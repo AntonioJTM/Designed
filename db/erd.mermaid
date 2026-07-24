@@ -1,0 +1,282 @@
+erDiagram
+    roles ||--o{ usuarios : tiene
+    roles ||--o{ rol_permisos : incluye
+    permisos ||--o{ rol_permisos : otorga
+    usuarios ||--o{ auditoria : registra
+    usuarios ||--o{ ordenes_compra : crea
+    usuarios ||--o{ movimientos_inventario : realiza
+    usuarios ||--o{ sesiones_caja : abre
+    usuarios ||--o{ pedidos : atiende
+
+    categorias ||--o{ categorias : padre_de
+    categorias ||--o{ productos : clasifica
+    marcas ||--o{ productos : fabrica
+    materiales ||--o{ productos : compone
+    unidades_medida ||--o{ productos : mide
+    impuestos ||--o{ productos : grava
+    productos ||--o{ producto_variantes : tiene
+    colores ||--o{ producto_variantes : colorea
+    productos ||--o{ producto_imagenes : muestra
+    producto_variantes ||--o{ producto_imagenes : ilustra
+
+    proveedores ||--o{ ordenes_compra : surte
+    ordenes_compra ||--o{ orden_compra_detalle : contiene
+    producto_variantes ||--o{ orden_compra_detalle : se_compra
+
+    producto_variantes ||--o{ inventario : existe_en
+    almacenes ||--o{ inventario : almacena
+    producto_variantes ||--o{ movimientos_inventario : mueve
+    almacenes ||--o{ movimientos_inventario : ubica
+
+    clientes ||--o{ direcciones : registra
+    clientes ||--o{ carritos : posee
+    carritos ||--o{ carrito_items : agrupa
+    producto_variantes ||--o{ carrito_items : en_carrito
+    clientes ||--o{ listas_deseos : guarda
+    producto_variantes ||--o{ listas_deseos : deseado
+    productos ||--o{ resenas : recibe
+    clientes ||--o{ resenas : escribe
+
+    almacenes ||--o{ cajas : tiene
+    cajas ||--o{ sesiones_caja : opera
+    sesiones_caja ||--o{ movimientos_caja : mueve
+    sesiones_caja ||--o{ pedidos : en_turno
+
+    clientes ||--o{ pedidos : realiza
+    almacenes ||--o{ pedidos : despacha
+    direcciones ||--o{ pedidos : envia_a
+    cupones ||--o{ pedidos : aplica_a
+    pedidos ||--o{ pedido_detalle : detalla
+    producto_variantes ||--o{ pedido_detalle : vendido_en
+    pedidos ||--o{ pagos : cobra
+    metodos_pago ||--o{ pagos : usa
+    pedidos ||--o{ envios : despacha
+    paqueterias ||--o{ envios : transporta
+
+    roles {
+        smallint id PK
+        varchar nombre
+    }
+    permisos {
+        smallint id PK
+        varchar clave
+    }
+    rol_permisos {
+        smallint rol_id PK_FK
+        smallint permiso_id PK_FK
+    }
+    usuarios {
+        bigint id PK
+        smallint rol_id FK
+        varchar correo
+        varchar contrasena_hash
+        boolean activo
+    }
+    auditoria {
+        bigint id PK
+        bigint usuario_id FK
+        varchar accion
+        varchar entidad
+        json detalle
+    }
+    categorias {
+        int id PK
+        int padre_id FK
+        varchar nombre
+        varchar slug
+    }
+    marcas {
+        int id PK
+        varchar nombre
+    }
+    materiales {
+        smallint id PK
+        varchar nombre
+    }
+    colores {
+        int id PK
+        varchar nombre
+        char codigo_hex
+        varchar codigo_fabricante
+    }
+    unidades_medida {
+        smallint id PK
+        varchar nombre
+    }
+    impuestos {
+        smallint id PK
+        varchar nombre
+        decimal porcentaje
+    }
+    productos {
+        bigint id PK
+        int categoria_id FK
+        int marca_id FK
+        smallint material_id FK
+        smallint unidad_medida_id FK
+        smallint impuesto_id FK
+        varchar nombre
+        varchar slug
+        varchar grosor_calibre
+    }
+    producto_variantes {
+        bigint id PK
+        bigint producto_id FK
+        int color_id FK
+        varchar sku
+        varchar codigo_barras
+        varchar presentacion
+        decimal precio
+        decimal costo
+    }
+    producto_imagenes {
+        bigint id PK
+        bigint producto_id FK
+        bigint variante_id FK
+        varchar url
+    }
+    proveedores {
+        bigint id PK
+        varchar nombre
+        varchar rfc_id_fiscal
+    }
+    ordenes_compra {
+        bigint id PK
+        bigint proveedor_id FK
+        bigint usuario_id FK
+        varchar folio
+        varchar estado
+        decimal total
+    }
+    orden_compra_detalle {
+        bigint id PK
+        bigint orden_compra_id FK
+        bigint variante_id FK
+        decimal cantidad
+        decimal costo_unitario
+    }
+    almacenes {
+        smallint id PK
+        varchar nombre
+        boolean es_punto_venta
+    }
+    inventario {
+        bigint id PK
+        bigint variante_id FK
+        smallint almacen_id FK
+        decimal cantidad
+        decimal cantidad_reservada
+        decimal stock_minimo
+    }
+    movimientos_inventario {
+        bigint id PK
+        bigint variante_id FK
+        smallint almacen_id FK
+        bigint usuario_id FK
+        varchar tipo
+        decimal cantidad
+    }
+    clientes {
+        bigint id PK
+        varchar nombre
+        varchar correo
+        varchar contrasena_hash
+    }
+    direcciones {
+        bigint id PK
+        bigint cliente_id FK
+        varchar tipo
+        varchar ciudad
+        varchar codigo_postal
+    }
+    carritos {
+        bigint id PK
+        bigint cliente_id FK
+        varchar token_sesion
+    }
+    carrito_items {
+        bigint id PK
+        bigint carrito_id FK
+        bigint variante_id FK
+        decimal cantidad
+    }
+    cupones {
+        bigint id PK
+        varchar codigo
+        varchar tipo
+        decimal valor
+    }
+    listas_deseos {
+        bigint id PK
+        bigint cliente_id FK
+        bigint variante_id FK
+    }
+    resenas {
+        bigint id PK
+        bigint producto_id FK
+        bigint cliente_id FK
+        tinyint calificacion
+        boolean aprobada
+    }
+    cajas {
+        smallint id PK
+        smallint almacen_id FK
+        varchar nombre
+    }
+    sesiones_caja {
+        bigint id PK
+        smallint caja_id FK
+        bigint usuario_id FK
+        decimal monto_inicial
+        decimal diferencia
+        varchar estado
+    }
+    movimientos_caja {
+        bigint id PK
+        bigint sesion_caja_id FK
+        varchar tipo
+        decimal monto
+    }
+    metodos_pago {
+        smallint id PK
+        varchar nombre
+    }
+    paqueterias {
+        smallint id PK
+        varchar nombre
+    }
+    pedidos {
+        bigint id PK
+        varchar numero_pedido
+        varchar canal
+        bigint cliente_id FK
+        bigint usuario_id FK
+        bigint sesion_caja_id FK
+        smallint almacen_id FK
+        bigint direccion_envio_id FK
+        bigint cupon_id FK
+        varchar estado
+        decimal total
+    }
+    pedido_detalle {
+        bigint id PK
+        bigint pedido_id FK
+        bigint variante_id FK
+        decimal cantidad
+        decimal precio_unitario
+        decimal subtotal
+    }
+    pagos {
+        bigint id PK
+        bigint pedido_id FK
+        smallint metodo_pago_id FK
+        decimal monto
+        varchar estado
+    }
+    envios {
+        bigint id PK
+        bigint pedido_id FK
+        smallint paqueteria_id FK
+        varchar numero_guia
+        varchar estado
+    }

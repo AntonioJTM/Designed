@@ -1,0 +1,28 @@
+<div class="admin">
+  <aside class="side">
+    <div class="brand">🧵 Tienda de hilos</div>
+    <nav>
+      <a routerLink="/admin/categorias" routerLinkActive="on">Categorías</a>
+      <a routerLink="/admin/productos" routerLinkActive="on">Productos</a>
+      <a routerLink="/admin/inventario" routerLinkActive="on">Inventario</a>
+      <a routerLink="/admin/kardex" routerLinkActive="on">Kardex</a>
+      <a routerLink="/admin/pos" routerLinkActive="on">Punto de venta</a>
+      <a routerLink="/admin/pedidos" routerLinkActive="on">Pedidos</a>
+      <a routerLink="/admin/reportes" routerLinkActive="on">Reportes</a>
+      @if (esAdmin()) {
+        <a routerLink="/admin/usuarios" routerLinkActive="on">Personal</a>
+      }
+    </nav>
+    <div class="user">
+      @if (sesion(); as s) {
+        <span class="nombre">{{ s.nombre }}</span>
+        <span class="rol">{{ s.rol }}</span>
+      }
+      <button type="button" (click)="salir()">Salir</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <router-outlet />
+  </main>
+</div>

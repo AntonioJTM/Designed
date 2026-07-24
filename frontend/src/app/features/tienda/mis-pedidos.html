@@ -1,0 +1,27 @@
+<h1>Mis pedidos</h1>
+
+@if (!esCliente()) {
+  <div class="aviso">Inicia sesión como cliente para ver tus pedidos. <a routerLink="/login">Ingresar</a></div>
+} @else if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (error()) {
+  <p class="err">{{ error() }}</p>
+} @else if (pedidos().length === 0) {
+  <p class="empty">Aún no tienes pedidos. <a routerLink="/tienda">Explora el catálogo</a></p>
+} @else {
+  <table class="grid" style="width:100%; background:#fff; border-collapse:collapse">
+    <thead>
+      <tr><th style="text-align:left; padding:0.6rem">Número</th><th style="text-align:left; padding:0.6rem">Estado</th><th style="text-align:left; padding:0.6rem">Total</th><th style="text-align:left; padding:0.6rem">Fecha</th></tr>
+    </thead>
+    <tbody>
+      @for (p of pedidos(); track p.id) {
+        <tr style="border-top:1px solid #eee">
+          <td style="padding:0.6rem">{{ p.numero_pedido }}</td>
+          <td style="padding:0.6rem">{{ p.estado }}</td>
+          <td style="padding:0.6rem">${{ p.total }}</td>
+          <td style="padding:0.6rem" class="muted">{{ p.creado_en }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

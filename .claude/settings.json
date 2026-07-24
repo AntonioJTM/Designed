@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(48\\).toString\\('hex'\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e ' *)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(ng version *)",
+      "Bash(NG_CLI_ANALYTICS=false ng new frontend --directory=frontend --style=scss --ssr=false --defaults --skip-git)",
+      "Bash(ng build *)",
+      "Bash(node -e \"const {slugify}=require\\('./src/utils/slug'\\); console.log\\(slugify\\('Hilo de Bordar Algodón'\\), '|', slugify\\('  Acción & Café #3  '\\)\\);\")",
+      "Bash(node -e 'console.log\\(Date.now\\(\\)\\)')",
+      "Bash(curl -s -X POST http://localhost:3100/api/v1/usuarios/registro -H \"Content-Type: application/json\" -d \"{\\\\\"rol_id\\\\\":1,\\\\\"nombre\\\\\":\\\\\"S\\\\\",\\\\\"correo\\\\\":\\\\\"dbg$\\(node -e 'console.log\\(Date.now\\(\\)\\)'\\)@t.mx\\\\\",\\\\\"contrasena\\\\\":\\\\\"secreta123\\\\\"}\")",
+      "Bash(node \"C:/Users/PLANDI/AppData/Local/Temp/claude/d--Imagenes-Designed/d79a2359-4b85-4742-99e0-839344f3a2b9/scratchpad/e2e_tienda.mjs\")",
+      "Bash(curl -s -o /dev/null -w \"GET /api/v1/usuarios → %{http_code}\\\\n\" http://localhost:3000/api/v1/usuarios)",
+      "Bash(curl -s -o /dev/null -w \"GET /api/v1/usuarios/roles → %{http_code}\\\\n\" http://localhost:3000/api/v1/usuarios/roles)",
+      "Bash(npm --prefix backend run start)",
+      "Bash(node -e \"const p=require\\('./frontend/package.json'\\); console.log\\('frontend scripts:', JSON.stringify\\(p.scripts\\)\\)\")",
+      "Bash(npx concurrently *)",
+      "Bash(node scripts/validate_palette.js \"#2a78d6,#eb6834\" --mode light)",
+      "Bash(node --check src/modules/categorias/model.js)",
+      "Bash(node --check src/modules/categorias/service.js)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\PLANDI\\AppData\\Local\\Temp\\claude\\d--Imagenes-Designed\\d79a2359-4b85-4742-99e0-839344f3a2b9\\scratchpad"
+    ]
+  }
+}

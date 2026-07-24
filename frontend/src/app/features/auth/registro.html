@@ -1,0 +1,41 @@
+<div class="auth-card">
+  <h1>Crear cuenta</h1>
+  <p class="sub">Tienda de hilos · cuenta de cliente</p>
+
+  <form [formGroup]="form" (ngSubmit)="enviar()">
+    <label>
+      Nombre
+      <input type="text" formControlName="nombre" placeholder="Nombre completo" />
+    </label>
+
+    <label>
+      Correo
+      <input type="email" formControlName="correo" autocomplete="email" placeholder="correo@ejemplo.com" />
+    </label>
+
+    <label>
+      Teléfono <span class="opt">(opcional)</span>
+      <input type="tel" formControlName="telefono" placeholder="55 1234 5678" />
+    </label>
+
+    <label>
+      Contraseña <span class="opt">(mín. 8 caracteres)</span>
+      <input type="password" formControlName="contrasena" autocomplete="new-password" placeholder="••••••••" />
+    </label>
+
+    <label class="check">
+      <input type="checkbox" formControlName="acepta_marketing" />
+      Acepto recibir promociones por correo
+    </label>
+
+    @if (error()) {
+      <p class="alert">{{ error() }}</p>
+    }
+
+    <button type="submit" [disabled]="cargando()">
+      {{ cargando() ? 'Creando…' : 'Crear cuenta' }}
+    </button>
+  </form>
+
+  <p class="pie">¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
+</div>

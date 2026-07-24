@@ -1,0 +1,28 @@
+<div class="tienda-shell">
+<header class="tienda-header">
+  <a class="logo" routerLink="/tienda">🧵 Hilos & Co.</a>
+  <nav>
+    <a routerLink="/tienda">Catálogo</a>
+    @if (esCliente()) {
+      <a routerLink="/tienda/mis-pedidos">Mis pedidos</a>
+      <a href="javascript:void(0)" (click)="salir()">Salir</a>
+    } @else {
+      <a routerLink="/login">Ingresar</a>
+    }
+    <a class="carrito-link" routerLink="/tienda/carrito">
+      🛒 Carrito
+      @if (cart.cantidadTotal() > 0) {
+        <span class="cart-badge">{{ cart.cantidadTotal() }}</span>
+      }
+    </a>
+  </nav>
+</header>
+
+<main class="tienda-main">
+  <router-outlet />
+</main>
+
+<footer class="tienda-footer">
+  <p>Hilos & Co. · Tienda en línea · Demo</p>
+</footer>
+</div>

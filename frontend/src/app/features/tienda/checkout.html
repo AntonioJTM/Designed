@@ -1,0 +1,38 @@
+<h1>Finalizar compra</h1>
+
+@if (pedido(); as p) {
+  <div class="exito">
+    <h2 style="margin-top:0">¡Gracias por tu compra! 🎉</h2>
+    <p>Tu pedido <b>{{ p.numero_pedido }}</b> quedó registrado con estado <b>{{ p.estado }}</b>.</p>
+    <p>Total: <b>${{ p.total }}</b></p>
+    <a class="btn-tienda" routerLink="/tienda/mis-pedidos">Ver mis pedidos</a>
+    <a class="btn-tienda ghost" routerLink="/tienda">Seguir comprando</a>
+  </div>
+} @else if (cart.items().length === 0) {
+  <p class="empty">No hay nada en tu carrito.</p>
+  <a class="btn-tienda ghost" routerLink="/tienda">Ir al catálogo</a>
+} @else if (!esCliente()) {
+  <div class="aviso">
+    Para finalizar tu compra necesitas
+    <a routerLink="/login" [queryParams]="{ returnUrl: '/tienda/checkout' }">iniciar sesión</a> o
+    <a routerLink="/registro">crear una cuenta</a> de cliente.
+  </div>
+} @else {
+  <p class="muted">Comprando como <b>{{ sesion()?.nombre || 'cliente' }}</b>.</p>
+
+  @if (error()) { <p class="err">{{ error() }}</p> }
+
+  <div class="resumen" style="max-width:480px">
+    @for (i of cart.items(); track i.variante_id) {
+      <div class="fila">
+        <span>{{ i.cantidad }} × {{ i.producto }} <span class="muted">({{ i.presentacion || i.sku }})</span></span>
+        <span>${{ (i.precio * i.cantidad).toFixed(2) }}</span>
+      </div>
+    }
+    <div class="fila total"><span>Subtotal (sin IVA)</span><span>${{ cart.subtotal().toFixed(2) }}</span></div>
+    <p class="muted" style="font-size:0.8rem">El total con impuestos lo calcula el servidor.</p>
+    <button class="btn-tienda" style="width:100%; margin-top:0.5rem" (click)="confirmar()" [disabled]="procesando()">
+      {{ procesando() ? 'Procesando…' : 'Confirmar pedido' }}
+    </button>
+  </div>
+}

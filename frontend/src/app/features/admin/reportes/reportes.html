@@ -1,0 +1,144 @@
+<div class="page-head">
+  <h1>Reportes</h1>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+
+<!-- Rango de fechas -->
+<div class="card">
+  <div class="form-grid">
+    <label class="field">Desde <input type="date" [(ngModel)]="desde" /></label>
+    <label class="field">Hasta <input type="date" [(ngModel)]="hasta" /></label>
+  </div>
+  <div style="margin-top:0.75rem">
+    <button class="btn btn-primary btn-sm" (click)="cargar()">Aplicar</button>
+    <span class="muted" style="margin-left:0.5rem">Sin fechas = hoy.</span>
+  </div>
+</div>
+
+<!-- KPIs de ventas -->
+@if (ventas(); as v) {
+  <div class="kpis">
+    <div class="card kpi"><span class="muted">Pedidos</span><b>{{ v.resumen.num_pedidos }}</b></div>
+    <div class="card kpi"><span class="muted">Subtotal</span><b>${{ v.resumen.subtotal }}</b></div>
+    <div class="card kpi"><span class="muted">Impuestos</span><b>${{ v.resumen.impuestos }}</b></div>
+    <div class="card kpi total"><span class="muted">Total vendido</span><b>${{ v.resumen.total }}</b></div>
+  </div>
+
+  <div class="form-grid" style="align-items:start">
+    <div class="card">
+      <h3 style="margin-top:0">Ventas por día</h3>
+      @if (chartPorDia().length === 0) { <p class="empty">Sin datos en el rango.</p> }
+      @else {
+        <app-vertical-bars [data]="chartPorDia()" prefix="$" [decimals]="0" />
+        <details style="margin-top:0.75rem">
+          <summary class="muted" style="cursor:pointer; font-size:0.85rem">Ver tabla</summary>
+          <table class="grid" style="margin-top:0.5rem">
+            <thead><tr><th>Día</th><th>Pedidos</th><th>Total</th></tr></thead>
+            <tbody>
+              @for (d of v.porDia; track d.dia) {
+                <tr><td>{{ d.dia }}</td><td>{{ d.num_pedidos }}</td><td>${{ d.total }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </details>
+      }
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Ventas por canal</h3>
+      @if (chartPorCanal().length === 0) { <p class="empty">Sin ventas en el rango.</p> }
+      @else {
+        <div class="viz-legend">
+          <span class="item"><span class="swatch" style="background:var(--viz-series-1)"></span> Punto de venta</span>
+          <span class="item"><span class="swatch" style="background:var(--viz-series-2)"></span> Tienda en línea</span>
+        </div>
+        <app-vertical-bars [data]="chartPorCanal()" prefix="$" [decimals]="0" />
+        <details style="margin-top:0.75rem">
+          <summary class="muted" style="cursor:pointer; font-size:0.85rem">Ver tabla</summary>
+          <table class="grid" style="margin-top:0.5rem">
+            <thead><tr><th>Canal</th><th>Pedidos</th><th>Total</th></tr></thead>
+            <tbody>
+              @for (c of v.porCanal; track c.canal) {
+                <tr><td>{{ c.canal === 'punto_venta' ? 'Punto de venta' : 'Tienda en línea' }}</td><td>{{ c.num_pedidos }}</td><td>${{ c.total }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </details>
+      }
+    </div>
+  </div>
+}
+
+<!-- Más vendidos + por reabastecer -->
+<div class="form-grid" style="align-items:start">
+  <div class="card">
+    <h3 style="margin-top:0">Más vendidos <span class="muted" style="font-size:0.8rem">(unidades)</span></h3>
+    @if (masVendidos().length === 0) { <p class="empty">Aún sin ventas.</p> }
+    @else {
+      <app-horizontal-bars [data]="chartMasVendidos()" [decimals]="0" />
+      <details style="margin-top:0.75rem">
+        <summary class="muted" style="cursor:pointer; font-size:0.85rem">Ver tabla</summary>
+        <table class="grid" style="margin-top:0.5rem">
+          <thead><tr><th>SKU</th><th>Producto</th><th>Unidades</th><th>Ingresos</th></tr></thead>
+          <tbody>
+            @for (m of masVendidos(); track m.variante_id) {
+              <tr><td>{{ m.sku }}</td><td>{{ m.producto }}</td><td>{{ m.unidades_vendidas }}</td><td>${{ m.ingresos }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </details>
+    }
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Por reabastecer <span class="pill off">{{ porReabastecer().length }}</span></h3>
+    @if (porReabastecer().length === 0) { <p class="empty">Todo con stock suficiente. 🎉</p> }
+    @else {
+      <table class="grid">
+        <thead><tr><th>SKU</th><th>Producto</th><th>Almacén</th><th>Disp.</th><th>Mín.</th></tr></thead>
+        <tbody>
+          @for (p of porReabastecer(); track p.variante_id + '-' + p.almacen) {
+            <tr>
+              <td>{{ p.sku }}</td>
+              <td>{{ p.producto }}{{ p.color ? ' · ' + p.color : '' }}</td>
+              <td>{{ p.almacen }}</td>
+              <td><span class="pill off">{{ p.disponible }}</span></td>
+              <td class="muted">{{ p.stock_minimo }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</div>
+
+<!-- Cortes de caja -->
+<div class="card">
+  <h3 style="margin-top:0">Cortes de caja</h3>
+  @if (cortes().length === 0) { <p class="empty">Sin sesiones en el rango.</p> }
+  @else {
+    <table class="grid">
+      <thead>
+        <tr><th>Caja</th><th>Cajero</th><th>Estado</th><th>Inicial</th><th>Ventas efectivo</th><th>Esperado</th><th>Final</th><th>Diferencia</th></tr>
+      </thead>
+      <tbody>
+        @for (c of cortes(); track c.id) {
+          <tr>
+            <td>{{ c.caja }}</td>
+            <td>{{ c.usuario }}</td>
+            <td><span class="pill" [class.ok]="c.estado === 'cerrada'">{{ c.estado }}</span></td>
+            <td>${{ c.monto_inicial }}</td>
+            <td>${{ c.ventas_efectivo }}</td>
+            <td>{{ c.monto_esperado ? '$' + c.monto_esperado : '—' }}</td>
+            <td>{{ c.monto_final ? '$' + c.monto_final : '—' }}</td>
+            <td>
+              @if (c.diferencia != null) {
+                <span class="pill" [class.ok]="+c.diferencia === 0" [class.off]="+c.diferencia !== 0">${{ c.diferencia }}</span>
+              } @else { — }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>

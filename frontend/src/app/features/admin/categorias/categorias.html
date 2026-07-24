@@ -1,0 +1,84 @@
+<div class="page-head">
+  <h1>Categorías</h1>
+</div>
+
+@if (error()) {
+  <p class="alert">{{ error() }}</p>
+}
+
+<div class="card">
+  <h3 style="margin-top:0">{{ editandoId() ? 'Editar categoría' : 'Nueva categoría' }}</h3>
+  <form [formGroup]="form" (ngSubmit)="guardar()">
+    <div class="form-grid">
+      <label class="field">
+        Nombre
+        <input type="text" formControlName="nombre" placeholder="Ej. Hilo de bordar" />
+      </label>
+      <label class="field">
+        Slug <span class="muted">(automático si se deja vacío)</span>
+        <input type="text" formControlName="slug" placeholder="hilo-de-bordar" />
+      </label>
+      <label class="field">
+        Categoría padre
+        <select formControlName="padre_id">
+          <option [ngValue]="null">— Ninguna (raíz) —</option>
+          @for (c of categorias(); track c.id) {
+            @if (c.id !== editandoId()) {
+              <option [ngValue]="c.id">{{ c.nombre }}</option>
+            }
+          }
+        </select>
+      </label>
+      <label class="field">
+        Orden
+        <input type="number" formControlName="orden" />
+      </label>
+      <label class="field full">
+        Descripción
+        <textarea formControlName="descripcion" rows="2"></textarea>
+      </label>
+      <label class="field check">
+        <input type="checkbox" formControlName="activo" /> Activa
+      </label>
+    </div>
+    <div style="margin-top:1rem; display:flex; gap:0.5rem">
+      <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+        {{ guardando() ? 'Guardando…' : (editandoId() ? 'Guardar cambios' : 'Crear categoría') }}
+      </button>
+      @if (editandoId()) {
+        <button type="button" class="btn btn-ghost" (click)="nueva()">Cancelar</button>
+      }
+    </div>
+  </form>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (categorias().length === 0) {
+  <p class="empty">Aún no hay categorías.</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr><th>Nombre</th><th>Slug</th><th>Padre</th><th>Orden</th><th>Estado</th><th></th></tr>
+    </thead>
+    <tbody>
+      @for (c of categorias(); track c.id) {
+        <tr>
+          <td>{{ c.nombre }}</td>
+          <td class="muted">{{ c.slug }}</td>
+          <td>{{ c.padre || '—' }}</td>
+          <td>{{ c.orden }}</td>
+          <td>
+            <span class="pill" [class.ok]="c.activo" [class.off]="!c.activo">
+              {{ c.activo ? 'Activa' : 'Inactiva' }}
+            </span>
+          </td>
+          <td class="acciones">
+            <button class="btn btn-ghost btn-sm" (click)="editar(c)">Editar</button>
+            <button class="btn btn-danger btn-sm" (click)="eliminar(c)">Eliminar</button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

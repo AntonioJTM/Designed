@@ -1,0 +1,60 @@
+<div class="page-head">
+  <h1>Productos <span class="muted" style="font-size:0.9rem">({{ total() }})</span></h1>
+  <a class="btn btn-primary" routerLink="/admin/productos/nuevo">+ Nuevo producto</a>
+</div>
+
+@if (error()) {
+  <p class="alert">{{ error() }}</p>
+}
+
+<div class="card">
+  <div class="form-grid">
+    <label class="field">
+      Buscar
+      <input type="text" [(ngModel)]="q" (keyup.enter)="buscar()" placeholder="Nombre, slug o descripción" />
+    </label>
+    <label class="field">
+      Categoría
+      <select [(ngModel)]="categoriaId">
+        <option value="">— Todas —</option>
+        @for (c of categorias(); track c.id) {
+          <option [ngValue]="c.id">{{ c.nombre }}</option>
+        }
+      </select>
+    </label>
+  </div>
+  <div style="margin-top:1rem">
+    <button class="btn btn-primary" (click)="buscar()">Buscar</button>
+  </div>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (productos().length === 0) {
+  <p class="empty">No hay productos que coincidan.</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr><th>Nombre</th><th>Categoría</th><th>Unidad</th><th>Destacado</th><th>Estado</th><th></th></tr>
+    </thead>
+    <tbody>
+      @for (p of productos(); track p.id) {
+        <tr>
+          <td>{{ p.nombre }}</td>
+          <td>{{ p.categoria }}</td>
+          <td class="muted">{{ p.unidad }}</td>
+          <td>{{ p.destacado ? '★' : '' }}</td>
+          <td>
+            <span class="pill" [class.ok]="p.activo" [class.off]="!p.activo">
+              {{ p.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+          <td class="acciones">
+            <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/productos', p.id]">Editar</a>
+            <button class="btn btn-danger btn-sm" (click)="eliminar(p)">Eliminar</button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

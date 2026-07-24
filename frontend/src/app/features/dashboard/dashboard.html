@@ -1,0 +1,26 @@
+<header class="topbar">
+  <strong>Tienda de hilos</strong>
+  <button type="button" class="ghost" (click)="salir()">Cerrar sesión</button>
+</header>
+
+<main class="contenido">
+  @if (cargando()) {
+    <p>Verificando sesión…</p>
+  } @else if (error()) {
+    <p class="alert">{{ error() }}</p>
+  } @else if (sesion(); as s) {
+    <h1>Hola, {{ s.nombre }} 👋</h1>
+    <p class="badge">{{ s.tipo === 'usuario' ? 'Staff · ' + s.rol : 'Cliente' }}</p>
+    <ul class="datos">
+      <li><span>Correo</span><b>{{ s.correo }}</b></li>
+      <li><span>Tipo</span><b>{{ s.tipo }}</b></li>
+      @if (s.rol) {
+        <li><span>Rol</span><b>{{ s.rol }}</b></li>
+      }
+    </ul>
+    @if (s.tipo === 'usuario') {
+      <p><a class="ir-admin" href="/admin">Ir al panel de administración →</a></p>
+    }
+    <p class="nota">Sesión verificada contra el API con tu JWT. Aquí irá el panel según el roadmap.</p>
+  }
+</main>

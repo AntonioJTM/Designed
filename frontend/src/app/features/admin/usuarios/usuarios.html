@@ -1,0 +1,81 @@
+<div class="page-head">
+  <h1>Personal (staff)</h1>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="pill ok" style="display:inline-block; padding:0.5rem 0.8rem">{{ mensaje() }}</p> }
+
+<div class="card">
+  <h3 style="margin-top:0">{{ editandoId() ? 'Editar usuario' : 'Dar de alta usuario' }}</h3>
+  <form [formGroup]="form" (ngSubmit)="guardar()">
+    <div class="form-grid">
+      <label class="field">
+        Rol
+        <select formControlName="rol_id">
+          @for (r of roles(); track r.id) {
+            <option [ngValue]="r.id">{{ r.nombre }}</option>
+          }
+        </select>
+      </label>
+      <label class="field">
+        Nombre
+        <input type="text" formControlName="nombre" placeholder="Nombre completo" />
+      </label>
+      <label class="field">
+        Correo
+        <input type="email" formControlName="correo" placeholder="correo@tienda.mx" />
+        @if (editandoId()) { <span class="muted" style="font-size:0.75rem">El correo no se puede cambiar.</span> }
+      </label>
+      <label class="field">
+        Teléfono <span class="muted">(opcional)</span>
+        <input type="tel" formControlName="telefono" />
+      </label>
+      <label class="field">
+        Contraseña
+        <input type="password" formControlName="contrasena"
+               [placeholder]="editandoId() ? 'Dejar vacío para no cambiarla' : 'Mín. 8 caracteres'" />
+      </label>
+      @if (editandoId()) {
+        <label class="field check">
+          <input type="checkbox" formControlName="activo" /> Activo
+        </label>
+      }
+    </div>
+    <div style="margin-top:1rem; display:flex; gap:0.5rem">
+      <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+        {{ guardando() ? 'Guardando…' : (editandoId() ? 'Guardar cambios' : 'Dar de alta') }}
+      </button>
+      @if (editandoId()) {
+        <button type="button" class="btn btn-ghost" (click)="nuevo()">Cancelar</button>
+      }
+    </div>
+  </form>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (usuarios().length === 0) {
+  <p class="empty">No hay personal registrado.</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th></th></tr>
+    </thead>
+    <tbody>
+      @for (u of usuarios(); track u.id) {
+        <tr>
+          <td>{{ u.nombre }}</td>
+          <td class="muted">{{ u.correo }}</td>
+          <td style="text-transform:capitalize">{{ u.rol }}</td>
+          <td>
+            <span class="pill" [class.ok]="u.activo" [class.off]="!u.activo">
+              {{ u.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+          <td class="muted">{{ u.ultimo_acceso || 'Nunca' }}</td>
+          <td><button class="btn btn-ghost btn-sm" (click)="editar(u)">Editar</button></td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

@@ -1,0 +1,79 @@
+.admin {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.side {
+  background: #111827;
+  color: #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1rem;
+  /* Fija la barra a la altura de la ventana: no crece con la página. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+}
+.brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-bottom: 1.5rem;
+}
+.side nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+.side nav a {
+  color: #cbd5e1;
+  text-decoration: none;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+.side nav a:hover { background: #1f2937; }
+.side nav a.on { background: #4f46e5; color: #fff; }
+
+.user {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-top: 1px solid #1f2937;
+  padding-top: 1rem;
+}
+.user .nombre { font-size: 0.9rem; }
+.user .rol { font-size: 0.75rem; color: #94a3b8; text-transform: capitalize; }
+.user button {
+  margin-top: 0.5rem;
+  background: transparent;
+  border: 1px solid #374151;
+  color: #e5e7eb;
+  padding: 0.4rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.main {
+  background: #f9fafb;
+  padding: 1.75rem 2rem;
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .admin { grid-template-columns: 1fr; }
+  .side {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    /* En móvil la barra vuelve a fluir arriba (sin fijar altura). */
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+  .side nav { flex-direction: row; }
+}

@@ -1,0 +1,37 @@
+<h1>Catálogo</h1>
+
+@if (error()) { <p class="err">{{ error() }}</p> }
+
+<div class="filtros">
+  <input type="text" [(ngModel)]="q" (keyup.enter)="buscar()" placeholder="Buscar hilos, estambres…" />
+  <select [(ngModel)]="categoriaId" (ngModelChange)="buscar()">
+    <option value="">Todas las categorías</option>
+    @for (c of categorias(); track c.id) {
+      <option [ngValue]="c.id">{{ c.nombre }}</option>
+    }
+  </select>
+  <button class="btn-tienda" (click)="buscar()">Buscar</button>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando productos…</p>
+} @else if (productos().length === 0) {
+  <p class="empty">No encontramos productos.</p>
+} @else {
+  <div class="grid-prod">
+    @for (p of productos(); track p.id) {
+      <a class="prod-card" [routerLink]="['/tienda/producto', p.id]">
+        <div class="thumb">
+          @if (p.imagen) { <img [src]="p.imagen" [alt]="p.nombre" /> } @else { 🧶 }
+        </div>
+        <div class="body">
+          <span class="cat">{{ p.categoria }}</span>
+          <span class="nombre">{{ p.nombre }}</span>
+          <span class="precio">
+            @if (p.precio_desde) { desde ${{ p.precio_desde }} } @else { <span class="muted">Sin precio</span> }
+          </span>
+        </div>
+      </a>
+    }
+  </div>
+}

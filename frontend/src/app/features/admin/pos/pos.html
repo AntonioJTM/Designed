@@ -1,0 +1,138 @@
+<div class="page-head">
+  <h1>Punto de venta</h1>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+
+<!-- Ticket de venta recién cobrada -->
+@if (ticket(); as t) {
+  <div class="card" style="border-color:#bbf7d0; background:#f0fdf4">
+    <h3 style="margin-top:0">✅ Venta {{ t.pedido.numero_pedido }}</h3>
+    <p>Total: <b>${{ t.pedido.total }}</b> · Cambio: <b>${{ t.cambio.toFixed(2) }}</b></p>
+    <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+  </div>
+}
+
+<!-- Selección / apertura de caja -->
+@if (!sesion() || sesion()!.estado === 'cerrada') {
+  <div class="card">
+    <h3 style="margin-top:0">Abrir caja</h3>
+    <div class="form-grid">
+      <label class="field">
+        Caja
+        <select [(ngModel)]="cajaSel" (ngModelChange)="verificarSesion()">
+          @for (c of cajas(); track c.id) { <option [ngValue]="c.id">{{ c.nombre }} · {{ c.almacen }}</option> }
+        </select>
+      </label>
+      <label class="field">
+        Monto inicial en caja
+        <input type="number" step="0.01" [(ngModel)]="montoInicial" />
+      </label>
+    </div>
+    <div style="margin-top:1rem">
+      <button class="btn btn-primary" (click)="abrirCaja()">Abrir caja</button>
+    </div>
+    @if (cajas().length === 0) {
+      <p class="muted">No hay cajas registradas. Créalas desde la API (<code>POST /caja/cajas</code>).</p>
+    }
+  </div>
+} @else {
+  <!-- Sesión abierta: POS operativo -->
+  <div class="form-grid" style="align-items:start">
+    <!-- Columna izquierda: búsqueda + carrito -->
+    <div>
+      <div class="card">
+        <h3 style="margin-top:0">Buscar producto</h3>
+        <div style="display:flex; gap:0.5rem">
+          <input type="text" [(ngModel)]="qVar" (keyup.enter)="buscar()" placeholder="SKU o nombre" style="flex:1; padding:0.55rem 0.7rem; border:1px solid #d1d5db; border-radius:8px" />
+          <button class="btn btn-primary" (click)="buscar()">Buscar</button>
+        </div>
+        @if (resultados().length) {
+          <table class="grid" style="margin-top:1rem">
+            <tbody>
+              @for (r of resultados(); track r.id) {
+                <tr>
+                  <td>{{ r.sku }}</td>
+                  <td>{{ r.producto }} {{ r.presentacion ? '· ' + r.presentacion : '' }}</td>
+                  <td>${{ r.precio.toFixed(2) }}</td>
+                  <td><button class="btn btn-ghost btn-sm" (click)="agregar(r)">Agregar</button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Carrito</h3>
+        @if (carrito().length === 0) {
+          <p class="empty">Vacío. Busca y agrega productos.</p>
+        } @else {
+          <table class="grid">
+            <thead><tr><th>SKU</th><th>Producto</th><th>Precio</th><th>Cant.</th><th>Importe</th><th></th></tr></thead>
+            <tbody>
+              @for (i of carrito(); track i.variante_id) {
+                <tr>
+                  <td>{{ i.sku }}</td>
+                  <td>{{ i.producto }}</td>
+                  <td>${{ i.precio.toFixed(2) }}</td>
+                  <td style="width:90px">
+                    <input type="number" min="1" [ngModel]="i.cantidad" (ngModelChange)="cambiarCantidad(i, $event)"
+                           style="width:70px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px" />
+                  </td>
+                  <td>${{ (i.precio * i.cantidad).toFixed(2) }}</td>
+                  <td><button class="btn btn-danger btn-sm" (click)="quitar(i)">✕</button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <p class="muted" style="text-align:right; margin-top:0.75rem">
+            Subtotal estimado (sin IVA): <b>${{ subtotalEstimado().toFixed(2) }}</b><br />
+            <span style="font-size:0.8rem">El total con impuestos lo calcula el servidor al cobrar.</span>
+          </p>
+        }
+      </div>
+    </div>
+
+    <!-- Columna derecha: caja + cobro -->
+    <div>
+      <div class="card">
+        <h3 style="margin-top:0">Caja abierta</h3>
+        <ul class="muted" style="list-style:none; padding:0; margin:0; font-size:0.9rem">
+          <li>Sesión #{{ sesion()!.id }} · {{ sesion()!.caja }}</li>
+          <li>Cajero: {{ sesion()!.usuario }}</li>
+          <li>Inicial: ${{ sesion()!.monto_inicial }}</li>
+          <li>Efectivo esperado: <b>${{ sesion()!.esperado_actual }}</b></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Cobrar</h3>
+        <label class="field">
+          Método de pago
+          <select [(ngModel)]="metodoSel">
+            @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+          </select>
+        </label>
+        <label class="field">
+          Monto recibido
+          <input type="number" step="0.01" [(ngModel)]="montoPago" />
+        </label>
+        <button class="btn btn-primary" style="margin-top:0.75rem; width:100%" (click)="cobrar()"
+                [disabled]="carrito().length === 0">Cobrar</button>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Cerrar caja (corte)</h3>
+        <label class="field">
+          Monto final contado
+          <input type="number" step="0.01" [(ngModel)]="montoFinal" />
+        </label>
+        <button class="btn btn-ghost" style="margin-top:0.75rem" (click)="cerrarCaja()">Cerrar caja</button>
+        @if (sesion()!.estado === 'cerrada') {
+          <p>Diferencia: <b>${{ sesion()!.diferencia }}</b></p>
+        }
+      </div>
+    </div>
+  </div>
+}

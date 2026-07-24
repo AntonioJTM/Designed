@@ -1,0 +1,162 @@
+<div class="page-head">
+  <h1>Inventario</h1>
+  <div style="display:flex; gap:0.5rem; align-items:center">
+    @if (totalAlertas() > 0) {
+    <span class="pill off">⚠ {{ totalAlertas() }} en alerta de stock</span>
+    }
+    <a class="btn btn-ghost" routerLink="/admin/kardex">Ver kardex →</a>
+  </div>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="pill ok" style="display:block; padding:0.6rem 0.8rem">{{ mensaje() }}</p> }
+
+<!-- Selector de variante (compartido) -->
+<div class="card">
+  <h3 style="margin-top:0">1 · Elige la variante (SKU)</h3>
+  <div class="form-grid">
+    <label class="field">
+      Buscar / escanear (SKU, código o producto)
+      <span class="input-scan">
+        <input #bcInv type="text" [(ngModel)]="qVar"
+               (keydown.enter)="$event.preventDefault(); buscarVariantes()"
+               placeholder="Escanea el código o teclea SKU/nombre" />
+        <button type="button" class="btn btn-ghost btn-sm" (click)="bcInv.focus()" title="Escanear">📷</button>
+      </span>
+    </label>
+    <label class="field">
+      Resultado
+      <select [(ngModel)]="varianteSel">
+        <option value="">— Selecciona —</option>
+        @for (v of resultadosVar(); track v.id) {
+        <option [ngValue]="v.id">{{ v.sku }} · {{ v.producto }} {{ v.presentacion ? '· ' + v.presentacion : '' }}
+        </option>
+        }
+      </select>
+    </label>
+  </div>
+  <div style="margin-top:0.75rem">
+    <button class="btn btn-ghost btn-sm" (click)="buscarVariantes()">Buscar variantes</button>
+  </div>
+</div>
+
+<div class="form-grid" style="align-items:start">
+  <!-- Movimiento -->
+  <div class="card">
+    <h3 style="margin-top:0">2 · Registrar movimiento</h3>
+    <div class="field">
+      Tipo
+      <select [(ngModel)]="mov.tipo">
+        @for (t of tipos; track t) { <option [value]="t">{{ t }}</option> }
+      </select>
+    </div>
+    <div class="field">
+      Almacén
+      <select [(ngModel)]="mov.almacen_id">
+        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+      </select>
+    </div>
+    <div class="field">
+      {{ esAjuste() ? 'Cantidad objetivo (saldo real contado)' : 'Cantidad' }}
+      <input type="number" step="0.001" [(ngModel)]="mov.cantidad" />
+    </div>
+    <div class="field">
+      Costo unitario <span class="muted">(opcional)</span>
+      <input type="number" step="0.01" [(ngModel)]="mov.costo_unitario" />
+    </div>
+    <div class="field">
+      Motivo <span class="muted">(opcional)</span>
+      <input type="text" [(ngModel)]="mov.motivo" />
+    </div>
+    <button class="btn btn-primary" style="margin-top:0.75rem" (click)="registrarMovimiento()">Registrar</button>
+  </div>
+
+  <!-- Transferencia -->
+  <div class="card">
+    <h3 style="margin-top:0">Transferir entre almacenes</h3>
+    <div class="field">
+      Origen
+      <select [(ngModel)]="transf.origen">
+        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+      </select>
+    </div>
+    <div class="field">
+      Destino
+      <select [(ngModel)]="transf.destino">
+        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+      </select>
+    </div>
+    <div class="field">
+      Cantidad
+      <input type="number" step="0.001" [(ngModel)]="transf.cantidad" />
+    </div>
+    <div class="field">
+      Motivo <span class="muted">(opcional)</span>
+      <input type="text" [(ngModel)]="transf.motivo" />
+    </div>
+    <button class="btn btn-primary" style="margin-top:0.75rem" (click)="transferir()">Transferir</button>
+  </div>
+</div>
+
+<!-- Existencias -->
+<div class="page-head" style="margin-top:0.5rem">
+  <h1 style="font-size:1.1rem">Existencias</h1>
+</div>
+<div class="card">
+  <div class="form-grid">
+    <label class="field">
+      Almacén
+      <select [(ngModel)]="filtroAlmacen">
+        <option value="">— Todos —</option>
+        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+      </select>
+    </label>
+    <label class="field">
+      Buscar
+      <input type="text" [(ngModel)]="filtroQ" (keyup.enter)="cargarStock()" placeholder="SKU o producto" />
+    </label>
+    <label class="field check">
+      <input type="checkbox" [(ngModel)]="soloBajo" /> Solo bajo stock
+    </label>
+  </div>
+  <div style="margin-top:0.75rem">
+    <button class="btn btn-primary btn-sm" (click)="cargarStock()">Aplicar filtros</button>
+  </div>
+</div>
+
+@if (cargando()) {
+<p class="muted">Cargando…</p>
+} @else if (stock().length === 0) {
+<p class="empty">Sin existencias registradas para el filtro.</p>
+} @else {
+<table class="grid">
+  <thead>
+    <tr>
+      <th>SKU</th>
+      <th>Producto</th>
+      <th>Almacén</th>
+      <th>Cantidad</th>
+      <th>Reservada</th>
+      <th>Disponible</th>
+      <th>Mínimo</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (s of stock(); track s.id) {
+    <tr>
+      <td>{{ s.sku }}</td>
+      <td>{{ s.producto }}{{ s.color ? ' · ' + s.color : '' }}</td>
+      <td>{{ s.almacen }}</td>
+      <td>{{ s.cantidad }}</td>
+      <td>{{ s.cantidad_reservada }}</td>
+      <td>
+        <span [class.pill]="+s.disponible <= +s.stock_minimo" [class.off]="+s.disponible <= +s.stock_minimo">
+          {{ s.disponible }}
+        </span>
+      </td>
+      <td class="muted">{{ s.stock_minimo }}</td>
+    </tr>
+    }
+  </tbody>
+</table>
+}

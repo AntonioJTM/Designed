@@ -1,0 +1,72 @@
+<div class="page-head">
+  <h1>Pedido</h1>
+  <a class="btn btn-ghost" routerLink="/admin/pedidos">← Volver</a>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (pedido(); as p) {
+  <div class="card">
+    <div class="form-grid">
+      <div><span class="muted">Número</span><br /><b>{{ p.numero_pedido }}</b></div>
+      <div><span class="muted">Canal</span><br />{{ p.canal === 'punto_venta' ? 'Punto de venta' : 'Tienda en línea' }}</div>
+      <div><span class="muted">Cliente</span><br />{{ p.cliente || '—' }}</div>
+      <div><span class="muted">Atendió</span><br />{{ p.usuario || '—' }}</div>
+      <div><span class="muted">Almacén</span><br />{{ p.almacen || '—' }}</div>
+      <div><span class="muted">Fecha</span><br />{{ p.creado_en }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Artículos</h3>
+    <table class="grid">
+      <thead><tr><th>SKU</th><th>Descripción</th><th>Cant.</th><th>P. unit.</th><th>Impuesto</th><th>Subtotal</th></tr></thead>
+      <tbody>
+        @for (d of p.detalle; track d.id) {
+          <tr>
+            <td>{{ d.sku }}</td>
+            <td>{{ d.descripcion }}</td>
+            <td>{{ d.cantidad }}</td>
+            <td>${{ d.precio_unitario }}</td>
+            <td>${{ d.impuesto }}</td>
+            <td>${{ d.subtotal }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    <div style="text-align:right; margin-top:1rem; line-height:1.8">
+      <div>Subtotal: <b>${{ p.subtotal }}</b></div>
+      @if (+p.descuento > 0) { <div>Descuento: −${{ p.descuento }}</div> }
+      <div>Impuestos: <b>${{ p.impuestos }}</b></div>
+      @if (+p.costo_envio > 0) { <div>Envío: ${{ p.costo_envio }}</div> }
+      <div style="font-size:1.2rem">Total: <b>${{ p.total }}</b></div>
+    </div>
+  </div>
+
+  @if (p.pagos?.length) {
+    <div class="card">
+      <h3 style="margin-top:0">Pagos</h3>
+      <table class="grid">
+        <thead><tr><th>Método</th><th>Monto</th><th>Estado</th><th>Referencia</th></tr></thead>
+        <tbody>
+          @for (pg of p.pagos; track pg.id) {
+            <tr><td>{{ pg.metodo }}</td><td>${{ pg.monto }}</td><td>{{ pg.estado }}</td><td class="muted">{{ pg.referencia_transaccion || '—' }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <div class="card">
+    <h3 style="margin-top:0">Estado</h3>
+    <div style="display:flex; gap:0.5rem; align-items:center">
+      <span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">{{ p.estado }}</span>
+      <select [(ngModel)]="nuevoEstado" style="padding:0.5rem; border:1px solid #d1d5db; border-radius:8px">
+        @for (e of estados; track e) { <option [value]="e">{{ e }}</option> }
+      </select>
+      <button class="btn btn-primary btn-sm" (click)="cambiarEstado()">Actualizar estado</button>
+    </div>
+  </div>
+}

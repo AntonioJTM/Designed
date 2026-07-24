@@ -1,0 +1,41 @@
+<div class="page-head">
+  <h1>Kardex <span class="muted" style="font-size:0.9rem">({{ total() }} movimientos)</span></h1>
+  <a class="btn btn-ghost" routerLink="/admin/inventario">← Inventario</a>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+
+<div class="card">
+  <label class="field" style="max-width:280px">
+    Almacén
+    <select [(ngModel)]="filtroAlmacen" (ngModelChange)="cargar()">
+      <option value="">— Todos —</option>
+      @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+    </select>
+  </label>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (movimientos().length === 0) {
+  <p class="empty">Sin movimientos.</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr><th>Fecha</th><th>SKU</th><th>Almacén</th><th>Tipo</th><th>Cantidad</th><th>Usuario</th><th>Motivo</th></tr>
+    </thead>
+    <tbody>
+      @for (m of movimientos(); track m.id) {
+        <tr>
+          <td class="muted">{{ m.creado_en }}</td>
+          <td>{{ m.sku }}</td>
+          <td>{{ m.almacen }}</td>
+          <td><span class="pill" [class.ok]="+m.cantidad >= 0" [class.off]="+m.cantidad < 0">{{ m.tipo }}</span></td>
+          <td>{{ m.cantidad }}</td>
+          <td>{{ m.usuario || '—' }}</td>
+          <td class="muted">{{ m.motivo || '—' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

@@ -1,0 +1,15 @@
+{
+  "name": "tienda-hilos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo de la tienda de hilos: backend (Express) + frontend (Angular).",
+  "scripts": {
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm --prefix backend run dev\" \"npm --prefix frontend start\"",
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend start",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

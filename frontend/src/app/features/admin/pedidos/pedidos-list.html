@@ -1,0 +1,56 @@
+<div class="page-head">
+  <h1>Pedidos <span class="muted" style="font-size:0.9rem">({{ total() }})</span></h1>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+
+<div class="card">
+  <div class="form-grid">
+    <label class="field">
+      Canal
+      <select [(ngModel)]="canal" (ngModelChange)="buscar()">
+        <option value="">— Todos —</option>
+        <option value="punto_venta">Punto de venta</option>
+        <option value="tienda_linea">Tienda en línea</option>
+      </select>
+    </label>
+    <label class="field">
+      Estado
+      <select [(ngModel)]="estado" (ngModelChange)="buscar()">
+        <option value="">— Todos —</option>
+        <option value="pendiente">Pendiente</option>
+        <option value="pagado">Pagado</option>
+        <option value="en_preparacion">En preparación</option>
+        <option value="enviado">Enviado</option>
+        <option value="entregado">Entregado</option>
+        <option value="cancelado">Cancelado</option>
+        <option value="devuelto">Devuelto</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (pedidos().length === 0) {
+  <p class="empty">Sin pedidos.</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr><th>Número</th><th>Canal</th><th>Cliente</th><th>Estado</th><th>Total</th><th>Fecha</th><th></th></tr>
+    </thead>
+    <tbody>
+      @for (p of pedidos(); track p.id) {
+        <tr>
+          <td>{{ p.numero_pedido }}</td>
+          <td>{{ p.canal === 'punto_venta' ? 'POS' : 'Online' }}</td>
+          <td>{{ p.cliente || '—' }}</td>
+          <td><span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">{{ p.estado }}</span></td>
+          <td>${{ p.total }}</td>
+          <td class="muted">{{ p.creado_en }}</td>
+          <td><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/pedidos', p.id]">Ver</a></td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

@@ -1,0 +1,44 @@
+<p><a routerLink="/tienda" class="muted">← Volver al catálogo</a></p>
+
+@if (error()) { <p class="err">{{ error() }}</p> }
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (producto(); as p) {
+  <div class="detalle">
+    <div class="foto">
+      @if (imagenPrincipal()) { <img [src]="imagenPrincipal()" [alt]="p.nombre" /> } @else { 🧶 }
+    </div>
+
+    <div>
+      <span class="muted">{{ p.categoria }}</span>
+      <h1>{{ p.nombre }}</h1>
+      @if (p.descripcion) { <p class="muted">{{ p.descripcion }}</p> }
+
+      <h3>Presentaciones</h3>
+      @if (p.variantes.length === 0) {
+        <p class="aviso">Este producto aún no tiene presentaciones disponibles.</p>
+      } @else {
+        @for (v of p.variantes; track v.id) {
+          @if (v.activo) {
+            <div class="variante-row" [class.sel]="seleccion()?.id === v.id" (click)="seleccion.set(v)">
+              <input type="radio" name="variante" [checked]="seleccion()?.id === v.id" />
+              <div>
+                <div>{{ v.presentacion || v.sku }}</div>
+                <div class="muted" style="font-size:0.8rem">
+                  {{ v.color ? v.color + ' · ' : '' }}SKU {{ v.sku }}
+                </div>
+              </div>
+              <span class="precio">${{ precio(v).toFixed(2) }}</span>
+            </div>
+          }
+        }
+
+        <div style="margin-top:1.5rem; display:flex; gap:0.75rem; align-items:center">
+          <button class="btn-tienda" (click)="agregar()" [disabled]="!seleccion()">Agregar al carrito</button>
+          @if (agregado()) { <span style="color:#166534">✓ Agregado</span> }
+        </div>
+      }
+    </div>
+  </div>
+}

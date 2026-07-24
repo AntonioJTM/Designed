@@ -1,0 +1,28 @@
+<h1>Tu carrito</h1>
+
+@if (cart.items().length === 0) {
+  <p class="empty">Tu carrito está vacío.</p>
+  <p><a class="btn-tienda ghost" routerLink="/tienda">Ir al catálogo</a></p>
+} @else {
+  @for (i of cart.items(); track i.variante_id) {
+    <div class="linea">
+      @if (i.imagen) { <img class="mini" [src]="i.imagen" [alt]="i.producto" /> } @else { <div class="mini"></div> }
+      <div class="crece">
+        <div><b>{{ i.producto }}</b></div>
+        <div class="muted" style="font-size:0.85rem">{{ i.presentacion || i.sku }} · ${{ i.precio.toFixed(2) }}</div>
+      </div>
+      <input type="number" min="1" [value]="i.cantidad"
+             (change)="cart.cambiarCantidad(i.variante_id, +$any($event.target).value)"
+             style="width:64px; padding:0.35rem; border:1px solid #d6d3d1; border-radius:6px" />
+      <div style="width:90px; text-align:right"><b>${{ (i.precio * i.cantidad).toFixed(2) }}</b></div>
+      <button class="btn-tienda ghost" (click)="cart.quitar(i.variante_id)">✕</button>
+    </div>
+  }
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem">
+    <div style="font-size:1.2rem">Subtotal: <b>${{ cart.subtotal().toFixed(2) }}</b>
+      <div class="muted" style="font-size:0.8rem">Impuestos y total finales se calculan al confirmar.</div>
+    </div>
+    <a class="btn-tienda" routerLink="/tienda/checkout">Proceder al pago →</a>
+  </div>
+}
