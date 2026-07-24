@@ -20,7 +20,13 @@
       "Bash(npx concurrently *)",
       "Bash(node scripts/validate_palette.js \"#2a78d6,#eb6834\" --mode light)",
       "Bash(node --check src/modules/categorias/model.js)",
-      "Bash(node --check src/modules/categorias/service.js)"
+      "Bash(node --check src/modules/categorias/service.js)",
+      "Bash(mysqldump --version)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); ['DB_HOST','DB_PORT','DB_USER','DB_PASSWORD','DB_NAME'].forEach\\(k=>process.env[k]=process.env[k]\\); const {execFileSync}=require\\('child_process'\\); execFileSync\\(process.execPath, ['C:/Users/PLANDI/AppData/Local/Temp/claude/d--Imagenes-Designed/d79a2359-4b85-4742-99e0-839344f3a2b9/scratchpad/dump_db.mjs','../db/dump_desarrollo_2026-07-24.sql'], {stdio:'inherit', env:process.env}\\);\")",
+      "Bash(node scripts/dump-db.js)",
+      "Bash(xargs echo \"CREATE TABLE:\")",
+      "Bash(xargs echo \"CREATE OR REPLACE VIEW:\")",
+      "Bash(xargs echo \"INSERT statements:\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\PLANDI\\AppData\\Local\\Temp\\claude\\d--Imagenes-Designed\\d79a2359-4b85-4742-99e0-839344f3a2b9\\scratchpad"
