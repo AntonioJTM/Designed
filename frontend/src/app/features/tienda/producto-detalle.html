@@ -21,23 +21,40 @@
       } @else {
         @for (v of p.variantes; track v.id) {
           @if (v.activo) {
-            <div class="variante-row" [class.sel]="seleccion()?.id === v.id" (click)="seleccion.set(v)">
+            <div
+              class="variante-row"
+              [class.sel]="seleccion()?.id === v.id"
+              [class.agotada]="disponible(v) <= 0"
+              (click)="seleccion.set(v)"
+            >
               <input type="radio" name="variante" [checked]="seleccion()?.id === v.id" />
               <div>
                 <div>{{ v.presentacion || v.sku }}</div>
                 <div class="muted" style="font-size:0.8rem">
                   {{ v.color ? v.color + ' · ' : '' }}SKU {{ v.sku }}
                 </div>
+                @if (disponible(v) <= 0) {
+                  <div class="sin-stock">Sin existencias</div>
+                } @else if (disponible(v) <= 5) {
+                  <div class="poco-stock">Quedan {{ disponible(v) }} {{ p.unidad || 'kg' }}</div>
+                }
               </div>
-              <span class="precio">${{ precio(v).toFixed(2) }}</span>
+              <span class="precio">
+                ${{ precio(v).toFixed(2) }}<span class="muted" style="font-size:0.8rem">/{{ p.unidad || 'kg' }}</span>
+              </span>
             </div>
           }
         }
 
         <div style="margin-top:1.5rem; display:flex; gap:0.75rem; align-items:center">
-          <button class="btn-tienda" (click)="agregar()" [disabled]="!seleccion()">Agregar al carrito</button>
+          <button class="btn-tienda" (click)="agregar()" [disabled]="!!bloqueo()">
+            {{ seleccion() && disponible(seleccion()!) <= 0 ? 'Sin existencias' : 'Agregar al carrito' }}
+          </button>
           @if (agregado()) { <span style="color:#166534">✓ Agregado</span> }
         </div>
+        @if (bloqueo(); as motivo) {
+          <p class="aviso" style="margin-top:0.75rem">{{ motivo }}</p>
+        }
       }
     </div>
   </div>

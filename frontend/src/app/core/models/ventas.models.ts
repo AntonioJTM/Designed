@@ -93,5 +93,7 @@ export interface ItemCarrito {
   producto: string;
   presentacion?: string | null;
   precio: number;
+  /** Unidad de peso en que se vende (kg por omisión). La cantidad es decimal. */
+  unidad?: string;
   cantidad: number;
 }

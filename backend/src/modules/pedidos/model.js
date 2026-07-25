@@ -3,6 +3,8 @@
 const crypto = require('crypto');
 const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
+const almacenesModel = require('../almacenes/model');
+const { hoyLocal } = require('../../utils/fechas');
 
 // Ventas/pedidos unificados (online + POS). La confirmación de venta ocurre en
 // UNA transacción: pedidos + pedido_detalle + pagos + descuento de inventario +
@@ -26,7 +28,7 @@ async function _resolverCupon(conn, codigo, subtotal) {
   const cupon = rows[0];
   if (!cupon) throw new AppError(422, 'CUPON_INVALIDO', 'El cupón no existe o está inactivo');
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyLocal();
   if (cupon.fecha_inicio && hoy < String(cupon.fecha_inicio).slice(0, 10)) {
     throw new AppError(422, 'CUPON_NO_VIGENTE', 'El cupón aún no es vigente');
   }
@@ -73,30 +75,50 @@ async function crearPedido(datos, usuarioId) {
       sesionCajaId = sesion.id;
       almacenId = almacenId ?? sesion.almacen_id;
     } else if (!almacenId) {
-      // Online sin almacén explícito: usa el primero activo (prefiere bodega).
-      const [arows] = await conn.query(
-        'SELECT id FROM almacenes WHERE activo = 1 ORDER BY es_punto_venta ASC, id LIMIT 1'
-      );
-      almacenId = arows[0]?.id ?? null;
+      // Online sin almacén explícito: el marcado como `es_tienda_linea`.
+      almacenId = await almacenesModel.idTiendaLinea(conn);
     }
     if (!almacenId) {
       throw new AppError(422, 'FALTA_ALMACEN', 'Se requiere almacen_id para descontar inventario');
     }
 
-    // 2. Construir el detalle con precios e impuestos calculados en el backend.
+    // 2. Lista de precios con la que se cobra. Sin tipo explícito se usa el
+    // público, que es `producto_variantes.precio`.
+    let tipoClienteId = datos.tipo_cliente_id ?? null;
+    if (tipoClienteId) {
+      const [trows] = await conn.query(
+        'SELECT id, activo FROM tipos_cliente WHERE id = :id',
+        { id: tipoClienteId }
+      );
+      if (!trows[0]) {
+        throw new AppError(422, 'TIPO_CLIENTE_INVALIDO', 'El tipo de cliente no existe');
+      }
+      if (!trows[0].activo) {
+        throw new AppError(422, 'TIPO_CLIENTE_INACTIVO', 'Ese tipo de cliente está inactivo');
+      }
+    } else {
+      const [prows] = await conn.query('SELECT id FROM tipos_cliente WHERE es_publico = 1 LIMIT 1');
+      tipoClienteId = prows[0]?.id ?? null;
+    }
+
+    // 3. Construir el detalle con precios e impuestos calculados en el backend.
     const detalle = [];
     let subtotal = 0;
     let impuestos = 0;
 
     for (const item of datos.items) {
+      // `precio_tipo` es el precio propio del tipo de cliente, si lo tiene
+      // capturado; si no, se cobra el público (pv.precio).
       const [vrows] = await conn.query(
         `SELECT pv.id, pv.precio, pv.precio_oferta, pv.presentacion, pv.activo,
-                p.nombre AS producto, imp.porcentaje AS imp_pct
+                p.nombre AS producto, imp.porcentaje AS imp_pct,
+                (SELECT vp.precio FROM variante_precios vp
+                  WHERE vp.variante_id = pv.id AND vp.tipo_cliente_id = :tipo_cliente) AS precio_tipo
            FROM producto_variantes pv
            JOIN productos p        ON p.id = pv.producto_id
            LEFT JOIN impuestos imp ON imp.id = p.impuesto_id
           WHERE pv.id = :id`,
-        { id: item.variante_id }
+        { id: item.variante_id, tipo_cliente: tipoClienteId ?? 0 }
       );
       const v = vrows[0];
       if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `Variante ${item.variante_id} no existe`);
@@ -110,11 +132,24 @@ async function crearPedido(datos, usuarioId) {
       );
       const existente = irows[0] ? Number(irows[0].cantidad) : 0;
       if (existente < item.cantidad) {
-        throw new AppError(409, 'STOCK_INSUFICIENTE',
-          `Stock insuficiente para variante ${item.variante_id}: hay ${existente}, se piden ${item.cantidad}`);
+        // Mensaje en términos del producto, no del id interno: lo lee el cliente.
+        const nombre = `${v.producto}${v.presentacion ? ' · ' + v.presentacion : ''}`;
+        throw new AppError(
+          409,
+          'STOCK_INSUFICIENTE',
+          existente === 0
+            ? `"${nombre}" está agotado.`
+            : `Solo quedan ${existente} de "${nombre}" y pediste ${item.cantidad}.`
+        );
       }
 
-      const precioUnit = v.precio_oferta != null ? Number(v.precio_oferta) : Number(v.precio);
+      // Orden de prelación: precio del tipo de cliente > oferta > público.
+      const precioUnit =
+        v.precio_tipo != null
+          ? Number(v.precio_tipo)
+          : v.precio_oferta != null
+            ? Number(v.precio_oferta)
+            : Number(v.precio);
       const descLinea = round2(item.descuento ?? 0);
       const base = round2(precioUnit * item.cantidad);
       const subLinea = round2(base - descLinea);
@@ -164,15 +199,16 @@ async function crearPedido(datos, usuarioId) {
     const numero = generarNumero(datos.canal);
     const [pr] = await conn.query(
       `INSERT INTO pedidos
-         (numero_pedido, canal, cliente_id, usuario_id, sesion_caja_id, almacen_id,
+         (numero_pedido, canal, cliente_id, tipo_cliente_id, usuario_id, sesion_caja_id, almacen_id,
           direccion_envio_id, cupon_id, estado, subtotal, descuento, impuestos, costo_envio, total, notas)
        VALUES
-         (:numero, :canal, :cliente_id, :usuario_id, :sesion_caja_id, :almacen_id,
+         (:numero, :canal, :cliente_id, :tipo_cliente_id, :usuario_id, :sesion_caja_id, :almacen_id,
           :direccion_envio_id, :cupon_id, :estado, :subtotal, :descuento, :impuestos, :costo_envio, :total, :notas)`,
       {
         numero,
         canal: datos.canal,
         cliente_id: datos.cliente_id ?? null,
+        tipo_cliente_id: tipoClienteId,
         usuario_id: usuarioId ?? null,
         sesion_caja_id: sesionCajaId,
         almacen_id: almacenId,

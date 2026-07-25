@@ -32,9 +32,12 @@ function notFound(req, res) {
 /** Middleware central de manejo de errores (debe registrarse al final). */
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-  // Errores de validación de zod → 422 con el detalle de campos.
+  // Errores de validación de zod → 422. El mensaje nombra los campos que
+  // fallaron: "Datos de entrada inválidos" a secas no le sirve a nadie.
   if (err instanceof ZodError) {
-    return enviarError(res, 422, 'VALIDACION', 'Datos de entrada inválidos', err.issues);
+    const campos = [...new Set(err.issues.map((i) => i.path.join('.')).filter(Boolean))];
+    const detalle = campos.length ? `: revisa ${campos.join(', ')}` : '';
+    return enviarError(res, 422, 'VALIDACION', `Datos de entrada inválidos${detalle}`, err.issues);
   }
 
   if (err instanceof AppError) {
@@ -49,6 +52,20 @@ function errorHandler(err, req, res, next) {
   // FK inexistente al insertar/actualizar (p.ej. categoria_id que no existe).
   if (err && err.code === 'ER_NO_REFERENCED_ROW_2') {
     return enviarError(res, 422, 'REFERENCIA_INVALIDA', 'Una referencia (llave foránea) no existe');
+  }
+
+  // Número demasiado grande para la columna. Sin esto se iba como 500 y el
+  // usuario solo veía "Ocurrió un error interno".
+  if (err && (err.code === 'ER_WARN_DATA_OUT_OF_RANGE' || err.code === 'ER_DATA_TOO_LONG')) {
+    const campo = /column '([^']+)'/.exec(err.sqlMessage || '')?.[1];
+    return enviarError(
+      res,
+      422,
+      'FUERA_DE_RANGO',
+      campo
+        ? `El valor de "${campo}" es demasiado grande para el sistema. Revísalo.`
+        : 'Uno de los valores es demasiado grande para el sistema.'
+    );
   }
 
   // Intento de borrar un registro referenciado por otros.

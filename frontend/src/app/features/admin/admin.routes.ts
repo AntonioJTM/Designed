@@ -24,6 +24,14 @@ export const ADMIN_ROUTES: Routes = [
         loadComponent: () => import('./inventario/inventario').then((m) => m.Inventario),
       },
       {
+        path: 'remesas',
+        loadComponent: () => import('./remesas/remesas').then((m) => m.Remesas),
+      },
+      {
+        path: 'traspasos',
+        loadComponent: () => import('./traspasos/traspasos').then((m) => m.Traspasos),
+      },
+      {
         path: 'kardex',
         loadComponent: () => import('./inventario/kardex').then((m) => m.Kardex),
       },
@@ -44,8 +52,21 @@ export const ADMIN_ROUTES: Routes = [
         loadComponent: () => import('./reportes/reportes').then((m) => m.Reportes),
       },
       {
+        path: 'almacenes',
+        loadComponent: () => import('./almacenes/almacenes').then((m) => m.Almacenes),
+      },
+      {
         path: 'usuarios',
         loadComponent: () => import('./usuarios/usuarios').then((m) => m.Usuarios),
+      },
+      // La ruta específica va primero para que no la absorba 'nomina'.
+      {
+        path: 'nomina/configuracion',
+        loadComponent: () => import('./nomina/nomina-config').then((m) => m.NominaConfig),
+      },
+      {
+        path: 'nomina',
+        loadComponent: () => import('./nomina/nomina').then((m) => m.Nomina),
       },
     ],
   },

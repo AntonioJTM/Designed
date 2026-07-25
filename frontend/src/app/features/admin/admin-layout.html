@@ -2,15 +2,19 @@
   <aside class="side">
     <div class="brand">🧵 Tienda de hilos</div>
     <nav>
-      <a routerLink="/admin/categorias" routerLinkActive="on">Categorías</a>
+      <a routerLink="/admin/categorias" routerLinkActive="on">Materiales</a>
       <a routerLink="/admin/productos" routerLinkActive="on">Productos</a>
       <a routerLink="/admin/inventario" routerLinkActive="on">Inventario</a>
+      <a routerLink="/admin/remesas" routerLinkActive="on">Recibir remesa</a>
+      <a routerLink="/admin/traspasos" routerLinkActive="on">Surtir sucursal</a>
       <a routerLink="/admin/kardex" routerLinkActive="on">Kardex</a>
       <a routerLink="/admin/pos" routerLinkActive="on">Punto de venta</a>
       <a routerLink="/admin/pedidos" routerLinkActive="on">Pedidos</a>
       <a routerLink="/admin/reportes" routerLinkActive="on">Reportes</a>
       @if (esAdmin()) {
+        <a routerLink="/admin/almacenes" routerLinkActive="on">Almacenes</a>
         <a routerLink="/admin/usuarios" routerLinkActive="on">Personal</a>
+        <a routerLink="/admin/nomina" routerLinkActive="on">Nómina</a>
       }
     </nav>
     <div class="user">

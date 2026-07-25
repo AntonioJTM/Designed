@@ -25,7 +25,10 @@
   <div class="resumen" style="max-width:480px">
     @for (i of cart.items(); track i.variante_id) {
       <div class="fila">
-        <span>{{ i.cantidad }} × {{ i.producto }} <span class="muted">({{ i.presentacion || i.sku }})</span></span>
+        <span>
+          {{ i.cantidad }} {{ i.unidad || 'kg' }} × {{ i.producto }}
+          <span class="muted">({{ i.presentacion || i.sku }})</span>
+        </span>
         <span>${{ (i.precio * i.cantidad).toFixed(2) }}</span>
       </div>
     }

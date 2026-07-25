@@ -14,6 +14,19 @@ async function crearCaja(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function actualizarCaja(req, res, next) {
+  try {
+    res.json({ data: await service.actualizarCaja(Number(req.params.id), req.body), error: null });
+  } catch (err) { next(err); }
+}
+
+async function eliminarCaja(req, res, next) {
+  try {
+    await service.eliminarCaja(Number(req.params.id));
+    res.json({ data: { eliminado: true }, error: null });
+  } catch (err) { next(err); }
+}
+
 async function abrirSesion(req, res, next) {
   try {
     res.status(201).json({ data: await service.abrirSesion(req.body, req.auth.sub), error: null });
@@ -52,6 +65,8 @@ async function cerrarSesion(req, res, next) {
 module.exports = {
   listarCajas,
   crearCaja,
+  actualizarCaja,
+  eliminarCaja,
   abrirSesion,
   sesionAbierta,
   obtenerSesion,

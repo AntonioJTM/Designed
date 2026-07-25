@@ -1,0 +1,213 @@
+<div class="page-head">
+  <h1>Recibir remesa</h1>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+<p class="muted" style="margin-bottom:1.25rem">
+  Sube la lista de empaque del proveedor y cada renglón entra como un bulto de la
+  presentación que elijas, con su <b>peso real</b> y su lote. El total en kilos se da de
+  entrada al almacén. Al escanear un bulto en caja se cobra por lo que ese bulto pesa.
+</p>
+
+<!-- Comprobante del último recibo -->
+@if (ultima(); as u) {
+  <div class="card" style="border-color:#bbf7d0; background:#f0fdf4">
+    <h3 style="margin-top:0">✅ Remesa {{ u.folio }}</h3>
+    <div class="previa-calculo" style="background:#fff">
+      <div class="renglon"><span>Bultos registrados</span><b>{{ u.num_bultos }}</b></div>
+      <div class="renglon">
+        <span>Lote(s)</span><span>{{ u.lotes.length ? u.lotes.join(', ') : '—' }}</span>
+      </div>
+      <div class="renglon total">
+        <span>Existencia en el almacén</span>
+        <b>{{ u.saldo_anterior | cantidad: 'kg' }} → {{ u.saldo_nuevo | cantidad: 'kg' }}</b>
+      </div>
+    </div>
+  </div>
+}
+
+<div class="card">
+  <h3 style="margin-top:0">1 · A qué presentación entra</h3>
+  @if (paquetes().length === 0) {
+    <p class="aviso">
+      No hay presentaciones de tipo <b>paquete</b>. Da de alta el producto con la casilla
+      <b>Multipresentación</b> y su presentación de paquete antes de recibir la remesa.
+    </p>
+  } @else {
+    <div class="form-grid">
+      <label class="field">
+        Presentación
+        <select [(ngModel)]="varianteSel">
+          <option value="">— Selecciona —</option>
+          @for (p of paquetes(); track p.id) {
+            <option [ngValue]="p.id">{{ p.producto }} · {{ p.sku }}</option>
+          }
+        </select>
+        @if (paqueteSel(); as p) {
+          <span class="muted" style="font-size:0.72rem">
+            Paquete de {{ p.peso_kg | cantidad: 'kg' }} nominal · ${{ p.precio }} por kilo
+          </span>
+        }
+      </label>
+      <label class="field">
+        Almacén que la recibe
+        <select [(ngModel)]="almacenSel">
+          @for (a of almacenes(); track a.id) {
+            <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_matriz ? ' · matriz' : '' }}</option>
+          }
+        </select>
+      </label>
+      <label class="field full">
+        Notas <span class="muted">(opcional)</span>
+        <input type="text" [(ngModel)]="notas" placeholder="Ej. Factura 4821, llegó el martes" />
+      </label>
+    </div>
+  }
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">2 · La lista de empaque</h3>
+  <label class="field" style="max-width:520px">
+    Archivo de Excel (.xlsx)
+    <input type="file" accept=".xlsx" (change)="elegirArchivo($event)" />
+    <span class="muted" style="font-size:0.72rem">
+      Columnas esperadas: código del bulto, cantidad en kilos, lote y conos.
+    </span>
+  </label>
+
+  @if (leyendo()) {
+    <p class="muted" style="margin-top:1rem">Leyendo el archivo…</p>
+  }
+
+  @if (previa(); as p) {
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); margin-top:1rem">
+      <div class="card kpi">
+        <span class="muted">Bultos</span>
+        <b>{{ p.resumen.num_bultos }}</b>
+      </div>
+      <div class="card kpi total">
+        <span class="muted">Total a recibir</span>
+        <b>{{ p.resumen.kg_total | cantidad: 'kg' }}</b>
+      </div>
+      <div class="card kpi">
+        <span class="muted">Peso por bulto</span>
+        <b style="font-size:1.1rem">
+          {{ p.resumen.peso_min | cantidad }} – {{ p.resumen.peso_max | cantidad: 'kg' }}
+        </b>
+      </div>
+      <div class="card kpi">
+        <span class="muted">Conos que rinden</span>
+        <b>{{ p.resumen.conos_totales | cantidad }}</b>
+      </div>
+    </div>
+
+    @if (p.resumen.lotes.length) {
+      <table class="grid mini" style="margin-top:1rem; max-width:420px">
+        <thead><tr><th>Lote</th><th class="num">Bultos</th><th class="num">Kilos</th></tr></thead>
+        <tbody>
+          @for (l of p.resumen.lotes; track l.lote) {
+            <tr>
+              <td>{{ l.lote }}</td>
+              <td class="num">{{ l.bultos }}</td>
+              <td class="num">{{ l.kg | cantidad: 'kg' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (bloqueantes().length) {
+      <p class="alert" style="margin-top:1rem">
+        {{ bloqueantes().length }} código(s) ya están registrados, así que no se puede cargar.
+        Si esta remesa ya se recibió antes, revísalo en el historial.
+      </p>
+      <ul class="muted" style="font-size:0.82rem; margin:0 0 0 1.2rem">
+        @for (a of bloqueantes().slice(0, 8); track a.fila) { <li>Renglón {{ a.fila }}: {{ a.aviso }}</li> }
+        @if (bloqueantes().length > 8) { <li>… y {{ bloqueantes().length - 8 }} más</li> }
+      </ul>
+    }
+
+    @if (advertencias().length) {
+      <div class="aviso" style="margin-top:1rem">
+        <b>Revisa estos renglones</b>
+        <ul style="margin:0.4rem 0 0 1.2rem; font-size:0.85rem">
+          @for (a of advertencias(); track a.fila) { <li>Renglón {{ a.fila }}: {{ a.aviso }}</li> }
+        </ul>
+      </div>
+    }
+
+    <table class="grid" style="margin-top:1rem">
+      <thead>
+        <tr><th>Código del bulto</th><th class="num">Peso</th><th>Lote</th><th class="num">Conos</th></tr>
+      </thead>
+      <tbody>
+        @for (b of bultosVisibles(); track b.codigo) {
+          <tr>
+            <td>{{ b.codigo }}</td>
+            <td class="num">{{ b.peso_kg | cantidad: 'kg' }}</td>
+            <td class="muted">{{ b.lote || '—' }}</td>
+            <td class="num">{{ b.conos || '—' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    @if (p.bultos.length > bultosVisibles().length) {
+      <button class="btn btn-ghost btn-sm" style="margin-top:0.6rem" (click)="verTodos.set(true)">
+        Ver los {{ p.bultos.length }} bultos
+      </button>
+    }
+
+    <div class="previa-calculo">
+      <div class="renglon total">
+        <span>
+          Entran <b>{{ p.resumen.num_bultos }}</b> bultos a
+          <b>{{ nombreAlmacen() }}</b>
+        </span>
+        <b>{{ p.resumen.kg_total | cantidad: 'kg' }}</b>
+      </div>
+    </div>
+
+    <div style="margin-top:1rem">
+      <button class="btn btn-primary"
+              [disabled]="enviando() || !p.se_puede_cargar || !varianteSel || !almacenSel"
+              (click)="confirmar()">
+        {{ enviando() ? 'Recibiendo…' : 'Confirmar la entrada' }}
+      </button>
+    </div>
+  }
+</div>
+
+<!-- Historial -->
+@if (historial().length > 0) {
+  <div class="page-head" style="margin-top:2rem">
+    <h2 style="font-size:1.1rem; margin:0">Remesas recibidas</h2>
+  </div>
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Folio</th><th>Producto</th><th>Almacén</th>
+        <th class="num">Bultos</th><th class="num">Kilos</th><th>Lotes</th><th>Cuándo</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (r of historial(); track r.id) {
+        <tr>
+          <td>
+            <b>{{ r.folio }}</b>
+            @if (r.archivo) {
+              <div class="muted" style="font-size:0.72rem">{{ r.archivo }}</div>
+            }
+          </td>
+          <td>{{ r.producto }} <span class="muted">· {{ r.sku }}</span></td>
+          <td class="muted">{{ r.almacen }}</td>
+          <td class="num">{{ r.num_bultos }}</td>
+          <td class="num">{{ r.kg_total | cantidad: 'kg' }}</td>
+          <td class="muted">{{ r.lotes || '—' }}</td>
+          <td class="muted">{{ r.creado_en | fecha }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

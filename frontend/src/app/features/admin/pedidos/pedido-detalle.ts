@@ -3,11 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
 import { EstadoPedido, Pedido } from '../../../core/models/ventas.models';
+import { FechaPipe } from '../../../shared/fecha.pipe';
 import { ApiError } from '../../../core/models/auth.models';
 
 @Component({
   selector: 'app-pedido-detalle',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, FechaPipe],
   templateUrl: './pedido-detalle.html',
 })
 export class PedidoDetalle {

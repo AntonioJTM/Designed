@@ -117,6 +117,97 @@ table.grid .acciones { display: flex; gap: 0.4rem; }
 .kpi.total .muted { color: #c7d2fe; }
 @media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
 
+/* ===== Cantidad con su unidad (se vende por peso: admite decimales) ===== */
+.cant-unidad { display: inline-flex; align-items: center; gap: 0.35rem; }
+.cant-unidad .muted { font-size: 0.8rem; }
+
+/* Vista previa de un cálculo antes de confirmarlo (precio del cono, desarme) */
+.previa-calculo {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.88rem;
+}
+.previa-calculo .renglon {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0;
+}
+.previa-calculo .renglon.total {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+  font-size: 1rem;
+}
+
+/* ================= Nómina semanal ================= */
+.ok-msg {
+  background: #f0fdf4;
+  color: #166534;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.pill.warn { background: #fef3c7; color: #92400e; }
+
+table.grid th.num, table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.neg { color: #b91c1c; }
+
+.semana-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.semana-info { display: flex; flex-direction: column; gap: 0.15rem; }
+.semana-info b { font-size: 1.05rem; }
+.semana-nav .ir-a { flex-direction: row; align-items: center; gap: 0.5rem; }
+.semana-nav .ir-a input { padding: 0.35rem 0.5rem; }
+
+.vacio-semana { text-align: center; }
+.vacio-semana p { color: #6b7280; margin-top: 0; }
+
+.acciones-periodo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.acciones-periodo .botones { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.nomina-tabla tr.abierta > td { background: #f8fafc; }
+.nomina-tabla .detalle-row > td { background: #f8fafc; padding: 0; }
+
+.detalle-nomina {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  padding: 1.25rem;
+}
+.detalle-nomina h4 { margin: 0 0 0.6rem; font-size: 0.9rem; color: #374151; }
+@media (max-width: 900px) { .detalle-nomina { grid-template-columns: 1fr; } }
+
+table.grid.mini { border-radius: 8px; }
+table.grid.mini th, table.grid.mini td { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+table.grid.mini tfoot td { background: #f8fafc; border-top: 1px solid #e5e7eb; }
+
+.form-concepto {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed #e5e7eb;
+}
+.form-concepto .field { flex: 1; min-width: 90px; }
+.form-concepto .field input, .form-concepto .field select { padding: 0.4rem 0.5rem; font-size: 0.85rem; }
+
 /* ================= Tienda en línea (pública) ================= */
 .tienda-shell { display: block; min-height: 100vh; background: #fafaf9; }
 
@@ -180,6 +271,33 @@ table.grid .acciones { display: flex; gap: 0.4rem; }
 .prod-card .nombre { font-weight: 600; font-size: 0.95rem; }
 .prod-card .cat { font-size: 0.78rem; color: #a8a29e; }
 .prod-card .precio { margin-top: auto; font-size: 1.1rem; font-weight: 700; color: #7c2d12; }
+
+/* Producto sin existencias en el almacén que surte la tienda en línea */
+.prod-card .thumb { position: relative; }
+.badge-agotado {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  background: #44403c;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+.prod-card.agotado .thumb img { opacity: 0.45; }
+.prod-card.agotado .precio { color: #a8a29e; }
+
+/* Cantidad por peso: el número y su unidad viajan juntos */
+.cant-peso { display: inline-flex; align-items: center; gap: 0.3rem; }
+.cant-peso input { text-align: right; }
+.cant-peso .muted { font-size: 0.8rem; }
+.por-unidad { font-size: 0.8rem; font-weight: 400; color: #a8a29e; }
+
+.variante-row.agotada { opacity: 0.6; }
+.sin-stock { font-size: 0.78rem; font-weight: 600; color: #b91c1c; margin-top: 0.15rem; }
+.poco-stock { font-size: 0.78rem; font-weight: 600; color: #b45309; margin-top: 0.15rem; }
 
 /* Detalle */
 .detalle { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }

@@ -6,9 +6,11 @@ import { ApiResponse } from '../models/auth.models';
 import { Paginado, Variante } from '../models/catalogo.models';
 import {
   Almacen,
+  AlmacenInput,
   Movimiento,
   ResultadoMovimiento,
   StockItem,
+  TraspasoDetalle,
   TipoMovimiento,
 } from '../models/inventario.models';
 
@@ -43,6 +45,174 @@ export interface TransferenciaInput {
   motivo?: string;
 }
 
+/** Desarme de paquetes en conos. El peso y los conos por paquete ya están en la variante. */
+export interface DesarmeInput {
+  cono_variante_id: number;
+  almacen_origen_id: number;
+  almacen_destino_id: number;
+  paquetes: number;
+  /** Kilos reales. Sin esto se usa paquetes × peso nominal del paquete. */
+  kg?: number;
+  motivo?: string;
+}
+
+export interface ResultadoDesarme {
+  conversion_id: number;
+  producto: string;
+  paquetes: number;
+  kg_consumidos: number;
+  /** Lo que habrían pesado los paquetes según su peso nominal. */
+  kg_nominales?: number;
+  piezas_generadas: number;
+  paquete: { variante_id: number; sku: string; almacen_id: number; saldo_nuevo: number };
+  cono: { variante_id: number; sku: string; almacen_id: number; saldo_nuevo: number };
+}
+
+/** Totales de un almacén en el panorama. */
+export interface ResumenAlmacen {
+  almacen_id: number;
+  nombre: string;
+  es_punto_venta: boolean | number;
+  es_matriz: boolean | number;
+  es_tienda_linea: boolean | number;
+  skus: number | string;
+  kilos: string;
+  piezas: string;
+  alertas: number | string;
+}
+
+/** Renglón de la matriz: un producto y lo que hay de él en cada almacén. */
+export interface ResumenFila {
+  variante_id: number;
+  sku: string;
+  producto: string;
+  presentacion?: string | null;
+  tipo_presentacion?: string;
+  peso_kg?: string | null;
+  unidad: string;
+  existencias: Record<string, { cantidad: string; bajo_minimo: boolean }>;
+  total: number;
+}
+
+export interface ResumenAlmacenes {
+  almacenes: ResumenAlmacen[];
+  filas: ResumenFila[];
+  truncado: boolean;
+  total_variantes: number;
+}
+
+/** Un bulto de la lista de empaque: código, peso real, lote y conos. */
+export interface BultoRemesa {
+  fila?: number;
+  codigo: string;
+  peso_kg: number;
+  lote?: string | null;
+  conos?: number | null;
+}
+
+export interface PreviaRemesa {
+  archivo: string | null;
+  hoja: string;
+  bultos: BultoRemesa[];
+  avisos: { fila: number; aviso: string; bloqueante?: boolean }[];
+  duplicados: string[];
+  se_puede_cargar: boolean;
+  resumen: {
+    num_bultos: number;
+    kg_total: number;
+    peso_min: number;
+    peso_max: number;
+    conos_totales: number;
+    lotes: { lote: string; bultos: number; kg: number }[];
+  };
+}
+
+export interface ResultadoRemesa {
+  id: number;
+  folio: string;
+  num_bultos: number;
+  kg_total: number;
+  lotes: string[];
+  saldo_anterior: number;
+  saldo_nuevo: number;
+}
+
+export interface Remesa {
+  id: number;
+  folio: string;
+  producto: string;
+  sku: string;
+  almacen: string;
+  usuario?: string | null;
+  num_bultos: number;
+  kg_total: string;
+  lotes?: string | null;
+  archivo?: string | null;
+  creado_en: string;
+}
+
+export interface TraspasoItemInput {
+  variante_id: number;
+  /** Para variantes de tipo paquete: cuántos paquetes se mandan. */
+  paquetes?: number;
+  /** Para el resto: cantidad en la unidad de la variante. */
+  cantidad?: number;
+}
+
+export interface TraspasoInput {
+  almacen_origen_id: number;
+  almacen_destino_id: number;
+  notas?: string;
+  items: TraspasoItemInput[];
+}
+
+export interface TraspasoLinea {
+  variante_id: number;
+  sku: string;
+  producto: string;
+  paquetes: number | string | null;
+  cantidad: number | string;
+  unidad?: string;
+  tipo_presentacion?: string;
+  saldo_origen?: number;
+  saldo_destino?: number;
+}
+
+export interface ResultadoTraspaso {
+  id: number;
+  folio: string;
+  almacen_origen_id: number;
+  almacen_destino_id: number;
+  lineas: TraspasoLinea[];
+}
+
+export interface Traspaso {
+  id: number;
+  folio: string;
+  almacen_origen: string;
+  almacen_destino: string;
+  usuario?: string | null;
+  notas?: string | null;
+  num_lineas: number | string;
+  creado_en: string;
+  lineas: TraspasoLinea[];
+}
+
+export interface Conversion {
+  id: number;
+  producto: string;
+  paquete_sku: string;
+  cono_sku: string;
+  paquetes: string;
+  kg_consumidos: string;
+  piezas_generadas: string;
+  almacen_origen: string;
+  almacen_destino: string;
+  usuario?: string | null;
+  motivo?: string | null;
+  creado_en: string;
+}
+
 /** Servicio HTTP de inventario y almacenes. */
 @Injectable({ providedIn: 'root' })
 export class InventarioService {
@@ -53,9 +223,84 @@ export class InventarioService {
     return this.http.get<ApiResponse<Almacen[]>>(`${this.base}/almacenes`).pipe(map(data));
   }
 
+  // ---- Remesas: carga masiva de bultos desde la lista de empaque ----
+
+  /** Lee el .xlsx en el servidor y devuelve la vista previa sin guardar nada. */
+  previaRemesa(archivo: File): Observable<PreviaRemesa> {
+    return this.http
+      .post<ApiResponse<PreviaRemesa>>(`${this.base}/remesas/previa`, archivo, {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Nombre-Archivo': archivo.name,
+        },
+      })
+      .pipe(map(data));
+  }
+
+  /** Confirma la remesa: registra los bultos y da entrada al total en kilos. */
+  confirmarRemesa(body: {
+    variante_id: number;
+    almacen_id: number;
+    archivo?: string | null;
+    notas?: string;
+    bultos: BultoRemesa[];
+  }): Observable<ResultadoRemesa> {
+    return this.http
+      .post<ApiResponse<ResultadoRemesa>>(`${this.base}/remesas`, body)
+      .pipe(map(data));
+  }
+
+  remesas(limit = 20): Observable<Paginado<Remesa>> {
+    const params = new HttpParams().set('limit', limit);
+    return this.http
+      .get<ApiResponse<Paginado<Remesa>>>(`${this.base}/remesas`, { params })
+      .pipe(map(data));
+  }
+
+  /** Panorama de qué hay en cada almacén: totales + matriz producto × almacén. */
+  resumen(): Observable<ResumenAlmacenes> {
+    return this.http
+      .get<ApiResponse<ResumenAlmacenes>>(`${this.base}/inventario/resumen`)
+      .pipe(map(data));
+  }
+
+  /** Alta de almacén. Solo administradores. */
+  crearAlmacen(body: AlmacenInput): Observable<Almacen> {
+    return this.http.post<ApiResponse<Almacen>>(`${this.base}/almacenes`, body).pipe(map(data));
+  }
+
+  /** Edición de almacén. Solo administradores. */
+  actualizarAlmacen(id: number, body: AlmacenInput): Observable<Almacen> {
+    return this.http
+      .put<ApiResponse<Almacen>>(`${this.base}/almacenes/${id}`, body)
+      .pipe(map(data));
+  }
+
+  /** Solo se permite si el almacén no tiene nada colgando. Solo administradores. */
+  eliminarAlmacen(id: number): Observable<unknown> {
+    return this.http
+      .delete<ApiResponse<unknown>>(`${this.base}/almacenes/${id}`)
+      .pipe(map(data));
+  }
+
   /** Búsqueda de variantes (SKU/código) para elegir en formularios. */
   buscarVariantes(q: string): Observable<Variante[]> {
     const params = new HttpParams().set('q', q).set('limit', 20);
+    return this.http
+      .get<ApiResponse<Paginado<Variante>>>(`${this.base}/variantes`, { params })
+      .pipe(map((r) => data(r).items));
+  }
+
+  /**
+   * Las presentaciones de un tipo, para llenar un selector completo.
+   * El filtro va al servidor: recortar en el cliente dejaría fuera las que no
+   * alcanzaron a entrar en la página.
+   */
+  variantesPorTipo(tipo: 'simple' | 'paquete' | 'cono'): Observable<Variante[]> {
+    const params = new HttpParams()
+      .set('tipo_presentacion', tipo)
+      .set('activo', true)
+      .set('limit', 200);
     return this.http
       .get<ApiResponse<Paginado<Variante>>>(`${this.base}/variantes`, { params })
       .pipe(map((r) => data(r).items));
@@ -77,10 +322,16 @@ export class InventarioService {
     return this.http.get<ApiResponse<StockItem[]>>(`${this.base}/inventario/alertas`).pipe(map(data));
   }
 
-  movimientos(almacen_id?: number, variante_id?: number): Observable<Paginado<Movimiento>> {
+  /** Kardex. `concepto` agrupa en lenguaje de tienda: ventas, traspasos, desarmes… */
+  movimientos(
+    almacen_id?: number,
+    variante_id?: number,
+    concepto?: string
+  ): Observable<Paginado<Movimiento>> {
     let params = new HttpParams().set('limit', 100);
     if (almacen_id) params = params.set('almacen_id', almacen_id);
     if (variante_id) params = params.set('variante_id', variante_id);
+    if (concepto) params = params.set('concepto', concepto);
     return this.http
       .get<ApiResponse<Paginado<Movimiento>>>(`${this.base}/inventario/movimientos`, { params })
       .pipe(map(data));
@@ -95,6 +346,46 @@ export class InventarioService {
   transferir(body: TransferenciaInput): Observable<unknown> {
     return this.http
       .post<ApiResponse<unknown>>(`${this.base}/inventario/transferencias`, body)
+      .pipe(map(data));
+  }
+
+  /** Desarma paquetes y los convierte en conos en el almacén destino. */
+  desarmar(body: DesarmeInput): Observable<ResultadoDesarme> {
+    return this.http
+      .post<ApiResponse<ResultadoDesarme>>(`${this.base}/inventario/desarmes`, body)
+      .pipe(map(data));
+  }
+
+  /**
+   * Traspaso de matriz a sucursal. En variantes de tipo paquete se manda
+   * `paquetes`; en las demás, `cantidad` en su propia unidad.
+   */
+  crearTraspaso(body: TraspasoInput): Observable<ResultadoTraspaso> {
+    return this.http
+      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos`, body)
+      .pipe(map(data));
+  }
+
+  traspasos(almacen_destino_id?: number, limit = 20): Observable<Paginado<Traspaso>> {
+    let params = new HttpParams().set('limit', limit);
+    if (almacen_destino_id) params = params.set('almacen_destino_id', almacen_destino_id);
+    return this.http
+      .get<ApiResponse<Paginado<Traspaso>>>(`${this.base}/inventario/traspasos`, { params })
+      .pipe(map(data));
+  }
+
+  /** Un traspaso con sus líneas, para ver qué se mandó. */
+  traspaso(id: number): Observable<TraspasoDetalle> {
+    return this.http
+      .get<ApiResponse<TraspasoDetalle>>(`${this.base}/inventario/traspasos/${id}`)
+      .pipe(map(data));
+  }
+
+  conversiones(variante_id?: number, limit = 20): Observable<Paginado<Conversion>> {
+    let params = new HttpParams().set('limit', limit);
+    if (variante_id) params = params.set('variante_id', variante_id);
+    return this.http
+      .get<ApiResponse<Paginado<Conversion>>>(`${this.base}/inventario/conversiones`, { params })
       .pipe(map(data));
   }
 

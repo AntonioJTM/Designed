@@ -8,10 +8,8 @@ erDiagram
     usuarios ||--o{ sesiones_caja : abre
     usuarios ||--o{ pedidos : atiende
 
-    categorias ||--o{ categorias : padre_de
     categorias ||--o{ productos : clasifica
-    marcas ||--o{ productos : fabrica
-    materiales ||--o{ productos : compone
+    lineas ||--o{ productos : procede_de
     unidades_medida ||--o{ productos : mide
     impuestos ||--o{ productos : grava
     productos ||--o{ producto_variantes : tiene
@@ -53,6 +51,20 @@ erDiagram
     pedidos ||--o{ envios : despacha
     paqueterias ||--o{ envios : transporta
 
+    almacenes ||--o{ traspasos : envia
+    traspasos ||--o{ traspaso_detalle : contiene
+    producto_variantes ||--o{ traspaso_detalle : se_traspasa
+
+    producto_variantes ||--o{ producto_variantes : se_desarma_en
+    producto_variantes ||--o{ variante_conversiones : origen
+    almacenes ||--o{ variante_conversiones : mueve
+
+    usuarios ||--o| nomina_empleados : cobra_como
+    usuarios ||--o{ nomina_periodos : genera
+    nomina_periodos ||--o{ nomina_recibos : agrupa
+    usuarios ||--o{ nomina_recibos : recibe
+    nomina_recibos ||--o{ nomina_recibo_conceptos : ajusta
+
     roles {
         smallint id PK
         varchar nombre
@@ -81,16 +93,11 @@ erDiagram
     }
     categorias {
         int id PK
-        int padre_id FK
         varchar nombre
-        varchar slug
+        varchar calibres
     }
-    marcas {
+    lineas {
         int id PK
-        varchar nombre
-    }
-    materiales {
-        smallint id PK
         varchar nombre
     }
     colores {
@@ -111,12 +118,10 @@ erDiagram
     productos {
         bigint id PK
         int categoria_id FK
-        int marca_id FK
-        smallint material_id FK
+        int linea_id FK
         smallint unidad_medida_id FK
         smallint impuesto_id FK
         varchar nombre
-        varchar slug
         varchar grosor_calibre
     }
     producto_variantes {
@@ -126,6 +131,11 @@ erDiagram
         varchar sku
         varchar codigo_barras
         varchar presentacion
+        varchar tipo_presentacion
+        decimal peso_kg
+        bigint origen_variante_id FK
+        int piezas_por_origen
+        varchar modo_precio
         decimal precio
         decimal costo
     }
@@ -159,6 +169,8 @@ erDiagram
         smallint id PK
         varchar nombre
         boolean es_punto_venta
+        boolean es_tienda_linea
+        boolean es_matriz
     }
     inventario {
         bigint id PK
@@ -279,4 +291,64 @@ erDiagram
         smallint paqueteria_id FK
         varchar numero_guia
         varchar estado
+    }
+    traspasos {
+        bigint id PK
+        varchar folio
+        smallint almacen_origen_id FK
+        smallint almacen_destino_id FK
+        bigint usuario_id FK
+    }
+    traspaso_detalle {
+        bigint id PK
+        bigint traspaso_id FK
+        bigint variante_id FK
+        decimal paquetes
+        decimal cantidad
+    }
+    variante_conversiones {
+        bigint id PK
+        bigint variante_origen_id FK
+        bigint variante_destino_id FK
+        smallint almacen_origen_id FK
+        smallint almacen_destino_id FK
+        decimal paquetes
+        decimal kg_consumidos
+        decimal piezas_generadas
+    }
+    nomina_empleados {
+        bigint usuario_id PK
+        decimal sueldo_base_semanal
+        boolean paga_comision
+        decimal porcentaje_comision
+        decimal valor_hora_extra
+        boolean activo
+    }
+    nomina_periodos {
+        bigint id PK
+        date fecha_inicio
+        date fecha_fin
+        date fecha_pago
+        varchar estado
+        bigint creado_por FK
+    }
+    nomina_recibos {
+        bigint id PK
+        bigint periodo_id FK
+        bigint usuario_id FK
+        decimal sueldo_base
+        decimal ventas_netas
+        decimal porcentaje_comision
+        decimal comision
+        decimal otras_percepciones
+        decimal deducciones
+        decimal total_pagar
+    }
+    nomina_recibo_conceptos {
+        bigint id PK
+        bigint recibo_id FK
+        varchar tipo
+        varchar clave
+        decimal cantidad
+        decimal importe
     }

@@ -1,0 +1,1490 @@
+===============================================================================
+ BITÁCORA DE CAMBIOS · Sistema de gestión para tienda de hilos
+ Las entradas más recientes van arriba.
+
+ SI SE PERDIÓ EL HILO DE LA CONVERSACIÓN, EMPIEZA AQUÍ:
+ lee el bloque "DÓNDE SE QUEDÓ" de abajo y luego la primera entrada fechada.
+ Ese bloque se reescribe en cada cambio; las entradas fechadas no se tocan.
+===============================================================================
+
+
+===============================================================================
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-07-25
+===============================================================================
+
+LO ÚLTIMO QUE SE TERMINÓ
+  Carga masiva de bultos desde la lista de empaque del proveedor (el .xlsx
+  "MARINO OSCURO 2-30.xlsx"). Funciona de punta a punta y está probado con el
+  archivo real: Admin → Recibir remesa. Ver la primera entrada fechada.
+
+CÓMO PROBAR QUE SIGUE FUNCIONANDO
+  cd backend
+  PORT=3210 node src/server.js &            (usa la base "desarrollo")
+  node scripts/e2e-remesas.js               26 comprobaciones, se limpia solo
+
+SIGUIENTE PASO NATURAL  (nada de esto está empezado)
+  1. Que el DESARME acepte escanear el bulto y tome su peso y sus conos reales
+     en vez de los nominales de la presentación. Es el pendiente más claro:
+     ya se guarda variante_codigos.peso_kg y .conos, pero nadie los lee todavía.
+     Importa por los bultos incompletos, como el de 7 conos del archivo.
+  2. Que el POS, al escanear un bulto, precargue los kilos de ESE bulto. Hoy
+     resuelve la presentación y cobra por el peso nominal.
+  3. Checkout de la tienda en línea: sigue sin dirección de envío, cupón ni
+     pago, así que el pedido se queda en "pendiente". Es el hueco más viejo
+     del proyecto.
+
+DEUDAS CONOCIDAS QUE NO SON DE ESTE CAMBIO
+  · backend/.env.example está borrado del repo aunque backend/README.md lo
+    referencia. Viene así de antes.
+  · Los traspasos son inmediatos, sin estado "en tránsito". Decisión explícita
+    del usuario, no un olvido.
+  · Las migraciones de db/migrations/ están aplicadas SOLO en "desarrollo".
+
+CÓMO TRABAJA EL USUARIO
+  · Contestarle siempre en español.
+  · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
+    fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Carga masiva de bultos desde la lista de empaque
+-------------------------------------------------------------------------------
+
+QUÉ TRAÍA EL ARCHIVO  (MARINO OSCURO 2-30.xlsx, hoja "Presentaciones")
+  Se analizó antes de diseñar nada:
+    · 80 renglones, cada uno un BULTO físico con código de barras único de 8
+      dígitos, sin repetidos
+    · Peso variable por bulto: de 10.750 a 19.800 kg, promedio 19.094
+    · TOTAL 1,527.500 kg
+    · 2 lotes: 0094886 (14 bultos, 265 kg) y 0095316 (66 bultos, 1,262.5 kg)
+    · Conos: 79 bultos rinden 12; el renglón 59 (código 00548087, 10.75 kg)
+      rinde 7 — un bulto incompleto
+    · Las columnas de fecha vienen vacías en los 80
+
+DECISIONES ACORDADAS
+  · Cada renglón NO es una presentación del catálogo. La presentación es una
+    sola ("MARINO OSCURO 2/30 · Paquete", con su precio por kilo) y los 80
+    códigos son sus BULTOS. Así hay un precio que mantener en vez de 80, y al
+    escanear un bulto se cobra por lo que ESE bulto pesa.
+  · Subir el archivo también da entrada a la mercancía: un solo paso.
+  · El producto, la presentación y el almacén se eligen en la pantalla, no en
+    el archivo. Así el Excel no tiene que cambiar nunca, como pediste.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_remesas_bultos.sql
+          · variante_codigos gana peso_kg, lote, conos y remesa_id: cada código
+            deja de ser "un código más" y pasa a describir su bulto
+          · tabla remesas: folio, presentación, almacén, bultos, kilos, lotes,
+            archivo, notas
+          Idempotente. YA APLICADA en "desarrollo".
+  MODIF   db/schema_mysql.sql   (46 tablas)
+
+BACKEND
+  NUEVO   backend/src/utils/xlsx.js
+          Lector de .xlsx propio, SIN dependencias. Se intentó usar la librería
+          `xlsx` de npm y trae un aviso de seguridad sin arreglo publicado, así
+          que se desinstaló y se escribió a mano: el .xlsx es un ZIP con XML y
+          el formato aquí es fijo. Verificado contra el archivo real: cuadra
+          exacto en los 1,527.500 kg.
+  NUEVO   backend/src/modules/remesas/  (model/service/controller/routes)
+            POST /api/v1/remesas/previa   ← el .xlsx en crudo, no guarda nada
+            POST /api/v1/remesas          ← confirma la entrada
+            GET  /api/v1/remesas[/:id]
+          La confirmación es una sola transacción: folio REM-…, los 80 bultos y
+          la entrada de los kilos con su movimiento de kardex.
+          Valida: formato del encabezado, peso inválido, código repetido en el
+          archivo, código ya registrado en la base (bloquea), y que la
+          presentación sea de tipo paquete.
+  MODIF   backend/src/modules/variantes/{model,controller}.js
+          GET /api/v1/variantes acepta ?tipo_presentacion=simple|paquete|cono.
+          Ver el BUG de abajo: era necesario para que el selector de la pantalla
+          de remesas no se quedara corto.
+
+FRONTEND
+  NUEVO   frontend/src/app/features/admin/remesas/remesas.ts + .html
+          Pantalla "Recibir remesa": eliges presentación y almacén, subes el
+          archivo y sale la vista previa —bultos, kilos, rango de peso, conos,
+          desglose por lote, avisos— antes de confirmar. Los bultos se listan
+          (primeros 15, con botón para ver todos) y al confirmar aparece el
+          comprobante con el saldo antes y después.
+  MODIF   inventario.service.ts   previaRemesa(), confirmarRemesa(), remesas()
+                                 y variantesPorTipo() (ver el BUG de abajo)
+  MODIF   admin.routes.ts + admin-layout.html
+
+BUG ENCONTRADO Y CORREGIDO DE PASO
+  El selector de presentaciones de la pantalla de remesas pedía las variantes
+  con buscarVariantes('') —límite de 20— y filtraba los paquetes en el
+  NAVEGADOR. Con el catálogo chico funciona, pero al crecer, el paquete que
+  buscas simplemente no aparecería en la lista: se quedó fuera de los primeros
+  20 antes de filtrar. Se corrigió llevando el filtro al servidor
+  (?tipo_presentacion=paquete&activo=true&limit=200) con el método nuevo
+  variantesPorTipo(). Regla general: filtrar en el cliente lo que la paginación
+  ya recortó deja datos fuera sin avisar.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-remesas.js
+          Guion de prueba GUARDADO EN EL REPO (antes era desechable). Levanta
+          nada: espera el servidor en :3210, crea lo que necesita con prefijo
+          TMP y lo borra al terminar. 26 comprobaciones, sale 1 si algo falla.
+
+  26 comprobaciones E2E con TU archivo real, todas en verde: lee la hoja
+  "Presentaciones", los 80 bultos, los 1,527.500 kg, el rango 10.75–19.8, los 2
+  lotes con su desglose, los 955 conos (79×12 + 7), el aviso del bulto
+  incompleto; la remesa se crea con folio y deja el inventario en 1,527.5 kg;
+  cada bulto guarda su peso y lote (00531332 = 18.650 kg, lote 0094886, 12
+  conos) y el incompleto conserva sus 7; el kardex lo explica; escanear
+  00548087 resuelve a la presentación; volver a subir el mismo archivo marca
+  los 80 como duplicados y el confirmar da 409.
+  Y las guardas: 422 NO_ES_PAQUETE con una presentación simple, 422
+  VARIANTE_INVALIDA, 422 ALMACEN_INVALIDO, 422 sin archivo, sin dejar bultos
+  huérfanos; y el filtro nuevo devolviendo solo paquetes.
+    OJO, quedó anotado en el guion: la guarda del almacén hay que probarla con
+    una variante paquete VÁLIDA. Si se usa una simple, contesta 422 pero por la
+    otra razón (NO_ES_PAQUETE) y la prueba pasa engañada. Así falló el primer
+    intento.
+  Build de producción de Angular limpio. La base quedó como estaba.
+
+DOCUMENTACIÓN
+  MODIF   CLAUDE.md   regla "Remesa → bultos" en el modelo de datos y línea
+                      nueva en el estado del proyecto
+
+PENDIENTE / NOTAS
+  · El desarme sigue usando el peso y los conos NOMINALES de la presentación.
+    Ahora que cada bulto trae los suyos, lo natural es que el desarme te deje
+    escanear el bulto y tome su peso y su rendimiento reales — sobre todo por
+    los incompletos como el de 7 conos. Queda como siguiente paso.
+  · El POS todavía no usa el peso del bulto al escanear: resuelve la
+    presentación pero no precarga los kilos. Mismo caso que el anterior.
+  · Aplicar db/migrations/2026-07_remesas_bultos.sql en ambientes distintos a
+    "desarrollo".
+  · Si algún día el proveedor llena las columnas D/E (fechas), el lector propio
+    las devuelve como número serial de Excel, no como fecha: hay que convertirlas
+    en utils/xlsx.js. Hoy vienen vacías en los 80 renglones.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Multipresentación, lotes y precios por tipo de cliente
+-------------------------------------------------------------------------------
+
+CUATRO COSAS PEDIDAS
+
+1 · LOS SKU SE PUEDEN AGREGAR DESPUÉS  (ya funcionaba)
+    Guardas el producto y sus presentaciones aparecen abajo. El producto puede
+    quedarse sin presentaciones el tiempo que sea y capturarlas cuando llegue
+    la mercancía. Se aclaró el texto, que antes sonaba a obligación.
+
+2 · MULTIPRESENTACIÓN  (casilla nueva, junto a Destacado y Activo)
+    Habilita manejar el producto en paquete y en conos. Si está apagada, el
+    backend RECHAZA crear variantes de tipo paquete o cono (422
+    NO_MULTIPRESENTACION) y el selector solo ofrece "Simple".
+    Además, el desarme ahora acepta el PESO REAL del bulto: si el paquete
+    nominal es de 10 kg pero pesó 9.85, capturas 9.85 y se consume eso. Los
+    conos generados no cambian. La vista previa marca cuando está ajustado y
+    muestra el nominal para comparar.
+
+3 · POR LOTES  (casilla nueva)
+    Habilita capturar el lote de cada presentación. Es una ETIQUETA de remesa:
+    las existencias se siguen sumando juntas, un saldo por variante y almacén.
+    El lote se muestra como distintivo en la tabla de presentaciones.
+
+4 · PRECIO PÚBLICO + PRECIO POR TIPO DE CLIENTE
+    El precio de la presentación pasó a rotularse "Precio público". Cada tipo
+    de cliente lleva su precio propio, capturado por presentación:
+
+        ACRILÁN 1/30 · Paquete (por kilo)
+          Precio público      $200.00
+          Mayoreo             $160.00   ← capturado
+          Medio mayoreo       público   ← sin capturar, paga $200
+
+    Al vender la prelación es: precio del tipo > oferta > público. Dejar vacío
+    el precio de un tipo lo devuelve al público. El POS trae un selector de
+    tipo de cliente (solo aparece si hay más de uno) y el carrito rotula con
+    qué lista está cobrando.
+    El pedido guarda `tipo_cliente_id` para saber con qué lista se cerró, y el
+    detalle congela el precio unitario, así que el histórico no cambia si
+    después se editan las listas.
+
+    Se arrancó con el tipo "Público", que es el único que dijiste manejar hoy.
+    Los demás se agregan por API (POST /api/v1/tipos-cliente) y aparecen solos
+    en el formulario de precios y en el POS.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_lotes_multipresentacion_precios.sql
+          · productos.multipresentacion y productos.por_lotes
+          · producto_variantes.lote (+ índice)
+          · tabla tipos_cliente, sembrada con "Público" (es_publico = 1)
+          · tabla variante_precios (variante + tipo → precio, UNIQUE)
+          · pedidos.tipo_cliente_id
+          Idempotente. YA APLICADA en "desarrollo". Los productos que ya
+          tenían paquete o cono quedaron marcados multipresentación solos.
+  MODIF   db/schema_mysql.sql   (45 tablas)
+
+BACKEND
+  NUEVO   backend/src/modules/tipos-cliente/  (model/service/controller/routes)
+            GET/POST/PUT/DELETE /api/v1/tipos-cliente
+          Listarlos es de staff (el cajero los necesita); definirlos es de
+          administrador. El tipo público no se puede borrar y uno con precios o
+          pedidos tampoco: se desactiva.
+  MODIF   productos {model,service,routes}   banderas
+  MODIF   variantes {model,service,routes,controller}
+            lote (solo si el producto es por_lotes)
+            candado de multipresentación
+            PUT /api/v1/variantes/:id/precios  → precio por tipo
+  MODIF   inventario {model,routes}          desarme con `kg` opcional
+  MODIF   pedidos {model,routes}             precio según tipo de cliente
+
+FRONTEND
+  MODIF   catalogo.models.ts · catalogo.service.ts · ventas.service.ts
+  MODIF   producto-form.ts + .html
+          casillas nuevas, campo de lote, "Precio público", y fila desplegable
+          para capturar el precio de cada tipo por presentación
+  MODIF   pos.ts + .html          selector de tipo de cliente
+  MODIF   inventario.ts + .html   kilos reales en el desarme
+
+PRUEBAS
+  27 comprobaciones contra el servidor real, todas en verde. Lo relevante:
+  el 422 al querer un paquete sin multipresentación; que el lote NO cree
+  inventario aparte; el 422 al querer capturar el precio del público en la
+  tabla de tipos; venta pública 3×$200=$600 contra mayoreo 3×$160=$480; que el
+  detalle congele $160; que quitar el precio devuelva al público; el 422 al
+  vender con un tipo inactivo; el desarme nominal de 10 kg contra el ajustado
+  de 9.85 kg con los mismos 8 conos; y el 409 cuando el peso ajustado no
+  alcanza.
+  Tus 3 productos y tu tipo Público quedaron intactos.
+
+NOTA
+  No hay pantalla para administrar tipos de cliente todavía; se crean por API.
+  Cuando definas cuáles son (medio mayoreo, mayoreo, especial) te la armo.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Fuera el peso a nivel producto
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  El campo "Peso de una pieza o bulto (kg)" del alta de producto duplicaba
+  información. El peso que el sistema usa de verdad es el de la VARIANTE
+  (`producto_variantes.peso_kg`): dice cuánto pesa un paquete y con eso se
+  calcula el precio del cono y el desarme. Tener un segundo peso en el producto
+  solo invitaba a confundirlo con las existencias — de hecho fue justo lo que
+  provocó el error "Out of range value" al teclear 500000.
+
+QUÉ SE ELIMINÓ
+  NUEVO   db/migrations/2026-07_quitar_peso_producto.sql
+          DROP de productos.peso_kg y productos.longitud_metros. Idempotente.
+          YA APLICADA en "desarrollo". Pendiente en otros ambientes.
+          `longitud_metros` ya era columna muerta desde que se retiró su campo:
+          nada la escribía ni la leía. Se va junto.
+  MODIF   db/schema_mysql.sql
+  MODIF   backend productos {model,service,routes}
+  MODIF   frontend catalogo.models.ts · producto-form.ts + .html
+
+LO QUE NO SE TOCÓ
+  `producto_variantes.peso_kg` sigue igual. El campo "Peso del paquete (kg)"
+  del formulario de variante es el que importa y ahí se queda.
+
+CÓMO QUEDA LA PRIMERA PARTE DEL ALTA
+      Nombre · Material · Línea · Calibre · Impuesto · Descripción
+      Destacado · Activo
+  De once campos originales quedaron ocho, sin perder nada que se usara.
+
+PRUEBAS
+  9 comprobaciones contra el servidor real, todas en verde: el producto se crea
+  sin pedir peso, la respuesta ya no expone peso_kg ni longitud_metros, mandar
+  peso_kg se rechaza, y —lo importante— el peso del paquete sigue intacto en la
+  variante: 10 kg a $200/kg = $2,000 entre 8 conos = $250 por cono de 1.25 kg, y
+  al subir el kilo a $240 el cono se resincroniza a $300.
+  Tus 2 productos quedaron intactos.
+
+NOTA
+  En la primera corrida una aserción de la prueba tenía el número equivocado
+  (esperaba $250 con un paquete de $100/kg, que da $125). El cálculo del sistema
+  estaba bien; se corrigió la prueba, no el código.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Material, línea y calibres por material
+-------------------------------------------------------------------------------
+
+EL PROBLEMA DE FONDO
+  Las categorías venían mezclando dos cosas en el nombre: "Acrilan turco" es
+  material (acrilán) + línea de procedencia (turco). Al crecer el catálogo eso
+  obliga a una categoría por cada combinación. Ahora son campos separados.
+
+CÓMO QUEDA EL ALTA DE PRODUCTO
+      Material   ▾  Acrilán · Viscosa          (antes decía "Categoría")
+      Línea      ▾  Turco · Nacional · Chino   (antes decía "Marca")
+      Calibre    ▾  depende del material:
+                      acrilán → 1/30, 2/30
+                      viscosa → 2/48
+  Y se quitó el campo "Material" que traía fibras genéricas (algodón,
+  poliéster, lana…) y no se usaba.
+
+LOS CALIBRES SON DATOS, NO CÓDIGO
+  Cada material guarda su lista de calibres en `categorias.calibres`, separada
+  por coma. Se edita en Admin → Materiales, así que agregar un calibre nuevo no
+  requiere tocar código. El backend normaliza la lista al guardar: recorta
+  espacios, quita repetidos y vacíos.
+  Si un producto viejo tiene un calibre que no está en la lista de su material
+  (el tuyo tiene "1.20"), se conserva como opción extra al editarlo para no
+  borrárselo sin avisar.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_linea_material_calibres.sql
+          · `marcas` → `lineas`, `productos.marca_id` → `linea_id`, con su FK
+            reconstruida. La tabla estaba vacía, no se arrastraron datos.
+          · Semilla de líneas: Turco, Nacional, Chino
+          · Retira `productos.material_id` y la tabla `materiales`
+          · Agrega `categorias.calibres` y lo llena según el material:
+            los ACRILAN quedaron en 1/30,2/30 y VISCOSA en 2/48
+          Idempotente. YA APLICADA en "desarrollo".
+  MODIF   db/schema_mysql.sql · db/erd.mermaid
+
+BACKEND
+  MODIF   productos {model,service,routes}  linea_id en vez de marca/material;
+          el SELECT trae `calibres_material` para alimentar el formulario
+  MODIF   categorias {model,service,routes} campo calibres + normalización
+  MODIF   opciones {controller,routes}      GET /opciones/lineas
+                                            se fueron /marcas y /materiales
+
+FRONTEND
+  MODIF   catalogo.models.ts · catalogo.service.ts
+  MODIF   producto-form.ts + .html
+          selector de línea, etiqueta "Material", y el selector de calibre se
+          recalcula según el material elegido
+  MODIF   categorias.ts + .html  la pantalla pasa a llamarse "Materiales" y
+          captura los calibres
+  MODIF   admin-layout.html      el menú dice "Materiales"
+
+PRUEBAS
+  13 comprobaciones contra el servidor real, todas en verde: las tres líneas
+  responden, el endpoint viejo de materiales da 404, acrilán trae 1/30,2/30 y
+  viscosa 2/48, la lista se normaliza (" 3/40 , 4/40 , 3/40 ," → "3/40,4/40"),
+  el producto se crea con línea y devuelve material y calibres, ya no expone
+  marca ni material_id, se puede cambiar la línea, y mandar marca_id se rechaza.
+  Tus 2 productos y 3 materiales quedaron intactos.
+
+NOTA PARA TI
+  Tus materiales se llaman "ACRILAN", "ACRILAN2" y "VISCOSA". Ahora que la
+  línea es un campo aparte, conviene dejarlos como "Acrilán" y "Viscosa" y
+  poner turco/chino en la línea de cada producto. No lo cambié porque es tu
+  dato; se renombra en Admin → Materiales.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Fuera la jerarquía de categorías
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  Mismo diagnóstico que con el slug: `categorias.padre_id` permitía anidar
+  categorías pero nada aprovechaba el árbol.
+    · El catálogo filtra por productos.categoria_id EXACTO, sin recursión, así
+      que una categoría padre nunca mostraba los productos de sus hijas
+    · Solo servía para capturarla y mostrarla en la tabla
+    · Tus 3 categorías la tenían en NULL: nunca la usaste
+
+QUÉ SE ELIMINÓ
+  NUEVO   db/migrations/2026-07_quitar_categoria_padre.sql
+          Suelta la llave foránea auto-referenciada (busca su nombre en
+          information_schema, porque MySQL lo autogenera) y luego retira la
+          columna. Idempotente.
+          YA APLICADA en "desarrollo". Pendiente en otros ambientes.
+  MODIF   db/schema_mysql.sql        columna, FK e índice
+  MODIF   db/erd.mermaid             se fue la relación padre_de
+  MODIF   backend categorias {model,service,routes}
+          · el SELECT ya no hace el LEFT JOIN a sí misma para traer el padre
+          · se quitó la validación "una categoría no puede ser su propio padre"
+          · contarDependencias ya no cuenta hijos, solo productos
+  MODIF   frontend catalogo.models.ts
+  MODIF   frontend categorias.ts + .html  (selector de padre y columna Padre)
+
+PRUEBAS
+  11 comprobaciones contra el servidor real, todas en verde: el listado ya no
+  expone padre ni padre_id, tus 3 categorías siguen ahí, se crea y se edita sin
+  pedir padre, mandar padre_id ahora se rechaza por schema, el catálogo sigue
+  filtrando por categoría y trayendo su nombre, y la guarda de borrado sigue
+  dando 409 cuando la categoría tiene productos.
+  Tus 3 categorías y 2 productos quedaron intactos.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Fuera los slugs
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  Se revisó todo el código antes de tocar nada y el diagnóstico confirmó la
+  sospecha: el slug se generaba y se guardaba, pero NADA lo consumía.
+    · La tienda en línea navega por id: /tienda/producto/:id
+    · El único uso real era engordar el filtro de búsqueda, que ya busca por
+      nombre y descripción
+    · Su restricción UNIQUE además impedía capturar dos productos con el mismo
+      nombre, dando un 409 DUPLICADO sin ninguna ganancia
+
+QUÉ SE ELIMINÓ
+  NUEVO   db/migrations/2026-07_quitar_slug.sql
+          DROP de productos.slug y categorias.slug. Idempotente.
+          YA APLICADA en "desarrollo". Pendiente en otros ambientes.
+  BORRADO backend/src/utils/slug.js  (la función slugify ya no se usa)
+  MODIF   db/schema_mysql.sql        columnas y semilla de categorías
+  MODIF   db/erd.mermaid
+  MODIF   backend productos {model,service,routes}
+  MODIF   backend categorias {model,service,routes}
+  MODIF   frontend catalogo.models.ts
+  MODIF   frontend categorias.ts + .html   (campo y columna de la tabla)
+  MODIF   frontend producto-form.ts + .html (campo)
+  MODIF   frontend productos-list.html      (el buscador ya no dice "slug")
+
+EFECTO SECUNDARIO BUENO
+  Ahora se pueden capturar dos productos con el mismo nombre. Antes el segundo
+  chocaba contra el slug único.
+
+PRUEBAS
+  13 comprobaciones contra el servidor real, todas en verde: alta, renombrado y
+  búsqueda de categorías; alta, edición, búsqueda por nombre y por descripción
+  de productos; que ninguna respuesta exponga slug; que el catálogo público siga
+  respondiendo; y que dos productos con el mismo nombre ya se permitan.
+  Tus 2 productos y 3 categorías quedaron intactos.
+
+NOTA
+  Si algún día quieres URLs legibles (/producto/hilo-azul-rey en vez de
+  /producto/12), hay que volver a agregar la columna y regenerarla desde el
+  nombre. Es trivial, pero hoy no aportaba nada.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · BUG · "Out of range value for column 'peso_gramos'"
+-------------------------------------------------------------------------------
+
+EL ERROR
+  Al dar de alta el producto "rojo" con peso 500000 el servidor respondía 500:
+      Out of range value for column 'peso_gramos' at row 1
+      INSERT ... peso_gramos = 500000000
+
+CAUSA
+  La columna era DECIMAL(8,2) en GRAMOS: tope 999,999.99 g, o sea una tonelada.
+  El formulario capturaba kilos y multiplicaba por 1000, así que cualquier peso
+  arriba de 999.99 kg desbordaba. Teclear 500000 mandaba 500 millones de gramos.
+  De fondo: era la única medida del sistema en gramos; todo lo demás (inventario,
+  variantes, traspasos) ya trabajaba en kilos DECIMAL(12,3).
+
+ARREGLO
+  NUEVO   db/migrations/2026-07_producto_peso_kg.sql
+          productos.peso_gramos → peso_kg DECIMAL(12,3). Idempotente.
+          Convierte lo existente dividiendo entre 1000: el producto que tenías
+          con 250,000 g quedó en 250 kg, que es lo que significaba.
+          YA APLICADA en "desarrollo". Pendiente en otros ambientes.
+  Se eliminó la multiplicación por 1000 del formulario: lo que se teclea es lo
+  que se guarda. Ya no hay unidades mezcladas en ninguna parte.
+  MODIF   db/schema_mysql.sql · backend productos {model,service,routes}
+  MODIF   frontend catalogo.models.ts · producto-form.ts + .html
+
+ARREGLO DE PASO
+  Un número fuera de rango se iba como 500 "Ocurrió un error interno". Ahora el
+  errorHandler traduce ER_WARN_DATA_OUT_OF_RANGE y ER_DATA_TOO_LONG a un 422 que
+  nombra la columna. Y el schema del producto pone un tope, así que un dedazo se
+  detiene en validación antes de llegar a la BD.
+  MODIF   backend/src/middlewares/error.js · productos/routes.js
+
+TAMBIÉN
+  El texto del campo se aclaró, porque el nombre invitaba a confundirlo con
+  existencias: "Peso de una pieza o bulto (kg) — cuánto pesa UNA pieza o bulto,
+  no lo que tienes en existencia".
+
+PRUEBAS
+  6 comprobaciones con tu caso exacto (rojo, calibre 1/30, peso 500000), todas
+  en verde: ya no truena y guarda 500000 kg; 1.2 kg se guarda tal cual sin
+  multiplicar; sin peso queda en null; un número absurdo da 422 con mensaje
+  claro en vez de 500; y al releer el producto el formulario recibe los mismos
+  kilos. Tu producto quedó intacto, ahora con 250 kg en vez de 250000 g.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · BUG · Error al registrar variante + ajustes al alta de producto
+-------------------------------------------------------------------------------
+
+EL BUG
+  Al dar de alta una variante en "Nuevo producto" salía el error
+  "Datos de entrada inválidos" sin decir por qué.
+
+  Causa: el formulario enviaba `precio: String(v.precio)`. Cuando el campo
+  quedaba vacío, `String(null)` manda el TEXTO "null", que zod rechaza. Lo
+  introduje yo al hacer opcional el precio para los conos de precio calculado.
+
+  Arreglo: si el precio viene vacío ya no se envía nada en vez de "null".
+  Además el formulario ahora avisa ANTES de mandar, con un mensaje pegado al
+  botón —no arriba de la página, donde no se ve— y el botón queda deshabilitado
+  mientras falte algo:
+      "Indica cuánto pesa el paquete en kilos."
+      "Elige de qué paquete se desarma el cono."
+      "Con precio por pieza tienes que capturar el precio del cono."
+
+ARREGLO DE PASO, EN TODO EL SISTEMA
+  Los errores de validación decían solo "Datos de entrada inválidos". Ahora
+  nombran los campos: "Datos de entrada inválidos: revisa precio". Aplica a
+  todos los endpoints, no solo a este formulario.
+  MODIF   backend/src/middlewares/error.js
+
+CAMBIOS PEDIDOS EN EL ALTA DE PRODUCTO
+  · Se quitó el campo "Longitud (m)". La columna longitud_metros sigue en la
+    BD por si algún día se ocupa, pero ya no se captura ni se envía.
+  · "Grosor / calibre" pasó de texto libre a lista con las dos opciones que
+    maneja la tienda: 1/30 y 2/30, más "Sin especificar".
+    Si un producto viejo trae otro valor (el actual tiene "1.20"), ese valor se
+    agrega a la lista al abrirlo, para no borrárselo sin avisar al guardar.
+
+FRONTEND
+  MODIF   frontend/src/app/features/admin/productos/producto-form.ts + .html
+
+PRUEBAS
+  9 comprobaciones contra el servidor real, todas en verde: alta con calibre
+  1/30 y 2/30, que ya no se manda longitud, que el peso de 1.2 kg se guarde
+  como 1200 g, que el texto "null" siga siendo rechazado pero ahora con
+  mensaje útil, y que el cono de precio calculado se cree sin capturar precio.
+  La base quedó con tu único producto intacto.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · INCIDENTE · Pérdida de datos por un script de prueba
+-------------------------------------------------------------------------------
+
+QUÉ PASÓ
+  Al correr la batería de pruebas de regresión, el script e2e_almacenes.cjs
+  tenía cinco DELETE SIN CLÁUSULA WHERE en su bloque de limpieza:
+      DELETE FROM pagos;  DELETE FROM pedido_detalle;  DELETE FROM pedidos;
+      DELETE FROM movimientos_caja;  DELETE FROM sesiones_caja;
+  Cuando se escribió, esas tablas estaban vacías y pasó por seguro. Para
+  cuando se volvió a ejecutar ya había datos reales.
+
+QUÉ SE PERDIÓ (irrecuperable, ningún respaldo cubría esa ventana)
+  · 4 pedidos con su detalle y sus pagos
+  · La sesión de caja #4 y sus 2 movimientos ($37,500 y $1,250)
+  · Los 4 movimientos de inventario tipo salida de esas ventas
+  · La configuración de nómina de "german vazques": otro script
+    (e2e_nomina.cjs) la borró y la reescribió con valores de prueba
+
+CÓMO SE CUADRÓ
+  Las existencias físicas nunca estuvieron mal: la mercancía sí salió. Lo que
+  faltaba era el rastro que lo explicara. Se compararon saldo real contra suma
+  del kardex por variante y almacén, y se repuso el rastro faltante con un
+  movimiento de ajuste que NO toca las existencias:
+
+      Bodega principal    350,000 real = 350,000 kardex   cuadraba
+      Tienda principal     99,845 real = 100,000 kardex   faltaban −155
+      tienda moroleon      49,840 real =  50,000 kardex   faltaban −160
+
+  Los dos movimientos llevan referencia_tipo='reconciliacion' y un motivo que
+  explica su origen, para que dentro de un año se entienda de dónde salieron.
+
+  También se borró el periodo de nómina #2 con sus 5 recibos (lo había creado
+  la prueba, no el usuario) y la fila de nómina de "german vazques" con los
+  valores inventados — es preferible que falte a que alguien pague con datos
+  falsos. HAY QUE RECAPTURARLA.
+
+VERIFICACIÓN
+  0 descuadres entre existencias y kardex, 0 periodos de nómina, 0 recibos.
+  Respaldo del estado cuadrado: db/dump_desarrollo_2026-07-25_cuadrado.sql
+
+QUÉ SE HIZO PARA QUE NO SE REPITA
+  · e2e_almacenes.cjs: limpieza quirúrgica, solo borra pedidos y sesiones que
+    él mismo creó, comparando contra una foto previa.
+  · e2e_nomina.cjs y e2e_stock.cjs: bloqueados con process.exit(0). Apuntaban
+    a ids que ya no existen y su limpieza tampoco era quirúrgica.
+  · Regla para scripts de prueba futuros: tomar foto de ids ANTES, borrar solo
+    la diferencia, y meter la limpieza siempre en un bloque finally.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Cantidades legibles y kardex que explica qué pasó
+-------------------------------------------------------------------------------
+
+1 · LAS CANTIDADES YA NO TRAEN CEROS DE RELLENO
+  MySQL devuelve DECIMAL(12,3) siempre con tres decimales, así que en pantalla
+  salía "350000.000" y costaba leerlo. Se agregó un pipe que recorta los ceros
+  sobrantes y agrupa los miles:
+      350000.000  →  350,000
+           2.500  →  2.5
+           1.250  →  1.25
+  Los decimales que sí existen se conservan: sigues pudiendo vender 2.5 kg.
+  NUEVO   frontend/src/app/shared/cantidad.pipe.ts
+  Aplicado en el panorama de almacenes, la tabla de existencias, el kardex,
+  los desarmes y la pantalla de surtir sucursal.
+
+2 · EL KARDEX DICE QUÉ PASÓ, NO SOLO EL TIPO
+  Antes cada renglón mostraba "transferencia −700" y había que adivinar. Ahora
+  el backend resuelve el documento que originó el movimiento:
+
+      Entrada de mercancía          (captura manual, con su motivo)
+      Traspaso a Tienda Moroleón    TRA-1785003726141-C217
+      Traspaso desde Bodega         TRA-1785003726141-C217
+      Desarme de paquetes AZUL-PAQ
+      Conos producidos CONO-AZUL
+      Venta mostrador               POS-1785003726155-BF4E
+      Venta en línea                WEB-...
+
+  Las dos patas de un traspaso comparten folio y se distinguen por el sentido:
+  la salida dice "a dónde" y la entrada "de dónde". La tabla también muestra el
+  nombre del producto, no solo el SKU, y la cantidad con signo y color.
+
+3 · DESDE EL KARDEX SE VE QUÉ SE MANDÓ
+  Los renglones de traspaso traen un botón "Ver envío" que despliega el
+  contenido completo: qué productos, cuántos paquetes, a cuántos kilos
+  equivalen, la nota, quién lo mandó y cuándo.
+
+BACKEND
+  MODIF   backend/src/modules/inventario/model.js
+          listarMovimientos() ahora hace LEFT JOIN a pedidos, traspasos y
+          variante_conversiones para traer folios y almacenes de contraparte.
+          Nuevo obtenerTraspaso() con sus líneas.
+  MODIF   backend/src/modules/inventario/service.js
+          _describir() traduce cada movimiento a lenguaje de tienda y expone
+          concepto, folio, detalle_tipo y detalle_id.
+  MODIF   backend/src/modules/inventario/{controller,routes}.js
+            GET /api/v1/inventario/traspasos/:id
+
+FRONTEND
+  NUEVO   frontend/src/app/shared/cantidad.pipe.ts
+  MODIF   frontend/src/app/features/admin/inventario/kardex.ts + .html
+          columnas Producto y Concepto, cantidad con signo, fila desplegable
+          con el contenido del traspaso
+  MODIF   frontend/src/app/features/admin/inventario/inventario.html
+  MODIF   frontend/src/app/features/admin/traspasos/traspasos.ts + .html
+  MODIF   frontend/src/app/core/models/inventario.models.ts
+          campos nuevos del movimiento y tipo TraspasoDetalle
+  MODIF   frontend/src/app/core/services/inventario.service.ts   traspaso(id)
+
+PRUEBAS
+  16 comprobaciones E2E con los cuatro tipos de movimiento en un mismo
+  escenario, todas en verde: entrada manual, traspaso de matriz a sucursal,
+  desarme de paquetes en conos y venta en mostrador. Se verifica que cada uno
+  reciba su concepto correcto, que el traspaso diga a dónde y desde dónde con
+  el mismo folio en ambas patas, que se pueda abrir el documento y ver las 70
+  cajas = 700 kg que se mandaron, el 404 de un traspaso inexistente, y que un
+  movimiento manual no invente folio ni documento.
+  La base quedó como estaba: mismos 9 movimientos que ya tenías.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · BUG · El panel "Caja abierta" salía en blanco
+-------------------------------------------------------------------------------
+
+SÍNTOMA
+  Al entrar al Punto de venta con una caja ya abierta, el panel mostraba:
+      Sesión #4 ·            <- sin nombre de caja
+      Cajero:                <- vacío
+      Inicial: $0.00
+      Efectivo esperado: $   <- vacío
+  Aparecía al volver a la pantalla, no al abrir la caja, que es lo que lo hacía
+  parecer intermitente: "se bugea después de hacer ventas".
+
+CAUSA
+  Tres endpoints devolvían la sesión y solo dos traían todos sus datos:
+    · POST /caja/sesiones            (abrir)   → completo
+    · GET  /caja/sesiones/:id        (recargar tras cobrar) → completo
+    · GET  /caja/sesiones/abierta    (al entrar al POS)     → INCOMPLETO
+  El último hacía `SELECT * FROM sesiones_caja` sin los JOIN a cajas y
+  usuarios, y sin calcular el efectivo esperado. La plantilla pintaba esos
+  campos como cadena vacía.
+  Solo era un problema de presentación: los datos nunca se perdieron. La
+  sesión #4 tenía sus dos ventas registradas correctamente ($37,500 y $1,250).
+
+ARREGLO
+  MODIF   backend/src/modules/caja/model.js
+          · sesionAbiertaDeCaja() ahora resuelve el id y delega en
+            obtenerSesion(), de modo que los tres endpoints devuelven
+            exactamente la misma forma.
+          · Se separó _idSesionAbierta(), una consulta ligera que solo valida
+            que la caja no tenga otro turno abierto.
+
+ARREGLO DE PASO
+  El efectivo esperado y la diferencia del corte se calculaban sumando floats
+  contra columnas DECIMAL, lo que podía dejar colas como 232.00000000000003 en
+  pantalla y en el corte guardado. Ahora se redondean a dos decimales.
+  También se quitó un `obtenerCaja` duplicado en module.exports.
+
+PRUEBAS
+  18 comprobaciones E2E siguiendo el flujo completo del POS, todas en verde:
+  al abrir la caja, al volver a entrar (el caso que fallaba), después de una
+  venta, después de dos ventas seguidas y al cerrar. En cada punto se verifica
+  que vengan nombre de caja, cajero, monto inicial y efectivo esperado, que el
+  esperado acumule bien las ventas, que no haya colas de decimales y que el
+  corte cuadre en cero.
+  La base quedó como estaba, con tu sesión #4 y sus dos ventas intactas.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Panorama de existencias por almacén
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  No se veía de un vistazo qué hay en cada almacén: había que filtrar la tabla
+  de existencias almacén por almacén y comparar de memoria. Además el nombre
+  "Almacenes" hacía pensar que una tienda y un almacén eran cosas distintas.
+
+QUÉ SE AGREGÓ
+  Arriba de Inventario, dos cosas nuevas:
+
+  1. Una tarjeta por almacén con su resumen:
+       cuántos productos distintos tiene, cuántos kilos, cuántas piezas,
+       qué papel juega (matriz / tienda / bodega / web) y cuántos renglones
+       están bajo su mínimo.
+
+  2. Una matriz producto × almacén: cada renglón es un producto y cada
+     columna un almacén, con la existencia en cada cruce. Los paquetes
+     muestran además su equivalencia ("250 kg · 25 paq") y lo que está bajo
+     mínimo sale en rojo. Hay una casilla para ocultar los que están en cero
+     y una columna de total por producto.
+
+  El panorama se refresca solo después de cualquier movimiento, transferencia
+  o desarme.
+
+TIENDA Y ALMACÉN SON LO MISMO
+  Se aclaró el lenguaje de la pantalla de Almacenes, que era la fuente de la
+  confusión. No hay dos entidades: un almacén es cualquier lugar que guarda
+  existencias, y `es_punto_venta` marca si además vende. Una tienda es un
+  almacén con mostrador. Al abrir una sucursal se da de alta UN registro con
+  esa casilla activada y se le asigna su caja.
+  · El texto de arriba lo explica.
+  · La casilla dice "Es punto de venta — tienda con mostrador".
+  · La columna Tipo muestra "Tienda · vende y almacena" o "Bodega · solo
+    almacena".
+
+BACKEND
+  MODIF   backend/src/modules/inventario/model.js
+          resumenPorAlmacen(): totales por almacén + matriz. Los conos se
+          suman como piezas y el resto como kilos, por separado, porque no se
+          pueden mezclar. Tope de 300 renglones, avisado en la respuesta.
+  MODIF   backend/src/modules/inventario/{service,controller,routes}.js
+            GET /api/v1/inventario/resumen
+
+FRONTEND
+  MODIF   frontend/src/app/core/services/inventario.service.ts
+          resumen() y sus tipos
+  MODIF   frontend/src/app/features/admin/inventario/inventario.ts + .html
+          tarjetas por almacén, matriz, filtro de ceros y refresco automático
+  MODIF   frontend/src/app/features/admin/almacenes/almacenes.html
+          redacción que aclara que tienda y almacén son el mismo registro
+
+PRUEBAS
+  11 comprobaciones contra el servidor real, todas en verde: crear una tienda
+  nueva con un solo registro y colgarle su caja; que el panorama la liste con
+  cero; que al darle entrada a 250 kg el total del almacén y la matriz se
+  actualicen; que esos kilos se lean como 25 paquetes; y que los otros
+  almacenes queden sin ese producto.
+  La base quedó como estaba, con tus 3 almacenes, tus 2 cajas y tu producto.
+
+PENDIENTE / NOTAS
+  · La matriz corta a 300 productos. Si el catálogo crece más, la pantalla lo
+    avisa y remite al buscador de existencias de abajo, que sigue paginado.
+  · El resumen no calcula valor del inventario porque `costo` es opcional en
+    la variante y hoy está vacío. Si se captura, se puede agregar.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Almacén matriz
+-------------------------------------------------------------------------------
+
+QUÉ SE AGREGÓ
+  Un almacén puede marcarse como MATRIZ: el que surte a las sucursales. Cierra
+  el pendiente que quedó de la entrada anterior, donde el origen del traspaso
+  se elegía a mano en cada envío.
+
+CÓMO FUNCIONA
+  · En Admin → Almacenes hay una columna "Matriz" con su botón para marcarla,
+    y la casilla correspondiente en el formulario. Arriba se lee siempre cuál
+    es la matriz hoy.
+  · Solo un almacén puede serlo: al marcarlo en uno, se apaga en los demás
+    (misma mecánica que es_tienda_linea).
+  · La pantalla de "Surtir sucursal" propone la matriz como origen y la
+    señala en el selector con la etiqueta "· matriz".
+  · Un mismo almacén puede ser matriz Y surtir la tienda en línea a la vez;
+    son marcas independientes.
+  · A diferencia de es_tienda_linea, no tener matriz NO rompe nada: solo
+    obliga a elegir el origen a mano, y la pantalla lo avisa.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_almacen_matriz.sql
+          Columna almacenes.es_matriz. Idempotente.
+          YA APLICADA en "desarrollo": quedó en Tienda principal.
+          Pendiente en otros ambientes.
+  MODIF   db/schema_mysql.sql   columna + semilla
+  MODIF   db/erd.mermaid
+
+BACKEND
+  MODIF   backend/src/modules/almacenes/model.js
+          marcarUnicaMatriz(), idMatriz(), es_matriz en CAMPOS/insert/update
+  MODIF   backend/src/modules/almacenes/service.js    exclusividad al guardar
+  MODIF   backend/src/modules/almacenes/controller.js + routes.js
+            GET /api/v1/almacenes/matriz
+            es_matriz aceptado en POST y PUT
+
+FRONTEND
+  MODIF   frontend/src/app/core/models/inventario.models.ts
+  MODIF   frontend/src/app/features/admin/almacenes/almacenes.ts + .html
+          columna Matriz, casilla en el formulario, aviso arriba y atajo
+          marcarMatriz()
+  MODIF   frontend/src/app/features/admin/traspasos/traspasos.ts + .html
+          el origen se propone solo con la matriz
+
+PRUEBAS
+  8 comprobaciones contra el servidor real, todas en verde: el endpoint
+  /almacenes/matriz, es_matriz expuesto en el listado, que una sucursal nueva
+  nazca sin la marca, mover la matriz a otro almacén, que quede encendida en
+  uno solo, que el resolvedor devuelva la nueva y que las dos marcas
+  (matriz y tienda en línea) convivan en el mismo almacén.
+  La base quedó como estaba: Tienda principal como matriz y Bodega surtiendo
+  la tienda en línea.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Surtir sucursales desde la matriz
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  Cuautepec de Hinojosa es la tienda principal y surte a Moroleón y a las
+  sucursales que se vayan abriendo. Eso no estaba contemplado: existía la
+  transferencia entre almacenes, pero de una variante a la vez y sin folio,
+  así que surtir una sucursal habría sido repetir la operación producto por
+  producto sin dejar constancia de qué envío fue.
+
+CÓMO SE MANDA
+  Un traspaso es un documento con folio y varias líneas. Se captura en
+  PAQUETES —"70 de azul marino, 30 de verde"— y el backend convierte a kilos,
+  porque el inventario de un paquete se lleva en kg:
+      70 paquetes × 10 kg = 700 kg
+  La línea guarda las dos cifras: los paquetes que se teclearon y los kilos
+  que de verdad se movieron.
+
+DECISIÓN: EL ENVÍO ES INMEDIATO
+  Se planteó modelar el tiempo de camino (estado "en tránsito" y confirmación
+  de recepción en la sucursal) y se descartó a propósito. El traspaso sale del
+  origen y entra al destino en la misma transacción.
+  Consecuencia a tener presente: durante los días que el hilo va en carretera,
+  la sucursal ya lo cuenta como existencia suya.
+
+QUÉ PASA DESPUÉS
+  En la sucursal deciden localmente si desarman los paquetes en conos o los
+  venden por paquete. Eso ya funcionaba: es el desarme, apuntando ambos
+  almacenes a la propia sucursal.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_traspasos.sql
+          YA APLICADA en "desarrollo". Pendiente en otros ambientes.
+          traspasos: folio, origen, destino, usuario, notas
+          traspaso_detalle: variante, paquetes capturados, cantidad movida
+  MODIF   db/schema_mysql.sql   (44 tablas)
+  MODIF   db/erd.mermaid
+
+BACKEND
+  MODIF   backend/src/modules/inventario/model.js
+          crearTraspaso() transaccional y listarTraspasos() con sus líneas
+  MODIF   backend/src/modules/inventario/{service,controller,routes}.js
+            POST /api/v1/inventario/traspasos
+            GET  /api/v1/inventario/traspasos
+          Dos movimientos por línea (salida y entrada) con
+          referencia_tipo='traspaso' y el mismo folio. Todo-o-nada: si una
+          línea no alcanza, se revierte el traspaso completo.
+
+FRONTEND
+  NUEVO   frontend/src/app/features/admin/traspasos/traspasos.ts + .html
+          Pantalla "Surtir sucursal": origen y destino, buscador de productos,
+          líneas capturadas en paquetes con su equivalencia en kilos al lado,
+          comprobante del último envío con el saldo que queda en origen, e
+          historial de traspasos con su contenido.
+  MODIF   frontend/src/app/core/services/inventario.service.ts
+          crearTraspaso(), traspasos() y sus tipos
+  MODIF   admin.routes.ts + admin-layout.html   ruta y enlace "Surtir sucursal"
+
+PRUEBAS
+  22 comprobaciones E2E con el escenario real, todas en verde: Cuautepec con
+  1000 kg de cada color manda 70 paquetes de azul marino y 30 de verde a
+  Moroleón; se verifica la conversión a 700 y 300 kg, que a Cuautepec le queden
+  300 y 700, que Moroleón reciba exactamente eso, los cuatro movimientos de
+  kardex compartiendo folio, el 409 cuando no alcanza el stock (sin mover
+  nada), los 422 de origen igual a destino y traspaso vacío, y que Moroleón
+  desarme 5 de los paquetes recibidos sin afectar a Cuautepec.
+  La base quedó igual, con tu producto y tus categorías intactos.
+
+PENDIENTE / NOTAS
+  · Aplicar db/migrations/2026-07_traspasos.sql en otros ambientes.
+  · No hay estado "en tránsito": decisión explícita. Si más adelante importa
+    el tiempo de camino o detectar faltantes al recibir, hay que agregar
+    recepción confirmada.
+  · No existe un almacén marcado como "matriz": el origen se elige a mano en
+    cada traspaso. Si se abren más sucursales, convendría marcarlo para que
+    el formulario lo proponga solo.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Pantalla de almacenes: una sucursal, un inventario
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  Al dar de alta "Caja Cuautepec de Hinojosa" y "Caja Moroleón", ambas
+  colgaban del mismo almacén (Tienda principal), así que las dos sucursales
+  habrían descontado del MISMO inventario: vender en Moroleón bajaba el stock
+  de Cuautepec. Faltaba poder darle un almacén propio a cada sucursal, y no
+  existía pantalla para hacerlo.
+
+QUÉ SE AGREGÓ
+  Nueva sección Admin → Almacenes, solo para administradores:
+  · Alta, edición, activar/desactivar y borrado de almacenes.
+  · Cada fila muestra qué cajas cuelgan de ese almacén, para ver de un vistazo
+    qué caja descuenta de dónde.
+  · La marca de "surte la tienda en línea" se mueve con un botón, sin abrir el
+    formulario. Arriba se lee siempre cuál la surte hoy.
+  · Con esto `es_tienda_linea` dejó de cambiarse solo por API.
+
+REGLAS QUE APLICA EL BACKEND
+  · Solo UN almacén puede surtir la tienda en línea: al marcarlo en uno, se
+    apaga en los demás.
+  · No se puede quitar la marca ni desactivar el almacén que surte la tienda
+    sin designar otro antes (409 TIENDA_SIN_ALMACEN). Si no, el catálogo web
+    se quedaría sin existencias que mostrar.
+  · No se puede borrar un almacén con existencias, movimientos, cajas, pedidos
+    o desarmes (409 ALMACEN_EN_USO). El mensaje enumera exactamente qué lo
+    está usando y sugiere desactivarlo para conservar el historial.
+  · Configurar almacenes pasa a ser de administrador; antes POST y PUT los
+    podía hacer cualquier staff. Consultarlos sigue abierto porque el catálogo
+    público los necesita.
+
+BACKEND
+  MODIF   backend/src/modules/almacenes/model.js
+          dependencias() y eliminar()
+  MODIF   backend/src/modules/almacenes/service.js
+          borrado con guardas y _validarNoDejarTiendaHuerfana()
+  MODIF   backend/src/modules/almacenes/controller.js
+  MODIF   backend/src/modules/almacenes/routes.js
+          POST/PUT pasan a administrador · DELETE /api/v1/almacenes/:id
+
+FRONTEND
+  NUEVO   frontend/src/app/features/admin/almacenes/almacenes.ts + .html
+  MODIF   frontend/src/app/core/models/inventario.models.ts
+          es_tienda_linea y AlmacenInput
+  MODIF   frontend/src/app/core/services/inventario.service.ts
+          crearAlmacen(), actualizarAlmacen(), eliminarAlmacen()
+  MODIF   frontend/src/app/features/admin/admin.routes.ts    ruta /admin/almacenes
+  MODIF   frontend/src/app/features/admin/admin-layout.html  enlace "Almacenes"
+
+PRUEBAS
+  22 comprobaciones E2E contra el servidor real, todas en verde. El escenario
+  central: se crean las sucursales de Cuautepec y Moroleón, cada una con su
+  caja, se cargan 30 kg SOLO en Cuautepec y se comprueba que vender en
+  Moroleón falla por falta de existencias mientras que en Cuautepec funciona y
+  descuenta de su propio almacén. Además: mover la marca de tienda en línea y
+  que quede en uno solo, los dos 409 que impiden dejar la tienda huérfana, el
+  409 al borrar un almacén en uso con el detalle de qué lo ocupa, el borrado
+  correcto de uno vacío, y los 403 para un cajero que intente configurarlos.
+  La base quedó igual, incluido el producto y el inventario que ya tenías, y
+  la tienda en línea volvió a quedar surtida por Bodega.
+
+CÓMO USARLO PARA TUS DOS SUCURSALES
+  1. Admin → Almacenes → dar de alta "Tienda Cuautepec de Hinojosa" y
+     "Tienda Moroleón", ambas como punto de venta.
+  2. Punto de venta → Administrar cajas → reasignar cada caja a su almacén.
+  3. Inventario → dar entrada a las existencias de cada sucursal por separado.
+  4. Decidir cuál almacén surte la tienda en línea (o dejar Bodega).
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · El administrador da de alta las cajas desde el panel
+-------------------------------------------------------------------------------
+
+QUÉ SE AGREGÓ
+  En Punto de venta apareció el botón "Administrar cajas", visible solo para
+  administradores. Desde ahí se dan de alta, se renombran, se activan o
+  desactivan y se eliminan las cajas, sin tener que tocar la API.
+  Ejemplo de uso: "Caja Cuautepec de Hinojosa" y "Caja Moroleón".
+
+REGLAS
+  · Ver las cajas es de cualquier staff: el cajero las necesita para abrir su
+    turno. Darlas de alta o modificarlas es solo de administrador.
+  · Cada caja pertenece a un almacén y sus ventas descuentan de ese almacén.
+    El formulario lo dice explícitamente al elegirlo.
+  · Una caja que ya tuvo turnos NO se puede borrar: sus cortes de caja
+    dependen de ella. Se desactiva en su lugar, y el error lo explica.
+  · Una caja que nunca abrió turno sí se elimina.
+
+BACKEND
+  MODIF   backend/src/modules/caja/model.js
+          actualizarCaja(), tieneSesiones(), eliminarCaja(); obtenerCaja ahora
+          resuelve el nombre del almacén igual que el listado
+  MODIF   backend/src/modules/caja/service.js       validaciones y el 409
+  MODIF   backend/src/modules/caja/controller.js
+  MODIF   backend/src/modules/caja/routes.js
+          POST/PUT/DELETE de cajas pasan a requerir rol administrador
+          (antes POST lo podía hacer cualquier staff)
+            PUT    /api/v1/caja/cajas/:id
+            DELETE /api/v1/caja/cajas/:id
+
+FRONTEND
+  MODIF   frontend/src/app/core/services/ventas.service.ts
+          actualizarCaja() y eliminarCaja()
+  MODIF   frontend/src/app/features/admin/pos/pos.ts + .html
+          panel de administración de cajas, tabla con estado y formulario de
+          alta/edición. El aviso de "no hay cajas" dejó de mandar a la API:
+          ahora le dice al admin dónde crearlas y al cajero a quién pedirlas.
+
+PRUEBAS
+  22 comprobaciones E2E contra el servidor real, todas en verde. Cubren: alta
+  de las dos cajas del ejemplo, el almacén resuelto en la respuesta, renombrar
+  y desactivar, 404 en caja inexistente, que un cajero SÍ pueda listarlas pero
+  reciba 403 al crear/editar/borrar, el 409 al borrar una caja que ya tuvo
+  turno, y el borrado correcto de una caja sin uso.
+  La base quedó como estaba: 0 cajas y 0 sesiones.
+
+PENDIENTE / NOTAS
+  · Sigue sin haber pantalla de almacenes. Si "Cuautepec" y "Moroleón" son
+    sucursales físicas distintas, cada una debería tener su propio almacén;
+    hoy ambas cajas cuelgan de los almacenes existentes (Tienda principal /
+    Bodega) y descontarían del mismo inventario. Ver nota al usuario.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Paquetes que se desarman en conos
+-------------------------------------------------------------------------------
+
+EL FLUJO QUE SE MODELÓ
+  El producto entra a bodega en PAQUETES de peso fijo que se venden por kilo.
+  De ahí se "desarma" un paquete para bajarlo a mostrador convertido en CONOS,
+  que se venden por pieza. Las dos presentaciones se exhiben y se venden.
+
+DECISIONES ACORDADAS
+  · Inventario separado: paquete y cono son variantes distintas, cada una con
+    su existencia y su código de barras. Así se sabe cuántos paquetes cerrados
+    quedan y cuántos conos hay en mostrador.
+  · El cono "por peso" lleva precio fijo ya calculado: se reparte el valor del
+    paquete entre los conos que trae. No se pesa en caja.
+  · El cono "por pieza" lleva el precio que capture el usuario.
+  · El peso del paquete y cuántos conos trae son fijos por producto; al
+    desarmar solo se indica cuántos paquetes se abren.
+
+LA MATEMÁTICA
+    precio_cono = (precio_por_kilo × peso_paquete) / conos_por_paquete
+    peso_cono   =  peso_paquete / conos_por_paquete
+
+  Ejemplo: paquete de 10 kg a $200/kg = $2,000 · 8 conos
+           → cada cono pesa 1.250 kg y cuesta $250.00
+  Si después se cambia el precio por kilo del paquete, los conos con precio
+  calculado se recalculan solos. Los de precio manual no se tocan.
+
+CÓMO SE DESARMA
+  Una sola transacción: descuenta paquetes × peso_kg kilos del paquete en el
+  almacén origen, da entrada a paquetes × conos_por_paquete conos en el
+  destino, y escribe en el kardex una salida y una entrada con
+  referencia_tipo='conversion' y el mismo folio, para poder reconstruirlo.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_paquetes_y_conos.sql
+          YA APLICADA en "desarrollo". Pendiente en otros ambientes.
+          producto_variantes: tipo_presentacion, peso_kg, origen_variante_id,
+                              piezas_por_origen, modo_precio
+          variante_conversiones: bitácora de desarmes
+  MODIF   db/schema_mysql.sql   (42 tablas)
+  MODIF   db/erd.mermaid
+
+BACKEND
+  MODIF   backend/src/modules/variantes/model.js
+          campos nuevos, unidad_venta (kg|pieza), datos del paquete de origen
+  MODIF   backend/src/modules/variantes/service.js
+          valida coherencia, calcula el precio del cono y resincroniza los
+          conos cuando cambia su paquete
+  MODIF   backend/src/modules/variantes/routes.js
+  MODIF   backend/src/modules/inventario/model.js
+          desarmar() transaccional + listarConversiones()
+  MODIF   backend/src/modules/inventario/{service,controller,routes}.js
+          POST /api/v1/inventario/desarmes
+          GET  /api/v1/inventario/conversiones
+
+FRONTEND
+  MODIF   producto-form.ts + .html
+          la variante ahora elige "se vende como": paquete (por kilo), cono
+          (por pieza) o simple. En cono se elige de qué paquete sale, cuántos
+          salen y si el precio lo calcula el sistema o lo pone el usuario;
+          muestra la cuenta completa antes de guardar.
+  MODIF   inventario.ts + .html
+          sección "Desarmar paquete en conos" con vista previa de lo que va a
+          pasar (−kg del paquete, +conos al mostrador) e historial de desarmes
+  MODIF   inventario.service.ts   desarmar() y conversiones()
+  MODIF   pos.ts + .html          cantidad decimal y unidad correcta por línea
+  MODIF   carrito.html            igual, con la unidad al lado del número
+  MODIF   producto-detalle.ts     arrastra la unidad de venta al carrito
+  MODIF   catalogo.models.ts      TipoPresentacion, ModoPrecio y campos nuevos
+  MODIF   styles.scss             .previa-calculo y .cant-unidad
+
+PRUEBAS
+  26 comprobaciones E2E contra el servidor real, todas en verde. Cubren: alta
+  de paquete y de cono, el cálculo $2,000/8 = $250 con conos de 1.250 kg, el
+  precio manual respetado, el recálculo al subir el kilo a $240 (cono pasa a
+  $300 y el manual sigue en $299), desarme de 2 paquetes (−20 kg, +16 conos),
+  el 409 cuando no alcanzan los kilos, las dos patas del kardex compartiendo
+  folio, la venta en ambas presentaciones (3 conos = $900, 2.5 kg = $600) y el
+  bloqueo al borrar un paquete con conos colgando.
+  La base quedó idéntica a como estaba, incluidas tus 2 categorías.
+
+PENDIENTE / NOTAS
+  · Aplicar db/migrations/2026-07_paquetes_y_conos.sql en otros ambientes.
+  · El precio del cono calculado se guarda en producto_variantes.precio y se
+    resincroniza al editar el paquete. Si algún día se cambia el precio del
+    paquete por SQL directo, los conos quedarían desfasados: hay que hacerlo
+    por el API.
+  · Una venta POS exige sesión de caja abierta, y no hay cajas dadas de alta.
+    Crear una con: POST /api/v1/caja/cajas {"almacen_id":1,"nombre":"Caja 1"}
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · El peso del producto se captura en kilos
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  Correción a la nota de la entrada anterior: peso_gramos NO es redundante.
+  Es el peso total de una pieza o bulto (por ejemplo un cono de 1.2 kg), que
+  es una cosa distinta de la unidad en que se vende. Lo que sí estaba mal era
+  la captura: el campo decía "Peso (g)" y quien piensa en kilos teclearía
+  "1.2" queriendo decir 1.2 kg, y se habrían guardado 1.2 GRAMOS.
+
+QUÉ CAMBIÓ
+  · El campo del formulario pasa a "Peso total del producto (kg)", con paso de
+    0.001 (un gramo) y ejemplo "1.2".
+  · Al escribir muestra la equivalencia en vivo: 1.2 -> "= 1200 g".
+  · Vacío, explica para qué sirve: cuánto pesa una pieza o bulto completo, y
+    que es informativo porque el precio y el inventario van por la unidad de
+    venta.
+  · La conversión kg <-> gramos se hace en el formulario. La BD y el API
+    siguen hablando en gramos (productos.peso_gramos), sin cambio de esquema
+    ni de contrato.
+
+FRONTEND
+  MODIF   frontend/src/app/features/admin/productos/producto-form.ts
+          control peso_kg; convierte al cargar (g/1000) y al guardar (kg*1000)
+  MODIF   frontend/src/app/features/admin/productos/producto-form.html
+
+PRUEBAS
+  Ida y vuelta verificado contra el servidor real: la UI envía 1.2 kg, la BD
+  guarda 1200.00 g y al releer el formulario vuelve a mostrar 1.2 kg, sin
+  pérdida de precisión. El producto de prueba se borró.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · El producto se vende por peso, no por pieza
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  El catálogo de unidades traía unidades de conteo (pieza, madeja, cono,
+  bolsa) y de longitud (metro), pero en esta tienda el hilo siempre se
+  compra, inventaría y vende por peso: kilos, y hasta toneladas.
+
+CATÁLOGO DE UNIDADES
+  Antes:  Pieza, Madeja, Cono, Metro, Gramo, Bolsa
+  Ahora:  Gramo (g) · Kilogramo (kg) · Tonelada (t)
+  El formulario de alta de producto arranca preseleccionado en Kilogramo.
+
+CONSECUENCIA IMPORTANTE: LAS CANTIDADES YA NO SON ENTERAS
+  Vender por kilo obliga a capturar fracciones (2.5 kg, 125 g). El esquema ya
+  lo soportaba (DECIMAL(12,3), resolución de 1 gramo) pero los campos de
+  captura estaban en pasos de 1, o sea que en la práctica no se podía. Se
+  ajustaron:
+    · POS      · el campo de cantidad pasa a step 0.001 y muestra la unidad
+    · Carrito  · igual, y el precio se rotula "$180.00 por kg"
+    · Checkout · el resumen dice "2.5 kg × Producto"
+    · Catálogo y detalle · el precio se muestra como "$180.00/kg" y el aviso
+      de poco stock dice "Quedan 3 kg"
+  El inventario ya aceptaba decimales desde antes; no se tocó.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_unidades_peso.sql
+          Idempotente. YA APLICADA en "desarrollo".
+          Solo borra las unidades de conteo que ningún producto esté usando,
+          así que es seguro correrla en ambientes con catálogo ya capturado:
+          ahí no borra nada hasta que se reasignen los productos.
+  MODIF   db/schema_mysql.sql          semilla de unidades_medida
+
+BACKEND
+  MODIF   backend/src/modules/variantes/model.js
+          las variantes ahora devuelven "unidad" (la abreviatura del producto),
+          para que POS y carrito puedan rotular la cantidad
+
+FRONTEND
+  MODIF   frontend/src/app/core/models/catalogo.models.ts   campo unidad
+  MODIF   frontend/src/app/core/models/ventas.models.ts     campo unidad
+  MODIF   frontend/src/app/core/services/cart.service.ts
+          cantidad decimal redondeada a 3, igual que la BD
+  MODIF   frontend/src/app/features/admin/productos/producto-form.ts + .html
+          "Se vende por (peso)", default kg y nota explicativa
+  MODIF   frontend/src/app/features/admin/pos/pos.ts + .html
+  MODIF   frontend/src/app/features/tienda/carrito.html
+  MODIF   frontend/src/app/features/tienda/checkout.html
+  MODIF   frontend/src/app/features/tienda/catalogo.html
+  MODIF   frontend/src/app/features/tienda/producto-detalle.ts + .html
+  MODIF   frontend/src/styles.scss                          estilos .cant-peso
+
+DOCUMENTACIÓN
+  MODIF   CLAUDE.md                    regla de venta por peso
+  MODIF   backend/scripts/README.md    la migración nueva en la lista
+
+PRUEBAS
+  18 comprobaciones E2E contra el servidor real, todas en verde. Se dio de
+  alta un producto a $180/kg, entraron 12.75 kg al inventario, se vendieron
+  2.5 kg (subtotal 450, IVA 72, total 522) y luego 125 gramos (subtotal
+  22.50), quedando 10.125 kg. Se verificó que el kardex registre -2.5,
+  -0.125 y +12.75. Todo lo creado por la prueba se borró; las categorías
+  "Acrilan turco" y "Acrilan chino" que capturaste quedaron intactas.
+
+NOTAS
+  · Si un producto no lleva impuesto asignado, no se le calcula IVA. El
+    campo es opcional a propósito; selecciónalo en el alta si aplica.
+  · El campo "peso_gramos" del producto sigue existiendo y ahora es
+    redundante con la unidad de venta. No se tocó para no romper nada, pero
+    conviene decidir si se retira o se reinterpreta (p.ej. peso por bulto).
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Limpieza de la base de datos de desarrollo
+-------------------------------------------------------------------------------
+
+QUÉ SE HIZO
+  Se vació la base "desarrollo" de todos los datos de prueba acumulados,
+  dejando únicamente al administrador y los catálogos base.
+
+RESPALDO PREVIO
+  db/dump_desarrollo_2026-07-25_antes_de_limpiar.sql  (58 KB · 156 filas)
+  Generado con backend/scripts/dump-db.js ANTES de borrar nada. Si algo hace
+  falta, de ahí se recupera.
+
+QUÉ SE CONSERVÓ
+  usuarios          1   Antonio Tristan <ceitor12345@gmail.com> (administrador)
+  roles             4   administrador, gerente, cajero, almacenista
+  unidades_medida   6   pieza, madeja, cono, metro, gramo, bolsa
+  materiales        7   algodón, poliéster, lana, acrílico, seda, lino, mezcla
+  impuestos         1   IVA 16%
+  metodos_pago      5   efectivo, tarjeta, transferencia, PayPal, Mercado Pago
+  paqueterias       5   Estafeta, DHL, FedEx, Correos de México, Paquetexpress
+  almacenes         2   Tienda principal (POS) · Bodega (surte la tienda web)
+
+QUÉ SE BORRÓ
+  usuarios         12   los Tester/Staff/Admin de prueba y el cajero juan luis
+  clientes          6   incluidos devcliente y antonio tristan gutierrez
+  categorias       11
+  productos        11   con sus 12 variantes, 3 imágenes y 1 código extra
+  inventario        7   con sus 21 movimientos
+  pedidos          10   con 10 líneas de detalle y 3 pagos
+  cajas             3   con 7 sesiones y 3 movimientos de caja
+  nómina            5   2 configuraciones, 1 periodo y 2 recibos
+  Los AUTO_INCREMENT quedaron reiniciados: el próximo producto será el id 1 y
+  el próximo usuario el id 2.
+
+VERIFICACIÓN
+  El servidor arranca sin errores contra la base limpia. Se probaron 12
+  endpoints (catálogo, categorías, opciones, almacenes, inventario, nómina,
+  reportes, usuarios y caja): todos responden 200, ninguno truena con las
+  tablas vacías.
+
+PARA EMPEZAR A CAPTURAR
+  El sistema quedó sin categorías ni cajas, tal como se pidió. El orden es:
+    1. Crear al menos una categoría (Admin > Categorías).
+    2. Crear el producto con sus variantes (Admin > Productos).
+    3. Darle entrada al inventario eligiendo el almacén según el canal:
+       Bodega surte la tienda en línea, Tienda principal surte el mostrador.
+    4. Para usar el POS, crear una caja: POST /api/v1/caja/cajas
+       {"almacen_id": 1, "nombre": "Caja 1"}
+    5. Para la nómina, dar de alta al personal en Admin > Nómina > Configurar.
+
+AVISO DE SEGURIDAD
+  Los dumps de la BD incluyen correos reales y hashes bcrypt de contraseñas
+  (19 en el respaldo nuevo, 18 en el del 2026-07-24). El dump del 2026-07-24
+  YA ESTÁ VERSIONADO EN GIT desde el commit inicial.
+  · Se agregó "db/dump_*.sql" al .gitignore para que no se suban más.
+  · Esa regla NO destraquea el archivo que ya está versionado. Para sacarlo:
+        git rm --cached db/dump_desarrollo_2026-07-24.sql
+    Y si el repo es público o compartido, considerar rotar esas contraseñas:
+    el hash sigue en el historial de git aunque se borre el archivo.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Existencias visibles en la tienda + almacén online configurable
+-------------------------------------------------------------------------------
+
+POR QUÉ
+  Al intentar comprar salía "Stock insuficiente para variante 12: hay 0, se
+  piden 1". El diagnóstico encontró dos cosas:
+    1. Las variantes de "azul rey" nunca recibieron entrada de inventario, y
+       la tienda las mostraba como comprables igual. El cliente se enteraba
+       hasta el checkout.
+    2. Cada canal descuenta de un almacén distinto, pero el de la tienda en
+       línea no estaba configurado en ningún lado: el código tomaba "el
+       primer almacén activo que no fuera punto de venta". Nada lo decía.
+
+MEJORA 1 · LA TIENDA MUESTRA EXISTENCIAS
+  · El catálogo público ahora devuelve "disponible" (cantidad - reservada)
+    del almacén que surte la tienda en línea, tanto por producto en el
+    listado como por variante en el detalle.
+  · Tarjeta del catálogo: insignia "Sin existencias" y la imagen atenuada.
+  · Detalle del producto: cada presentación agotada se marca en rojo; si
+    quedan 5 o menos avisa "Quedan N"; se preselecciona la primera
+    presentación CON existencias; el botón se deshabilita y cambia a "Sin
+    existencias".
+  · Tampoco deja agregar más unidades de las que hay considerando lo que ya
+    trae el carrito.
+  · El error del checkout dejó de hablar de ids internos:
+        antes:  Stock insuficiente para variante 12: hay 0, se piden 1
+        ahora:  "azul rey · 50" está agotado.
+                Solo quedan 1 de "azul rey · 50" y pediste 5.
+
+MEJORA 2 · ALMACÉN DE LA TIENDA EN LÍNEA CONFIGURABLE
+  · Nueva columna almacenes.es_tienda_linea. Solo puede estar encendida en un
+    almacén: el backend apaga los demás al guardar.
+  · Un único resolvedor, almacenes/model.js -> idTiendaLinea(), que usan tanto
+    el catálogo como el checkout, para que lo que ve el cliente sea siempre
+    lo que valida el pedido. Si ningún almacén está marcado, cae al
+    comportamiento anterior y nada se rompe.
+  · En "desarrollo" quedó marcada Bodega, que es justo lo que se venía usando.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_almacen_tienda_linea.sql
+          Idempotente. YA APLICADA en "desarrollo".
+          Pendiente aplicarla en cualquier otro ambiente.
+  MODIF   db/schema_mysql.sql          columna nueva + semilla actualizada
+
+BACKEND
+  MODIF   backend/src/modules/almacenes/model.js
+          CAMPOS con es_tienda_linea, marcarUnicoTiendaLinea(), idTiendaLinea()
+  MODIF   backend/src/modules/almacenes/service.js    exclusividad al guardar
+  MODIF   backend/src/modules/almacenes/controller.js + routes.js
+          GET /api/v1/almacenes/tienda-linea
+          PUT /api/v1/almacenes/:id ahora acepta es_tienda_linea
+  MODIF   backend/src/modules/productos/model.js      campo "disponible"
+  MODIF   backend/src/modules/productos/service.js    resuelve el almacén online
+  MODIF   backend/src/modules/pedidos/model.js
+          usa idTiendaLinea() y da mensajes de stock con nombre de producto
+
+FRONTEND
+  MODIF   frontend/src/app/core/models/catalogo.models.ts   campo disponible
+  MODIF   frontend/src/app/features/tienda/catalogo.ts + .html
+  MODIF   frontend/src/app/features/tienda/producto-detalle.ts + .html
+  MODIF   frontend/src/styles.scss                          estilos de agotado
+
+DOCUMENTACIÓN
+  MODIF   CLAUDE.md                    regla de almacén por canal, estado
+  MODIF   backend/scripts/README.md    la migración nueva en la lista
+
+PRUEBAS
+  17 comprobaciones E2E contra el servidor real, todas en verde. Cubren: el
+  campo disponible en listado y detalle, el mensaje de agotado sin ids
+  internos, que el stock de mostrador NO surta a la tienda en línea, la compra
+  correcta descontando de Bodega, el aviso con la cantidad real al pedir de
+  más, el cambio de almacén surtidor y la exclusividad de la marca.
+  La base quedó exactamente como estaba (pedidos, inventario y almacenes
+  restaurados).
+
+PENDIENTE / NOTAS
+  · Aplicar db/migrations/2026-07_almacen_tienda_linea.sql en ambientes
+    distintos a "desarrollo".
+  · No existe pantalla de administración de almacenes, así que es_tienda_linea
+    se cambia por API: PUT /api/v1/almacenes/:id {"es_tienda_linea": true}.
+  · El carrito guarda un snapshot en localStorage y no revalida existencias al
+    entrar al checkout. Si el stock baja mientras el carrito está lleno, el
+    aviso llega al confirmar (ya con mensaje claro). Revalidar al abrir el
+    carrito queda como mejora futura.
+  · Las variantes 1, 2, 10, 11, 12 y 13 siguen sin existencias cargadas. Ahora
+    la tienda las muestra como "Sin existencias" en vez de dejar que el
+    cliente llegue al checkout.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-25 · Nómina semanal del personal
+-------------------------------------------------------------------------------
+
+QUÉ SE AGREGÓ
+  Módulo completo de nómina semanal: sueldo base, comisión sobre ventas,
+  horas extra y descuentos, con pago los sábados.
+
+REGLAS DE NEGOCIO ACORDADAS
+  · La semana va de DOMINGO a SÁBADO y se paga ese mismo sábado.
+  · La comisión se calcula sobre la VENTA NETA: subtotal - descuento del
+    pedido, es decir SIN IVA y SIN costo de envío.
+  · Solo cuentan los pedidos donde el empleado figura como vendedor
+    (pedidos.usuario_id) y que no estén cancelados ni devueltos.
+  · Conceptos manuales soportados: horas extra (suma) y faltas/descuentos
+    (restan). No se incluyeron adelantos ni bonos.
+  · Fórmula del recibo:
+        total = sueldo_base + comisión + horas_extra - descuentos
+        comisión = ventas_netas × porcentaje / 100
+  · Al calcular, el recibo CONGELA ventas_netas y porcentaje_comision, para
+    que el histórico no cambie si después se edita al empleado.
+  · Estados del periodo: borrador (editable) -> pagado (definitivo) o
+    cancelado. Una nómina pagada no se recalcula ni se reabre.
+  · Acceso restringido al rol "administrador" porque expone sueldos.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_nomina.sql
+          4 tablas + 1 vista. YA APLICADA en la base "desarrollo".
+          Pendiente aplicarla en cualquier otro ambiente.
+            - nomina_empleados         config por empleado (sueldo, %, hora extra)
+            - nomina_periodos          semana domingo->sábado
+            - nomina_recibos           recibo por empleado por semana
+            - nomina_recibo_conceptos  horas extra y descuentos capturados
+            - v_ventas_por_empleado    venta neta por vendedor y día
+  MODIF   db/schema_mysql.sql          se agregó el MÓDULO 9 y la vista nueva
+  MODIF   db/erd.mermaid               las 4 tablas y sus relaciones
+
+BACKEND
+  NUEVO   backend/src/modules/nomina/model.js
+  NUEVO   backend/src/modules/nomina/service.js
+  NUEVO   backend/src/modules/nomina/controller.js
+  NUEVO   backend/src/modules/nomina/routes.js
+  MODIF   backend/src/routes.js        monta /api/v1/nomina
+
+          Endpoints (todos requieren rol administrador):
+            GET    /api/v1/nomina/empleados
+            PUT    /api/v1/nomina/empleados/:usuarioId
+            GET    /api/v1/nomina/periodos/actual?fecha=
+            GET    /api/v1/nomina/periodos
+            POST   /api/v1/nomina/periodos
+            GET    /api/v1/nomina/periodos/:id
+            GET    /api/v1/nomina/periodos/:id/ventas?usuario_id=
+            POST   /api/v1/nomina/periodos/:id/calcular
+            PATCH  /api/v1/nomina/periodos/:id/estado
+            POST   /api/v1/nomina/recibos/:id/conceptos
+            DELETE /api/v1/nomina/conceptos/:conceptoId
+
+FRONTEND
+  NUEVO   frontend/src/app/core/models/nomina.models.ts
+  NUEVO   frontend/src/app/core/services/nomina.service.ts
+  NUEVO   frontend/src/app/features/admin/nomina/nomina.ts + .html
+          Pantalla principal: navegación por semana, KPIs, tabla de recibos,
+          fila expandible con captura de ajustes y desglose de las ventas que
+          formaron la comisión, e histórico de semanas anteriores.
+  NUEVO   frontend/src/app/features/admin/nomina/nomina-config.ts + .html
+          Alta y edición de sueldo, comisión y valor de hora extra.
+  MODIF   frontend/src/app/features/admin/admin.routes.ts
+          rutas /admin/nomina y /admin/nomina/configuracion
+  MODIF   frontend/src/app/features/admin/admin-layout.html
+          enlace "Nómina" en el menú (solo administradores)
+  MODIF   frontend/src/styles.scss
+          estilos de la sección de nómina
+
+CORRECCIÓN DE UN BUG ENCONTRADO DE PASO
+  mysql2 devuelve las columnas DATE como objeto Date, no como string. Eso
+  rompía el armado del rango de fechas de la semana (RangeError: Invalid time
+  value). Se resolvió seleccionándolas con DATE_FORMAT(col,'%Y-%m-%d') y se
+  documentó en CLAUDE.md para que no vuelva a ocurrir en módulos futuros.
+
+DOCUMENTACIÓN
+  MODIF   CLAUDE.md                    regla de nómina, regla de fechas DATE,
+                                       estado del proyecto actualizado
+  MODIF   backend/README.md            tabla de endpoints y ejemplos
+  MODIF   backend/scripts/README.md    la migración nueva en la lista
+  MODIF   README.md                    conteo actualizado: 41 tablas, 4 vistas
+
+PRUEBAS
+  39 comprobaciones E2E contra el servidor real y la base "desarrollo", todas
+  en verde. Cubren: cálculo de comisión (300 × 10% = 30), porcentaje forzado
+  a 0 cuando el empleado no comisiona, horas extra automáticas (3 × $50 =
+  $150), conservación de los ajustes manuales al recalcular, los tres bloqueos
+  del periodo pagado, y 403 para un cajero que intente ver sueldos.
+  Los datos de prueba se eliminaron al terminar.
+
+PENDIENTE / NOTAS
+  · Aplicar db/migrations/2026-07_nomina.sql en ambientes distintos a
+    "desarrollo".
+  · backend/.env.example sigue borrado del repo aunque backend/README.md lo
+    referencia. Viene así de antes de este cambio; no se tocó.

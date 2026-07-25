@@ -21,9 +21,8 @@ export class Categorias {
 
   readonly form = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(1)]],
-    slug: [''],
     descripcion: [''],
-    padre_id: [null as number | null],
+    calibres: [''],
     orden: [0],
     activo: [true],
   });
@@ -48,16 +47,15 @@ export class Categorias {
 
   nueva(): void {
     this.editandoId.set(null);
-    this.form.reset({ nombre: '', slug: '', descripcion: '', padre_id: null, orden: 0, activo: true });
+    this.form.reset({ nombre: '', descripcion: '', calibres: '', orden: 0, activo: true });
   }
 
   editar(c: Categoria): void {
     this.editandoId.set(c.id);
     this.form.reset({
       nombre: c.nombre,
-      slug: c.slug,
       descripcion: c.descripcion ?? '',
-      padre_id: c.padre_id ?? null,
+      calibres: c.calibres ?? '',
       orden: c.orden,
       activo: !!c.activo,
     });
@@ -74,9 +72,8 @@ export class Categorias {
     const v = this.form.getRawValue();
     const body: Partial<Categoria> = {
       nombre: v.nombre,
-      slug: v.slug.trim() || undefined,
       descripcion: v.descripcion.trim() || undefined,
-      padre_id: v.padre_id || null,
+      calibres: v.calibres.trim() || null,
       orden: v.orden,
       activo: v.activo,
     };
@@ -100,7 +97,7 @@ export class Categorias {
   }
 
   eliminar(c: Categoria): void {
-    if (!confirm(`¿Eliminar la categoría "${c.nombre}"?`)) return;
+    if (!confirm(`¿Eliminar el material "${c.nombre}"?`)) return;
     this.catalogo.eliminarCategoria(c.id).subscribe({
       next: () => this.cargar(),
       error: (e) => this.error.set(this.msg(e)),

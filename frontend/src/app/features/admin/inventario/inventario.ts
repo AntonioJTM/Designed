@@ -1,20 +1,31 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { InventarioService } from '../../../core/services/inventario.service';
+import {
+  Conversion,
+  InventarioService,
+  ResultadoDesarme,
+  ResumenAlmacenes,
+  ResumenFila,
+} from '../../../core/services/inventario.service';
 import { Almacen, StockItem, TipoMovimiento } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
+import { FechaPipe } from '../../../shared/fecha.pipe';
 import { ApiError } from '../../../core/models/auth.models';
+import { CantidadPipe } from '../../../shared/cantidad.pipe';
 
 @Component({
   selector: 'app-inventario',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, CantidadPipe, FechaPipe],
   templateUrl: './inventario.html',
 })
 export class Inventario {
   private readonly inv = inject(InventarioService);
 
   readonly almacenes = signal<Almacen[]>([]);
+  /** Panorama de existencias por almacén (totales + matriz). */
+  readonly resumen = signal<ResumenAlmacenes | null>(null);
+  readonly soloConStock = signal(true);
   readonly stock = signal<StockItem[]>([]);
   readonly totalAlertas = signal(0);
   readonly cargando = signal(true);
@@ -39,7 +50,44 @@ export class Inventario {
   // Formulario de transferencia
   transf = { origen: '' as number | '', destino: '' as number | '', cantidad: null as number | null, motivo: '' };
 
+  // Desarme de paquetes en conos
+  readonly conos = signal<Variante[]>([]);
+  readonly conversiones = signal<Conversion[]>([]);
+  readonly ultimoDesarme = signal<ResultadoDesarme | null>(null);
+  desarme = {
+    cono_id: '' as number | '',
+    origen: '' as number | '',
+    destino: '' as number | '',
+    paquetes: 1 as number | null,
+    // Vacío = se usa el peso nominal del paquete.
+    kg: null as number | null,
+    motivo: '',
+  };
+
   readonly esAjuste = computed(() => this.mov.tipo === 'ajuste');
+
+  /** Cono elegido para desarmar, con los datos de su paquete de origen. */
+  readonly conoSel = computed(() =>
+    this.conos().find((c) => c.id === Number(this.desarme.cono_id)) ?? null
+  );
+
+  /** Lo que va a pasar al desarmar, calculado en vivo para confirmarlo antes. */
+  readonly previaDesarme = computed(() => {
+    const c = this.conoSel();
+    const n = Number(this.desarme.paquetes);
+    if (!c || !n || !c.paquete_peso_kg || !c.piezas_por_origen) return null;
+    // Peso nominal según el paquete, y el real si se ajustó a mano.
+    const nominal = Number(c.paquete_peso_kg) * n;
+    const kg = this.desarme.kg != null ? Number(this.desarme.kg) : nominal;
+    return {
+      kg,
+      nominal,
+      ajustado: kg !== nominal,
+      piezas: Number(c.piezas_por_origen) * n,
+      paqueteSku: c.paquete_sku,
+      conoSku: c.sku,
+    };
+  });
 
   constructor() {
     this.inv.almacenes().subscribe({
@@ -55,6 +103,102 @@ export class Inventario {
     });
     this.cargarStock();
     this.cargarAlertas();
+    this.cargarConos();
+    this.cargarConversiones();
+    this.cargarResumen();
+  }
+
+  cargarResumen(): void {
+    this.inv.resumen().subscribe({
+      next: (r) => this.resumen.set(r),
+      error: (e) => this.error.set(this.msg(e)),
+    });
+  }
+
+  /** Renglones del comparativo, opcionalmente solo los que tienen existencias. */
+  filasResumen(): ResumenFila[] {
+    const filas = this.resumen()?.filas ?? [];
+    return this.soloConStock() ? filas.filter((f) => f.total > 0) : filas;
+  }
+
+  /** Existencia de una variante en un almacén concreto. */
+  celda(f: ResumenFila, almacenId: number): { cantidad: string; bajo_minimo: boolean } | null {
+    return f.existencias[String(almacenId)] ?? null;
+  }
+
+  /** Los DECIMAL llegan como string; en la plantilla se comparan como número. */
+  num(v: string | number | null | undefined): number {
+    return Number(v ?? 0);
+  }
+
+  /** Cuántos paquetes representan esos kilos, para leerlo como lo cuenta la tienda. */
+  paquetesDe(kilos: string | number, pesoKg: string | number | null | undefined): string {
+    const peso = Number(pesoKg ?? 0);
+    if (!peso) return '';
+    return (Math.round((Number(kilos) / peso) * 100) / 100).toString();
+  }
+
+  /** Etiqueta corta del papel que juega el almacén. */
+  papel(a: { es_matriz: boolean | number; es_punto_venta: boolean | number; es_tienda_linea: boolean | number }): string {
+    const partes: string[] = [];
+    if (a.es_matriz) partes.push('matriz');
+    partes.push(a.es_punto_venta ? 'tienda' : 'bodega');
+    if (a.es_tienda_linea) partes.push('web');
+    return partes.join(' · ');
+  }
+
+  /** Trae las presentaciones de tipo cono: son las que se pueden desarmar. */
+  private cargarConos(): void {
+    this.inv.buscarVariantes('').subscribe({
+      next: (vs) => {
+        const conos = vs.filter((v) => v.tipo_presentacion === 'cono');
+        this.conos.set(conos);
+        if (conos[0]) this.desarme.cono_id = conos[0].id;
+      },
+      error: () => {},
+    });
+  }
+
+  private cargarConversiones(): void {
+    this.inv.conversiones().subscribe({
+      next: (p) => this.conversiones.set(p.items),
+      error: () => {},
+    });
+  }
+
+  desarmar(): void {
+    const c = this.conoSel();
+    if (!c || !this.desarme.origen || !this.desarme.destino || !this.desarme.paquetes) {
+      this.error.set('Elige el cono, los almacenes y cuántos paquetes vas a desarmar.');
+      return;
+    }
+    this.error.set(null);
+    this.mensaje.set(null);
+    this.inv
+      .desarmar({
+        cono_variante_id: c.id,
+        almacen_origen_id: Number(this.desarme.origen),
+        almacen_destino_id: Number(this.desarme.destino),
+        paquetes: Number(this.desarme.paquetes),
+        kg: this.desarme.kg != null ? Number(this.desarme.kg) : undefined,
+        motivo: this.desarme.motivo.trim() || undefined,
+      })
+      .subscribe({
+        next: (r) => {
+          this.ultimoDesarme.set(r);
+          this.mensaje.set(
+            `Se desarmaron ${r.paquetes} paquete(s): −${r.kg_consumidos} kg de ${r.paquete.sku}, ` +
+            `+${r.piezas_generadas} conos de ${r.cono.sku}.`
+          );
+          this.desarme.motivo = '';
+          this.desarme.kg = null;
+          this.cargarStock();
+          this.cargarAlertas();
+          this.cargarConversiones();
+          this.cargarResumen();
+        },
+        error: (e) => this.error.set(this.msg(e)),
+      });
   }
 
   cargarStock(): void {
@@ -127,6 +271,7 @@ export class Inventario {
           this.mov.motivo = '';
           this.cargarStock();
           this.cargarAlertas();
+          this.cargarResumen();
         },
         error: (e) => this.error.set(this.msg(e)),
       });
@@ -154,6 +299,7 @@ export class Inventario {
           this.transf.motivo = '';
           this.cargarStock();
           this.cargarAlertas();
+          this.cargarResumen();
         },
         error: (e) => this.error.set(this.msg(e)),
       });

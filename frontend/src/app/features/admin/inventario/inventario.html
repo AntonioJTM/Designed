@@ -11,6 +11,99 @@
 @if (error()) { <p class="alert">{{ error() }}</p> }
 @if (mensaje()) { <p class="pill ok" style="display:block; padding:0.6rem 0.8rem">{{ mensaje() }}</p> }
 
+<!-- Panorama: qué hay en cada almacén -->
+@if (resumen(); as r) {
+  <div class="kpis" style="grid-template-columns:repeat(auto-fit, minmax(210px, 1fr))">
+    @for (a of r.almacenes; track a.almacen_id) {
+      <div class="card kpi">
+        <span class="muted">{{ a.nombre }}</span>
+        <b>{{ a.skus }} <span style="font-size:0.9rem; font-weight:500">productos</span></b>
+        <span class="muted">
+          @if (num(a.kilos)) { {{ a.kilos | cantidad: 'kg' }} }
+          @if (num(a.kilos) && num(a.piezas)) { · }
+          @if (num(a.piezas)) { {{ a.piezas | cantidad: 'pz' }} }
+          @if (!num(a.kilos) && !num(a.piezas)) { sin existencias }
+        </span>
+        <span style="display:flex; gap:0.3rem; flex-wrap:wrap; margin-top:0.2rem">
+          <span class="pill" [class.ok]="a.es_matriz">{{ papel(a) }}</span>
+          @if (num(a.alertas)) {
+            <span class="pill off">{{ a.alertas }} bajo mínimo</span>
+          }
+        </span>
+      </div>
+    }
+  </div>
+
+  <div class="card">
+    <div class="acciones-periodo">
+      <div>
+        <b>Qué hay en cada almacén</b>
+        <span class="muted"> · {{ filasResumen().length }} de {{ r.total_variantes }} productos</span>
+      </div>
+      <label class="field check" style="margin:0">
+        <input type="checkbox" [checked]="soloConStock()"
+               (change)="soloConStock.set($any($event.target).checked)" />
+        Ocultar los que están en cero
+      </label>
+    </div>
+
+    @if (r.truncado) {
+      <p class="aviso" style="margin-top:0.75rem">
+        El catálogo tiene {{ r.total_variantes }} productos y aquí solo caben los primeros
+        {{ r.filas.length }}. Usa el buscador de existencias de abajo para el resto.
+      </p>
+    }
+
+    @if (filasResumen().length === 0) {
+      <p class="empty">Todavía no hay existencias registradas en ningún almacén.</p>
+    } @else {
+      <div style="overflow-x:auto">
+        <table class="grid" style="margin-top:0.75rem">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              @for (a of r.almacenes; track a.almacen_id) {
+                <th class="num">{{ a.nombre }}</th>
+              }
+              <th class="num">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (f of filasResumen(); track f.variante_id) {
+              <tr>
+                <td>
+                  <b>{{ f.producto }}</b>
+                  <div class="muted" style="font-size:0.75rem">
+                    {{ f.sku }}{{ f.presentacion ? ' · ' + f.presentacion : '' }}
+                    @if (f.tipo_presentacion === 'paquete') { · paquete de {{ f.peso_kg | cantidad: 'kg' }} }
+                    @else if (f.tipo_presentacion === 'cono') { · cono }
+                  </div>
+                </td>
+                @for (a of r.almacenes; track a.almacen_id) {
+                  <td class="num">
+                    @if (celda(f, a.almacen_id); as c) {
+                      <span [class.neg]="c.bajo_minimo">{{ c.cantidad | cantidad }}</span>
+                      <span class="muted" style="font-size:0.72rem"> {{ f.unidad }}</span>
+                      @if (f.tipo_presentacion === 'paquete' && num(f.peso_kg)) {
+                        <div class="muted" style="font-size:0.72rem">
+                          {{ paquetesDe(c.cantidad, f.peso_kg) | cantidad }} paq
+                        </div>
+                      }
+                    } @else {
+                      <span class="muted">—</span>
+                    }
+                  </td>
+                }
+                <td class="num"><b>{{ f.total | cantidad }}</b> <span class="muted" style="font-size:0.72rem">{{ f.unidad }}</span></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+}
+
 <!-- Selector de variante (compartido) -->
 <div class="card">
   <h3 style="margin-top:0">1 · Elige la variante (SKU)</h3>
@@ -39,6 +132,111 @@
     <button class="btn btn-ghost btn-sm" (click)="buscarVariantes()">Buscar variantes</button>
   </div>
 </div>
+
+<!-- Desarmar paquetes en conos -->
+@if (conos().length > 0) {
+  <div class="card">
+    <h3 style="margin-top:0">Desarmar paquete en conos</h3>
+    <p class="muted" style="margin-top:0; font-size:0.85rem">
+      Abre paquetes de bodega y baja los conos a mostrador. Descuenta los kilos del paquete y da
+      entrada a los conos, dejando las dos patas en el kardex.
+    </p>
+
+    <div class="form-grid">
+      <label class="field">
+        Cono a producir
+        <select [(ngModel)]="desarme.cono_id">
+          @for (c of conos(); track c.id) {
+            <option [ngValue]="c.id">{{ c.sku }} · {{ c.producto }}</option>
+          }
+        </select>
+        @if (conoSel(); as c) {
+          <span class="muted" style="font-size:0.72rem">
+            Sale del paquete {{ c.paquete_sku }} de {{ c.paquete_peso_kg | cantidad: 'kg' }} ·
+            {{ c.piezas_por_origen }} conos por paquete
+          </span>
+        }
+      </label>
+      <label class="field">
+        Paquetes a desarmar
+        <input type="number" step="1" min="1" [(ngModel)]="desarme.paquetes" />
+      </label>
+      <label class="field">
+        Kilos reales <span class="muted">(opcional)</span>
+        <input type="number" step="0.001" min="0" [(ngModel)]="desarme.kg"
+               [placeholder]="previaDesarme() ? previaDesarme()!.nominal + ' kg' : 'peso nominal'" />
+        <span class="muted" style="font-size:0.72rem">
+          Solo si el bulto no pesó lo nominal. Vacío usa el peso del paquete.
+        </span>
+      </label>
+      <label class="field">
+        Sale de (bodega)
+        <select [(ngModel)]="desarme.origen">
+          @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+        </select>
+      </label>
+      <label class="field">
+        Entra a (mostrador)
+        <select [(ngModel)]="desarme.destino">
+          @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+        </select>
+      </label>
+      <label class="field full">
+        Motivo (opcional)
+        <input type="text" [(ngModel)]="desarme.motivo" placeholder="Ej. Surtido de mostrador" />
+      </label>
+    </div>
+
+    @if (previaDesarme(); as p) {
+      <div class="previa-calculo">
+        <div class="renglon">
+          <span>
+            {{ p.paqueteSku }}
+            @if (p.ajustado) {
+              <span class="muted">· ajustado, nominal {{ p.nominal | cantidad: 'kg' }}</span>
+            }
+          </span>
+          <span class="neg">−{{ p.kg | cantidad: 'kg' }}</span>
+        </div>
+        <div class="renglon">
+          <span>{{ p.conoSku }}</span>
+          <span style="color:#166534">+{{ p.piezas | cantidad }} conos</span>
+        </div>
+      </div>
+    }
+
+    <div style="margin-top:1rem">
+      <button class="btn btn-primary" (click)="desarmar()">Desarmar</button>
+    </div>
+  </div>
+
+  @if (conversiones().length > 0) {
+    <div class="card">
+      <h3 style="margin-top:0">Desarmes recientes</h3>
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Producto</th><th>Paquete</th><th class="num">Paquetes</th>
+            <th class="num">Kilos</th><th class="num">Conos</th><th>Destino</th><th>Cuándo</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of conversiones(); track c.id) {
+            <tr>
+              <td>{{ c.producto }}</td>
+              <td class="muted">{{ c.paquete_sku }} → {{ c.cono_sku }}</td>
+              <td class="num">{{ c.paquetes | cantidad }}</td>
+              <td class="num neg">−{{ c.kg_consumidos | cantidad }}</td>
+              <td class="num">+{{ c.piezas_generadas | cantidad }}</td>
+              <td class="muted">{{ c.almacen_destino }}</td>
+              <td class="muted">{{ c.creado_en | fecha }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}
 
 <div class="form-grid" style="align-items:start">
   <!-- Movimiento -->
@@ -147,14 +345,14 @@
       <td>{{ s.sku }}</td>
       <td>{{ s.producto }}{{ s.color ? ' · ' + s.color : '' }}</td>
       <td>{{ s.almacen }}</td>
-      <td>{{ s.cantidad }}</td>
-      <td>{{ s.cantidad_reservada }}</td>
+      <td class="num">{{ s.cantidad | cantidad }}</td>
+      <td class="num">{{ s.cantidad_reservada | cantidad }}</td>
       <td>
         <span [class.pill]="+s.disponible <= +s.stock_minimo" [class.off]="+s.disponible <= +s.stock_minimo">
-          {{ s.disponible }}
+          {{ s.disponible | cantidad }}
         </span>
       </td>
-      <td class="muted">{{ s.stock_minimo }}</td>
+      <td class="num muted">{{ s.stock_minimo | cantidad }}</td>
     </tr>
     }
   </tbody>
