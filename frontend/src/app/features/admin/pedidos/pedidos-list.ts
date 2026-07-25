@@ -3,11 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
 import { CanalVenta, EstadoPedido, Pedido } from '../../../core/models/ventas.models';
+import { FechaPipe } from '../../../shared/fecha.pipe';
 import { ApiError } from '../../../core/models/auth.models';
 
 @Component({
   selector: 'app-pedidos-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, FechaPipe],
   templateUrl: './pedidos-list.html',
 })
 export class PedidosList {

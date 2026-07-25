@@ -75,30 +75,27 @@ CREATE TABLE auditoria (
 --  MÓDULO 2 · CATÁLOGO DE PRODUCTOS (HILOS)
 -- ---------------------------------------------------------------------
 
+-- Material del hilo (acrilán, viscosa…). Se rotula "Material" en el panel.
+-- Lista plana: no hay jerarquía. El catálogo filtra por material exacto.
+-- `calibres` es la lista de calibres válidos de ese material, separados por
+-- coma; el alta de producto solo ofrece esos.
 CREATE TABLE categorias (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    padre_id    INT UNSIGNED,
     nombre      VARCHAR(100) NOT NULL,
-    slug        VARCHAR(120) NOT NULL UNIQUE,
     descripcion TEXT,
+    calibres    VARCHAR(255),
     imagen_url  VARCHAR(255),
     orden       SMALLINT DEFAULT 0,
-    activo      BOOLEAN NOT NULL DEFAULT TRUE,
-    FOREIGN KEY (padre_id) REFERENCES categorias(id) ON DELETE SET NULL,
-    INDEX idx_categorias_padre (padre_id)
+    activo      BOOLEAN NOT NULL DEFAULT TRUE
 ) ENGINE=InnoDB;
 
-CREATE TABLE marcas (
+-- Línea de procedencia del hilo: turco, nacional, chino.
+CREATE TABLE lineas (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     nombre      VARCHAR(100) NOT NULL UNIQUE,
     descripcion TEXT,
     logo_url    VARCHAR(255),
     activo      BOOLEAN NOT NULL DEFAULT TRUE
-) ENGINE=InnoDB;
-
-CREATE TABLE materiales (
-    id     SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(60) NOT NULL UNIQUE
 ) ENGINE=InnoDB;
 
 CREATE TABLE colores (
@@ -125,46 +122,113 @@ CREATE TABLE impuestos (
 CREATE TABLE productos (
     id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     categoria_id     INT UNSIGNED NOT NULL,
-    marca_id         INT UNSIGNED,
-    material_id      SMALLINT UNSIGNED,
+    linea_id         INT UNSIGNED,
     unidad_medida_id SMALLINT UNSIGNED NOT NULL,
     impuesto_id      SMALLINT UNSIGNED,
     nombre           VARCHAR(160) NOT NULL,
-    slug             VARCHAR(180) NOT NULL UNIQUE,
     descripcion      TEXT,
+    -- El calibre válido lo define el material en `categorias.calibres`.
     grosor_calibre   VARCHAR(30),
-    peso_gramos      DECIMAL(8,2),
-    longitud_metros  DECIMAL(8,2),
+    -- multipresentacion: se maneja como paquete que se desarma en conos.
+    -- por_lotes: sus presentaciones se etiquetan por lote (el stock NO se separa).
+    multipresentacion BOOLEAN NOT NULL DEFAULT FALSE,
+    por_lotes        BOOLEAN NOT NULL DEFAULT FALSE,
     destacado        BOOLEAN NOT NULL DEFAULT FALSE,
     activo           BOOLEAN NOT NULL DEFAULT TRUE,
     creado_en        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     actualizado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (categoria_id)     REFERENCES categorias(id),
-    FOREIGN KEY (marca_id)         REFERENCES marcas(id),
-    FOREIGN KEY (material_id)      REFERENCES materiales(id),
+    FOREIGN KEY (linea_id)         REFERENCES lineas(id),
     FOREIGN KEY (unidad_medida_id) REFERENCES unidades_medida(id),
     FOREIGN KEY (impuesto_id)      REFERENCES impuestos(id),
     INDEX idx_productos_categoria (categoria_id),
-    INDEX idx_productos_marca (marca_id)
+    INDEX idx_productos_linea (linea_id)
 ) ENGINE=InnoDB;
 
+-- `tipo_presentacion` define cómo se vende e inventaría la variante:
+--   paquete → la cantidad son KILOS  y `precio` es el precio por kilo
+--   cono    → la cantidad son PIEZAS y `precio` es el precio de un cono
+--   simple  → la cantidad va en la unidad del producto
+-- Un 'cono' sale de desarmar su `origen_variante_id`: de un paquete salen
+-- `piezas_por_origen` conos. Con `modo_precio = 'calculado'` el precio del
+-- cono lo deriva el backend del valor del paquete; con 'manual' lo fija el
+-- usuario. Ver db/migrations/2026-07_paquetes_y_conos.sql.
 CREATE TABLE producto_variantes (
-    id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    producto_id    BIGINT UNSIGNED NOT NULL,
-    color_id       INT UNSIGNED,
-    sku            VARCHAR(60) NOT NULL UNIQUE,
-    codigo_barras  VARCHAR(60) UNIQUE,
-    presentacion   VARCHAR(40),
-    precio         DECIMAL(12,2) NOT NULL CHECK (precio >= 0),
-    precio_oferta  DECIMAL(12,2) CHECK (precio_oferta >= 0),
-    costo          DECIMAL(12,2) CHECK (costo >= 0),
-    activo         BOOLEAN NOT NULL DEFAULT TRUE,
-    creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
-    FOREIGN KEY (color_id)    REFERENCES colores(id),
+    id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    producto_id        BIGINT UNSIGNED NOT NULL,
+    color_id           INT UNSIGNED,
+    sku                VARCHAR(60) NOT NULL UNIQUE,
+    codigo_barras      VARCHAR(60) UNIQUE,
+    presentacion       VARCHAR(40),
+    -- Etiqueta de la remesa. El inventario NO se separa por lote.
+    lote               VARCHAR(40),
+    tipo_presentacion  VARCHAR(10) NOT NULL DEFAULT 'simple'
+                         CHECK (tipo_presentacion IN ('simple','paquete','cono')),
+    peso_kg            DECIMAL(12,3),
+    origen_variante_id BIGINT UNSIGNED,
+    piezas_por_origen  INT UNSIGNED,
+    modo_precio        VARCHAR(10) NOT NULL DEFAULT 'manual'
+                         CHECK (modo_precio IN ('manual','calculado')),
+    precio             DECIMAL(12,2) NOT NULL CHECK (precio >= 0),
+    precio_oferta      DECIMAL(12,2) CHECK (precio_oferta >= 0),
+    costo              DECIMAL(12,2) CHECK (costo >= 0),
+    activo             BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (producto_id)        REFERENCES productos(id) ON DELETE CASCADE,
+    FOREIGN KEY (color_id)           REFERENCES colores(id),
+    FOREIGN KEY (origen_variante_id) REFERENCES producto_variantes(id) ON DELETE SET NULL,
     INDEX idx_variantes_producto (producto_id),
-    INDEX idx_variantes_color (color_id)
+    INDEX idx_variantes_color (color_id),
+    INDEX idx_variantes_origen (origen_variante_id),
+    INDEX idx_variantes_lote (lote)
+) ENGINE=InnoDB;
+
+-- Tipos de cliente. El público cobra `producto_variantes.precio`; los demás
+-- llevan su precio propio en `variante_precios`.
+CREATE TABLE tipos_cliente (
+    id         SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre     VARCHAR(60) NOT NULL UNIQUE,
+    es_publico BOOLEAN NOT NULL DEFAULT FALSE,
+    orden      SMALLINT NOT NULL DEFAULT 0,
+    activo     BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- Precio de una presentación para un tipo de cliente distinto del público.
+-- Sin fila, ese tipo paga el precio público.
+CREATE TABLE variante_precios (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    variante_id     BIGINT UNSIGNED NOT NULL,
+    tipo_cliente_id SMALLINT UNSIGNED NOT NULL,
+    precio          DECIMAL(12,2) NOT NULL CHECK (precio >= 0),
+    actualizado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE (variante_id, tipo_cliente_id),
+    FOREIGN KEY (variante_id)     REFERENCES producto_variantes(id) ON DELETE CASCADE,
+    FOREIGN KEY (tipo_cliente_id) REFERENCES tipos_cliente(id)      ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Bitácora de desarmes: liga la salida del paquete con la entrada de conos
+-- en `movimientos_inventario` (referencia_tipo = 'conversion').
+CREATE TABLE variante_conversiones (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    variante_origen_id  BIGINT UNSIGNED NOT NULL,
+    variante_destino_id BIGINT UNSIGNED NOT NULL,
+    almacen_origen_id   SMALLINT UNSIGNED NOT NULL,
+    almacen_destino_id  SMALLINT UNSIGNED NOT NULL,
+    paquetes            DECIMAL(12,3) NOT NULL CHECK (paquetes > 0),
+    kg_consumidos       DECIMAL(12,3) NOT NULL CHECK (kg_consumidos > 0),
+    piezas_generadas    DECIMAL(12,3) NOT NULL CHECK (piezas_generadas > 0),
+    usuario_id          BIGINT UNSIGNED,
+    motivo              VARCHAR(255),
+    creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (variante_origen_id)  REFERENCES producto_variantes(id),
+    FOREIGN KEY (variante_destino_id) REFERENCES producto_variantes(id),
+    FOREIGN KEY (almacen_origen_id)   REFERENCES almacenes(id),
+    FOREIGN KEY (almacen_destino_id)  REFERENCES almacenes(id),
+    FOREIGN KEY (usuario_id)          REFERENCES usuarios(id),
+    INDEX idx_conversiones_origen (variante_origen_id),
+    INDEX idx_conversiones_fecha (creado_en)
 ) ENGINE=InnoDB;
 
 CREATE TABLE producto_imagenes (
@@ -179,17 +243,47 @@ CREATE TABLE producto_imagenes (
     INDEX idx_imagenes_producto (producto_id)
 ) ENGINE=InnoDB;
 
--- Códigos de barras adicionales por variante (varios paquetes/lotes del mismo
--- color con códigos distintos, agrupados en la misma variante). El código
--- principal sigue en producto_variantes.codigo_barras; el stock no se separa por lote.
+-- Bultos físicos de una variante. Cada renglón es UN bulto con su código de
+-- barras, su peso real y su lote, tal como llega en la lista de empaque del
+-- proveedor. La presentación del catálogo es una sola (el paquete); estos son
+-- sus ejemplares. El código principal sigue en producto_variantes.codigo_barras
+-- y el stock NO se separa por lote: es un saldo en kilos por variante y almacén.
 CREATE TABLE variante_codigos (
     id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     variante_id BIGINT UNSIGNED NOT NULL,
     codigo      VARCHAR(60) NOT NULL UNIQUE,
+    -- Peso real de ESTE bulto: al escanearlo se cobra por él, no por el nominal.
+    peso_kg     DECIMAL(12,3),
+    lote        VARCHAR(40),
+    -- Conos que rinde este bulto (varía cuando viene incompleto).
+    conos       INT UNSIGNED,
+    remesa_id   BIGINT UNSIGNED,
     etiqueta    VARCHAR(60),
     creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (variante_id) REFERENCES producto_variantes(id) ON DELETE CASCADE,
-    INDEX idx_variante_codigos_variante (variante_id)
+    INDEX idx_variante_codigos_variante (variante_id),
+    INDEX idx_variante_codigos_lote (lote),
+    INDEX idx_variante_codigos_remesa (remesa_id)
+) ENGINE=InnoDB;
+
+-- Documento de entrada de una remesa (la lista de empaque importada).
+CREATE TABLE remesas (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    folio       VARCHAR(40) NOT NULL UNIQUE,
+    variante_id BIGINT UNSIGNED NOT NULL,
+    almacen_id  SMALLINT UNSIGNED NOT NULL,
+    usuario_id  BIGINT UNSIGNED,
+    num_bultos  INT UNSIGNED NOT NULL,
+    kg_total    DECIMAL(12,3) NOT NULL CHECK (kg_total > 0),
+    lotes       VARCHAR(255),
+    archivo     VARCHAR(255),
+    notas       TEXT,
+    creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (variante_id) REFERENCES producto_variantes(id),
+    FOREIGN KEY (almacen_id)  REFERENCES almacenes(id),
+    FOREIGN KEY (usuario_id)  REFERENCES usuarios(id),
+    INDEX idx_remesas_variante (variante_id),
+    INDEX idx_remesas_fecha (creado_en)
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
@@ -243,12 +337,17 @@ CREATE TABLE orden_compra_detalle (
 --  MÓDULO 4 · INVENTARIO (MULTI-ALMACÉN)
 -- ---------------------------------------------------------------------
 
+-- `es_tienda_linea` marca el almacén del que descuentan los pedidos web y
+-- `es_matriz` el que surte a las demás sucursales. Cada uno debe estar
+-- encendido en un solo almacén; el backend lo garantiza al guardar.
 CREATE TABLE almacenes (
-    id             SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    nombre         VARCHAR(100) NOT NULL UNIQUE,
-    direccion      VARCHAR(255),
-    es_punto_venta BOOLEAN NOT NULL DEFAULT FALSE,
-    activo         BOOLEAN NOT NULL DEFAULT TRUE
+    id              SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre          VARCHAR(100) NOT NULL UNIQUE,
+    direccion       VARCHAR(255),
+    es_punto_venta  BOOLEAN NOT NULL DEFAULT FALSE,
+    es_tienda_linea BOOLEAN NOT NULL DEFAULT FALSE,
+    es_matriz       BOOLEAN NOT NULL DEFAULT FALSE,
+    activo          BOOLEAN NOT NULL DEFAULT TRUE
 ) ENGINE=InnoDB;
 
 CREATE TABLE inventario (
@@ -285,6 +384,36 @@ CREATE TABLE movimientos_inventario (
     FOREIGN KEY (usuario_id)  REFERENCES usuarios(id),
     INDEX idx_movinv_variante (variante_id),
     INDEX idx_movinv_fecha (creado_en)
+) ENGINE=InnoDB;
+
+-- Traspasos de matriz a sucursales. Documento con folio y varias líneas; el
+-- movimiento es inmediato (no se modela el tiempo de camino). La línea guarda
+-- los `paquetes` capturados y la `cantidad` real movida, porque el inventario
+-- de una variante 'paquete' se lleva en kilos.
+CREATE TABLE traspasos (
+    id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    folio              VARCHAR(40) NOT NULL UNIQUE,
+    almacen_origen_id  SMALLINT UNSIGNED NOT NULL,
+    almacen_destino_id SMALLINT UNSIGNED NOT NULL,
+    usuario_id         BIGINT UNSIGNED,
+    notas              TEXT,
+    creado_en          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (almacen_origen_id)  REFERENCES almacenes(id),
+    FOREIGN KEY (almacen_destino_id) REFERENCES almacenes(id),
+    FOREIGN KEY (usuario_id)         REFERENCES usuarios(id),
+    INDEX idx_traspasos_destino (almacen_destino_id),
+    INDEX idx_traspasos_fecha (creado_en)
+) ENGINE=InnoDB;
+
+CREATE TABLE traspaso_detalle (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    traspaso_id BIGINT UNSIGNED NOT NULL,
+    variante_id BIGINT UNSIGNED NOT NULL,
+    paquetes    DECIMAL(12,3),
+    cantidad    DECIMAL(12,3) NOT NULL CHECK (cantidad > 0),
+    FOREIGN KEY (traspaso_id) REFERENCES traspasos(id) ON DELETE CASCADE,
+    FOREIGN KEY (variante_id) REFERENCES producto_variantes(id),
+    INDEX idx_traspaso_detalle_traspaso (traspaso_id)
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
@@ -447,6 +576,8 @@ CREATE TABLE pedidos (
     canal              VARCHAR(15) NOT NULL
                          CHECK (canal IN ('tienda_linea','punto_venta')),
     cliente_id         BIGINT UNSIGNED,
+    -- Lista de precios con la que se cerró la venta.
+    tipo_cliente_id    SMALLINT UNSIGNED,
     usuario_id         BIGINT UNSIGNED,
     sesion_caja_id     BIGINT UNSIGNED,
     almacen_id         SMALLINT UNSIGNED,
@@ -464,6 +595,7 @@ CREATE TABLE pedidos (
     creado_en          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     actualizado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (cliente_id)         REFERENCES clientes(id),
+    FOREIGN KEY (tipo_cliente_id)    REFERENCES tipos_cliente(id),
     FOREIGN KEY (usuario_id)         REFERENCES usuarios(id),
     FOREIGN KEY (sesion_caja_id)     REFERENCES sesiones_caja(id),
     FOREIGN KEY (almacen_id)         REFERENCES almacenes(id),
@@ -519,6 +651,87 @@ CREATE TABLE envios (
     INDEX idx_envios_pedido (pedido_id)
 ) ENGINE=InnoDB;
 
+-- ---------------------------------------------------------------------
+--  MÓDULO 9 · NÓMINA SEMANAL DEL PERSONAL
+--  Semana natural DOMINGO → SÁBADO, pagada ese mismo sábado.
+--  La comisión se calcula sobre la VENTA NETA de los pedidos donde el
+--  empleado es el vendedor (pedidos.usuario_id): subtotal - descuento,
+--  es decir sin IVA y sin costo de envío.
+-- ---------------------------------------------------------------------
+
+-- Configuración de nómina por empleado. Es 1:1 opcional con `usuarios`:
+-- solo el staff que aparece aquí entra en la nómina.
+CREATE TABLE nomina_empleados (
+    usuario_id          BIGINT UNSIGNED PRIMARY KEY,
+    sueldo_base_semanal DECIMAL(12,2) NOT NULL DEFAULT 0 CHECK (sueldo_base_semanal >= 0),
+    paga_comision       BOOLEAN NOT NULL DEFAULT FALSE,
+    porcentaje_comision DECIMAL(5,2)  NOT NULL DEFAULT 0
+                          CHECK (porcentaje_comision >= 0 AND porcentaje_comision <= 100),
+    valor_hora_extra    DECIMAL(12,2) NOT NULL DEFAULT 0 CHECK (valor_hora_extra >= 0),
+    activo              BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Periodo semanal. `fecha_inicio` es domingo, `fecha_fin` sábado y
+-- `fecha_pago` coincide con el sábado del cierre.
+CREATE TABLE nomina_periodos (
+    id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    fecha_inicio   DATE NOT NULL UNIQUE,
+    fecha_fin      DATE NOT NULL,
+    fecha_pago     DATE NOT NULL,
+    estado         VARCHAR(15) NOT NULL DEFAULT 'borrador'
+                     CHECK (estado IN ('borrador','pagado','cancelado')),
+    notas          TEXT,
+    creado_por     BIGINT UNSIGNED,
+    creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (creado_por) REFERENCES usuarios(id),
+    INDEX idx_nomina_periodos_pago (fecha_pago)
+) ENGINE=InnoDB;
+
+-- Recibo de un empleado dentro del periodo. Los montos quedan CONGELADOS
+-- al calcular: `ventas_netas` y `porcentaje_comision` se guardan aquí para
+-- que el recibo siga siendo auditable aunque cambie la configuración.
+CREATE TABLE nomina_recibos (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    periodo_id          BIGINT UNSIGNED NOT NULL,
+    usuario_id          BIGINT UNSIGNED NOT NULL,
+    sueldo_base         DECIMAL(12,2) NOT NULL DEFAULT 0,
+    num_pedidos         INT UNSIGNED  NOT NULL DEFAULT 0,
+    ventas_netas        DECIMAL(12,2) NOT NULL DEFAULT 0,
+    porcentaje_comision DECIMAL(5,2)  NOT NULL DEFAULT 0,
+    comision            DECIMAL(12,2) NOT NULL DEFAULT 0,
+    otras_percepciones  DECIMAL(12,2) NOT NULL DEFAULT 0,
+    deducciones         DECIMAL(12,2) NOT NULL DEFAULT 0,
+    total_pagar         DECIMAL(12,2) NOT NULL DEFAULT 0,
+    notas               TEXT,
+    creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE (periodo_id, usuario_id),
+    FOREIGN KEY (periodo_id) REFERENCES nomina_periodos(id) ON DELETE CASCADE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    INDEX idx_nomina_recibos_usuario (usuario_id)
+) ENGINE=InnoDB;
+
+-- Conceptos capturados a mano sobre un recibo. `cantidad` guarda las horas
+-- (o los días) cuando aplica; `importe` siempre es positivo y el signo lo
+-- determina `tipo`.
+CREATE TABLE nomina_recibo_conceptos (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    recibo_id   BIGINT UNSIGNED NOT NULL,
+    tipo        VARCHAR(12) NOT NULL CHECK (tipo IN ('percepcion','deduccion')),
+    clave       VARCHAR(20) NOT NULL
+                  CHECK (clave IN ('horas_extra','falta','descuento','otro')),
+    descripcion VARCHAR(200),
+    cantidad    DECIMAL(10,2),
+    importe     DECIMAL(12,2) NOT NULL CHECK (importe >= 0),
+    creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recibo_id) REFERENCES nomina_recibos(id) ON DELETE CASCADE,
+    INDEX idx_nomina_conceptos_recibo (recibo_id)
+) ENGINE=InnoDB;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------
@@ -548,6 +761,21 @@ JOIN pedidos ped           ON ped.id = pd.pedido_id
 WHERE ped.estado NOT IN ('cancelado','devuelto')
 GROUP BY pv.id, pv.sku, p.nombre;
 
+-- Venta neta por empleado y día. Alimenta el cálculo de comisiones de nómina
+-- y sirve para auditar de dónde salió la base comisionable de la semana.
+CREATE OR REPLACE VIEW v_ventas_por_empleado AS
+SELECT  p.usuario_id,
+        u.nombre AS usuario,
+        DATE(p.creado_en) AS dia,
+        COUNT(*) AS num_pedidos,
+        COALESCE(SUM(p.subtotal - p.descuento), 0) AS venta_neta,
+        COALESCE(SUM(p.total), 0) AS venta_total
+FROM pedidos p
+JOIN usuarios u ON u.id = p.usuario_id
+WHERE p.usuario_id IS NOT NULL
+  AND p.estado NOT IN ('cancelado','devuelto')
+GROUP BY p.usuario_id, u.nombre, DATE(p.creado_en);
+
 -- ---------------------------------------------------------------------
 --  DATOS SEMILLA
 -- ---------------------------------------------------------------------
@@ -558,12 +786,13 @@ INSERT INTO roles (nombre, descripcion) VALUES
  ('cajero','Operación del punto de venta'),
  ('almacenista','Recepción de mercancía y ajustes de inventario');
 
+-- El producto se compra, inventaría y vende por peso; no hay unidades de conteo.
 INSERT INTO unidades_medida (nombre, abreviatura) VALUES
- ('Pieza','pza'), ('Madeja','mad'), ('Cono','cono'),
- ('Metro','m'), ('Gramo','g'), ('Bolsa','bolsa');
+ ('Gramo','g'), ('Kilogramo','kg'), ('Tonelada','t');
 
-INSERT INTO materiales (nombre) VALUES
- ('Algodón'),('Poliéster'),('Lana'),('Acrílico'),('Seda'),('Lino'),('Mezcla');
+INSERT INTO lineas (nombre) VALUES ('Turco'), ('Nacional'), ('Chino');
+
+INSERT INTO tipos_cliente (nombre, es_publico, orden) VALUES ('Público', TRUE, 0);
 
 INSERT INTO impuestos (nombre, porcentaje) VALUES ('IVA', 16.00);
 
@@ -573,13 +802,11 @@ INSERT INTO metodos_pago (nombre) VALUES
 INSERT INTO paqueterias (nombre) VALUES
  ('Estafeta'),('DHL'),('FedEx'),('Correos de México'),('Paquetexpress');
 
-INSERT INTO almacenes (nombre, direccion, es_punto_venta) VALUES
- ('Tienda principal','Sucursal centro', TRUE),
- ('Bodega','Almacén general', FALSE);
+INSERT INTO almacenes (nombre, direccion, es_punto_venta, es_tienda_linea, es_matriz) VALUES
+ ('Tienda principal','Sucursal centro', TRUE,  FALSE, TRUE),
+ ('Bodega','Almacén general',           FALSE, TRUE,  FALSE);
 
-INSERT INTO categorias (nombre, slug, descripcion) VALUES
- ('Hilo de bordar','hilo-de-bordar','Madejas para bordado a mano y punto de cruz'),
- ('Hilo de coser','hilo-de-coser','Carretes y conos para máquina y costura'),
- ('Estambre','estambre','Estambres y lanas para tejido'),
- ('Hilo de crochet','hilo-de-crochet','Hilos finos para ganchillo'),
- ('Accesorios','accesorios','Agujas, tijeras y complementos');
+-- Materiales con sus calibres válidos.
+INSERT INTO categorias (nombre, descripcion, calibres) VALUES
+ ('Acrilán','Acrilán para suéteres y bordado','1/30,2/30'),
+ ('Viscosa','Viscosa antipiling','2/48');

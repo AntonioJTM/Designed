@@ -6,13 +6,23 @@
 @if (error()) { <p class="alert">{{ error() }}</p> }
 
 <div class="card">
-  <label class="field" style="max-width:280px">
-    Almacén
-    <select [(ngModel)]="filtroAlmacen" (ngModelChange)="cargar()">
-      <option value="">— Todos —</option>
-      @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
-    </select>
-  </label>
+  <div class="form-grid">
+    <label class="field">
+      Almacén
+      <select [(ngModel)]="filtroAlmacen" (ngModelChange)="cargar()">
+        <option value="">— Todos —</option>
+        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+      </select>
+    </label>
+    <label class="field">
+      Tipo de movimiento
+      <select [(ngModel)]="filtroConcepto" (ngModelChange)="cargar()">
+        @for (c of conceptos; track c.valor) {
+          <option [value]="c.valor">{{ c.etiqueta }}</option>
+        }
+      </select>
+    </label>
+  </div>
 </div>
 
 @if (cargando()) {
@@ -20,21 +30,104 @@
 } @else if (movimientos().length === 0) {
   <p class="empty">Sin movimientos.</p>
 } @else {
-  <table class="grid">
+  <table class="grid nomina-tabla">
     <thead>
-      <tr><th>Fecha</th><th>SKU</th><th>Almacén</th><th>Tipo</th><th>Cantidad</th><th>Usuario</th><th>Motivo</th></tr>
+      <tr>
+        <th>Fecha</th>
+        <th>Producto</th>
+        <th>Almacén</th>
+        <th>Concepto</th>
+        <th class="num">Cantidad</th>
+        <th>Quién</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
       @for (m of movimientos(); track m.id) {
-        <tr>
-          <td class="muted">{{ m.creado_en }}</td>
-          <td>{{ m.sku }}</td>
+        <tr [class.abierta]="abierto() === m.id">
+          <td class="muted">{{ m.creado_en | fecha }}</td>
+          <td>
+            {{ m.producto }}
+            <div class="muted" style="font-size:0.75rem">{{ m.sku }}</div>
+          </td>
           <td>{{ m.almacen }}</td>
-          <td><span class="pill" [class.ok]="+m.cantidad >= 0" [class.off]="+m.cantidad < 0">{{ m.tipo }}</span></td>
-          <td>{{ m.cantidad }}</td>
-          <td>{{ m.usuario || '—' }}</td>
-          <td class="muted">{{ m.motivo || '—' }}</td>
+          <td>
+            <span class="pill" [class.ok]="esEntrada(m)" [class.off]="!esEntrada(m)">
+              {{ m.concepto }}
+            </span>
+            @if (m.folio) {
+              <div class="muted" style="font-size:0.75rem">{{ m.folio }}</div>
+            } @else if (m.motivo) {
+              <div class="muted" style="font-size:0.75rem">{{ m.motivo }}</div>
+            }
+          </td>
+          <td class="num">
+            <b [class.neg]="!esEntrada(m)">
+              {{ esEntrada(m) ? '+' : '' }}{{ m.cantidad | cantidad }}
+            </b>
+            <span class="muted" style="font-size:0.75rem"> {{ m.unidad }}</span>
+            @if (m.tipo_presentacion === 'paquete' && m.peso_kg) {
+              <div class="muted" style="font-size:0.72rem">
+                {{ paquetesDe(m) | cantidad }} paq
+              </div>
+            }
+          </td>
+          <td class="muted">{{ m.usuario || '—' }}</td>
+          <td style="width:1%">
+            @if (tieneDetalle(m)) {
+              <button class="btn btn-ghost btn-sm" (click)="verDetalle(m)">
+                {{ abierto() === m.id ? 'Cerrar' : 'Ver envío' }}
+              </button>
+            }
+          </td>
         </tr>
+
+        @if (abierto() === m.id) {
+          <tr class="detalle-row">
+            <td colspan="7">
+              <div style="padding:1.25rem">
+                @if (traspaso(); as t) {
+                  <h4 style="margin:0 0 0.6rem; font-size:0.9rem">
+                    Traspaso {{ t.folio }} · {{ t.almacen_origen }} → {{ t.almacen_destino }}
+                  </h4>
+                  <table class="grid mini">
+                    <thead>
+                      <tr><th>Producto</th><th class="num">Se mandó</th><th class="num">Equivale a</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (l of t.lineas; track l.variante_id) {
+                        <tr>
+                          <td>
+                            {{ l.producto }}
+                            <span class="muted">· {{ l.sku }}</span>
+                          </td>
+                          <td class="num">
+                            @if (l.paquetes) {
+                              {{ l.paquetes | cantidad }} paquetes
+                            } @else {
+                              {{ l.cantidad | cantidad }}
+                            }
+                          </td>
+                          <td class="num muted">
+                            @if (l.paquetes) { {{ l.cantidad | cantidad: 'kg' }} } @else { — }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                  @if (t.notas) {
+                    <p class="muted" style="margin:0.6rem 0 0; font-size:0.8rem">{{ t.notas }}</p>
+                  }
+                  <p class="muted" style="margin:0.4rem 0 0; font-size:0.78rem">
+                    Enviado por {{ t.usuario || '—' }} el {{ t.creado_en | fecha }}.
+                  </p>
+                } @else {
+                  <p class="muted" style="margin:0">Cargando el envío…</p>
+                }
+              </div>
+            </td>
+          </tr>
+        }
       }
     </tbody>
   </table>

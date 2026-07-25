@@ -19,11 +19,7 @@
           <input type="text" formControlName="nombre" placeholder="Ej. Hilo de crochet fino" />
         </label>
         <label class="field">
-          Slug <span class="muted">(auto si vacío)</span>
-          <input type="text" formControlName="slug" />
-        </label>
-        <label class="field">
-          Categoría
+          Material
           <select formControlName="categoria_id">
             <option [ngValue]="null" disabled>— Selecciona —</option>
             @for (c of categorias(); track c.id) {
@@ -32,29 +28,24 @@
           </select>
         </label>
         <label class="field">
-          Unidad de medida
+          Se vende por <span class="muted">(peso)</span>
           <select formControlName="unidad_medida_id">
             <option [ngValue]="null" disabled>— Selecciona —</option>
             @for (u of unidades(); track u.id) {
               <option [ngValue]="u.id">{{ u.nombre }} ({{ u.abreviatura }})</option>
             }
           </select>
+          <span class="muted" style="font-size:0.78rem">
+            El precio de cada variante es por esta unidad y el inventario se lleva
+            en ella. Admite decimales: puedes vender 2.5 kg.
+          </span>
         </label>
         <label class="field">
-          Marca
-          <select formControlName="marca_id">
+          Línea
+          <select formControlName="linea_id">
             <option [ngValue]="null">— Ninguna —</option>
-            @for (m of marcas(); track m.id) {
-              <option [ngValue]="m.id">{{ m.nombre }}</option>
-            }
-          </select>
-        </label>
-        <label class="field">
-          Material
-          <select formControlName="material_id">
-            <option [ngValue]="null">— Ninguno —</option>
-            @for (m of materiales(); track m.id) {
-              <option [ngValue]="m.id">{{ m.nombre }}</option>
+            @for (l of lineas(); track l.id) {
+              <option [ngValue]="l.id">{{ l.nombre }}</option>
             }
           </select>
         </label>
@@ -68,20 +59,37 @@
           </select>
         </label>
         <label class="field">
-          Grosor / calibre
-          <input type="text" formControlName="grosor_calibre" />
+          Calibre
+          <select formControlName="grosor_calibre">
+            <option value="">— Sin especificar —</option>
+            @for (c of calibres(); track c) { <option [value]="c">{{ c }}</option> }
+          </select>
+          @if (calibres().length === 0) {
+            <span class="muted" style="font-size:0.72rem">
+              Elige primero el material. Sus calibres se configuran en
+              Admin → Materiales.
+            </span>
+          }
         </label>
-        <label class="field">
-          Peso (g)
-          <input type="number" step="0.01" formControlName="peso_gramos" />
-        </label>
-        <label class="field">
-          Longitud (m)
-          <input type="number" step="0.01" formControlName="longitud_metros" />
-        </label>
+
         <label class="field full">
           Descripción
           <textarea formControlName="descripcion" rows="3"></textarea>
+        </label>
+        <label class="field check full">
+          <input type="checkbox" formControlName="multipresentacion" />
+          Multipresentación
+          <span class="muted" style="font-size:0.78rem">
+            — se maneja en paquete y en conos. Necesario para poder desarmarlo.
+          </span>
+        </label>
+        <label class="field check full">
+          <input type="checkbox" formControlName="por_lotes" />
+          Por lotes
+          <span class="muted" style="font-size:0.78rem">
+            — cada presentación lleva su etiqueta de remesa. Las existencias se
+            siguen sumando juntas.
+          </span>
         </label>
         <label class="field check">
           <input type="checkbox" formControlName="destacado" /> Destacado
@@ -99,7 +107,11 @@
   </div>
 
   @if (!esEdicion()) {
-    <p class="muted">Guarda el producto para poder agregar variantes (SKU) e imágenes.</p>
+    <p class="muted">
+      Guarda el producto y aquí abajo aparecerán sus presentaciones (SKU) e imágenes.
+      No hace falta capturarlas ahora: el producto puede quedarse sin presentaciones
+      y las agregas cuando llegue la mercancía.
+    </p>
   } @else {
     <!-- Variantes -->
     <div class="card">
@@ -109,23 +121,90 @@
       } @else {
         <table class="grid" style="margin-bottom:1rem">
           <thead>
-            <tr><th>SKU</th><th>Presentación</th><th>Color</th><th>Precio</th><th>Oferta</th><th></th></tr>
+            <tr>
+              <th>SKU</th><th>Presentación</th><th>Color</th>
+              <th class="num">Precio público</th><th>Otros precios</th><th></th>
+            </tr>
           </thead>
           <tbody>
             @for (v of variantes(); track v.id) {
               <tr>
                 <td>{{ v.sku }}</td>
-                <td>{{ v.presentacion || '—' }}</td>
+                <td>
+                  {{ v.presentacion || '—' }}
+                  @if (v.tipo_presentacion === 'paquete') {
+                    <div class="muted" style="font-size:0.75rem">Paquete de {{ v.peso_kg }} kg · se vende por kilo</div>
+                  } @else if (v.tipo_presentacion === 'cono') {
+                    <div class="muted" style="font-size:0.75rem">
+                      {{ v.piezas_por_origen }} conos por paquete {{ v.paquete_sku }} · se vende por pieza
+                      @if (v.modo_precio === 'calculado') { <span class="pill ok">precio calculado</span> }
+                    </div>
+                  }
+                </td>
                 <td>{{ v.color || '—' }}</td>
-                <td>{{ v.precio }}</td>
-                <td>{{ v.precio_oferta || '—' }}</td>
+                <td class="num">
+                  ${{ v.precio }}
+                  <div class="muted" style="font-size:0.75rem">
+                    {{ v.tipo_presentacion === 'paquete' ? 'por kg' : v.tipo_presentacion === 'cono' ? 'por cono' : '' }}
+                  </div>
+                </td>
+                <td>
+                  @if (tiposConPrecio().length === 0) {
+                    <span class="muted">solo público</span>
+                  } @else {
+                    @for (tc of tiposConPrecio(); track tc.id) {
+                      <div style="font-size:0.8rem">
+                        {{ tc.nombre }}:
+                        @if (precioDe(v, tc.id); as pr) {
+                          <b>${{ pr.toFixed(2) }}</b>
+                        } @else {
+                          <span class="muted">público</span>
+                        }
+                      </div>
+                    }
+                  }
+                </td>
                 <td class="acciones">
+                  @if (tiposConPrecio().length > 0) {
+                    <button class="btn btn-ghost btn-sm" (click)="togglePrecios(v)">
+                      {{ editandoPrecios() === v.id ? '▾' : '▸' }} Precios
+                    </button>
+                  }
                   <button class="btn btn-ghost btn-sm" (click)="toggleCodigos(v)">
                     {{ expandida() === v.id ? '▾' : '▸' }} Códigos
                   </button>
                   <button class="btn btn-danger btn-sm" (click)="eliminarVariante(v)">Eliminar</button>
                 </td>
               </tr>
+              @if (editandoPrecios() === v.id) {
+                <tr class="detalle-row">
+                  <td colspan="6">
+                    <div style="padding:1.25rem">
+                      <h4 style="margin:0 0 0.6rem; font-size:0.9rem">
+                        Precios de {{ v.sku }} por tipo de cliente
+                      </h4>
+                      <p class="muted" style="margin:0 0 0.75rem; font-size:0.8rem">
+                        El público paga ${{ v.precio }}. Deja vacío el de un tipo para que
+                        también pague el precio público.
+                      </p>
+                      <div class="form-concepto" style="border-top:0; margin-top:0; padding-top:0">
+                        @for (tc of tiposConPrecio(); track tc.id) {
+                          <label class="field">
+                            {{ tc.nombre }}
+                            <input type="number" step="0.01" min="0"
+                                   [(ngModel)]="precioTipo[tc.id]" [name]="'pt' + tc.id"
+                                   [placeholder]="v.precio" />
+                          </label>
+                          <button class="btn btn-primary btn-sm" (click)="guardarPrecioTipo(v, tc.id)">
+                            Guardar
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              }
+
               @if (expandida() === v.id) {
                 <tr>
                   <td colspan="6" style="background:#f8fafc">
@@ -165,8 +244,17 @@
         <div class="form-grid">
           <label class="field">SKU <input type="text" formControlName="sku" /></label>
           <label class="field">
-            Presentación <input type="text" formControlName="presentacion" placeholder="Madeja 50g" />
+            Presentación <input type="text" formControlName="presentacion" placeholder="Paquete 10 kg" />
           </label>
+          @if (esPorLotes()) {
+            <label class="field">
+              Lote
+              <input type="text" formControlName="lote" placeholder="Ej. MAR-26" />
+              <span class="muted" style="font-size:0.72rem">
+                Etiqueta de la remesa. No separa las existencias.
+              </span>
+            </label>
+          }
           <label class="field">
             Color
             <select formControlName="color_id">
@@ -186,12 +274,113 @@
             </span>
             <span class="muted" style="font-size:0.72rem">Al escanear se captura aquí; si el SKU está vacío, se copia también.</span>
           </label>
-          <label class="field">Precio <input type="number" step="0.01" formControlName="precio" /></label>
+          <label class="field">
+            Se vende como
+            <select formControlName="tipo_presentacion">
+              @if (esMultipresentacion()) {
+                <option value="paquete">Paquete (por kilo)</option>
+                <option value="cono">Cono (por pieza)</option>
+              }
+              <option value="simple">Simple</option>
+            </select>
+            @if (!esMultipresentacion()) {
+              <span class="muted" style="font-size:0.72rem">
+                Marca <b>Multipresentación</b> arriba para manejar paquetes y conos.
+              </span>
+            }
+          </label>
+
+          @if (varForm.controls.tipo_presentacion.value === 'paquete') {
+            <label class="field">
+              Peso del paquete (kg)
+              <input type="number" step="0.001" min="0" formControlName="peso_kg" placeholder="Ej. 10" />
+              <span class="muted" style="font-size:0.72rem">
+                Es lo que se descuenta al desarmarlo en conos.
+              </span>
+            </label>
+            <label class="field">
+              Precio público por kilo
+              <input type="number" step="0.01" min="0" formControlName="precio" />
+              <span class="muted" style="font-size:0.72rem">
+                Es el de mostrador. Los demás tipos de cliente se capturan por
+                presentación, en la tabla de arriba.
+              </span>
+            </label>
+          }
+
+          @if (varForm.controls.tipo_presentacion.value === 'cono') {
+            <label class="field">
+              Sale del paquete
+              <select formControlName="origen_variante_id">
+                <option [ngValue]="null" disabled>— Selecciona —</option>
+                @for (p of paquetes(); track p.id) {
+                  <option [ngValue]="p.id">{{ p.sku }} · {{ p.peso_kg }} kg a ${{ p.precio }}/kg</option>
+                }
+              </select>
+              @if (paquetes().length === 0) {
+                <span class="muted" style="font-size:0.72rem">
+                  Primero da de alta el paquete: un cono siempre sale de uno.
+                </span>
+              }
+            </label>
+            <label class="field">
+              Conos por paquete
+              <input type="number" step="1" min="1" formControlName="piezas_por_origen" placeholder="Ej. 8" />
+            </label>
+            <label class="field">
+              Precio del cono
+              <select formControlName="modo_precio">
+                <option value="calculado">Por peso — lo calcula el sistema</option>
+                <option value="manual">Por pieza — yo lo pongo</option>
+              </select>
+            </label>
+            @if (varForm.controls.modo_precio.value === 'manual') {
+              <label class="field">
+                Precio público por cono
+                <input type="number" step="0.01" min="0" formControlName="precio" />
+              </label>
+            }
+          }
+
+          @if (varForm.controls.tipo_presentacion.value === 'simple') {
+            <label class="field">
+              Precio público
+              <input type="number" step="0.01" formControlName="precio" />
+            </label>
+          }
+
           <label class="field">Precio oferta <input type="number" step="0.01" formControlName="precio_oferta" /></label>
           <label class="field">Costo <input type="number" step="0.01" formControlName="costo" /></label>
         </div>
+
+        <!-- Cómo queda el precio del cono, antes de guardar -->
+        @if (previaCono(); as c) {
+          <div class="previa-calculo">
+            <div class="renglon">
+              <span>Paquete {{ c.paquete }}</span>
+              <span>{{ c.pesoPaq }} kg × ${{ c.precioKg.toFixed(2) }}/kg = <b>${{ c.valorPaquete.toFixed(2) }}</b></span>
+            </div>
+            <div class="renglon">
+              <span>Entre {{ c.piezas }} conos</span>
+              <span>cada cono pesa {{ c.pesoCono.toFixed(3) }} kg</span>
+            </div>
+            <div class="renglon total">
+              <span>Precio por cono</span>
+              <b>${{ c.precioCono.toFixed(2) }}</b>
+            </div>
+            <p class="muted" style="margin:0.5rem 0 0; font-size:0.75rem">
+              Si después cambias el precio por kilo del paquete, este cono se recalcula solo.
+            </p>
+          </div>
+        }
+
+        @if (faltaEnVariante(); as falta) {
+          <p class="aviso" style="margin-top:1rem">{{ falta }}</p>
+        }
         <div style="margin-top:1rem">
-          <button type="submit" class="btn btn-primary btn-sm">+ Agregar variante</button>
+          <button type="submit" class="btn btn-primary btn-sm" [disabled]="!!faltaEnVariante()">
+            + Agregar variante
+          </button>
         </div>
       </form>
     </div>

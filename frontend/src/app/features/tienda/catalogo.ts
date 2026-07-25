@@ -21,6 +21,11 @@ export class Catalogo {
   q = '';
   categoriaId: number | '' = '';
 
+  /** Un producto está agotado si ninguna de sus variantes tiene existencias. */
+  agotado(p: Producto): boolean {
+    return Number(p.disponible ?? 0) <= 0;
+  }
+
   constructor() {
     this.catalogo.listarCategorias().subscribe({
       next: (p) => this.categorias.set(p.items.filter((c) => c.activo)),

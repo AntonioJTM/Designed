@@ -7,6 +7,10 @@ const { AppError } = require('../../middlewares/error');
 // Signo del movimiento de caja sobre el efectivo esperado.
 const SIGNO_CAJA = { venta: 1, ingreso: 1, retiro: -1, devolucion: -1 };
 
+// El efectivo se suma en JS a partir de DECIMAL; redondear evita colas como
+// 232.00000000000003 tanto en pantalla como en el corte.
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
 // ---- Cajas ----
 async function listarCajas() {
   const [rows] = await pool.query(
@@ -22,27 +26,66 @@ async function crearCaja({ almacen_id, nombre, activo }) {
     'INSERT INTO cajas (almacen_id, nombre, activo) VALUES (:almacen_id, :nombre, :activo)',
     { almacen_id, nombre, activo }
   );
-  const [rows] = await pool.query('SELECT * FROM cajas WHERE id = :id', { id: r.insertId });
-  return rows[0];
+  return obtenerCaja(r.insertId);
 }
 
+async function actualizarCaja(id, { almacen_id, nombre, activo }) {
+  await pool.query(
+    'UPDATE cajas SET almacen_id = :almacen_id, nombre = :nombre, activo = :activo WHERE id = :id',
+    { id, almacen_id, nombre, activo }
+  );
+  return obtenerCaja(id);
+}
+
+/** Caja con el nombre de su almacén, igual que en el listado. */
 async function obtenerCaja(id) {
-  const [rows] = await pool.query('SELECT * FROM cajas WHERE id = :id LIMIT 1', { id });
-  return rows[0] || null;
-}
-
-// ---- Sesiones ----
-async function sesionAbiertaDeCaja(caja_id) {
   const [rows] = await pool.query(
-    `SELECT * FROM sesiones_caja WHERE caja_id = :caja_id AND estado = 'abierta' LIMIT 1`,
-    { caja_id }
+    `SELECT c.id, c.almacen_id, a.nombre AS almacen, c.nombre, c.activo
+       FROM cajas c JOIN almacenes a ON a.id = c.almacen_id
+      WHERE c.id = :id LIMIT 1`,
+    { id }
   );
   return rows[0] || null;
 }
 
+/** Sesiones que ha tenido la caja; si hay alguna, no se puede eliminar. */
+async function tieneSesiones(cajaId) {
+  const [[{ n }]] = await pool.query(
+    'SELECT COUNT(*) AS n FROM sesiones_caja WHERE caja_id = :id',
+    { id: cajaId }
+  );
+  return n > 0;
+}
+
+async function eliminarCaja(id) {
+  const [r] = await pool.query('DELETE FROM cajas WHERE id = :id', { id });
+  return r.affectedRows > 0;
+}
+
+// ---- Sesiones ----
+
+/** Id de la sesión abierta de una caja, o null. Solo para validar. */
+async function _idSesionAbierta(caja_id) {
+  const [rows] = await pool.query(
+    `SELECT id FROM sesiones_caja WHERE caja_id = :caja_id AND estado = 'abierta' LIMIT 1`,
+    { caja_id }
+  );
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Sesión abierta de una caja, con la MISMA forma que devuelve obtenerSesion:
+ * nombre de caja y cajero, movimientos y efectivo esperado. El POS la usa para
+ * pintar el panel al entrar, así que si viniera cruda esos datos saldrían en
+ * blanco.
+ */
+async function sesionAbiertaDeCaja(caja_id) {
+  const id = await _idSesionAbierta(caja_id);
+  return id ? obtenerSesion(id) : null;
+}
+
 async function abrirSesion({ caja_id, usuario_id, monto_inicial }) {
-  const existente = await sesionAbiertaDeCaja(caja_id);
-  if (existente) {
+  if (await _idSesionAbierta(caja_id)) {
     throw new AppError(409, 'CAJA_YA_ABIERTA', 'Esa caja ya tiene una sesión abierta');
   }
   const [r] = await pool.query(
@@ -89,7 +132,7 @@ async function obtenerSesion(id) {
   );
   const { neto, porTipo } = await totalesSesion(id);
   sesion.movimientos = movs;
-  sesion.esperado_actual = Number(sesion.monto_inicial) + neto;
+  sesion.esperado_actual = round2(Number(sesion.monto_inicial) + neto);
   sesion.totales_por_tipo = porTipo;
   return sesion;
 }
@@ -133,8 +176,8 @@ async function cerrarSesion(id, monto_final) {
     let neto = 0;
     for (const row of tot) neto += (SIGNO_CAJA[row.tipo] ?? 0) * Number(row.suma);
 
-    const esperado = Number(sesion.monto_inicial) + neto;
-    const diferencia = Number(monto_final) - esperado;
+    const esperado = round2(Number(sesion.monto_inicial) + neto);
+    const diferencia = round2(Number(monto_final) - esperado);
 
     await conn.query(
       `UPDATE sesiones_caja SET estado='cerrada', monto_esperado=:esperado,
@@ -149,7 +192,10 @@ async function cerrarSesion(id, monto_final) {
 module.exports = {
   listarCajas,
   crearCaja,
+  actualizarCaja,
   obtenerCaja,
+  tieneSesiones,
+  eliminarCaja,
   sesionAbiertaDeCaja,
   abrirSesion,
   obtenerSesion,

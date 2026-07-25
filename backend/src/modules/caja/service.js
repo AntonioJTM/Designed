@@ -15,6 +15,30 @@ async function crearCaja(datos) {
   });
 }
 
+async function actualizarCaja(id, datos) {
+  const actual = await model.obtenerCaja(id);
+  if (!actual) throw new AppError(404, 'NO_ENCONTRADO', 'Caja no encontrada');
+  return model.actualizarCaja(id, {
+    almacen_id: datos.almacen_id ?? actual.almacen_id,
+    nombre: datos.nombre ?? actual.nombre,
+    activo: datos.activo !== undefined ? datos.activo : actual.activo,
+  });
+}
+
+/**
+ * Solo se puede borrar una caja que nunca abrió turno. Si ya operó, su
+ * historial de cortes depende de ella: se desactiva en vez de borrarse.
+ */
+async function eliminarCaja(id) {
+  const actual = await model.obtenerCaja(id);
+  if (!actual) throw new AppError(404, 'NO_ENCONTRADO', 'Caja no encontrada');
+  if (await model.tieneSesiones(id)) {
+    throw new AppError(409, 'CAJA_CON_HISTORIAL',
+      'Esta caja ya tuvo turnos y sus cortes dependen de ella. Desactívala en vez de borrarla.');
+  }
+  await model.eliminarCaja(id);
+}
+
 async function abrirSesion(datos, usuarioId) {
   return model.abrirSesion({
     caja_id: datos.caja_id,
@@ -44,6 +68,8 @@ async function cerrarSesion(id, datos) {
 module.exports = {
   listarCajas,
   crearCaja,
+  actualizarCaja,
+  eliminarCaja,
   abrirSesion,
   sesionAbierta,
   obtenerSesion,

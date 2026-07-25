@@ -25,6 +25,8 @@ const crearSchema = z
   .object({
     canal: z.enum(['tienda_linea', 'punto_venta']),
     cliente_id: z.coerce.number().int().positive().optional(),
+    // Lista de precios a aplicar. Sin esto se cobra el precio público.
+    tipo_cliente_id: z.coerce.number().int().positive().optional(),
     sesion_caja_id: z.coerce.number().int().positive().optional(),
     almacen_id: z.coerce.number().int().positive().optional(),
     direccion_envio_id: z.coerce.number().int().positive().optional(),

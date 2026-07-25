@@ -37,6 +37,8 @@ export interface PagoPedido {
 export interface CrearPedidoInput {
   canal: CanalVenta;
   sesion_caja_id?: number;
+  /** Lista de precios a aplicar. Sin esto se cobra el precio público. */
+  tipo_cliente_id?: number;
   almacen_id?: number;
   cliente_id?: number;
   cupon_codigo?: string;
@@ -56,8 +58,20 @@ export class VentasService {
   cajas(): Observable<Caja[]> {
     return this.http.get<ApiResponse<Caja[]>>(`${this.base}/caja/cajas`).pipe(map(data));
   }
-  crearCaja(body: { almacen_id: number; nombre: string }): Observable<Caja> {
+  /** Alta de caja. Solo administradores. */
+  crearCaja(body: { almacen_id: number; nombre: string; activo?: boolean }): Observable<Caja> {
     return this.http.post<ApiResponse<Caja>>(`${this.base}/caja/cajas`, body).pipe(map(data));
+  }
+  /** Edición de caja (renombrar, cambiar almacén, activar/desactivar). Solo administradores. */
+  actualizarCaja(
+    id: number,
+    body: { almacen_id?: number; nombre?: string; activo?: boolean }
+  ): Observable<Caja> {
+    return this.http.put<ApiResponse<Caja>>(`${this.base}/caja/cajas/${id}`, body).pipe(map(data));
+  }
+  /** Solo se permite si la caja nunca abrió turno. Solo administradores. */
+  eliminarCaja(id: number): Observable<unknown> {
+    return this.http.delete<ApiResponse<unknown>>(`${this.base}/caja/cajas/${id}`).pipe(map(data));
   }
   sesionAbierta(caja_id: number): Observable<SesionCaja | null> {
     const params = new HttpParams().set('caja_id', caja_id);

@@ -1,0 +1,99 @@
+<div class="page-head">
+  <h1>Sueldos y comisiones</h1>
+  <a class="btn btn-ghost" routerLink="/admin/nomina">← Volver a la nómina</a>
+</div>
+
+@if (error()) {
+  <p class="alert">{{ error() }}</p>
+}
+@if (mensaje()) {
+  <p class="ok-msg">{{ mensaje() }}</p>
+}
+
+<p class="muted" style="margin-bottom: 1.25rem">
+  Solo el personal marcado <b>En nómina</b> entra en el cálculo semanal. La comisión se aplica
+  sobre la venta neta (subtotal − descuento) de los pedidos hechos a su nombre, sin IVA ni envío.
+</p>
+
+@if (editando(); as emp) {
+  <div class="card">
+    <h3 style="margin-top: 0">{{ emp.nombre }} <span class="muted">· {{ emp.rol }}</span></h3>
+    <form [formGroup]="form" (ngSubmit)="guardar()">
+      <div class="form-grid">
+        <label class="field">
+          Sueldo base semanal
+          <input type="number" step="0.01" min="0" formControlName="sueldo_base_semanal" />
+        </label>
+        <label class="field">
+          Valor de la hora extra
+          <input type="number" step="0.01" min="0" formControlName="valor_hora_extra" />
+        </label>
+        <label class="field check">
+          <input type="checkbox" formControlName="paga_comision" /> Recibe comisión por ventas
+        </label>
+        @if (form.controls.paga_comision.value) {
+          <label class="field">
+            Porcentaje de comisión (%)
+            <input type="number" step="0.01" min="0" max="100" formControlName="porcentaje_comision" />
+          </label>
+        }
+        <label class="field check">
+          <input type="checkbox" formControlName="activo" /> En nómina
+        </label>
+      </div>
+      <div style="margin-top: 1rem; display: flex; gap: 0.5rem">
+        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+          {{ guardando() ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+}
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Empleado</th>
+        <th>Rol</th>
+        <th class="num">Sueldo semanal</th>
+        <th class="num">Comisión</th>
+        <th class="num">Hora extra</th>
+        <th>En nómina</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (e of empleados(); track e.usuario_id) {
+        <tr>
+          <td>
+            <b>{{ e.nombre }}</b>
+            <div class="muted" style="font-size: 0.78rem">{{ e.correo }}</div>
+          </td>
+          <td>{{ e.rol }}</td>
+          <td class="num">{{ e.en_nomina ? '$' + mx(e.sueldo_base_semanal) : '—' }}</td>
+          <td class="num">
+            {{ e.paga_comision ? mx(e.porcentaje_comision) + '%' : '—' }}
+          </td>
+          <td class="num">{{ e.en_nomina ? '$' + mx(e.valor_hora_extra) : '—' }}</td>
+          <td>
+            <span class="pill" [class.ok]="e.activo" [class.off]="!e.activo">
+              {{ e.activo ? 'Sí' : 'No' }}
+            </span>
+          </td>
+          <td class="acciones">
+            <button class="btn btn-ghost btn-sm" (click)="editar(e)">
+              {{ e.en_nomina ? 'Editar' : 'Dar de alta' }}
+            </button>
+            @if (e.activo) {
+              <button class="btn btn-danger btn-sm" (click)="desactivar(e)">Sacar</button>
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}
