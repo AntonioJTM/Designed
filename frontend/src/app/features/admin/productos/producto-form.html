@@ -7,6 +7,10 @@
   <p class="alert">{{ error() }}</p>
 }
 
+@if (guardado()) {
+  <p class="ok-msg">{{ guardado() }}</p>
+}
+
 @if (cargando()) {
   <p class="muted">Cargando…</p>
 } @else {
@@ -48,6 +52,15 @@
               <option [ngValue]="l.id">{{ l.nombre }}</option>
             }
           </select>
+        </label>
+        <label class="field">
+          Precio por {{ unidadSel() }}
+          <input type="number" step="0.01" min="0" formControlName="precio_kg"
+                 placeholder="Ej. 200.00" />
+          <span class="muted" style="font-size:0.72rem">
+            El precio de lista del hilo. Las presentaciones que se capturen después
+            arrancan con este precio.
+          </span>
         </label>
         <label class="field">
           Impuesto
@@ -100,323 +113,27 @@
       </div>
       <div style="margin-top:1rem">
         <button type="submit" class="btn btn-primary" [disabled]="guardando()">
-          {{ guardando() ? 'Guardando…' : (esEdicion() ? 'Guardar cambios' : 'Crear y continuar') }}
+          {{ guardando() ? 'Guardando…' : (esEdicion() ? 'Guardar cambios' : 'Guardar producto') }}
         </button>
       </div>
     </form>
   </div>
 
-  @if (!esEdicion()) {
-    <p class="muted">
-      Guarda el producto y aquí abajo aparecerán sus presentaciones (SKU) e imágenes.
-      No hace falta capturarlas ahora: el producto puede quedarse sin presentaciones
-      y las agregas cuando llegue la mercancía.
-    </p>
-  } @else {
-    <!-- Variantes -->
+  <p class="muted">
+    Con esto basta para guardar. Las presentaciones (SKU, precio, código de barras) y las
+    imágenes se capturan aparte, en su propia pantalla.
+  </p>
+
+  @if (esEdicion()) {
     <div class="card">
-      <h3 style="margin-top:0">Variantes (SKU)</h3>
-      @if (variantes().length === 0) {
-        <p class="muted">Sin variantes. El producto necesita al menos una para venderse.</p>
-      } @else {
-        <table class="grid" style="margin-bottom:1rem">
-          <thead>
-            <tr>
-              <th>SKU</th><th>Presentación</th><th>Color</th>
-              <th class="num">Precio público</th><th>Otros precios</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (v of variantes(); track v.id) {
-              <tr>
-                <td>{{ v.sku }}</td>
-                <td>
-                  {{ v.presentacion || '—' }}
-                  @if (v.tipo_presentacion === 'paquete') {
-                    <div class="muted" style="font-size:0.75rem">Paquete de {{ v.peso_kg }} kg · se vende por kilo</div>
-                  } @else if (v.tipo_presentacion === 'cono') {
-                    <div class="muted" style="font-size:0.75rem">
-                      {{ v.piezas_por_origen }} conos por paquete {{ v.paquete_sku }} · se vende por pieza
-                      @if (v.modo_precio === 'calculado') { <span class="pill ok">precio calculado</span> }
-                    </div>
-                  }
-                </td>
-                <td>{{ v.color || '—' }}</td>
-                <td class="num">
-                  ${{ v.precio }}
-                  <div class="muted" style="font-size:0.75rem">
-                    {{ v.tipo_presentacion === 'paquete' ? 'por kg' : v.tipo_presentacion === 'cono' ? 'por cono' : '' }}
-                  </div>
-                </td>
-                <td>
-                  @if (tiposConPrecio().length === 0) {
-                    <span class="muted">solo público</span>
-                  } @else {
-                    @for (tc of tiposConPrecio(); track tc.id) {
-                      <div style="font-size:0.8rem">
-                        {{ tc.nombre }}:
-                        @if (precioDe(v, tc.id); as pr) {
-                          <b>${{ pr.toFixed(2) }}</b>
-                        } @else {
-                          <span class="muted">público</span>
-                        }
-                      </div>
-                    }
-                  }
-                </td>
-                <td class="acciones">
-                  @if (tiposConPrecio().length > 0) {
-                    <button class="btn btn-ghost btn-sm" (click)="togglePrecios(v)">
-                      {{ editandoPrecios() === v.id ? '▾' : '▸' }} Precios
-                    </button>
-                  }
-                  <button class="btn btn-ghost btn-sm" (click)="toggleCodigos(v)">
-                    {{ expandida() === v.id ? '▾' : '▸' }} Códigos
-                  </button>
-                  <button class="btn btn-danger btn-sm" (click)="eliminarVariante(v)">Eliminar</button>
-                </td>
-              </tr>
-              @if (editandoPrecios() === v.id) {
-                <tr class="detalle-row">
-                  <td colspan="6">
-                    <div style="padding:1.25rem">
-                      <h4 style="margin:0 0 0.6rem; font-size:0.9rem">
-                        Precios de {{ v.sku }} por tipo de cliente
-                      </h4>
-                      <p class="muted" style="margin:0 0 0.75rem; font-size:0.8rem">
-                        El público paga ${{ v.precio }}. Deja vacío el de un tipo para que
-                        también pague el precio público.
-                      </p>
-                      <div class="form-concepto" style="border-top:0; margin-top:0; padding-top:0">
-                        @for (tc of tiposConPrecio(); track tc.id) {
-                          <label class="field">
-                            {{ tc.nombre }}
-                            <input type="number" step="0.01" min="0"
-                                   [(ngModel)]="precioTipo[tc.id]" [name]="'pt' + tc.id"
-                                   [placeholder]="v.precio" />
-                          </label>
-                          <button class="btn btn-primary btn-sm" (click)="guardarPrecioTipo(v, tc.id)">
-                            Guardar
-                          </button>
-                        }
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              }
-
-              @if (expandida() === v.id) {
-                <tr>
-                  <td colspan="6" style="background:#f8fafc">
-                    <p class="muted" style="margin:0 0 0.5rem; font-size:0.82rem">
-                      Códigos de barras de esta variante (color). Escanea cualquiera y el sistema lo reconoce como este color.
-                      El principal es <b>{{ v.codigo_barras || '—' }}</b>.
-                    </p>
-                    @if (codigosDe(v.id).length) {
-                      <ul style="list-style:none; padding:0; margin:0 0 0.5rem; display:flex; flex-wrap:wrap; gap:0.4rem">
-                        @for (c of codigosDe(v.id); track c.id) {
-                          <li class="pill" style="background:#eef2ff; color:#3730a3; display:inline-flex; gap:0.4rem; align-items:center">
-                            {{ c.codigo }}@if (c.etiqueta) { <span class="muted">· {{ c.etiqueta }}</span> }
-                            <button class="btn btn-danger btn-sm" style="padding:0 0.35rem" (click)="eliminarCodigoVar(c.id, v.id)">✕</button>
-                          </li>
-                        }
-                      </ul>
-                    } @else {
-                      <p class="muted" style="margin:0 0 0.5rem; font-size:0.82rem">Sin códigos adicionales.</p>
-                    }
-                    <div class="input-scan" style="max-width:520px">
-                      <input type="text" [(ngModel)]="nuevoCodigo" name="nc"
-                             (keydown.enter)="capturarCodigoVar($event, v.id)"
-                             placeholder="Escanea o teclea un código" />
-                      <input type="text" [(ngModel)]="nuevaEtiqueta" name="ne"
-                             style="max-width:140px" placeholder="Lote (opcional)" />
-                      <button class="btn btn-primary btn-sm" (click)="agregarCodigoVar(v.id)">+ Añadir</button>
-                    </div>
-                  </td>
-                </tr>
-              }
-            }
-          </tbody>
-        </table>
-      }
-
-      <form [formGroup]="varForm" (ngSubmit)="agregarVariante()">
-        <div class="form-grid">
-          <label class="field">SKU <input type="text" formControlName="sku" /></label>
-          <label class="field">
-            Presentación <input type="text" formControlName="presentacion" placeholder="Paquete 10 kg" />
-          </label>
-          @if (esPorLotes()) {
-            <label class="field">
-              Lote
-              <input type="text" formControlName="lote" placeholder="Ej. MAR-26" />
-              <span class="muted" style="font-size:0.72rem">
-                Etiqueta de la remesa. No separa las existencias.
-              </span>
-            </label>
-          }
-          <label class="field">
-            Color
-            <select formControlName="color_id">
-              <option [ngValue]="null">— Ninguno —</option>
-              @for (c of colores(); track c.id) {
-                <option [ngValue]="c.id">{{ c.nombre }}</option>
-              }
-            </select>
-          </label>
-          <label class="field">
-            Código de barras
-            <span class="input-scan">
-              <input type="text" #bc formControlName="codigo_barras"
-                     placeholder="Escanea o teclea el código"
-                     (keydown.enter)="capturarCodigo($event)" />
-              <button type="button" class="btn btn-ghost btn-sm" (click)="bc.focus()" title="Escanear código">📷</button>
-            </span>
-            <span class="muted" style="font-size:0.72rem">Al escanear se captura aquí; si el SKU está vacío, se copia también.</span>
-          </label>
-          <label class="field">
-            Se vende como
-            <select formControlName="tipo_presentacion">
-              @if (esMultipresentacion()) {
-                <option value="paquete">Paquete (por kilo)</option>
-                <option value="cono">Cono (por pieza)</option>
-              }
-              <option value="simple">Simple</option>
-            </select>
-            @if (!esMultipresentacion()) {
-              <span class="muted" style="font-size:0.72rem">
-                Marca <b>Multipresentación</b> arriba para manejar paquetes y conos.
-              </span>
-            }
-          </label>
-
-          @if (varForm.controls.tipo_presentacion.value === 'paquete') {
-            <label class="field">
-              Peso del paquete (kg)
-              <input type="number" step="0.001" min="0" formControlName="peso_kg" placeholder="Ej. 10" />
-              <span class="muted" style="font-size:0.72rem">
-                Es lo que se descuenta al desarmarlo en conos.
-              </span>
-            </label>
-            <label class="field">
-              Precio público por kilo
-              <input type="number" step="0.01" min="0" formControlName="precio" />
-              <span class="muted" style="font-size:0.72rem">
-                Es el de mostrador. Los demás tipos de cliente se capturan por
-                presentación, en la tabla de arriba.
-              </span>
-            </label>
-          }
-
-          @if (varForm.controls.tipo_presentacion.value === 'cono') {
-            <label class="field">
-              Sale del paquete
-              <select formControlName="origen_variante_id">
-                <option [ngValue]="null" disabled>— Selecciona —</option>
-                @for (p of paquetes(); track p.id) {
-                  <option [ngValue]="p.id">{{ p.sku }} · {{ p.peso_kg }} kg a ${{ p.precio }}/kg</option>
-                }
-              </select>
-              @if (paquetes().length === 0) {
-                <span class="muted" style="font-size:0.72rem">
-                  Primero da de alta el paquete: un cono siempre sale de uno.
-                </span>
-              }
-            </label>
-            <label class="field">
-              Conos por paquete
-              <input type="number" step="1" min="1" formControlName="piezas_por_origen" placeholder="Ej. 8" />
-            </label>
-            <label class="field">
-              Precio del cono
-              <select formControlName="modo_precio">
-                <option value="calculado">Por peso — lo calcula el sistema</option>
-                <option value="manual">Por pieza — yo lo pongo</option>
-              </select>
-            </label>
-            @if (varForm.controls.modo_precio.value === 'manual') {
-              <label class="field">
-                Precio público por cono
-                <input type="number" step="0.01" min="0" formControlName="precio" />
-              </label>
-            }
-          }
-
-          @if (varForm.controls.tipo_presentacion.value === 'simple') {
-            <label class="field">
-              Precio público
-              <input type="number" step="0.01" formControlName="precio" />
-            </label>
-          }
-
-          <label class="field">Precio oferta <input type="number" step="0.01" formControlName="precio_oferta" /></label>
-          <label class="field">Costo <input type="number" step="0.01" formControlName="costo" /></label>
-        </div>
-
-        <!-- Cómo queda el precio del cono, antes de guardar -->
-        @if (previaCono(); as c) {
-          <div class="previa-calculo">
-            <div class="renglon">
-              <span>Paquete {{ c.paquete }}</span>
-              <span>{{ c.pesoPaq }} kg × ${{ c.precioKg.toFixed(2) }}/kg = <b>${{ c.valorPaquete.toFixed(2) }}</b></span>
-            </div>
-            <div class="renglon">
-              <span>Entre {{ c.piezas }} conos</span>
-              <span>cada cono pesa {{ c.pesoCono.toFixed(3) }} kg</span>
-            </div>
-            <div class="renglon total">
-              <span>Precio por cono</span>
-              <b>${{ c.precioCono.toFixed(2) }}</b>
-            </div>
-            <p class="muted" style="margin:0.5rem 0 0; font-size:0.75rem">
-              Si después cambias el precio por kilo del paquete, este cono se recalcula solo.
-            </p>
-          </div>
-        }
-
-        @if (faltaEnVariante(); as falta) {
-          <p class="aviso" style="margin-top:1rem">{{ falta }}</p>
-        }
-        <div style="margin-top:1rem">
-          <button type="submit" class="btn btn-primary btn-sm" [disabled]="!!faltaEnVariante()">
-            + Agregar variante
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Imágenes -->
-    <div class="card">
-      <h3 style="margin-top:0">Imágenes</h3>
-      @if (imagenes().length === 0) {
-        <p class="muted">Sin imágenes.</p>
-      } @else {
-        <table class="grid" style="margin-bottom:1rem">
-          <thead><tr><th>URL</th><th>Principal</th><th>Orden</th><th></th></tr></thead>
-          <tbody>
-            @for (img of imagenes(); track img.id) {
-              <tr>
-                <td class="muted" style="word-break:break-all">{{ img.url }}</td>
-                <td>{{ img.es_principal ? '★' : '' }}</td>
-                <td>{{ img.orden }}</td>
-                <td class="acciones">
-                  <button class="btn btn-danger btn-sm" (click)="eliminarImagen(img)">Eliminar</button>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      }
-
-      <form [formGroup]="imgForm" (ngSubmit)="agregarImagen()">
-        <div class="form-grid">
-          <label class="field full">URL de la imagen <input type="url" formControlName="url" placeholder="https://…" /></label>
-          <label class="field check"><input type="checkbox" formControlName="es_principal" /> Principal</label>
-        </div>
-        <div style="margin-top:1rem">
-          <button type="submit" class="btn btn-primary btn-sm">+ Agregar imagen</button>
-        </div>
-      </form>
+      <h3 style="margin-top:0">Presentaciones e imágenes</h3>
+      <p class="muted" style="margin-top:0; font-size:0.85rem">
+        Este producto tiene <b>{{ variantes().length }}</b>
+        {{ variantes().length === 1 ? 'presentación' : 'presentaciones' }}.
+      </p>
+      <a class="btn btn-primary btn-sm" [routerLink]="['/admin/productos', id(), 'presentaciones']">
+        Administrar presentaciones
+      </a>
     </div>
   }
 }

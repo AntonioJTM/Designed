@@ -141,9 +141,14 @@
       <div class="card">
         <h3 style="margin-top:0">Buscar producto</h3>
         <div style="display:flex; gap:0.5rem">
-          <input type="text" [(ngModel)]="qVar" (keyup.enter)="buscar()" placeholder="SKU o nombre" style="flex:1; padding:0.55rem 0.7rem; border:1px solid #d1d5db; border-radius:8px" />
-          <button class="btn btn-primary" (click)="buscar()">Buscar</button>
+          <input type="text" [(ngModel)]="qVar" (keyup.enter)="escanearOBuscar()"
+                 placeholder="Escanea el bulto, o teclea SKU o nombre"
+                 style="flex:1; padding:0.55rem 0.7rem; border:1px solid #d1d5db; border-radius:8px" />
+          <button class="btn btn-primary" (click)="escanearOBuscar()">Buscar</button>
         </div>
+        <span class="muted" style="font-size:0.75rem">
+          Al escanear un bulto se cobra por lo que ESE bulto pesa.
+        </span>
         @if (resultados().length) {
           <table class="grid" style="margin-top:1rem">
             <tbody>
@@ -171,7 +176,19 @@
               @for (i of carrito(); track i.variante_id) {
                 <tr>
                   <td>{{ i.sku }}</td>
-                  <td>{{ i.producto }}</td>
+                  <td>
+                    {{ i.producto }}
+                    @if (i.bultos?.length) {
+                      <br />
+                      <span class="muted" style="font-size:0.72rem">
+                        {{ i.bultos!.length }}
+                        {{ i.bultos!.length === 1 ? 'bulto' : 'bultos' }}:
+                        @for (b of i.bultos; track b.codigo) {
+                          {{ b.codigo }} ({{ b.peso_kg }} kg){{ $last ? '' : ' + ' }}
+                        }
+                      </span>
+                    }
+                  </td>
                   <td>${{ i.precio.toFixed(2) }}<span class="muted">/{{ i.unidad || 'kg' }}</span></td>
                   <td style="width:120px">
                     <span class="cant-peso">

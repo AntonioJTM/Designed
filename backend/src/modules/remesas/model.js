@@ -58,12 +58,14 @@ async function crearRemesa(datos, usuarioId) {
     );
     const remesaId = r.insertId;
 
-    // Los bultos, uno por uno: el código es único en toda la base.
+    // Los bultos, uno por uno: el código es único en toda la base. Quedan
+    // ubicados en el almacén que recibe la remesa; de ahí saldrán al traspasar.
     for (const b of bultos) {
       await conn.query(
-        `INSERT INTO variante_codigos (variante_id, codigo, peso_kg, lote, conos, remesa_id)
-         VALUES (:variante_id, :codigo, :peso_kg, :lote, :conos, :remesa_id)`,
-        { variante_id, ...b, remesa_id: remesaId }
+        `INSERT INTO variante_codigos
+           (variante_id, codigo, peso_kg, lote, conos, almacen_id, remesa_id)
+         VALUES (:variante_id, :codigo, :peso_kg, :lote, :conos, :almacen_id, :remesa_id)`,
+        { variante_id, ...b, almacen_id, remesa_id: remesaId }
       );
     }
 

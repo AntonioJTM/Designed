@@ -50,6 +50,40 @@ export interface PedidoLinea {
   descuento: string;
   impuesto: string;
   subtotal: string;
+  /**
+   * Bultos que se entregaron en esta línea, con el código, el peso y el lote
+   * congelados al momento de la venta. Vacío en las ventas sin escaneo.
+   */
+  bultos?: BultoVendido[];
+  /**
+   * Otras presentaciones en que esta línea puede regresar, con la cantidad
+   * equivalente ya calculada por el backend. El caso típico: se entregó el
+   * paquete y el cliente devuelve los conos.
+   */
+  alternativas_devolucion?: AlternativaDevolucion[];
+}
+
+/** Una presentación en que puede regresar la mercancía, y cuánto. */
+export interface AlternativaDevolucion {
+  variante_id: number;
+  sku: string;
+  presentacion?: string | null;
+  unidad: string;
+  cantidad_equivalente: number;
+}
+
+/** En qué presentación y cuánto regresa una línea al cancelar o devolver. */
+export interface DevolucionLinea {
+  detalle_id: number;
+  variante_id: number;
+  cantidad?: number;
+}
+
+/** Un bulto entregado, tal como quedó registrado en el pedido. */
+export interface BultoVendido {
+  codigo: string;
+  peso_kg: string;
+  lote?: string | null;
 }
 
 export interface PagoLinea {
@@ -96,4 +130,17 @@ export interface ItemCarrito {
   /** Unidad de peso en que se vende (kg por omisión). La cantidad es decimal. */
   unidad?: string;
   cantidad: number;
+  /**
+   * Bultos escaneados que forman esta cantidad. Cada bulto pesa distinto, así
+   * que la cantidad es la SUMA de sus pesos reales, no un múltiplo del nominal.
+   * Sirve además para no cobrar dos veces el mismo bulto físico.
+   */
+  bultos?: BultoEnCarrito[];
+}
+
+/** Un bulto físico dentro del carrito: su código y lo que pesó. */
+export interface BultoEnCarrito {
+  codigo: string;
+  peso_kg: number;
+  lote?: string | null;
 }

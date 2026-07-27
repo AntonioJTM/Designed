@@ -2,6 +2,8 @@
 
 const model = require('./model');
 const variantesModel = require('../variantes/model');
+const variantesService = require('../variantes/service');
+const productosModel = require('../productos/model');
 const almacenesModel = require('../almacenes/model');
 const { leerHoja } = require('../../utils/xlsx');
 const { AppError } = require('../../middlewares/error');
@@ -65,10 +67,16 @@ function analizar(buffer, nombreArchivo) {
   const vistos = new Set();
 
   for (const { fila, celdas } of filas.slice(1)) {
+    // Solo se leen A, B, C y F. Las columnas de fecha (D y E) vienen vacías en
+    // este formato y no se usan para nada: si algún día traen algo, se ignora.
     const codigo = (celdas.A ?? '').trim();
     const pesoTxt = (celdas.B ?? '').trim();
 
-    if (!codigo && !pesoTxt) continue; // renglón en blanco al final
+    // Renglón vacío: no cuenta y no se avisa. Pasa al final del archivo y en los
+    // huecos que deja el proveedor entre lotes.
+    const vacio = !Object.values(celdas).some((v) => String(v ?? '').trim() !== '');
+    if (vacio || (!codigo && !pesoTxt)) continue;
+
     if (!codigo) {
       avisos.push({ fila, aviso: 'Sin código de bulto; se omite el renglón' });
       continue;
@@ -98,19 +106,9 @@ function analizar(buffer, nombreArchivo) {
     throw new AppError(422, 'SIN_BULTOS', 'El archivo no trae bultos utilizables');
   }
 
-  // Los bultos que rinden distinto que la mayoría suelen venir incompletos:
-  // conviene señalarlos sin bloquear la carga.
-  const conteoConos = {};
-  for (const b of bultos) if (b.conos) conteoConos[b.conos] = (conteoConos[b.conos] ?? 0) + 1;
-  const conosNormal = Object.entries(conteoConos).sort((a, b) => b[1] - a[1])[0]?.[0];
-  for (const b of bultos) {
-    if (b.conos && conosNormal && String(b.conos) !== conosNormal) {
-      avisos.push({
-        fila: b.fila,
-        aviso: `El bulto ${b.codigo} rinde ${b.conos} conos y los demás ${conosNormal}: parece incompleto (${b.peso_kg} kg)`,
-      });
-    }
-  }
+  // Que un bulto rinda menos conos que los demás NO es un problema: así viene de
+  // fábrica. Se carga tal cual y su rendimiento real queda guardado en el bulto,
+  // que es lo que el desarme necesita. No se avisa nada: sería ruido.
 
   const porLote = {};
   for (const b of bultos) {
@@ -160,15 +158,76 @@ async function previa(buffer, nombreArchivo) {
 }
 
 /**
+ * Resuelve en qué presentación entra la remesa.
+ *
+ * Se puede mandar `variante_id` (la presentación exacta) o `producto_id`, que es
+ * como se usa desde la pantalla del producto: se busca su presentación en kilos
+ * y, si el producto todavía no tiene ninguna, SE CREA con los datos del propio
+ * archivo. Así el alta es: guardar el producto → subir el Excel.
+ */
+async function _resolverPresentacion(datos, bultos) {
+  if (datos.variante_id) {
+    const v = await variantesModel.obtener(datos.variante_id);
+    if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', 'La presentación no existe');
+    return v;
+  }
+
+  const producto = await productosModel.obtener(datos.producto_id);
+  if (!producto) throw new AppError(422, 'PRODUCTO_INVALIDO', 'El producto no existe');
+
+  // Las que se inventarían en kilos: primero el paquete, luego la simple. Un
+  // cono no sirve, se lleva en piezas.
+  const { rows } = await variantesModel.listar({
+    producto_id: datos.producto_id,
+    limit: 200,
+    offset: 0,
+  });
+  const enKilos = rows.filter((v) => v.tipo_presentacion !== 'cono');
+  const existente =
+    enKilos.find((v) => v.tipo_presentacion === 'paquete') ?? enKilos[0] ?? null;
+
+  if (existente) {
+    // La presentación se crea al dar de alta el producto, sin peso: no había
+    // mercancía. La primera remesa lo completa con el PROMEDIO real de sus
+    // bultos, que es el dato bueno para el desarme y el precio del cono.
+    if (!existente.peso_kg || Number(existente.peso_kg) <= 0) {
+      const pesos = bultos.map((b) => Number(b.peso_kg));
+      const promedio = round3(pesos.reduce((s, x) => s + x, 0) / pesos.length);
+      await variantesService.actualizar(existente.id, { peso_kg: promedio });
+      return { ...existente, peso_kg: promedio };
+    }
+    return existente;
+  }
+
+  // No tiene ninguna: se crea con lo que dice el archivo. El peso del paquete es
+  // el PROMEDIO de los bultos (varían entre sí) y el precio lo hereda del
+  // producto. Ambos se pueden corregir después.
+  const pesos = bultos.map((b) => Number(b.peso_kg));
+  const promedio = round3(pesos.reduce((s, p) => s + p, 0) / pesos.length);
+
+  return variantesService.crear({
+    producto_id: datos.producto_id,
+    sku: await variantesService.skuDesdeNombre(producto.nombre),
+    presentacion: producto.multipresentacion ? 'Paquete' : null,
+    tipo_presentacion: producto.multipresentacion ? 'paquete' : 'simple',
+    peso_kg: promedio,
+  });
+}
+
+/**
  * Confirma la remesa: registra los bultos y da entrada al total en kilos.
  * Todo o nada; si un código ya existe, no se carga nada.
  */
 async function confirmar(datos, usuarioId) {
-  const variante = await variantesModel.obtener(datos.variante_id);
-  if (!variante) throw new AppError(422, 'VARIANTE_INVALIDA', 'La presentación no existe');
-  if (variante.tipo_presentacion !== 'paquete') {
+  if (!datos.variante_id && !datos.producto_id) {
+    throw new AppError(422, 'FALTA_DESTINO',
+      'Indica el producto o la presentación a la que entra la remesa');
+  }
+
+  const variante = await _resolverPresentacion(datos, datos.bultos);
+  if (variante.tipo_presentacion === 'cono') {
     throw new AppError(422, 'NO_ES_PAQUETE',
-      `"${variante.sku}" no es una presentación de tipo paquete; la remesa entra en kilos.`);
+      `"${variante.sku}" es un cono y se lleva en piezas; la remesa entra en kilos.`);
   }
   const almacen = await almacenesModel.obtener(datos.almacen_id);
   if (!almacen) throw new AppError(422, 'ALMACEN_INVALIDO', 'El almacén no existe');
@@ -184,7 +243,7 @@ async function confirmar(datos, usuarioId) {
 
   return model.crearRemesa(
     {
-      variante_id: datos.variante_id,
+      variante_id: variante.id,
       almacen_id: datos.almacen_id,
       archivo: datos.archivo ?? null,
       notas: datos.notas ?? null,

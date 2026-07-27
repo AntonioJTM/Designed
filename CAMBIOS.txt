@@ -9,27 +9,111 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-07-25
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-07-26
 ===============================================================================
 
 LO ÚLTIMO QUE SE TERMINÓ
-  Carga masiva de bultos desde la lista de empaque del proveedor (el .xlsx
-  "MARINO OSCURO 2-30.xlsx"). Funciona de punta a punta y está probado con el
-  archivo real: Admin → Recibir remesa. Ver la primera entrada fechada.
+  El CONO se vende POR KILO al mismo precio del paquete, no por pieza. El desarme
+  da entrada a los kilos CON el destare (18.5 + 0.5 = 19 kg vendibles), y ahí está
+  la ganancia de enconar. Se convirtieron los 4 conos que ya existían.
+  Ver la primera entrada fechada.
+  Antes: DESTARE al bajar conos: campo editable, vacío por omisión, que se suma al peso
+  (18.5 + 0.5 = 19 enconados) y queda en el kardex. No cambia lo que se descuenta
+  del paquete ni el precio del cono. Ver la primera entrada fechada.
+  Antes: la presentación se crea SOLA al dar de alta el producto: paquete, SKU y código =
+  el nombre del producto, precio heredado, y el PESO queda pendiente hasta la
+  primera carga del Excel. Ver la primera entrada fechada.
+  Antes: "Registrar movimiento" quedó solo como AJUSTE y MERMA (los otros tres tipos ya
+  los cubren remesas, cancelaciones y traspasos). No se quitó porque el ajuste es
+  la única forma de cuadrar un conteo físico. Ver la primera entrada fechada.
+  Antes: fuera "Transferir entre almacenes" de Inventario: lo hacía Surtir sucursal y
+  además no movía los bultos. La pantalla quedó en orden de uso.
+  Ver la primera entrada fechada.
+  Antes: el bulto se escanea al VENDER, no al salir del almacén: la venta no valida su
+  ubicación y el bulto la corrige al escanearse. Los saldos siempre cuadran.
+  Ver la primera entrada fechada.
+  Antes: TRASPASOS POR PAQUETES con peso real: se pide "5 paquetes", el sistema toma los
+  más antiguos de la bodega y descuenta SU peso exacto. La pantalla traduce kilos
+  a paquetes. Y cada bulto ya sabe en qué almacén está. Ver la primera entrada.
+  Antes: se arregló que la tarjeta "Bajar conos a mostrador" estaba ESCONDIDA: solo
+  aparecía si ya había un cono, y el cono se crea justamente ahí. Está en
+  Admin → Inventario. Ver la primera entrada fechada.
+  Antes: BAJAR CONOS A MOSTRADOR desde Inventario: se escanea el paquete, dice cuántos
+  conos trae y al confirmar se deshace. El cono se crea solo la primera vez, así
+  que no hay nada que configurar. Ver la primera entrada fechada.
+  Antes: una sola presentación (paquete) por producto: el formulario de alta desaparece
+  cuando ya existe, el de bultos pide los CONOS, y el cono se da de alta en su
+  propia sección. Y las 7 suites de prueba ya NO dependen del estado de la base.
+  Ver la primera entrada fechada.
+  Antes: 8 listas de empaque de prueba en muestras/ (360 bultos, 7,121.81 kg), con el
+  formato exacto del proveedor y casos variados. Se regeneran con
+  backend/scripts/generar-muestras-xlsx.js. Ver la primera entrada fechada.
+  Antes: Calibre y Línea como columnas del listado de productos. Y quedó dicho que el
+  mismo color en otro calibre SÍ es otro producto (el calibre vive en el
+  producto); se recomendó no cambiarlo. Ver la primera entrada fechada.
+  Antes: BASE LIMPIA para capturar en serio: se borraron los 6 productos de prueba, sus
+  bultos, el inventario, los pedidos, las sesiones de caja y la nómina de prueba
+  (137 filas). Se conservó el personal y toda la configuración. Respaldo en
+  db/dump_desarrollo_antes_de_limpiar.sql. Ver la primera entrada fechada.
+  Antes: fuera el aviso de "bulto incompleto": los bultos que rinden menos conos vienen
+  así de fábrica, se cargan tal cual y no se avisa nada (0 avisos con el archivo
+  real). Ver la primera entrada fechada.
+  Antes: EL VACIADO MASIVO, que era la pregunta abierta del día: se sube el Excel del
+  proveedor desde la pantalla de presentaciones del producto, se crea la
+  presentación si falta, se registran los 80 bultos y entra la mercancía al
+  inventario. Ver la primera entrada fechada.
+  Antes: limpieza completa del color (46 tablas, 0 rastros).
+  Antes: el color es el producto —fuera el selector de las presentaciones— y el
+  listado rotula "Color"/"Material" con botón directo a Presentaciones.
+  Antes: repaso de detalles de interfaz —un botón que sobraba y textos que
+  quedaron mintiendo al mover las presentaciones de pantalla.
+  Antes: el alta de producto quedó SOLO con los datos del hilo más su precio por kilo;
+  las presentaciones se fueron a /admin/productos/:id/presentaciones. Las
+  presentaciones nuevas heredan el precio del producto. Ver la primera entrada.
+  Antes: el botón de cancelar/devolver con panel de confirmación y la devolución
+  en otra presentación (se entregó el paquete, devuelven los conos).
+  Antes: cancelar regresa la mercancía al almacén que vendió y saca el efectivo
+  de la caja, así que el corte cuadra.
+  Antes: el estado del bulto (disponible/vendido/desarmado), con prueba de
+  concurrencia —dos cajas peleando por el mismo bulto, solo una pasa.
+  Antes, el mismo día: el rastro de qué bultos se le vendieron a quién, el
+  desarme con los conos reales del bulto, el POS cobrando por el peso del bulto,
+  el alta de producto sin presentaciones y la carga masiva de la lista de
+  empaque (Admin → Recibir remesa).
+
+  FALTA LA PRUEBA DE MOSTRADOR: todo lo del lector se verificó contra los
+  endpoints y compilando, NUNCA con la pistola física en el navegador. Es lo
+  primero que hay que hacer.
+
+LO QUE ESTÁ ABIERTO  ← EMPIEZA POR AQUÍ
+  PROBARLO EN EL NAVEGADOR. Es la única deuda grande que queda: todo el trabajo
+  del 2026-07-26 pasa contra los endpoints y compila, pero NADIE ha abierto la
+  interfaz. Falta ver con la pistola física el escaneo del POS y del desarme, y
+  a mano el panel de cancelación, la pantalla de presentaciones y la carga
+  masiva del Excel.
+
+  (El "vaciado masivo" ya quedó resuelto: es la lista de empaque, cargada desde
+  la pantalla de presentaciones del producto. Ver la primera entrada fechada.)
 
 CÓMO PROBAR QUE SIGUE FUNCIONANDO
   cd backend
   PORT=3210 node src/server.js &            (usa la base "desarrollo")
   node scripts/e2e-remesas.js               26 comprobaciones, se limpia solo
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-trazabilidad.js    (14)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-bultos-estado.js   (21)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-cancelacion.js     (16)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-cancelacion-caja.js (18)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-devolucion-presentacion.js (16)
 
-SIGUIENTE PASO NATURAL  (nada de esto está empezado)
-  1. Que el DESARME acepte escanear el bulto y tome su peso y sus conos reales
-     en vez de los nominales de la presentación. Es el pendiente más claro:
-     ya se guarda variante_codigos.peso_kg y .conos, pero nadie los lee todavía.
-     Importa por los bultos incompletos, como el de 7 conos del archivo.
-  2. Que el POS, al escanear un bulto, precargue los kilos de ESE bulto. Hoy
-     resuelve la presentación y cobra por el peso nominal.
-  3. Checkout de la tienda en línea: sigue sin dirección de envío, cupón ni
+SIGUIENTE PASO NATURAL
+  1. CAPTURAR DE VERDAD en el navegador: producto → Presentaciones → subir el
+     Excel. Es la prueba que falta y ahora la base está limpia para hacerla.
+     Con el lector físico donde aplique (POS y desarme).
+  2. Checkout de la tienda en línea, el hueco más viejo del proyecto.
+  3. Probar TODO en el navegador. Es lo que más falta: el escaneo con la pistola
+     (POS y desarme) y el panel de cancelación con cambio de presentación solo se
+     han probado contra los endpoints, nunca con la interfaz en la mano.
+  4. Checkout de la tienda en línea: sigue sin dirección de envío, cupón ni
      pago, así que el pedido se queda en "pendiente". Es el hueco más viejo
      del proyecto.
 
@@ -42,8 +126,1733 @@ DEUDAS CONOCIDAS QUE NO SON DE ESTE CAMBIO
 
 CÓMO TRABAJA EL USUARIO
   · Contestarle siempre en español.
+  · CUIDA LOS DETALLES de la interfaz: botones que sobran, textos que ya no
+    corresponden ("aquí abajo" cuando eso se movió), y nunca prometer en pantalla
+    algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-27 · El CONO se vende POR KILO, no por pieza
+-------------------------------------------------------------------------------
+
+QUÉ ACLARÓ
+  "cuando se cambie un paquete a conos no hay precio por cono, sigue siendo por
+  kilo, pero se le aumenta el destare".
+
+  Esto corrige un supuesto que venía desde el principio del proyecto y que estaba
+  mal: se creía que el cono se vendía POR PIEZA, con un precio propio calculado
+  repartiendo el valor del paquete entre las piezas. No: el cono es el MISMO hilo,
+  solo enconado, y se vende al mismo precio por kilo.
+
+  Y ahí encaja el destare: como el tubo pesa, de un paquete de 18.5 kg salen 19 kg
+  vendibles. Eso es lo que gana la tienda al enconar.
+
+      paquete 18.5 kg × $200 = $3,700
+      enconado 19.0 kg × $200 = $3,800   ← el destare deja $100
+
+CÓMO QUEDÓ
+  · El cono se lleva en KILOS (antes en piezas).
+  · Su precio es el MISMO por kilo del paquete. `modo_precio='calculado'` ya no
+    divide entre piezas: copia el precio del paquete y se resincroniza si cambia.
+  · El desarme da entrada a `kg_consumidos + destare_kg`, no a las piezas.
+  · `piezas_por_origen` y `piezas_generadas` se conservan como DATO INFORMATIVO:
+    dicen cuántos conos son, pero no son la unidad de inventario.
+  · Las devoluciones paquete↔cono pasan a ser 1:1 en kilos (antes convertían a
+    piezas): es el mismo hilo, los kilos que salieron son los que vuelven.
+  · El panorama de almacenes ya no separa "kilos" de "piezas": todo suma en kilos.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_cono_por_kilo.sql
+          No cambia el esquema: CONVIERTE LOS DATOS que ya existían.
+            · el precio de los 4 conos pasa al de su paquete
+              (BLANCO $180, BEIGE $120, NEGRO $145, AMARILLO $130)
+            · el inventario pasa de piezas a kilos, reconstruido desde
+              `variante_conversiones` (kg_consumidos + destare_kg):
+                12 pz → 18.940 kg · 16 pz → 22.850 kg
+                12 pz → 19.130 kg · 16 pz → 23.320 kg (incluye 0.8 de destare)
+            · el kardex de esas entradas también estaba en piezas y se corrigió,
+              así que la suma de movimientos vuelve a cuadrar con el saldo
+              (verificado: los 4 cuadran al gramo)
+          Solo es válida porque NO se había vendido ningún cono. Queda dicho en el
+          encabezado del archivo: con ventas de por medio habría que restarlas.
+          Respaldo previo en db/dump_antes_cono_por_kilo.sql (347 filas).
+
+BACKEND
+  MODIF   variantes/model.js      unidad_venta del cono: 'pieza' → 'kg'
+  MODIF   variantes/service.js    precioDelCono() devuelve el precio del paquete
+  MODIF   productos/model.js      unidad_venta del cono en el detalle
+  MODIF   inventario/model.js     el desarme da entrada en kg_enconados; el kardex
+                                  rotula el cono en kg; el traspaso y el resumen
+                                  dejan de hablar de piezas
+  MODIF   pedidos/model.js        las alternativas de devolución son 1:1 en kilos
+
+FRONTEND
+  MODIF   catalogo.models.ts      la documentación del tipo, que decía piezas
+  MODIF   inventario/inventario.ts + .html
+          la vista previa muestra "+19.000 kg" en vez de "+12 conos", con el
+          desglose "18.500 del paquete + 0.5 de destare"; el aviso de éxito dice
+          los kilos y los conos entre paréntesis; el histórico gana la columna
+          "Kilos enconados" y deja "Conos" como informativa.
+
+PRUEBAS
+  17 comprobaciones con el caso de la tienda (18.5 + 0.5): el cono se vende por
+  kilo al mismo precio del paquete, NO al precio por pieza que habría sido $308.33;
+  entran 19 kg al mostrador; vender 5 kg cobra $1,000; el kardex habla en kilos; y
+  el panorama ya no reporta piezas.
+
+  TRES SUITES quedaron desactualizadas por el cambio de modelo y se corrigieron
+  —el código estaba bien, las pruebas medían piezas—:
+    · e2e-trazabilidad: el bulto de 10.75 kg ahora entra como 10.75 kg, no 7 pz
+    · e2e-devolucion-presentacion: la equivalencia paquete↔cono es 1:1 en kilos
+    · e2e-bajar-a-mostrador: el precio es el del paquete, y el saldo en kilos
+  Regresión de las 9 suites en verde. Build sin avisos.
+
+PENDIENTE / NOTAS
+  · `producto_variantes.peso_kg` del cono sigue guardando el peso de UN cono
+    (peso del paquete / piezas). Ya no se usa para cobrar; queda como referencia.
+  · `modo_precio='manual'` en un cono ahora significa "precio por kilo propio",
+    no "precio por pieza". El mensaje de error se actualizó.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Destare al bajar conos: lo captura la tienda
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "cuando paso un paquete a conos el peso se le suma el destare, eso déjamelo a mí
+  para que lo agregue porque sube el peso; digamos que mi paquete pesa 18.5 kg y lo
+  paso a conos y me dejas agregar el destare, le agrego 0.5, entonces el peso se
+  suma".
+  Al enconar el hilo pesa más: cada cono lleva su tubo. Ese aumento depende del
+  tubo que se use, así que lo captura la tienda y el sistema no lo calcula.
+
+TRES DECISIONES QUE QUEDARON ABIERTAS Y SE TOMARON
+  Se le preguntaron dos cosas y respondió aceptando la propuesta sin aclararlas,
+  así que se resolvieron por el camino más conservador y queda anotado:
+  1. El destare es un TOTAL en kilos del desarme, NO por cono. Es lo que dijo
+     literalmente ("le agrego 0.5"), y en pantalla se entiende sin cuentas. Si
+     alguna vez lo quiere por cono, lo multiplica él.
+  2. Los conos siguen entrando al inventario POR PIEZA. Cambiarlos a kilos sería
+     un cambio de modelo que no pidió.
+  3. El destare NO cambia el precio del cono. Subir un precio por detrás sería
+     peligroso y no lo pidió; solo afecta el peso registrado.
+  (De paso: en su ejemplo 18.5 + 0.5 daba 19, no 20 como escribió. Se le señaló y
+  se implementó la suma correcta.)
+
+DÓNDE VIVE, Y POR QUÉ
+  En la CONVERSIÓN (`variante_conversiones.destare_kg`), no en la presentación:
+  cada desarme puede llevar un destare distinto, así que es un dato de ESA bajada
+  y no una propiedad del cono. Si viviera en la presentación, el segundo desarme
+  le cambiaría el peso al primero.
+
+  `kg_consumidos` NO se toca: del paquete sale su peso real y eso es lo que se
+  descuenta del inventario. El destare solo dice cuánto pesó el resultado.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_desarme_destare.sql
+          `variante_conversiones.destare_kg` DECIMAL(12,3) NULL. Idempotente.
+          YA APLICADA en "desarrollo".
+  MODIF   db/schema_mysql.sql   (46 tablas, validado desde cero)
+
+BACKEND
+  MODIF   inventario/model.js
+          `destare_kg` opcional; `kgEnconados = kgConsumidos + destare`; se guarda
+          en la conversión, se devuelve en la respuesta y el kardex lo explica en
+          las DOS patas:
+            salida:  "… (18.5 kg) en 12 cono(s) · +0.5 kg de destare = 19 kg enconados"
+            entrada: "Desarme de 1 paquete(s) de DT-AZUL · pesan 19 kg con el destare"
+          Un destare negativo da 422. El histórico de conversiones lo devuelve.
+  MODIF   inventario/routes.js   el schema acepta destare_kg
+
+FRONTEND
+  MODIF   inventario.service.ts   destare_kg en la entrada, y destare_kg /
+                                  kg_enconados en el resultado
+  MODIF   inventario/inventario.ts + .html
+          Campo "Destare (kg)" en la tarjeta de bajar conos, VACÍO por omisión,
+          con la ayuda de qué es. Al escanear otro bulto se limpia.
+          Mientras se captura, la vista previa muestra la suma en vivo:
+            "18.500 kg + 0.5 de destare → 19.000 kg enconados"
+          El aviso de éxito y el histórico de bajadas también lo mencionan.
+
+PRUEBAS
+  16 comprobaciones con SU ejemplo exacto (18.5 + 0.5): el peso enconado da 19; del
+  paquete salen sus 18.5 reales y el inventario baja 18.5, no 19; entran los 12
+  conos; el kardex lo dice en las dos patas; la conversión guarda los tres datos y
+  el histórico los devuelve. Sin destare todo queda igual que antes (null, y el
+  kardex no lo menciona). Un destare negativo da 422.
+  Regresión de las 9 suites en verde. Build sin avisos.
+
+PENDIENTE / NOTAS
+  · El peso unitario del cono (`producto_variantes.peso_kg`) sigue saliendo del
+    paquete SIN destare. Es coherente con que el cono se venda por pieza: ese peso
+    es informativo. Si algún día se vendieran conos por kilo, habría que revisarlo.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · La presentación se crea SOLA al dar de alta el producto
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "cuando creo por primera vez un producto quiero que se cree en automático la
+  presentación; siempre van a ser paquetes; el SKU y el código de barras quiero
+  que siempre sea el nombre del producto; el peso del paquete no lo utilizo ahí,
+  ni el precio oferta ni el costo; y el precio público ya lo traigo cuando creo
+  el producto".
+
+CÓMO QUEDÓ
+  Al guardar un producto nuevo se crea su presentación sin preguntar nada:
+      tipo    = paquete   (o simple si no es multipresentación)
+      SKU     = el nombre del producto → "ROSA MEXICANO" pasa a ROSA-MEXICANO
+      código  = el mismo SKU
+      precio  = el precio_kg del producto
+      peso    = PENDIENTE
+      oferta y costo = vacíos
+  Con dos productos del mismo nombre el segundo recibe ROSA-MEXICANO-2: el SKU se
+  genera buscando uno libre.
+
+EL PESO: EL PROBLEMA QUE HABÍA QUE RESOLVER
+  Un paquete EXIGÍA peso, y al dar de alta el producto todavía no ha llegado
+  mercancía, así que no hay peso que poner. Se resolvió dejándolo PENDIENTE:
+    · `variantes/service.js` ya no exige peso al crear un paquete: queda en NULL.
+    · La primera carga del Excel lo completa con el PROMEDIO real de los bultos.
+    · El DESARME sí lo exige, porque de ahí salen los kilos a descontar: si falta,
+      422 PAQUETE_SIN_PESO con un mensaje que dice de dónde sale ("lo pone la carga
+      del Excel, o captúralo en la presentación").
+  O sea: se exige donde importa, no donde estorba.
+
+BACKEND
+  MODIF   variantes/service.js
+          peso opcional en paquete; `skuDesdeNombre()` pasó a vivir aquí (era una
+          copia privada en remesas) y se exporta
+  MODIF   productos/service.js
+          crear() da de alta la presentación después del producto. Si eso falla
+          (por ejemplo un SKU imposible) el producto NO se pierde: se registra en
+          el log y el alta se devuelve igual. Perder el alta completa sería peor.
+  MODIF   remesas/service.js
+          si la presentación ya existe pero sin peso, la remesa lo completa con el
+          promedio de sus bultos. Usa el skuDesdeNombre compartido.
+  MODIF   inventario/model.js
+          el desarme rechaza un paquete sin peso, con mensaje accionable
+
+FRONTEND
+  MODIF   producto-presentaciones.html
+          un paquete sin peso ya no muestra un hueco: dice "el peso del paquete lo
+          pone la primera carga del Excel".
+  El formulario de captura a mano NO se tocó: como ahora el producto siempre nace
+  con su presentación, ese formulario simplemente ya no aparece.
+
+BUG QUE DESTAPÓ LA PRUEBA
+  La primera versión creaba SIEMPRE 'paquete'. Pero 'paquete' exige la bandera de
+  multipresentación, así que un producto sin ella se quedaba sin presentación (el
+  try/catch se lo tragaba). Ahora el tipo depende de la bandera: paquete o simple.
+
+PRUEBAS
+  15 comprobaciones con el flujo real: el producto nace con su presentación
+  (paquete, SKU del nombre, código igual, $155 heredados, sin peso, sin oferta ni
+  costo); desarmar sin peso da 422 con el mensaje correcto; el Excel completa el
+  peso con el promedio (19.197 kg) sin duplicar la presentación ni cambiar el SKU;
+  después ya se puede bajar a mostrador; y dos productos del mismo nombre no
+  chocan (el segundo recibe -2).
+
+  SE ACTUALIZÓ e2e-carga-por-producto.js: comprobaba que el producto naciera SIN
+  presentación, y eso cambió a propósito. Ahora comprueba que nace CON ella y sin
+  peso, y que la carga se lo pone. La prueba estaba desactualizada, no el código.
+
+  Regresión de las 9 suites en verde. Build sin avisos.
+
+PENDIENTE / NOTAS
+  · Si se cambia el nombre del producto, el SKU de la presentación NO se renombra.
+    Es a propósito: el SKU puede estar ya impreso en etiquetas o en pedidos
+    viejos. Se edita a mano si hace falta.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · "Registrar movimiento" queda solo como ajuste y merma
+-------------------------------------------------------------------------------
+
+QUÉ PREGUNTÓ
+  "en inventario, para qué es el de registrar movimiento; creo que igual ahorita
+  no lo utilizo, si no se utiliza puedes quitarlo".
+
+QUÉ SE REVISÓ ANTES DE DECIDIR
+  En su base, TODOS los movimientos vienen de flujos automáticos: 5 entradas de
+  remesa, 2+2 de desarme, 6 de traspaso. Ninguno capturado a mano. O sea que hoy
+  de verdad no lo usa.
+
+  Pero de los 5 tipos que ofrecía, dos NO los cubre ningún otro flujo:
+    · entrada    → ya la hace la remesa
+    · devolución → ya la hace cancelar el pedido
+    · salida     → se usaba para transferir, que ahora va por traspasos
+    · AJUSTE     → cuadrar el sistema con un conteo físico. Nada más lo hace.
+    · MERMA      → dar de baja hilo mojado, dañado o perdido. Nada más lo hace.
+
+  Sin el ajuste, el día que cuente físicamente y no cuadre no habría forma de
+  corregirlo salvo tocando la base a mano. Y va a pasar: hay bultos capturados sin
+  ubicación, y en este proyecto YA ocurrió una vez (ver el INCIDENTE del
+  2026-07-25, que se cuadró con movimientos de reconciliación).
+  Por eso no se quitó la tarjeta: se le quitó lo que sobra.
+
+CAMBIOS
+  MODIF   inventario/inventario.ts
+          los tipos pasan de 5 a 2: ['ajuste', 'merma']. Queda comentado qué
+          flujo cubre cada uno de los tres que se fueron.
+          Fuera el campo `costo_unitario` del formulario: era para las entradas.
+  MODIF   inventario/inventario.html
+          "2 · Registrar movimiento" → "2 · Ajustar o dar de baja", con dos
+          líneas que explican cuándo se usa cada uno:
+            Ajuste: la cantidad que escribas queda como el saldo real.
+            Merma: resta lo que se dañó, se mojó o se perdió.
+          El rótulo del campo cambia según el tipo: "Saldo real contado" para el
+          ajuste, "Cantidad a dar de baja" para la merma.
+
+  El endpoint POST /inventario/movimientos NO se tocó: sigue aceptando los 5
+  tipos (lo usan tres guiones de prueba para preparar datos) y es la única vía
+  para un ajuste.
+
+PRUEBAS
+  8 comprobaciones: el ajuste fija el saldo (100 kg); un conteo de 94.5 lo deja en
+  94.5 y el kardex registra la diferencia (−5.5); la merma de 3 kg resta y queda
+  como merma; y el kardex lo lee en lenguaje de tienda ("Ajuste de inventario",
+  "Merma") con su motivo.
+  Regresión de las 9 suites en verde. Build sin avisos.
+
+NOTA
+  Si aun así lo quiere fuera, se quita en un minuto: es una tarjeta y dos tipos.
+  Pero entonces conviene dejar claro cómo se corregirá un descuadre de conteo.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Fuera "Transferir entre almacenes" de Inventario
+-------------------------------------------------------------------------------
+
+QUÉ OBSERVÓ
+  "en inventario tienes la opción de transferir entre almacenes pero eso ya lo
+  haces desde surtir sucursal, creo que no vale la pena tenerlo en inventario".
+
+Y ERA PEOR QUE UNA DUPLICACIÓN
+  La transferencia movía kilos y punto: NO movía los bultos. Después del cambio de
+  hoy (cada bulto sabe en qué almacén está) ese camino habría descuadrado la
+  ubicación en silencio —los kilos en un almacén y los bultos en otro—.
+  El traspaso de Surtir sucursal hace todo lo que hacía y mejor: folio, varias
+  líneas, captura en paquetes, peso REAL de los bultos y los mueve al destino.
+
+SE QUITÓ COMPLETO, no solo la pantalla
+  FRONTEND
+    MODIF   inventario/inventario.html   fuera la tarjeta "Transferir entre
+                                         almacenes" (26 líneas)
+    MODIF   inventario/inventario.ts     fuera el estado `transf` y el método
+                                         transferir()
+    MODIF   inventario.service.ts        fuera transferir() y TransferenciaInput
+  BACKEND
+    MODIF   inventario/routes.js         fuera POST /inventario/transferencias y
+                                         su schema
+    MODIF   inventario/controller.js · service.js · model.js
+                                         fuera la función en las tres capas
+  Se dejó el TIPO de movimiento 'transferencia' porque el traspaso lo usa para sus
+  dos patas del kardex; lo que se fue es el endpoint suelto.
+
+DE PASO, DOS DETALLES DE LA PANTALLA
+  · Al quedar una sola tarjeta donde había dos, la rejilla de dos columnas dejaba
+    "Registrar movimiento" a media pantalla. Se quitó la rejilla.
+  · Los títulos "1 · Elige la variante" y "2 · Registrar movimiento" tenían la
+    sección de conos EN MEDIO, así que la numeración no correspondía a nada. Como
+    ese selector solo alimenta el movimiento manual (se verificó: es su único
+    consumidor), se movió junto a él y se le puso una línea que dice para qué es.
+    La pantalla quedó en orden de uso: panorama → bajar conos → bajadas recientes
+    → movimiento manual → existencias.
+
+PRUEBAS
+  9 comprobaciones: POST /inventario/transferencias da 404; las 6 lecturas de
+  Inventario siguen respondiendo; el traspaso responde; y el movimiento manual
+  sigue validando.
+  Regresión de las 9 suites en verde. Build sin avisos.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · El bulto se escanea al VENDER, no al salir del almacén
+-------------------------------------------------------------------------------
+
+QUÉ ACLARÓ
+  "toma en cuenta que igual no voy a escanear los bultos que salen del almacén,
+  los escaneo hasta que los vendo".
+
+  Es la pieza que faltaba para cerrar el traspaso. Consecuencia: el sistema
+  asigna los bultos por FIFO al traspasar, pero quien surte se lleva los que tiene
+  a mano. Así que la ubicación REGISTRADA de un bulto puede no ser la real, y al
+  escanearlo en la tienda el sistema puede creerlo en la bodega.
+
+LA REGLA QUE SE ADOPTÓ
+  Los SALDOS por almacén son la verdad; la ubicación de cada bulto es una
+  aproximación hasta que alguien lo escanea. El escaneo manda: donde se escanea,
+  ahí está.
+  · La venta NO valida que el bulto "estuviera" en ese almacén. Validarlo
+    bloquearía ventas legítimas por un detalle de registro que la tienda no lleva.
+  · Al vender o al desarmar, el bulto CORRIGE su ubicación al almacén donde se
+    escaneó. Así el rastro se va afinando solo, con el uso.
+
+CAMBIOS
+  MODIF   pedidos/model.js       al marcar el bulto vendido también se le pone el
+                                 almacén del pedido (el de la caja que vendió)
+  MODIF   inventario/model.js    el desarme hace lo mismo con el almacén de origen
+
+  Los dos llevan el comentario de por qué NO se valida la ubicación, para que
+  nadie lo "arregle" después añadiendo una validación que rompa la operación.
+
+PRUEBAS
+  9 comprobaciones con el caso incómodo montado a propósito: se traspasan 5
+  paquetes (el sistema asigna del 00620000 al 00620028) pero se venden OTROS
+  (del 00620245 en adelante), que el sistema creía en la bodega.
+    · la venta pasa sin protestar
+    · cobra por el peso real del bulto escaneado (18.93 kg)
+    · descuenta de la TIENDA, que es la caja que vendió
+    · el bulto queda registrado en la tienda: se corrigió solo
+    · lo mismo al bajarlo a mostrador desde la tienda
+    · y bodega + tienda siguen cuadrando al gramo (665.07 + 57.67 = 722.74)
+  Regresión de las 9 suites en verde.
+
+POR QUÉ ESTO ESTÁ BIEN Y NO ES UN PARCHE
+  El inventario en kilos por almacén siempre es correcto: el traspaso mueve el
+  peso real de los bultos que asignó, y la venta descuenta del almacén de la caja.
+  Lo único aproximado es CUÁL bulto está dónde, y eso solo importaría para
+  auditar qué lote llegó a cada sucursal. La tienda decidió no escanear a la
+  salida, así que ese nivel de detalle no está disponible: es una consecuencia de
+  su operación, no un defecto del sistema.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Traspasos por PAQUETES, con el peso real de la bodega
+-------------------------------------------------------------------------------
+
+EL PROBLEMA QUE PLANTEÓ
+  "cuando mando hilo de almacén matriz a tienda puedo mandar blanco y 100 kilos,
+  pero no todos los paquetes pesan lo mismo y no puedo mandar un paquete… son
+  paquetes cerrados, ¿qué podría hacer?"
+
+  Tenía razón y el error estaba cuantificado: mandar 5 paquetes de MARINO OSCURO
+  descontaba 95.470 kg (5 × 19.094 nominal) cuando los 5 primeros pesan 93.950 kg.
+  1.52 kg de descuadre en cinco paquetes, y sus bultos van de 10.75 a 19.80 kg.
+
+LO QUE SE DESCARTÓ, Y POR QUÉ
+  Se le había propuesto TRASPASAR ESCANEANDO cada bulto. Lo rechazó con dos
+  razones operativas que mandan sobre el diseño:
+    · "no vas a estar checando cuánto pesan cada paquete";
+    · "no voy a estar buscando en una bodega específico, es imposible, son
+      muchos".
+  Tiene razón: en una bodega con cientos de bultos nadie busca el 00531332. El
+  escaneo queda solo para el mostrador (bajar conos), donde el bulto ya está en
+  la mano.
+
+LA SOLUCIÓN: SE PIDE POR PAQUETES Y EL SISTEMA ELIGE CUÁLES
+  Quien surte sigue diciendo "5 paquetes de blanco". El sistema toma los bultos
+  que DE VERDAD hay en el origen, los más antiguos primero (FIFO), y descuenta SU
+  peso real. Nadie pesa ni busca nada, y la cuenta cuadra al gramo.
+  Y si se piensa en kilos, la pantalla traduce: "100 kg ≈ 5 paquetes (95.44 kg,
+  faltan 4.56) o 6 (114.53, sobran 14.53)", usando el peso PROMEDIO REAL de los
+  bultos de esa bodega, no el nominal.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_bulto_almacen.sql
+          `variante_codigos.almacen_id`: cada bulto sabe dónde está. Se pobló con
+          el almacén de la remesa que lo trajo (205 bultos ubicados en Bodega
+          principal). Los capturados a mano quedan en NULL a propósito: no se
+          sabe dónde están y no conviene inventarlo.
+          Idempotente. YA APLICADA en "desarrollo".
+  MODIF   db/schema_mysql.sql  (validado creando una base desde cero)
+
+  Esto cierra de paso el pendiente que se había anotado tres veces: "el bulto no
+  sabe en qué almacén está".
+
+BACKEND
+  NUEVO   GET /api/v1/inventario/equivalencia-paquetes?variante_id=&almacen_id=&kg=
+          Cuántos paquetes hay, cuánto pesan de verdad (promedio, mínimo, máximo)
+          y las dos opciones para los kilos pedidos.
+  MODIF   inventario/model.js
+          bultosDisponibles() (FIFO, con FOR UPDATE) y disponibilidadEnPaquetes().
+          crearTraspaso() toma los bultos reales, descuenta su peso, LOS MUEVE al
+          almacén destino y devuelve en la línea qué bultos salieron.
+          Si no hay bultos ubicados que cubran lo pedido, cae al peso nominal y lo
+          marca con `peso_estimado: true` en vez de fingir precisión.
+  MODIF   inventario/{service,controller,routes}.js
+  MODIF   remesas/model.js
+          BUG: los bultos nuevos entraban SIN almacén, así que el traspaso no los
+          encontraba y volvía al nominal. Lo detectó la prueba ("0 paquetes en
+          bodega"). Ahora quedan en el almacén que recibe la remesa.
+
+FRONTEND
+  MODIF   inventario.service.ts   equivalenciaPaquetes() y sus tipos
+  MODIF   traspasos/traspasos.ts + .html
+          La columna de kilos usa el peso REAL y se rotula "Kilos (aprox.)", con
+          el rango debajo ("de 18.84 a 19.39 kg cada uno") para que se entienda
+          por qué es aproximado. Cada línea dice cuántos paquetes hay en el
+          origen. Al cambiar el almacén de origen se recalculan los pesos.
+          El texto de arriba explica el criterio en una frase.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-traspaso-paquetes.js
+  19 comprobaciones, todas en verde: la equivalencia cuenta 80 paquetes y usa el
+  peso real; mandar 5 descuenta 95.95 kg (el real) y no 95.44 (el nominal); dice
+  qué bultos salieron; los 5 bultos VIAJAN a la tienda y 75 quedan en bodega; son
+  los más antiguos; la suma de bultos cuadra con el saldo en los DOS almacenes; el
+  bulto ya se ubica en la tienda para bajarlo a mostrador; y pedir 500 paquetes da
+  409 sin mover nada.
+  Regresión de las 9 suites en verde. Build sin avisos. Datos de la tienda
+  intactos.
+
+PENDIENTE / NOTAS
+  · El sistema elige QUÉ bultos salen (FIFO), no el almacenista. Físicamente puede
+    llevarse otros cinco: da igual para el peso total y el saldo, pero si algún día
+    importa el lote exacto que llegó a cada sucursal, habría que escanear.
+  · Los bultos capturados a mano siguen sin almacén, así que no cuentan para el
+    traspaso: si una variante solo tiene esos, el peso se estima con el nominal y
+    la línea lo marca.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · BUG · La pantalla de bajar conos estaba escondida
+-------------------------------------------------------------------------------
+
+QUÉ PREGUNTÓ
+  "y dónde se hace eso, porque no sé dónde hacerlo".
+
+LA CAUSA (bug propio, del cambio de hace un rato)
+  La tarjeta de Inventario estaba envuelta en `@if (conos().length > 0)`: solo
+  aparecía si el producto YA tenía una presentación de cono. Como el cono ahora
+  nace al bajar el primer paquete, quedó un círculo vicioso: la pantalla que crea
+  el cono se escondía hasta que existiera un cono.
+  Con sus datos era invisible: 6 presentaciones, todas paquete, 0 conos.
+
+ARREGLO
+  MODIF   inventario/inventario.html
+          · fuera la condición: la tarjeta se muestra siempre. El escáner no
+            necesita conos previos, los crea.
+          · se renombró con las palabras que usa la tienda: "Desarmar paquete en
+            conos" → "Bajar conos a mostrador", y el histórico "Desarmes
+            recientes" → "Bajadas recientes a mostrador".
+          · el texto explica el flujo en una línea: escanea el paquete, dice
+            cuántos conos trae, al confirmar lo deshace.
+          · el respaldo manual SÍ sigue condicionado a que exista un cono: ahí se
+            elige de una lista, así que sin conos no hay nada que elegir.
+          · al quitar el `@if` había que recolocar "Bajadas recientes", que estaba
+            anidado dentro; quedó suelto con su propia condición.
+
+VERIFICADO CON SUS DATOS REALES
+  Con el bulto 00531332 de su MARINO OSCURO, la pantalla ya responde:
+      MARINO OSCURO · bulto 00531332 · lote 0094886      −18.650 kg
+      Trae 12 conos (se dará de alta la presentación)     +12 conos
+      Sale de: Bodega principal — hay 1,527.500 kg
+  Sin tener ningún cono configurado.
+
+  Las 8 suites en verde. Build sin avisos.
+
+DÓNDE ESTÁ, PARA NO VOLVER A PREGUNTARLO
+  Admin → Inventario → tarjeta "Bajar conos a mostrador", después del panorama de
+  almacenes y del selector de variante.
+
+LECCIÓN
+  Segunda vez en el día que una condición `@if` esconde justo la pantalla que
+  hacía falta. Al cambiar CUÁNDO se crea algo, hay que revisar qué pantallas se
+  mostraban solo si eso ya existía.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Bajar conos a mostrador: se escanea el paquete y ya
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "para pasar conos a mostrador necesito que se haga desde inventario y no desde
+  las presentaciones; el proceso es este: escaneo el paquete que voy a pasar y me
+  dice cuántos conos trae, y ahí se bajan: se deshace un paquete y se pasa a
+  conos, pero no sé cómo hacer eso o cómo mostrarlo".
+
+LA PIEZA QUE FALTABA
+  El desarme ya existía y ya aceptaba escanear el bulto, pero EXIGÍA que alguien
+  hubiera configurado antes la presentación de cono. Eso choca con lo que pidió
+  ayer ("ya no se crean más variantes") y era el motivo de que no supiera cómo
+  hacerlo: faltaba un paso invisible.
+
+  La solución sale de un dato que ya estaba en la base: EL BULTO YA DICE CUÁNTOS
+  CONOS RINDE, porque viene en la lista de empaque. Así que no hay que configurar
+  nada: el cono NACE la primera vez que se baja un paquete a mostrador, con los
+  conos que dice el bulto y su precio derivado del paquete.
+
+EL FLUJO, EN INVENTARIO
+  1. Escaneas el paquete.
+  2. La pantalla dice: producto, bulto, lote, sus KILOS REALES, cuántos conos
+     trae, y en qué almacén está la mercancía (con cuánto hay).
+  3. Propone de dónde sale (donde de verdad está) y a qué mostrador baja.
+  4. "Bajar a mostrador": descuenta los kilos reales del paquete, da entrada a
+     los conos, marca el bulto como desarmado y deja las dos patas en el kardex.
+
+BACKEND
+  NUEVO   GET /api/v1/inventario/desarmes/previa/:codigo
+          Lo que trae el bulto, sin mover nada: paquete, kilos, lote, conos a
+          generar, si el cono ya existe, y en qué almacenes hay existencias.
+          404 si el código no existe, 409 si el bulto ya se vendió o desarmó.
+  MODIF   inventario/service.js
+          desarmar() acepta SOLO `codigo_bulto`: resuelve el paquete, toma los
+          kilos y los conos del bulto y crea la presentación de cono si falta
+          (SKU `<PAQUETE>-CONO`, precio calculado). Con `cono_variante_id` sigue
+          funcionando como antes.
+  MODIF   inventario/model.js      conoDe() y existenciasDe() nuevas
+  MODIF   inventario/routes.js     `cono_variante_id` y `paquetes` pasan a
+                                   opcionales; se exige uno de los dos caminos
+  MODIF   inventario/controller.js
+
+FRONTEND
+  MODIF   inventario.service.ts    previaDesarme() y el tipo PreviaDesarme
+  MODIF   inventario/inventario.ts + .html
+          La sección "Desarmar paquete en conos" se reordenó: el ESCÁNER va
+          primero y grande, y al leer muestra qué trae el bulto con los dos
+          almacenes ya propuestos. La captura a mano quedó dentro de un
+          <details> ("Capturar a mano, sin escanear") como respaldo.
+  MODIF   productos/producto-presentaciones.ts + .html
+          fuera la sección "Conos para mostrador" que se había hecho el día
+          anterior: ya no hace falta configurar el cono en ningún lado.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-bajar-a-mostrador.js
+  19 comprobaciones, todas en verde: el producto tiene solo su paquete y ningún
+  cono; escanear dice los 22.420 kg reales y los 16 conos que trae, avisa que el
+  cono no existe y dónde está la mercancía; al confirmar el cono se crea solo con
+  su precio derivado ($280.16), bajan los kilos de la bodega, entran los 16 conos
+  al mostrador y el bulto queda desarmado; el segundo bulto reutiliza el mismo
+  cono y los conos se acumulan (32); y las guardas: 409 si el bulto ya se
+  desarmó, 404 si el código no existe, 422 sin bulto ni cono.
+  Regresión de las 7 suites en verde. Build sin avisos. Datos de la tienda
+  intactos (6 productos).
+
+PENDIENTE / NOTAS
+  · El cono se crea con `modo_precio='calculado'`, o sea su precio sale del
+    paquete. Si la tienda quiere ponerle un precio por pieza distinto, hoy se
+    edita la presentación; no hay forma de elegirlo al bajar el primer bulto.
+  · El almacén de origen se propone según dónde hay existencias del paquete, no
+    según dónde está el bulto: el bulto sigue sin saber en qué almacén está.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Una sola presentación por producto, y los conos aparte
+-------------------------------------------------------------------------------
+
+QUÉ OBSERVÓ, usando el sistema de verdad
+  1. "en el llenado de las presentaciones no hay más variantes, solo es el que se
+     crea y listo, ya no se crean más variantes".
+  2. "en códigos, para agregar otro está bien: pide el código, el peso en kg y el
+     lote, pero falta saber cuántos conos tiene el bulto".
+  3. "en la presentación siempre son paquetes, nunca cambia".
+
+  Se confirmó en sus datos antes de tocar nada: 6 productos, 6 presentaciones
+  TODAS de tipo paquete, una por producto, ningún cono, y 1 bulto sin dato de
+  conos —justo el que había capturado a mano—.
+
+CAMBIOS
+  · El formulario de bultos ahora pide CONOS, junto al código, el peso y el lote.
+    Era el dato que faltaba y el que usa el desarme.
+  · La presentación ya no pregunta el tipo: es PAQUETE, fijo. Fuera el selector
+    "Se vende como" y los bloques de cono y simple de ese formulario.
+  · Cuando el producto ya tiene su presentación, el formulario de alta DESAPARECE
+    y en su lugar dice que las remesas siguientes agregan bultos, no
+    presentaciones. Cuando no la tiene, el formulario aparece rotulado como
+    "capturar la presentación a mano" y aclara que normalmente la crea el Excel.
+
+DECISIÓN: LOS CONOS NO SE ELIMINARON, SE MUDARON
+  "Ya no se crean más variantes" tomado al pie de la letra dejaría sin salida al
+  desarme, porque el cono ES una variante y sin él no se puede desarmar nada. Se
+  resolvió sacándolo del formulario de presentaciones y dándole su propia sección
+  ("Conos para mostrador"), que solo aparece cuando el producto YA tiene su
+  paquete. Ahí solo se piden dos cosas —cuántos conos salen de un paquete y de
+  dónde sale su precio— y el SKU se deriva del paquete (`<PAQUETE>-CONO`), porque
+  es una presentación interna, no un código del proveedor. La sección dice
+  explícitamente que si no se vende por pieza, no hace falta.
+
+PRUEBAS
+  11 comprobaciones contra el servidor real: la carga crea UNA presentación tipo
+  paquete; un bulto a mano acepta código, peso, lote Y conos, y el dato queda
+  guardado; el cono se da de alta con su precio derivado del paquete
+  ((175 × 19.011) / 12 = $277.24); el desarme funciona con él; y una segunda
+  remesa NO crea otra presentación.
+
+ARREGLO GRANDE DE LAS PRUEBAS: YA NO DEPENDEN DE LA BASE
+  Al correr la regresión, 5 de las 7 suites reventaron. La causa NO era el código:
+  la tienda ya cargó el archivo MARINO OSCURO de verdad, así que sus 80 códigos
+  están ocupados y las pruebas que los usaban chocaban.
+  Se arregló en las 5: cada corrida le pone un sufijo propio a los códigos
+  (`-T<timestamp>`) con un helper `marcar()`/`cod()`, así que ya no importa qué
+  haya en la base. Se comprobó corriéndolas DOS VECES seguidas: verdes las dos.
+  Lección: una prueba que dependa de datos concretos de la base caduca en cuanto
+  el usuario empieza a trabajar.
+
+  Las 7 suites en verde. Build sin avisos. Los datos de la tienda intactos:
+  6 productos, 6 presentaciones, 205 bultos, 3,938.6 kg.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · 8 listas de empaque de prueba, con datos distintos
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  Otros 8 colores con el formato del archivo del proveedor, para probar con datos
+  diferentes sin esperar mercancía real.
+
+CÓMO SE HICIERON
+  NUEVO   backend/scripts/generar-muestras-xlsx.js
+          Escribe el .xlsx a mano (ZIP + XML), sin dependencias, igual que
+          `utils/xlsx.js` lo lee. Se copió la forma EXACTA del archivo real,
+          revisando antes su XML:
+            A código  → texto compartido (así conserva los ceros: "00610000")
+            B peso    → número
+            C lote    → texto compartido
+            D,E       → la celda NO se escribe (vienen vacías)
+            F conos   → número · G paquete → número, siempre 1
+          Determinista: regenerarlo da los mismos archivos. La fecha del ZIP es
+          fija por lo mismo.
+
+  NUEVO   muestras/  (8 archivos, 360 bultos, 7,121.81 kg)
+    BLANCO 2-30            80 bultos · 1,527.05 kg · 2 lotes
+    NEGRO 2-30             40 bultos ·   760.42 kg · 1 lote
+    ROJO 1-30              60 bultos · 1,344.75 kg · 3 lotes
+    VERDE BOTELLA 2-30     24 bultos ·   435.24 kg · 2 bultos rinden 7 conos
+    AMARILLO 1-30          12 bultos ·   270.90 kg · poco volumen
+    ROSA MEXICANO 2-30    100 bultos · 1,919.71 kg · 4 lotes
+    GRIS PERLA 2-30        36 bultos ·   685.83 kg · con RENGLONES VACÍOS
+    BEIGE 1-30              8 bultos ·   177.91 kg · pesos muy dispersos
+
+  Varían a propósito: número de bultos, peso nominal (los 1/30 pesan ~22 kg y
+  rinden 16 conos; los 2/30 ~19 kg y 12 conos), uno o varios lotes, y tres casos
+  raros a propósito —bultos que rinden menos, renglones vacíos y pesos dispersos.
+
+  Los códigos van en un rango propio por color (610000, 620000, …) para que no
+  choquen: el sistema rechaza un código ya registrado.
+
+VERIFICACIÓN
+  · Los 8 ZIP están íntegros leídos con una librería estándar ajena al proyecto
+    (zipfile de Python), así que Excel también los abre.
+  · Los 8 los lee NUESTRO lector: hoja "Presentaciones", bultos, kilos, lotes y
+    conos correctos, y 0 avisos en todos.
+  · Los renglones vacíos de GRIS PERLA se ignoran en silencio: 36 bultos leídos.
+  · Los 2 bultos de VERDE BOTELLA que rinden 7 conos se leen sin avisar.
+  · 440 códigos entre las 8 muestras y el archivo original: TODOS únicos.
+  · Carga real de punta a punta con dos de ellos contra la base limpia: el
+    producto se guarda vacío, la previa lee, la carga crea la presentación con el
+    peso promedio y el precio de lista, la mercancía entra al almacén matriz y los
+    bultos que rinden menos conservan sus 7 conos. Se limpió al terminar.
+
+DE PASO
+  Se vio que ya tiene capturados DOS "MARINO OSCURO", uno 2/30 y otro 1/30, con
+  precios distintos ($180 y $120). Es exactamente el caso que preguntó, y con las
+  columnas Calibre y Línea del listado se distinguen de un vistazo.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Calibre y línea en el listado de productos
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  Ver la línea y el calibre de cada producto en el listado. Y preguntó si para el
+  mismo color en otro calibre hay que crear otro producto.
+
+CAMBIO
+  MODIF   productos/productos-list.html
+          Columnas nuevas: Calibre y Línea, entre Material y Precio. Los datos ya
+          venían en la respuesta del listado (`grosor_calibre`, `linea`), solo no
+          se pintaban. Se muestran con "—" cuando están vacíos.
+
+LA RESPUESTA A SU PREGUNTA: SÍ, SON DOS PRODUCTOS
+  El calibre vive en `productos.grosor_calibre`, así que MARINO OSCURO 1/30 y
+  MARINO OSCURO 2/30 son dos productos. Se le explicó el porqué y la alternativa
+  (mover el calibre a la presentación), con la recomendación de NO cambiarlo:
+    · el precio por kilo suele cambiar con el calibre, y así cada producto tiene
+      su precio limpio en `precio_kg`;
+    · el vaciado masivo queda sin ambigüedad: el archivo es de UN calibre y se
+      sube al producto de ese calibre. Con dos calibres bajo el mismo producto,
+      "la presentación en kilos del producto" ya no sería una sola;
+    · el calibre se elige de la lista del material, así que no hay error de dedo.
+  Con las columnas nuevas el costo de tener dos renglones del mismo color es
+  bajo: se distinguen de un vistazo. Queda como decisión suya.
+
+SE LE AVISÓ DE UN DETALLE DE SUS DATOS
+  Capturó "MARINO OSCURO" con calibre 1/30, pero el archivo del proveedor se
+  llama "MARINO OSCURO 2-30" (calibre 2/30). Si va a cargar ese Excel ahí, el
+  calibre del producto no corresponde.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Base limpia para empezar a capturar en serio
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "limpia la base de datos para iniciar con las pruebas reales, solo no limpies
+  el personal y lo demás sí; lo que sea necesario igual no lo elimines".
+
+ANTES DE BORRAR
+  · Respaldo: db/dump_desarrollo_antes_de_limpiar.sql (176 filas, 69 KB).
+  · Inventario de las 46 tablas para ver qué había en cada una.
+  · Simulación con --dry-run para revisar la lista antes de ejecutarla.
+  · Se revisó a mano lo que parecía delicado. SE LE AVISÓ de una cosa: el periodo
+    de nómina #3 estaba en estado 'pagado' (19–25 julio). Los 4 pedidos eran del
+    25 de julio entre 13:03 y 13:06 con montos redondos ($25,000, $12,500,
+    $10,000, $6,250), o sea pruebas, y esa nómina se calculó sobre ellos. Se
+    borró con lo demás; el respaldo lo cubre si resultara ser real.
+
+SE BORRÓ (137 filas)
+  6 productos · 4 presentaciones · 80 bultos · 1 imagen · 1 remesa
+  5 renglones de inventario · 13 movimientos de kardex
+  4 pedidos con su detalle y sus 4 pagos
+  2 sesiones de caja con sus 4 movimientos
+  1 periodo de nómina con sus 5 recibos y 3 conceptos
+
+SE CONSERVÓ
+  PERSONAL, como lo pidió: 5 usuarios, 4 roles y las 5 configuraciones de
+  nomina_empleados (sueldo, comisión, hora extra). De paso se confirmó que la
+  nómina de "german vazques" YA está recapturada con 0.70% de comisión: la deuda
+  que dejó el INCIDENTE del 2026-07-25 está cerrada.
+
+  CONFIGURACIÓN, porque sin ella no se puede ni dar de alta un producto:
+  3 almacenes (con su matriz y su tienda en línea marcadas), 2 cajas,
+  3 materiales con sus calibres, 3 líneas, 2 unidades, 1 impuesto,
+  5 métodos de pago, el tipo de cliente Público y 5 paqueterías.
+
+CÓMO SE HIZO
+  NUEVO   backend/scripts/limpiar-para-pruebas.js
+          Las tablas van ENUMERADAS una por una, en orden de dependencias, y hay
+          dos listas explícitas: BORRAR y CONSERVAR. Nunca un "borra todo lo que
+          encuentres" —eso fue exactamente lo que causó el incidente del día
+          anterior—. Sin `--si` solo simula. Al terminar verifica que lo borrado
+          quedó en cero y lo conservado intacto, y reinicia los AUTO_INCREMENT
+          para que los ids empiecen en 1.
+
+PRUEBA DE HUMO CON LA BASE VACÍA
+  22 pantallas consultadas: productos, presentaciones, materiales, existencias,
+  alertas, panorama, kardex, desarmes, traspasos, almacenes, cajas, pedidos,
+  remesas, personal, nómina (empleados y periodos), los 4 reportes, tipos de
+  cliente y unidades. Ninguna revienta por falta de datos.
+  (Una "falla" del primer corrido era la ruta mal escrita en el guion: el reporte
+  es /reportes/ventas, no /reportes/ventas-dia.)
+
+CÓMO EMPEZAR A CAPTURAR
+  1. Admin → Productos → + Nuevo producto: nombre (el color), material, calibre y
+     el precio por kilo. Guardar. No pide SKU.
+  2. En el renglón del producto → botón "Presentaciones".
+  3. "Cargar del Excel del proveedor": se sube la lista de empaque, se revisa la
+     previa y al confirmar se crea la presentación, entran los bultos y la
+     mercancía al inventario.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Fuera el aviso de "bulto incompleto": así viene de fábrica
+-------------------------------------------------------------------------------
+
+QUÉ DIJO
+  Sobre el aviso "El bulto 00548087 rinde 7 conos y los demás 12: parece
+  incompleto": "es que así viene desde la fábrica, entonces así agrégalo aunque
+  según esté incompleto, no afecta en nada".
+
+  O sea: no es un defecto ni algo que revisar. El aviso era RUIDO —le señalaba un
+  problema donde no hay ninguno— y encima usaba una palabra equivocada.
+
+QUÉ SE QUITÓ
+  MODIF   remesas/service.js
+          fuera la detección de "bultos que rinden distinto que la mayoría". El
+          rendimiento real del bulto SE SIGUE GUARDANDO igual (7 conos en ese
+          caso), que es lo único que importa: el desarme lo lee de ahí.
+          Con el archivo real la previa ahora da 0 avisos, contra 1 antes.
+
+  La sección de avisos NO se eliminó: sigue sirviendo para los renglones que de
+  verdad se omiten (sin código, peso inválido, código repetido en el archivo).
+
+Y LA PALABRA, EN TODO EL PROYECTO
+  Se decía "bulto incompleto" en 10 lugares —comentarios, ayudas de pantalla,
+  CLAUDE.md, el comentario del esquema— para algo que es normal. Se cambió por
+  "bultos que rinden menos" y donde tocaba se dejó dicho que ASÍ VIENEN DE
+  FÁBRICA, para que nadie lo vuelva a tratar como defecto:
+    backend/src/modules/inventario/{model,routes}.js
+    frontend: remesas.ts · inventario.ts · inventario.html ·
+              producto-presentaciones.ts
+    CLAUDE.md (2 lugares) · db/schema_mysql.sql
+
+PRUEBAS
+  Se actualizaron dos guiones que daban por buena la palabra vieja:
+    · e2e-remesas.js: comprobaba "avisa del bulto incompleto". Ahora comprueba lo
+      contrario y lo que de verdad importa: que el bulto de 7 conos se lea SIN
+      avisar (7 conos, 0 avisos).
+    · e2e-trazabilidad.js: solo el texto de sus encabezados.
+  Regresión de las 7 suites, todas en verde. Build sin avisos.
+  Comprobado con el archivo real: 80 bultos, 1,527.5 kg, 0 avisos, y el bulto
+  00548087 sigue entrando con sus 10.75 kg y sus 7 conos.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · EL VACIADO MASIVO: el Excel llena las presentaciones del producto
+-------------------------------------------------------------------------------
+
+SE CERRÓ LA PREGUNTA QUE ESTUVO ABIERTA TODO EL DÍA
+  "para cargar las presentaciones por producto es con el archivo MARINO OSCURO
+  2-30.xlsx, ahí es donde se hace la carga masiva y se agrega al inventario, y
+  esos son los únicos datos que se utilizan; los campos o filas vacías no las
+  tomes en cuenta".
+
+  O sea: el "vaciado masivo" ES la lista de empaque que ya se leía. Lo que
+  faltaba era poder cargarla DESDE EL PRODUCTO, sin haber creado la presentación
+  a mano. La decisión de que un renglón es un BULTO (no una presentación) se
+  mantiene: 80 renglones siguen siendo 80 bultos de UNA presentación.
+
+EL FLUJO COMPLETO, YA CERRADO
+  1. Se guarda el producto con sus datos y su precio por kilo (sin SKU).
+  2. Presentaciones → "Cargar del Excel del proveedor" → se sube el archivo.
+  3. La vista previa muestra bultos, kilos, lotes y avisos. Nada se guarda.
+  4. Al confirmar: si el producto NO tiene presentación, SE CREA; se registran
+     los 80 bultos con su peso y lote; y entra la mercancía al inventario.
+
+  La presentación que se crea sola:
+    · SKU  = del nombre del producto ("MARINO OSCURO 2/30" → MARINO-OSCURO-2-30),
+             con contador si ya está ocupado
+    · tipo = 'paquete' si el producto es multipresentación, 'simple' si no
+    · peso = el PROMEDIO de los bultos del archivo (19.094 en el real)
+    · precio = el precio_kg de lista del producto
+  Todo editable después. Una segunda remesa reutiliza la presentación, no
+  duplica.
+
+BACKEND
+  MODIF   remesas/{service,routes}.js
+          POST /remesas acepta `producto_id` (además de `variante_id`) y resuelve
+          la presentación: busca la que se lleva en kilos y, si no hay, la crea.
+          _skuDesdeNombre() genera el SKU único.
+          Se RELAJÓ la guarda: antes exigía tipo 'paquete'; ahora también acepta
+          'simple' —también se inventaría en kilos— y solo rechaza 'cono', que va
+          en piezas.
+  MODIF   variantes/model.js   porSku() nuevo, para no repetir SKU
+  MODIF   remesas/service.js   el lector ignora explícitamente los renglones
+          vacíos (los del final y los huecos entre lotes) y no lee D ni E
+
+BUG PREEXISTENTE QUE DESTAPÓ LA PRUEBA
+  `productos/model.js → variantesDe()` NUNCA seleccionaba tipo_presentacion,
+  peso_kg, lote, origen_variante_id, piezas_por_origen ni modo_precio. Se
+  confirmó con git que no fue la limpieza del color: ya venía así.
+  Consecuencia: la pantalla de presentaciones (y antes el formulario) no podía
+  decir "Paquete de 19 kg" ni de dónde salía el precio de un cono —los campos
+  llegaban en undefined y nadie lo había notado. Se completó la consulta con esos
+  campos, la unidad de venta y los datos del paquete de origen.
+
+FRONTEND
+  MODIF   inventario.service.ts   confirmarRemesa acepta producto_id
+  MODIF   productos/producto-presentaciones.ts + .html
+          tarjeta "Cargar del Excel del proveedor": subir archivo, elegir almacén
+          (propone la matriz), vista previa con kilos/lotes/avisos, tabla de los
+          primeros 15 bultos con botón para ver los 80, y el comprobante con el
+          saldo antes y después.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-carga-por-producto.js
+  22 comprobaciones con el archivo REAL, todas en verde: el producto nace vacío;
+  la previa no guarda nada; cargar por producto crea la presentación con el SKU
+  derivado del nombre, tipo paquete, peso promedio 19.094 y el precio heredado;
+  entran los 1,527.5 kg con su movimiento de kardex y los 80 bultos; una segunda
+  remesa no duplica la presentación y el inventario acumula; las columnas de fecha
+  no aparecen en el resultado; un producto sin multipresentación recibe una
+  presentación 'simple'; y sin producto ni presentación da 422.
+
+  SE ACTUALIZÓ e2e-remesas.js: esperaba que una presentación 'simple' fuera
+  rechazada, y ese comportamiento cambió a propósito. Ahora comprueba que la
+  simple SÍ acepta remesa y que el CONO da 422 NO_ES_PAQUETE. La prueba estaba
+  desactualizada, no el código.
+
+  Regresión de las 7 suites, todas en verde. Build de producción sin avisos.
+
+PENDIENTE / NOTAS
+  · El peso de la presentación se fija con el PROMEDIO de la primera remesa. Si
+    la siguiente trae bultos de otro peso nominal, el promedio no se recalcula
+    (sería cambiar el precio del cono por detrás). Se corrige a mano.
+  · Nada de esto se ha probado en el navegador, y ya es la deuda más grande del
+    día: el escaneo con la pistola, el panel de cancelación, la pantalla de
+    presentaciones y ahora la carga masiva.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Limpieza completa del color: fuera la columna y la tabla
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  La limpieza completa que se le había ofrecido: borrar de verdad
+  `producto_variantes.color_id` y la tabla `colores`, no solo dejar de
+  capturarlos. Es la misma operación que se hizo con `materiales` /
+  `productos.material_id`: que "color" signifique UNA sola cosa.
+
+SE COMPROBÓ ANTES DE BORRAR
+  Tabla `colores` VACÍA (0 filas) y ninguna de las 3 variantes con `color_id`.
+  No se perdió ningún dato.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_quitar_color.sql
+          El ORDEN importa y por eso va en este:
+            1. Recrear v_stock_disponible SIN el color, y v_alertas_stock, que
+               hace SELECT * de la anterior y si no se toca se queda con la
+               columna vieja congelada.
+            2. Soltar la llave foránea (nombre autogenerado: se busca en
+               information_schema, no se asume `producto_variantes_ibfk_2`).
+            3. Soltar el índice idx_variantes_color.
+            4. Soltar la columna color_id.
+            5. DROP TABLE colores.
+          Idempotente, probada re-ejecutándola. YA APLICADA en "desarrollo".
+  MODIF   db/schema_mysql.sql   46 tablas (eran 47) y 4 vistas. Validado creando
+                                una base desde cero y consultando las vistas.
+
+BACKEND  (se limpió ANTES de aplicar la migración, para que nada consultara una
+          columna ya borrada)
+  MODIF   variantes/model.js     SELECT_BASE sin pv.color_id/col.nombre/
+                                 codigo_hex ni el LEFT JOIN; INSERT y UPDATE
+  MODIF   variantes/service.js   fuera color_id de crear y actualizar
+  MODIF   variantes/routes.js    fuera del schema de zod
+  MODIF   inventario/model.js    SELECT_STOCK sin color ni su JOIN
+  MODIF   productos/model.js     las variantes del producto sin color
+  MODIF   opciones/{controller,routes}.js   fuera el endpoint GET /opciones/colores
+
+FRONTEND
+  MODIF   catalogo.models.ts     Variante sin color_id/color/codigo_hex; Opcion
+                                 sin codigo_hex (solo lo usaba el catálogo de
+                                 colores)
+  MODIF   inventario.models.ts · reportes.models.ts   fuera el campo color
+  MODIF   catalogo.service.ts    opciones() ya no acepta 'colores'
+  MODIF   tienda/producto-detalle.html    fuera el "{{ v.color }} · " que nunca
+                                          se cumplía
+  MODIF   admin/reportes.html · admin/inventario.html   fuera el sufijo de color
+
+PRUEBAS
+  13 comprobaciones contra el servidor real, todas en verde: /opciones/colores da
+  404 y los otros tres lookups siguen bien; el listado de variantes no trae color
+  ni codigo_hex; el stock, el detalle del producto, los reportes y la vista
+  v_stock_disponible consultan sin error; y el alta completa —producto,
+  presentación, cono, inventario y VENTA— funciona de punta a punta.
+  Regresión de las 6 suites, todas en verde. Build de producción sin avisos.
+  Barrido final: 0 rastros de color_id / codigo_hex / colores en todo el
+  proyecto (backend, frontend y esquema).
+
+  OJO: dos "fallas" del primer corrido eran rutas mal escritas en el guion (el
+  stock es GET /inventario, no /inventario/stock, y no existe un módulo
+  /catalogo: la tienda usa /productos). El código estaba bien.
+
+PENDIENTE / NOTAS
+  · Aplicar la migración en ambientes distintos a "desarrollo". Esta SÍ borra
+    datos, así que conviene respaldar antes aunque las tablas estén vacías.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · El COLOR es el producto · botón de presentaciones en el listado
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "quisiera que para agregar presentaciones tuviera un boton aqui en vez de que
+  cuando le de editar producto — y el color es el producto".
+
+1 · EL COLOR ES EL PRODUCTO
+  Sus productos se llaman CARAMEL, HUESO, TR1, TR1GRAFITO, rojo, azul: cada
+  COLOR es un producto. El color NO es un atributo de la presentación.
+
+  Se comprobó en los datos antes de tocar nada: la tabla `colores` está VACÍA (0
+  registros) y ninguna de las 3 variantes tiene `color_id`. El campo nunca se
+  usó, así que quitarlo de la captura no pierde nada.
+
+  MODIF   productos/producto-presentaciones.ts + .html
+          fuera el selector "Color", su columna en la tabla de presentaciones, el
+          campo del formulario, el envío y la carga de la lista de colores.
+  MODIF   productos/productos-list.html
+          la columna "Nombre" se rotula COLOR y "Categoría" pasa a MATERIAL, que
+          es como se llama en el resto del panel (CLAUDE.md ya lo decía: la tabla
+          se llama `categorias` pero se rotula "Material"). El listado era el
+          único lugar que seguía diciendo "Categoría".
+
+  NO se eliminó la columna `producto_variantes.color_id` ni la tabla `colores`:
+  quedan vacías sin estorbar. Eliminarlas sería el equivalente a lo que se hizo
+  con `materiales`, pero toca los JOIN de varias consultas y NO se pidió. La
+  tienda pública sigue teniendo un `@if (v.color)` que ahora nunca se cumple.
+
+2 · BOTÓN DE PRESENTACIONES EN EL LISTADO
+  Antes había que entrar a "Editar producto" para llegar a las presentaciones.
+  Ahora cada renglón del listado tiene su botón "Presentaciones" directo.
+
+  De paso, el listado gana la columna PRECIO (el precio_kg del producto, que se
+  agregó hoy y no se veía en ninguna parte) y pierde la columna "Unidad", que
+  ahora va pegada al precio: "$200/kg". El buscador dice "Color o descripción".
+
+PRUEBAS
+  9 comprobaciones contra el servidor real, todas en verde: el listado devuelve
+  nombre, material, precio_kg y unidad —lo que pinta la tabla nueva—; una
+  presentación se crea SIN color y sin precio, con color_id en null y heredando
+  los $210 del producto; y el detalle del producto sigue completo.
+  Regresión de las 6 suites, todas en verde. Build de producción sin avisos.
+
+PENDIENTE / NOTAS
+  · Si se quiere la limpieza completa del color (borrar `colores` y
+    `producto_variantes.color_id`, como se hizo con `materiales`), hace falta una
+    migración y tocar los SELECT de variantes y la tienda pública. Hoy solo se
+    dejó de capturar.
+  · `variante_codigos` se diseñó como "códigos agrupados por color"; ahora que el
+    color es el producto, esa agrupación es simplemente "bultos de la
+    presentación". El comentario del esquema ya se había actualizado al hacer las
+    remesas.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Repaso de detalles: textos que quedaron mintiendo
+-------------------------------------------------------------------------------
+
+QUÉ SEÑALÓ
+  El aviso de "producto guardado" traía un botón "Volver a productos" que sobra,
+  porque el "← Volver" ya está arriba. Y pidió cuidar mucho esos detalles, "en lo
+  que ya está y en lo que falta".
+
+LO QUE ENCONTRÉ AL REVISAR  (todo era daño de mis propios cambios del día)
+  1. El aviso decía "...o aquí abajo una por una", pero las presentaciones se
+     habían movido a otra pantalla ese mismo día: ya no hay nada abajo.
+  2. En la pantalla de presentaciones: "Marca Multipresentación ARRIBA para
+     manejar paquetes y conos" — esa casilla ahora está en el producto, en otra
+     pantalla.
+  3. La interfaz prometía "el vaciado masivo del Excel" en CUATRO lugares y esa
+     función NO EXISTE todavía. Peor que no mencionarla: manda al usuario a
+     buscar un botón que no está. Los textos ahora dicen dónde se capturan HOY.
+  4. El campo "Precio público por kilo" sonaba obligatorio, pero desde el cambio
+     de precio_kg puede heredarse. Ahora el placeholder muestra el precio del
+     producto y la ayuda dice que si se deja vacío lo toma.
+  5. `faltaEnVariante()` seguía exigiendo precio siempre, así que el formulario
+     bloqueaba antes de que el backend pudiera heredarlo. Se alineó con el
+     backend: solo exige si no hay ninguno de los dos.
+  6. Restos de la extracción en producto-form.ts: 6 imports sin uso, un
+     comentario JSDoc huérfano sin su método, la señal `colores` y su carga en el
+     forkJoin (eran para el selector de la variante), y dobles líneas en blanco.
+     Quedó en 221 líneas.
+
+CAMBIOS
+  MODIF   productos/producto-form.ts + .html
+  MODIF   productos/producto-presentaciones.ts + .html
+
+  Build de producción sin ningún aviso (antes marcaba CantidadPipe sin usar).
+
+REGLA PARA NO REPETIRLO
+  Al mover una sección de pantalla, los textos que la rodean quedan mintiendo:
+  "aquí abajo", "arriba", "en esta pantalla". Hay que buscarlos EXPLÍCITAMENTE
+  (grep de "abajo|arriba|aquí") y releer los mensajes de éxito, que es donde
+  menos se mira. Y nunca prometer en la interfaz una función que no existe: si
+  todavía no está, el texto dice lo que se puede hacer hoy.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · El alta de producto: solo el hilo, con su precio por kilo
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "en productos solo quiero llenar eso y no mas ni los sku ni nada y ademas
+  agrega el precio por kg en ese formulario".
+
+1 · PRECIO POR KILO EN EL PRODUCTO
+  El precio vivía SOLO en la variante, y la tienda no lo piensa así: el precio es
+  del hilo ("MARINO OSCURO 2/30 cuesta $200 el kilo"), no de cada presentación.
+
+  NUEVO   db/migrations/2026-07_producto_precio_kg.sql
+          productos.precio_kg DECIMAL(12,2). Los productos que ya tenían
+          presentaciones heredaron el precio de su paquete, para que la columna
+          no arrancara vacía (azul → 250, rojo → 120).
+          Idempotente. YA APLICADA en "desarrollo".
+  MODIF   db/schema_mysql.sql  (validado creando una base desde cero)
+
+  NO reemplaza a producto_variantes.precio: ese sigue siendo el que se cobra y el
+  que congela el pedido. El del producto es el precio de LISTA, y las
+  presentaciones nuevas lo HEREDAN si no se les captura uno. La prelación al
+  vender no se toca: precio del tipo > precio_oferta > precio de la variante.
+
+  MODIF   productos {model,service,routes}   precio_kg de punta a punta
+  MODIF   variantes/service.js
+          _exigirPrecio() acepta el producto y usa su precio_kg como respaldo. El
+          error ahora dice qué hacer: "captúralo en la presentación o pon el
+          precio por kilo del producto".
+
+2 · EL FORMULARIO SE QUEDÓ SOLO CON EL HILO
+  Las presentaciones (SKU) y las imágenes salieron del formulario del producto y
+  se fueron a su propia pantalla: /admin/productos/:id/presentaciones.
+
+  NUEVO   frontend/.../productos/producto-presentaciones.ts + .html
+          Todo lo de variantes, bultos, precios por tipo de cliente e imágenes,
+          tal cual estaba, con un encabezado que muestra el producto y su precio
+          de lista. Se llega con el botón "Administrar presentaciones".
+  MODIF   producto-form.ts + .html
+          El formulario quedó en 146 líneas de HTML (eran 504) y 236 de TS (eran
+          571): solo los datos del hilo + el precio por kilo. Se borró el código
+          que quedó muerto en vez de dejarlo ahí.
+  MODIF   admin.routes.ts   la ruta nueva ANTES de 'productos/:id'
+
+DECISIÓN: NO se quitó la captura de presentaciones del sistema, solo del
+  formulario de producto. Quitarla del todo habría dejado la tienda sin forma de
+  crear nada vendible, porque el vaciado masivo del Excel TODAVÍA NO EXISTE.
+
+PRUEBAS
+  11 comprobaciones contra el servidor real, todas en verde: el producto se
+  guarda con precio y sin presentaciones; una presentación creada SIN precio
+  hereda los $200 del producto; una con precio propio lo respeta ($250); el cono
+  calculado sigue saliendo del paquete (200 × 19 / 12 = 316.67); sin precio en
+  ninguno de los dos da 422 con un mensaje que dice qué hacer; y cambiar el
+  precio del producto NO altera las presentaciones ya creadas.
+  Regresión de las 6 suites, todas en verde. Build de producción sin avisos.
+
+PENDIENTE / NOTAS
+  · El vaciado masivo del Excel sigue sin existir, y ahora el formulario ya
+    apunta a él en su texto. Mientras no esté, las presentaciones se capturan en
+    la pantalla nueva.
+  · Cambiar el precio del producto no propaga a las presentaciones existentes: es
+    a propósito (no se les toca el precio a espaldas del usuario), pero si algún
+    día se quiere "actualizar todas", hace falta un botón explícito.
+  · La pantalla de presentaciones no se ha abierto en el navegador: solo compila.
+    Es un archivo nuevo armado moviendo código, así que ahí conviene mirar.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Devolver en OTRA presentación + botón de cancelar en el panel
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "en cuanta mercancia regresa puede ser coneado, por ejemplo entrego paquete y
+  me da coneado, ahi se hace el cambio" — y que se cree el botón de cancelar.
+  El caso: se entrega el PAQUETE y el cliente devuelve los CONOS porque ya lo
+  desarmó. La mercancía vuelve, pero no en la forma en que salió.
+
+CÓMO QUEDÓ
+  Al cancelar o devolver se puede indicar en qué presentación regresa cada
+  línea. La equivalencia la calcula el BACKEND (es inventario, no se confía al
+  cliente) y la propone en pantalla:
+
+      paquete → conos:  kg / peso_del_paquete × piezas_por_origen
+      conos → paquete:  piezas / piezas_por_origen × peso_del_paquete
+
+      vendí 19 kg de paquete  →  regresan 12 conos   (el paquete NO vuelve)
+      vendí 12 conos          →  regresa 19 kg       (los conos NO vuelven)
+
+  · La cantidad propuesta es EDITABLE: si regresan 10 conos de 12, se acepta y
+    el kardex asienta el equivalente que se esperaba, para que se note.
+  · Solo se admiten presentaciones emparentadas (el cono de ese paquete o su
+    paquete de origen). Otra cosa da 422 PRESENTACION_INCOMPATIBLE.
+  · Sin indicar nada, regresa tal como se vendió (comportamiento anterior).
+  · Un pedido devuelto en OTRA presentación no se puede reactivar: 409
+    DEVUELTO_EN_OTRA_PRESENTACION. El paquete ya no existe, son conos; deshacerlo
+    solo dejaría el inventario mintiendo. Se avisa que hay que ajustar a mano.
+  · El motivo del kardex lo explica: "se vendió 19 de … · Paquete 19kg y regresó
+    como TMPD-CONO (equivalente 12)".
+
+BACKEND
+  MODIF   pedidos/model.js
+          _alternativasDeDevolucion() calcula en qué puede regresar y cuánto;
+          _resolverRetorno() valida el parentesco y decide qué reponer.
+          El GET del pedido devuelve `alternativas_devolucion` por línea, para
+          que la pantalla solo pinte opciones sin hacer aritmética.
+  MODIF   pedidos/routes.js       estadoSchema acepta `devoluciones[]`
+  MODIF   pedidos/service.js + controller.js   pasan el arreglo
+
+FRONTEND · EL BOTÓN
+  MODIF   core/models/ventas.models.ts   AlternativaDevolucion, DevolucionLinea
+  MODIF   core/services/ventas.service.ts   cambiarEstado con devoluciones
+  MODIF   features/admin/pedidos/pedido-detalle.ts + .html
+          Elegir "cancelado" o "devuelto" ya no aplica de golpe: abre un panel
+          de confirmación que dice a qué almacén regresa la mercancía, permite
+          cambiar la presentación por línea (con la cantidad equivalente
+          propuesta y editable) y avisa cuánto efectivo sale de la caja.
+          El aviso del efectivo es informativo; el monto real lo calcula el
+          backend con los pagos del pedido.
+
+BUG PROPIO, ENCONTRADO POR LA PRUEBA
+  La primera versión ignoraba `devoluciones` por completo: la consulta de las
+  líneas era `SELECT variante_id, cantidad, descripcion` —sin `id`—, así que
+  `l.id` era undefined y nunca casaba con `detalle_id`. El paquete volvía entero
+  y en silencio. Se agregó `id` al SELECT. Lección: cuando algo "no hace nada",
+  revisar primero que los datos con que se compara existan.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-devolucion-presentacion.js
+  16 comprobaciones contra el servidor real, todas en verde: el pedido ofrece el
+  cono con la equivalencia 19 kg → 12 conos; devolver coneado deja el paquete sin
+  tocar y mete 12 conos; el kardex explica el cambio; no se puede reactivar;
+  devolver 10 de 12 se acepta y queda asentado el equivalente; una presentación
+  ajena da 422 sin mover nada ni cambiar el estado; sin indicar nada el paquete
+  vuelve entero; y al revés, 12 conos regresan como 19 kg de paquete.
+
+  OJO: dos fallas del primer corrido eran del GUION, no del código —los conos de
+  precio calculado dan importes con centavos (316.67 × 12 = 3,800.04) y el pago
+  de 3,800 se rechazaba por 4 centavos. Al probar con conos calculados hay que
+  pagar con holgura y dejar que el POS calcule el cambio.
+
+  Regresión de las 6 suites: e2e-remesas (26), e2e-trazabilidad (14),
+  e2e-bultos-estado (21), e2e-cancelacion (16), e2e-cancelacion-caja (18) y
+  e2e-devolucion-presentacion (16). Todas en verde. Build de producción limpio.
+
+PENDIENTE / NOTAS
+  · La devolución con cambio de presentación NO registra una conversión en
+    variante_conversiones: solo repone en la presentación indicada. El kardex lo
+    explica en el motivo, pero el desarme "implícito" no queda como documento.
+    Si algún día se quiere cuadrar conversiones contra desarmes, hay que verlo.
+  · El panel muestra el efectivo con los pagos que ya trae el pedido. Si el
+    pedido tuviera pagos mixtos raros, el número de pantalla podría diferir del
+    que calcula el backend; el que manda es el del backend.
+  · Nada de esto se ha probado en el navegador: solo compila y pasa contra los
+    endpoints.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Cancelar una venta saca el efectivo de la caja
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  Confirmó la primera opción de las tres que se le plantearon: al cancelar, el
+  dinero SALE de la caja registrando el movimiento, para que el corte cuadre.
+
+NO HIZO FALTA MIGRACIÓN
+  El esquema ya tenía todo: movimientos_caja.tipo admite 'devolucion' y
+  caja/model.js ya lo resta en el corte (SIGNO_CAJA = {venta:1, ingreso:1,
+  retiro:-1, devolucion:-1}). También existía pagos.estado = 'reembolsado'.
+  Se revisó ANTES de escribir código; insertar el movimiento fue suficiente.
+
+CÓMO QUEDÓ
+      vender     → +$1,000 'venta'       el corte espera $1,000
+      cancelar   → −$1,000 'devolucion'  el corte espera $0
+      reactivar  → +$1,000 'ingreso'     el corte espera $1,000
+
+  · Solo el EFECTIVO. Lo pagado con tarjeta no toca el cajón —lo reembolsa el
+    banco— pero el pago igual pasa a 'reembolsado'.
+  · Al reactivar entra como 'ingreso' y NO como 'venta', para no contarlo dos
+    veces en los reportes de ventas del día.
+  · EL TURNO YA CERRADO NO SE TOCA. Su corte está cuadrado y firmado: si la
+    venta fue en un turno cerrado, el dinero sale del turno ABIERTO de la misma
+    caja, que es de donde de verdad se saca el efectivo.
+  · Si no hay ningún turno abierto → 409 CAJA_CERRADA con el monto en el
+    mensaje, y NO se cancela nada: ni inventario ni bultos ni estado. Todo o
+    nada. Es preferible pedir que abran la caja a perder el registro del dinero.
+
+BACKEND
+  MODIF   pedidos/model.js
+          _efectivoDelPedido() y _sesionParaDevolucion() nuevas; cambiarEstado()
+          mueve el dinero ANTES de tocar inventario, para que un 409 por caja
+          cerrada no deje nada movido.
+
+BUG PROPIO, ENCONTRADO Y CORREGIDO EN LA MISMA SESIÓN
+  La primera versión no reingresaba el dinero al reactivar. _efectivoDelPedido()
+  buscaba pagos en estado 'completado', pero al cancelar los había dejado en
+  'reembolsado', así que calculaba $0 y no insertaba nada. Se corrigió pasando
+  el estado según la dirección: 'completado' al cancelar, 'reembolsado' al
+  reactivar. Lo detectó la prueba, no se fue a producción.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-cancelacion-caja.js
+  18 comprobaciones contra el servidor real, todas en verde: la venta entra al
+  corte; cancelar lo saca y el corte ya no lo cuenta; el pago queda reembolsado;
+  reactivar lo reingresa como 'ingreso'; la tarjeta no mueve el cajón; con la
+  caja cerrada da 409 y NO se cancela ni se repone inventario; y con un turno
+  nuevo abierto el dinero sale de ese turno mientras el cerrado sigue cuadrado.
+
+  OJO PARA EL FUTURO: dos "fallas" del primer corrido eran de la ARITMÉTICA DEL
+  GUION, no del código —las expectativas de stock no tomaban en cuenta las
+  reposiciones de los pasos anteriores. Los saldos 487 y 490 eran correctos. Al
+  escribir estas pruebas hay que rastrear el saldo acumulado, no recalcularlo
+  desde el inicial.
+
+  Regresión de las 5 suites: e2e-remesas (26), e2e-trazabilidad (14),
+  e2e-bultos-estado (21), e2e-cancelacion (16) y e2e-cancelacion-caja (18),
+  todas en verde. La base quedó como estaba.
+
+PENDIENTE / NOTAS
+  · No hay pantalla para cancelar: se hace con
+    PATCH /api/v1/pedidos/:id/estado {"estado":"cancelado"}. El panel de pedidos
+    no tiene el botón, así que hoy esto solo se puede usar por API.
+  · El cambio entregado al cliente nunca se registró como movimiento de caja (el
+    ingreso neto ya venía descontado), así que la devolución tampoco lo
+    considera. Es coherente con cómo se vendía.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Cancelar un pedido regresa la mercancía a donde se vendió
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  "cancelar un pedido que regrese de donde se sacó y se agregue al inventario
+  donde se vendió para tenerlo ahí".
+
+QUÉ PASABA
+  cambiarEstado() solo cambiaba la palabra del estado. Cancelar NO reponía nada:
+  la mercancía quedaba descontada para siempre aunque el cliente no se la
+  hubiera llevado. Venía así desde antes de los bultos y ya se había anotado
+  como deuda dos entradas atrás.
+
+CÓMO QUEDÓ
+  La mercancía vuelve al almacén DE DONDE SALIÓ, que es `pedidos.almacen_id`:
+  el de la caja que vendió, o el de la tienda en línea. Nunca a otro.
+
+      vender      → −18.650 kg de Tienda A   (salida en el kardex)
+      cancelar    → +18.650 kg a  Tienda A   (entrada, "Cancelación de POS-…")
+      reactivar   → −18.650 kg de Tienda A   (salida, "Reactivación de POS-…")
+
+  · Aplica igual a 'cancelado' y a 'devuelto'; el kardex distingue el motivo.
+  · Cancelar dos veces NO repone doble: se compara el estado anterior contra el
+    nuevo, no el estado destino a secas.
+  · Reactivar vuelve a descontar y EXIGE existencias: si ya no hay, 409
+    STOCK_INSUFICIENTE y el pedido no se mueve.
+  · El UPDATE del estado del pedido va AL FINAL de la transacción, para que si
+    algo falla el pedido no quede movido sin su movimiento de inventario.
+  · Los bultos escaneados vuelven a 'disponible' (ya venía de la entrada previa).
+
+BACKEND
+  MODIF   pedidos/model.js       cambiarEstado() repone o vuelve a descontar,
+                                 con su movimiento en el kardex
+  MODIF   pedidos/service.js + controller.js
+                                 pasan el usuario, para que quede firmado quién
+                                 canceló en el movimiento de inventario
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-cancelacion.js
+  16 comprobaciones contra el servidor real, todas en verde. Se montó con DOS
+  almacenes a propósito, para comprobar que solo se toca el que vendió:
+    · vender baja A y deja B intacto
+    · cancelar devuelve A a su saldo original y B sigue intacto
+    · el kardex queda con las dos patas (salida −18.650 / entrada +18.650), la
+      entrada dice "Cancelación de POS-…" y entró al almacén correcto
+    · cancelar dos veces no repone doble
+    · reactivar vuelve a descontar
+    · devolver también regresa la mercancía, con su propio motivo
+    · sin existencias no se reactiva: 409, el pedido NO cambia de estado y el
+      inventario no se mueve
+  Regresión: e2e-remesas (26), e2e-trazabilidad (14) y e2e-bultos-estado (21)
+  siguen en verde. La base quedó como estaba.
+
+PENDIENTE / NOTAS
+  · LA CAJA NO SE AJUSTA. Si se cancela una venta de mostrador pagada en
+    efectivo, el movimiento de caja tipo 'venta' sigue ahí y el corte seguirá
+    contando ese dinero. Devolver efectivo es una decisión de negocio (¿sale de
+    la caja? ¿queda como nota de crédito?) y no se tocó sin preguntar. Es el
+    siguiente hueco de este flujo.
+  · Un pedido cancelado repone al almacén original aunque la mercancía se haya
+    traspasado a otra sucursal mientras tanto. El bulto no sabe dónde está.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · El bulto se consume UNA vez: disponible / vendido / desarmado
+-------------------------------------------------------------------------------
+
+EL AGUJERO QUE SE CERRÓ
+  Un bulto es una pieza física única, pero se podía escanear uno ya vendido o ya
+  desarmado y el sistema lo aceptaba: lo único que frenaba era el saldo en kilos
+  de la variante, y ese saldo no sabe QUÉ bultos lo componen. Se podía cobrar
+  dos veces el mismo bulto mientras hubiera kilos en el almacén.
+
+LA MÁQUINA DE ESTADOS
+      disponible ──vender──→ vendido ──cancelar/devolver──→ disponible
+           │                    ↑                               │
+           │                    └──── reactivar el pedido ───────┘
+           └──desarmar──→ desarmado   (no vuelve: ya son conos)
+
+  Cancelar o devolver un pedido regresa sus bultos a disponible (el bulto
+  volvió). Reactivarlo los retoma, pero SOLO los que nadie más haya tomado
+  mientras estaba cancelado.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_bultos_estado.sql
+          variante_codigos gana estado (CHECK con los 3 valores), consumido_en,
+          consumido_tipo ('pedido'|'conversion') y consumido_id.
+          La migración NO arranca mintiendo: marca como vendidos los bultos que
+          ya tenían rastro en pedido_detalle_bultos (excluyendo pedidos
+          cancelados o devueltos) y como desarmados los que aparecen en
+          variante_conversiones.codigo_bulto.
+          Idempotente, probada re-ejecutándola. YA APLICADA en "desarrollo".
+  MODIF   db/schema_mysql.sql   (47 tablas; validado creando una base desde cero)
+
+BACKEND
+  MODIF   pedidos/model.js
+          · la venta bloquea cada bulto con SELECT … FOR UPDATE, exige que esté
+            disponible y lo marca vendido con el pedido de referencia. El 409
+            revienta la transacción completa: no hay media venta.
+          · cambiarEstado() pasó a ser transaccional para poder liberar o
+            retomar los bultos según el estado nuevo.
+  MODIF   inventario/model.js
+          el desarme valida el bulto ANTES de tocar saldos y lo marca desarmado
+  MODIF   variantes/model.js
+          codigosDe() y bultoPorCodigo() devuelven el estado y el folio del
+          pedido que consumió el bulto
+
+FRONTEND
+  MODIF   catalogo.models.ts   EstadoBulto; VarianteCodigo con estado y
+                               consumido_*; LoteDeBultos con disponibles/kg
+  MODIF   inventario.service.ts   CodigoResuelto trae el estado
+  MODIF   pos/pos.ts           avisa al escanear un bulto ya consumido, sin
+                               esperar a que falle el cobro
+  MODIF   inventario.ts        el desarme rechaza un bulto no disponible
+  MODIF   producto-form.ts + .html
+          los bultos consumidos se ven tachados y en gris, con su estado y en
+          qué pedido se fueron (el histórico se conserva, no se borra). El
+          resumen ahora dice "X de Y bultos disponibles" y los kilos SIN VENDER,
+          que es el dato que sirve.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-bultos-estado.js
+  21 comprobaciones contra el servidor real con la remesa REAL, todas en verde:
+    · los 80 bultos nacen disponibles
+    · vender uno lo marca vendido y guarda en qué pedido se fue
+    · 409 BULTO_NO_DISPONIBLE al venderlo otra vez, y NO queda pedido a medias
+    · 409 al desarmar un bulto ya vendido, y al vender uno ya desarmado
+    · desarmar marca desarmado y no se puede repetir
+    · cancelar el pedido lo libera y se puede volver a vender
+    · reactivar el pedido cancelado lo retoma
+    · DOS CAJAS pidiendo el mismo bulto a la vez: solo una pasa (201 vs 409) y
+      queda un único rastro de venta
+    · una venta a granel sin escanear bultos sigue funcionando
+  Regresión: e2e-remesas (26) y e2e-trazabilidad (14) siguen en verde.
+  Compila y el build de producción queda limpio. La base quedó como estaba.
+
+PENDIENTE / NOTAS
+  · CUIDADO: cancelar un pedido libera el bulto pero NO repone el saldo en
+    kilos. Eso ya era así antes de los bultos (cambiarEstado nunca repuso
+    inventario), así que puede quedar un bulto disponible sin existencias que lo
+    respalden. El ajuste sigue siendo manual. Si se quiere cerrar, hay que
+    decidir primero si cancelar debe reponer inventario y en qué almacén.
+  · El bulto NO sabe en qué almacén está: variante_codigos no tiene almacen_id y
+    los traspasos se hacen por kilos. Si se traspasan kilos a una sucursal, los
+    bultos siguen "disponibles" sin decir dónde. Para el mostrador funciona
+    porque se escanea lo que se tiene en la mano.
+  · Aplicar la migración en ambientes distintos a "desarrollo".
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · Rastro de los bultos: a quién se vendió y cuál se desarmó
+-------------------------------------------------------------------------------
+
+LAS DOS COSAS QUE SE CERRARON
+  Eran los dos pendientes que quedaron anotados el mismo día:
+    1. El pedido guardaba la cantidad total en kilos pero no DE QUÉ BULTOS
+       salió, así que no se podía responder "¿de qué lote era el hilo que le
+       vendimos a este cliente?".
+    2. El desarme pedía el peso a mano y —lo más grave— generaba SIEMPRE los
+       conos nominales. Desarmar el bulto incompleto (10.75 kg, rinde 7) daba
+       de alta 12 conos e inflaba el inventario en 5 piezas que no existen.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-07_bultos_trazabilidad.sql
+          · tabla pedido_detalle_bultos: qué bultos formaron cada línea del
+            pedido, con código, peso y lote CONGELADOS (igual que
+            pedido_detalle.precio_unitario) y una referencia viva al bulto que
+            queda en NULL si el bulto se borra —el histórico no cambia.
+          · variante_conversiones.codigo_bulto: cuál bulto se desarmó.
+          Idempotente, probada re-ejecutándola. YA APLICADA en "desarrollo".
+
+BACKEND
+  MODIF   pedidos/model.js     el detalle guarda sus bultos dentro de la MISMA
+                               transacción de la venta; al obtener un pedido se
+                               devuelven agrupados por línea
+  MODIF   pedidos/routes.js    items[].bultos opcional (la tienda en línea y las
+                               ventas a granel no escanean bultos)
+  MODIF   inventario/model.js  el desarme acepta `conos` reales y guarda
+                               codigo_bulto; sin esos datos sigue usando los
+                               nominales, así que nada cambia para quien no
+                               escanea
+  MODIF   inventario/routes.js schema con `conos` y `codigo_bulto`
+
+FRONTEND
+  MODIF   ventas.service.ts + ventas.models.ts   ItemPedido.bultos,
+                                                 PedidoLinea.bultos, BultoVendido
+  MODIF   pos/pos.ts                el cobro manda el rastro de los bultos
+  MODIF   pedidos/pedido-detalle    el detalle del pedido dice qué bultos se
+                                    entregaron, con su peso y su lote
+  MODIF   inventario/inventario.ts + .html
+          Campo para ESCANEAR el bulto a desarmar: precarga los kilos, los conos
+          reales y elige solo el cono que sale de ese paquete. Botón para volver
+          a los valores nominales. Campo "Conos reales" manual por si no hay
+          lector, y la vista previa marca cuando las piezas van ajustadas.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-trazabilidad.js   (guardado en el repo)
+  14 comprobaciones contra el servidor real con la remesa REAL, todas en verde:
+    · la venta de 2 bultos (18.650 + 18.800 = 37.450 kg) guarda los dos con su
+      lote, y los pesos suman exactamente la cantidad vendida
+    · la consulta "de qué lote fue lo que le vendí" funciona
+    · BORRANDO el bulto de la base, el pedido sigue diciendo qué se entregó y la
+      referencia viva queda en NULL sin romper nada
+    · el bulto incompleto se desarma con 10.75 kg y 7 conos, el inventario de
+      conos sube 7 y NO 12, y queda el rastro de cuál bulto fue
+    · sin escanear, el desarme sigue dando 19.094 kg y 12 conos
+  Compila y el build de producción queda limpio. La base quedó como estaba.
+
+PENDIENTE / NOTAS
+  · Los bultos NO se marcan como consumidos al venderse o desarmarse. Si se
+    escanea un bulto ya vendido, el POS lo aceptará y solo el stock de la
+    variante frenará la venta. Para cerrarlo haría falta un estado por bulto
+    (disponible / vendido / desarmado); no se hizo porque no se pidió y toca
+    varios flujos.
+  · Aplicar la migración en ambientes distintos a "desarrollo".
+  · La captura por lector físico sigue sin probarse en el navegador, tanto en el
+    POS como en el desarme.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · El mostrador cobra por lo que pesa EL BULTO escaneado
+-------------------------------------------------------------------------------
+
+POR QUÉ IMPORTA
+  Los bultos de una misma remesa pesan distinto: en el archivo real van de
+  10.750 a 19.800 kg contra un nominal de 19.094. El POS resolvía el código a
+  su presentación pero agregaba CANTIDAD 1, así que el peso real no se usaba
+  para nada. En el bulto incompleto (00548087, 10.75 kg) cobrar por el nominal
+  le habría costado al cliente $1,668.80 DE MÁS en una sola línea.
+  Este era el pendiente que hacía valiosa la decisión de registrar los bultos
+  uno por uno; sin él, guardarlos no servía para cobrar.
+
+BACKEND
+  NUEVO   GET /api/v1/variantes/resolver/:codigo
+          Resuelve un código escaneado y devuelve { variante, bulto }. `bulto`
+          es null cuando el código es el PRINCIPAL de la presentación (no es un
+          bulto y no tiene peso propio) y 404 cuando el código no existe, que es
+          la señal para que el POS caiga a la búsqueda por texto.
+          Se montó ANTES de '/:id' para que "resolver" no se lea como un id.
+  MODIF   variantes/model.js     bultoPorCodigo() nuevo
+  MODIF   variantes/service.js   resolverCodigo() nuevo
+  MODIF   variantes/controller.js + routes.js
+
+FRONTEND
+  MODIF   core/models/ventas.models.ts
+          ItemCarrito gana `bultos: BultoEnCarrito[]`: qué bultos forman la
+          cantidad, con su código y su peso. La cantidad es la SUMA de pesos
+          reales, no un múltiplo del nominal.
+  MODIF   core/services/inventario.service.ts   resolverCodigo()
+  MODIF   features/admin/pos/pos.ts
+          escanearOBuscar(): intenta primero resolver lo teclado como código
+          exacto; si es un bulto lo agrega con SU peso, si no cae a buscar por
+          nombre o SKU. Dos bultos distintos SUMAN sus pesos (18.65 + 18.80 =
+          37.45 kg). El MISMO bulto escaneado dos veces NO se cobra doble: es
+          una pieza física única, así que avisa y no suma.
+  MODIF   features/admin/pos/pos.html
+          el ticket muestra de qué bultos salió cada cantidad y el buscador
+          explica que al escanear se cobra por el peso de ese bulto
+
+PRUEBAS
+  11 comprobaciones contra el servidor real con la remesa REAL cargada, todas
+  en verde: escanear 00531332 devuelve 18.650 kg (no el nominal 19.094) con su
+  lote, sus conos y el folio de su remesa; el incompleto devuelve sus 10.750 kg
+  y 7 conos; el código principal resuelve la presentación con bulto en null;
+  un código inexistente da 404; y dos bultos distintos suman 37.45 kg.
+
+PENDIENTE / NOTAS
+  · La lógica del CARRITO (sumar bultos, no cobrar dos veces el mismo) se
+    verificó compilando y con los datos que devuelve el endpoint, NO en el
+    navegador con el lector físico. Falta esa prueba de mostrador.
+  · El pedido guarda la cantidad total en kilos; NO guarda cuáles bultos la
+    formaron. Si algún día se quiere saber qué bulto se le vendió a quién, hay
+    que agregar la relación en pedido_detalle.
+  · El DESARME sigue pidiendo el peso a mano (acepta `kg` desde antes). Ahora
+    que existe resolver/:codigo, lo natural es que escanear el bulto precargue
+    su peso y sus conos. No está hecho.
+
+
+-------------------------------------------------------------------------------
+ 2026-07-26 · El producto se guarda sin presentaciones, sin regaños
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ
+  Al dar de alta un producto quiere llenar SOLO los datos del producto (nombre,
+  material, unidad, línea, calibre, banderas) y guardar. El SKU, el precio y lo
+  demás los va a llenar con el vaciado masivo del Excel.
+
+QUÉ ESTABA PASANDO  (importante: no era un bug de backend)
+  Guardar sin presentaciones YA FUNCIONABA: guardar() solo valida el formulario
+  del producto y no manda variantes. El problema era que la pantalla decía lo
+  contrario:
+    · El botón se llamaba "Crear y continuar" → suena a "te falta un paso".
+    · Al guardar, recibía con "Sin variantes. El producto necesita al menos una
+      para venderse." → suena a error cuando es una decisión deliberada.
+    · No había ningún aviso de éxito, así que no daba señal de haber terminado.
+  O sea: el sistema lo permitía y la interfaz lo desanimaba. Se cambió el texto,
+  no la lógica.
+
+FRONTEND
+  MODIF   frontend/src/app/features/admin/productos/producto-form.ts
+          Señal `guardado` con el aviso de éxito (no existía; solo había `error`).
+  MODIF   frontend/src/app/features/admin/productos/producto-form.html
+          · botón "Crear y continuar" → "Guardar producto"
+          · aviso verde al guardar + botón "Volver a productos" a la mano
+          · el texto de abajo ahora dice que con eso basta y que las
+            presentaciones se pueden llenar con el vaciado masivo
+          · "Sin variantes. El producto necesita al menos una para venderse."
+            → "Todavía sin presentaciones… está guardado y esperando". Se
+            conservó el dato verdadero (sin presentaciones no se vende ni se
+            inventaría) pero sin sonar a reclamo.
+          Se usó la clase `ok-msg`, que es la convención del proyecto para
+          mensajes de éxito; se había empezado a inventar una `alert-ok` que no
+          existía en styles.scss.
+
+SEGUNDA PARTE · EL CÓDIGO DE BARRAS ES EL SKU
+  Lo dijo el usuario con esas palabras. Se confirmó en sus datos: las 3
+  presentaciones que tiene capturadas traen el SKU igual al código
+  (11111/11111, 22222/22222, 99999/999999999). Ya trabajaba así, teclando el
+  mismo dato dos veces.
+
+  El formulario de presentación pedía SKU y "Código de barras" como campos
+  separados, y solo copiaba uno al otro si se ESCANEABA (tecla Enter). Ahora:
+    · El código de barras va PRIMERO: es el dato que trae el proveedor.
+    · El SKU se llena solo conforme se teclea o escanea el código.
+    · Si se edita el SKU a mano, deja de seguirlo (bandera `skuManual`) y la
+      ayuda del campo lo dice. Vaciarlo lo vuelve a enganchar: es el deshacer.
+    · Se eliminó el campo duplicado de código de barras que había más abajo.
+  Las dos columnas siguen siendo UNIQUE en la BD, así que usar el mismo valor
+  en ambas es válido. NO se fusionaron las columnas: `sku` y `codigo_barras`
+  tienen semántica propia y hay datos viejos; solo se sincroniza la captura.
+
+TERCERA PARTE · BUG · Los bultos se guardaban y no se veían
+  El usuario dijo: "me dicen que cada bulto tiene un sku diferente pero los
+  lotes son iguales para algunos, puedo tener el lote 1 y 2 y ambos pueden
+  tener el mismo hilo". Al ir a comprobar que eso ya estaba soportado se
+  encontró que la pantalla NO lo mostraba.
+
+  El bug (lo dejé yo al hacer las remesas): la migración agregó peso_kg, lote,
+  conos y remesa_id a variante_codigos, pero `codigosDe()` —la consulta que
+  alimenta la pantalla de la presentación— seguía con la lista de columnas
+  vieja: SELECT id, variante_id, codigo, etiqueta, creado_en. Los 80 bultos
+  entraban con su peso y su lote y en pantalla se veían como códigos pelones.
+  Lección: al agregar columnas, revisar TODAS las consultas que leen la tabla,
+  no solo las del módulo nuevo.
+
+  Además el campo de captura manual decía "Lote (opcional)" pero lo guardaba en
+  `etiqueta`, no en la columna `lote`. Se corrigió.
+
+  BACKEND
+    MODIF   variantes/model.js    codigosDe() devuelve peso_kg, lote, conos y
+                                  el folio de la remesa; ordena por lote.
+                                  agregarCodigo() recibe peso y lote de verdad.
+    MODIF   variantes/service.js  pasa los datos del bulto completos
+    MODIF   variantes/routes.js   el schema acepta peso_kg, lote y conos
+  FRONTEND
+    MODIF   catalogo.models.ts    VarianteCodigo con los campos del bulto;
+                                  tipo LoteDeBultos nuevo
+    MODIF   catalogo.service.ts   agregarCodigo() acepta peso y lote
+    MODIF   producto-form.ts      lotesDe() agrupa los bultos por lote,
+                                  kgDeBultos() suma el total
+    MODIF   producto-form.html    los bultos se ven AGRUPADOS POR LOTE, cada
+                                  uno con su peso y sus conos, con el total
+                                  arriba y la nota de que varios lotes del
+                                  mismo hilo suman al mismo inventario.
+                                  Captura manual con peso y lote separados y
+                                  el aviso de que NO mueve inventario.
+
+PRUEBAS
+  6 comprobaciones del alta de producto contra el servidor real, todas en
+  verde: se crea con solo categoría + unidad + nombre, queda con 0
+  presentaciones, se puede reabrir para editar, aparece en el listado del
+  panel, NO se asoma a la tienda pública (correcto: no tiene nada que vender)
+  y acepta presentaciones después.
+
+  9 comprobaciones más con la remesa REAL cargada, todas en verde: llegan los
+  80 bultos, cada uno con su peso (00531332 = 18.650 kg), su lote, sus conos y
+  el folio de la remesa; son 2 lotes del MISMO hilo (0094886: 14 bultos,
+  265 kg · 0095316: 66 bultos, 1,262.5 kg); el inventario queda en UN solo
+  renglón con los 1,527.5 kg sumados, sin separar por lote; y capturar un bulto
+  a mano guarda su peso y su lote sin mover el inventario.
+
+  Compila y el build de producción queda limpio. La base quedó como estaba.
+  El sincronizado del SKU se verificó compilando; falta probarlo con el lector
+  físico de códigos.
+
+PENDIENTE / NOTAS
+  · Falta el VACIADO MASIVO en sí. Ver el bloque "DÓNDE SE QUEDÓ" al inicio del
+    archivo: no está decidido si es otro Excel (un renglón por presentación) o
+    el mismo de bultos sin mover inventario. Se le preguntó y quedó sin
+    contestar; no inventar la respuesta.
 
 
 -------------------------------------------------------------------------------

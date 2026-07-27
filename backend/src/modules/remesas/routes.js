@@ -21,15 +21,21 @@ const bultoSchema = z
   })
   .strict();
 
+// Se manda `producto_id` (la pantalla del producto: crea la presentación si le
+// falta) o `variante_id` (la presentación exacta). Uno de los dos.
 const confirmarSchema = z
   .object({
-    variante_id: z.coerce.number().int().positive(),
+    producto_id: z.coerce.number().int().positive().optional(),
+    variante_id: z.coerce.number().int().positive().optional(),
     almacen_id: z.coerce.number().int().positive(),
     archivo: z.string().trim().max(255).nullable().optional(),
     notas: z.string().trim().max(1000).optional(),
     bultos: z.array(bultoSchema).min(1).max(5000),
   })
-  .strict();
+  .strict()
+  .refine((d) => d.producto_id || d.variante_id, {
+    message: 'Indica producto_id o variante_id',
+  });
 
 // La vista previa recibe el .xlsx en crudo. Se acepta cualquier binario para no
 // depender de que el navegador mande el content-type exacto.

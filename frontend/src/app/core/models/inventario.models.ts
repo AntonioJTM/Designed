@@ -27,7 +27,6 @@ export interface StockItem {
   variante_id: number;
   sku: string;
   producto: string;
-  color?: string | null;
   almacen_id: number;
   almacen: string;
   cantidad: string;

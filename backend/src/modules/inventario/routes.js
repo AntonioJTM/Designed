@@ -22,31 +22,34 @@ const movimientoSchema = z
   })
   .strict();
 
-const transferenciaSchema = z
-  .object({
-    variante_id: z.coerce.number().int().positive(),
-    almacen_origen_id: z.coerce.number().int().positive(),
-    almacen_destino_id: z.coerce.number().int().positive(),
-    cantidad: z.coerce.number().positive(),
-    costo_unitario: z.coerce.number().nonnegative().nullable().optional(),
-    motivo: z.string().trim().max(255).optional(),
-  })
-  .strict();
-
 // Desarmar paquetes en conos. El peso del paquete y cuántos conos salen ya
 // están en la variante cono; aquí solo se dice cuántos paquetes se abren.
 const desarmarSchema = z
   .object({
-    cono_variante_id: z.coerce.number().int().positive(),
+    // Con `codigo_bulto` no hace falta: se resuelve el paquete del bulto y, si el
+    // producto no tiene cono todavía, se crea con los conos que dice el bulto.
+    cono_variante_id: z.coerce.number().int().positive().optional(),
     almacen_origen_id: z.coerce.number().int().positive(),
     almacen_destino_id: z.coerce.number().int().positive(),
-    paquetes: z.coerce.number().positive().max(100000),
+    paquetes: z.coerce.number().positive().max(100000).optional(),
     // Kilos reales a consumir. Sin este dato se usa paquetes × peso del paquete;
     // sirve cuando el bulto no pesó exactamente lo nominal.
     kg: z.coerce.number().positive().max(1000000).nullable().optional(),
+    // Conos que rinde de verdad. Sin este dato se usan los nominales de la
+    // presentación; hace falta cuando el bulto rinde menos (uno del archivo real
+    // da 7 en vez de 12, así viene de fábrica) o el inventario queda inflado.
+    conos: z.coerce.number().positive().max(1000000).nullable().optional(),
+    // Lo que GANA de peso el hilo al enconarse (el tubo de cada cono). Lo captura
+    // la tienda: no se calcula. Se suma a los kilos y queda en el kardex.
+    destare_kg: z.coerce.number().nonnegative().max(100000).nullable().optional(),
+    // Bulto que se desarmó, para dejar el rastro en el kardex.
+    codigo_bulto: z.string().trim().max(60).nullable().optional(),
     motivo: z.string().trim().max(255).optional(),
   })
-  .strict();
+  .strict()
+  .refine((d) => d.cono_variante_id || d.codigo_bulto, {
+    message: 'Escanea el bulto o indica qué cono se va a producir',
+  });
 
 // Traspaso de matriz a sucursal. Cada línea manda `paquetes` (si la variante
 // es un paquete) o `cantidad` en la unidad de la variante.
@@ -86,12 +89,15 @@ router.get('/alertas', ...soloStaff, controller.alertas);
 router.get('/resumen', ...soloStaff, controller.resumenPorAlmacen);
 router.get('/movimientos', ...soloStaff, controller.listarMovimientos);
 router.get('/conversiones', ...soloStaff, controller.listarConversiones);
+// Lo que trae un bulto, para mostrarlo antes de bajarlo a mostrador.
+router.get('/desarmes/previa/:codigo', ...soloStaff, controller.previaDesarmeBulto);
+// Cuántos paquetes son X kilos, con el peso real de los bultos de la bodega.
+router.get('/equivalencia-paquetes', ...soloStaff, controller.equivalenciaPaquetes);
 router.get('/traspasos', ...soloStaff, controller.listarTraspasos);
 router.get('/traspasos/:id', ...soloStaff, controller.obtenerTraspaso);
 
-// Escrituras (staff): movimientos, transferencias y configuración de umbrales.
+// Escrituras (staff): movimientos, desarmes, traspasos y configuración de umbrales.
 router.post('/movimientos', ...soloStaff, validate(movimientoSchema), controller.registrarMovimiento);
-router.post('/transferencias', ...soloStaff, validate(transferenciaSchema), controller.transferir);
 router.post('/desarmes', ...soloStaff, validate(desarmarSchema), controller.desarmar);
 router.post('/traspasos', ...soloStaff, validate(traspasoSchema), controller.crearTraspaso);
 router.put('/configuracion', ...soloStaff, validate(configurarSchema), controller.configurar);

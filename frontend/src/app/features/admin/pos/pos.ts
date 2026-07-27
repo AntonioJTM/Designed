@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { VentasService } from '../../../core/services/ventas.service';
-import { InventarioService } from '../../../core/services/inventario.service';
+import { CodigoResuelto, InventarioService } from '../../../core/services/inventario.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { CatalogoService } from '../../../core/services/catalogo.service';
@@ -206,6 +206,108 @@ export class Pos {
     });
   }
 
+  /**
+   * Enter del lector de códigos. Primero intenta resolver lo teclado como un
+   * código exacto: si es un BULTO, se agrega con su peso real (los bultos de una
+   * remesa pesan distinto: 18.65, 18.80, 19.05…) y cobrar por el nominal sería
+   * cobrar mal. Si no es un código, cae a la búsqueda normal por nombre o SKU.
+   */
+  escanearOBuscar(): void {
+    const q = this.qVar.trim();
+    if (!q) return;
+    this.error.set(null);
+    this.inv.resolverCodigo(q).subscribe({
+      next: (r) => this.agregarPorCodigo(r),
+      // 404 = no es un código registrado; se busca como texto.
+      error: () => this.buscar(),
+    });
+  }
+
+  /** Mete al carrito lo que resolvió el lector. */
+  private agregarPorCodigo(r: CodigoResuelto): void {
+    const v = r.variante;
+
+    // Un bulto ya vendido o desarmado no existe físicamente: no se vuelve a
+    // vender. El backend también lo rechaza; esto es para avisar antes de que
+    // el cajero cierre el ticket.
+    if (r.bulto && r.bulto.estado && r.bulto.estado !== 'disponible') {
+      const donde = r.bulto.consumido_folio ? ` en ${r.bulto.consumido_folio}` : '';
+      this.error.set(
+        `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${donde}. Escanea otro.`
+      );
+      this.qVar = '';
+      return;
+    }
+
+    const peso = r.bulto?.peso_kg != null ? Number(r.bulto.peso_kg) : null;
+
+    // Código de la presentación (no de un bulto): se agrega como siempre.
+    if (!r.bulto || !peso || peso <= 0) {
+      this.agregar({
+        id: v.id,
+        sku: v.sku,
+        producto: v.producto ?? '',
+        presentacion: v.presentacion,
+        precio: Number(v.precio_oferta ?? v.precio),
+        unidad: v.unidad,
+      });
+      this.qVar = '';
+      this.resultados.set([]);
+      return;
+    }
+
+    const bulto = { codigo: r.bulto.codigo, peso_kg: peso, lote: r.bulto.lote };
+    let repetido = false;
+
+    this.carrito.update((arr) => {
+      const item = arr.find((i) => i.variante_id === v.id);
+      if (!item) {
+        return [
+          ...arr,
+          {
+            variante_id: v.id,
+            sku: v.sku,
+            producto: v.producto ?? '',
+            presentacion: v.presentacion,
+            precio: Number(v.precio_oferta ?? v.precio),
+            unidad: v.unidad,
+            cantidad: peso,
+            bultos: [bulto],
+          },
+        ];
+      }
+      // El bulto es una pieza física única: escanearlo dos veces es un error de
+      // captura, no una venta doble.
+      if ((item.bultos ?? []).some((b) => b.codigo === bulto.codigo)) {
+        repetido = true;
+        return arr;
+      }
+      return arr.map((i) =>
+        i.variante_id === v.id
+          ? {
+              ...i,
+              cantidad: this.round3(i.cantidad + peso),
+              bultos: [...(i.bultos ?? []), bulto],
+            }
+          : i
+      );
+    });
+
+    if (repetido) {
+      this.error.set(`El bulto ${bulto.codigo} ya está en el ticket; no se cobra dos veces.`);
+    } else {
+      this.mensaje.set(
+        `Bulto ${bulto.codigo}: ${peso} kg${r.bulto.lote ? ` · lote ${r.bulto.lote}` : ''}`
+      );
+    }
+    this.qVar = '';
+    this.resultados.set([]);
+  }
+
+  private round3(n: number): number {
+    return Math.round((n + Number.EPSILON) * 1000) / 1000;
+  }
+
   buscar(): void {
     if (!this.qVar.trim()) return;
     this.inv.buscarVariantes(this.qVar.trim()).subscribe({
@@ -281,7 +383,12 @@ export class Pos {
         canal: 'punto_venta',
         sesion_caja_id: s.id,
         tipo_cliente_id: this.tipoClienteSel ? Number(this.tipoClienteSel) : undefined,
-        items: this.carrito().map((i) => ({ variante_id: i.variante_id, cantidad: i.cantidad })),
+        items: this.carrito().map((i) => ({
+          variante_id: i.variante_id,
+          cantidad: i.cantidad,
+          // Va el rastro de los bultos escaneados, si hubo.
+          bultos: i.bultos?.length ? i.bultos : undefined,
+        })),
         pagos: [{ metodo_pago_id: Number(this.metodoSel), monto }],
       })
       .subscribe({

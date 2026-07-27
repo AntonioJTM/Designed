@@ -7,7 +7,9 @@
 
 <p class="muted" style="margin-bottom:1.25rem">
   Manda mercancía de la matriz a una sucursal. La captura es por <b>paquetes</b>: teclea 70 y el
-  sistema descuenta los kilos que corresponden. Sale del origen y entra al destino de inmediato; en
+  sistema toma los paquetes más antiguos de la bodega y descuenta SU peso real, así que la cuenta
+  cuadra aunque cada paquete pese distinto. Los kilos que se muestran son aproximados —el promedio
+  de los que hay— y el exacto se sabe al enviar. Sale del origen y entra al destino de inmediato; en
   la sucursal deciden si los desarman en conos o los venden por paquete.
 </p>
 
@@ -44,7 +46,7 @@
   <div class="form-grid">
     <label class="field">
       Sale de
-      <select [(ngModel)]="origen">
+      <select [(ngModel)]="origen" (ngModelChange)="alCambiarOrigen()">
         @for (a of almacenes(); track a.id) {
           <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_matriz ? ' · matriz' : '' }}</option>
         }
@@ -117,9 +119,20 @@
                        style="width:90px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px; text-align:right" />
                 <span class="muted">{{ unidadCaptura(l.variante) }}</span>
               </span>
+              @if (disponibles(l); as hay) {
+                <div class="muted" style="font-size:0.7rem">hay {{ hay }} en el origen</div>
+              }
             </td>
             <td class="num muted">
-              @if (kilosDe(l); as kg) { {{ kg | cantidad: 'kg' }} } @else { — }
+              @if (kilosReales(l); as kg) {
+                ≈ {{ kg | cantidad: 'kg' }}
+                @if (rangoPeso(l); as r) {
+                  <div class="muted" style="font-size:0.7rem">{{ r }}</div>
+                }
+              } @else if (kilosDe(l); as kg) {
+                ≈ {{ kg | cantidad: 'kg' }}
+                <div class="muted" style="font-size:0.7rem">peso nominal</div>
+              } @else { — }
             </td>
             <td style="width:1%">
               <button class="btn btn-danger btn-sm" (click)="quitar(l)">✕</button>

@@ -18,6 +18,9 @@ const crearSchema = z
     nombre: z.string().trim().min(1).max(160),
     descripcion: z.string().trim().optional(),
     grosor_calibre: z.string().trim().max(30).optional(),
+    // Precio de lista del hilo por kilo. Las presentaciones que se creen después
+    // arrancan con este precio; el que se cobra es el de la variante.
+    precio_kg: z.coerce.number().nonnegative().max(99999999).nullable().optional(),
     // Habilita las presentaciones paquete/cono de este producto.
     multipresentacion: z.coerce.boolean().optional(),
     // Habilita etiquetar sus presentaciones por lote.

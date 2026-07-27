@@ -48,7 +48,7 @@ export class Remesas {
     (this.previa()?.avisos ?? []).filter((a) => a.bloqueante)
   );
 
-  /** Los avisos informativos, como los bultos incompletos. */
+  /** Los avisos informativos: renglones que se omitieron por estar mal. */
   readonly advertencias = computed(() =>
     (this.previa()?.avisos ?? []).filter((a) => !a.bloqueante)
   );

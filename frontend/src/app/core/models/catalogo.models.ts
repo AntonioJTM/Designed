@@ -19,18 +19,48 @@ export interface Categoria {
   activo: boolean | number;
 }
 
+/**
+ * Un BULTO físico de la variante: su código de barras propio, lo que pesa de
+ * verdad y el lote con el que llegó. Varios lotes distintos pueden ser del
+ * mismo hilo; el inventario no se separa por lote, suman al mismo saldo.
+ */
 export interface VarianteCodigo {
   id: number;
   variante_id: number;
   codigo: string;
+  peso_kg?: string | null;
+  lote?: string | null;
+  conos?: number | null;
+  /** Un bulto se consume una sola vez: al venderse o al desarmarse. */
+  estado?: EstadoBulto;
+  consumido_en?: string | null;
+  consumido_tipo?: 'pedido' | 'conversion' | null;
+  consumido_id?: number | null;
+  /** Folio del pedido que lo consumió, cuando fue una venta. */
+  consumido_folio?: string | null;
+  remesa_id?: number | null;
+  remesa_folio?: string | null;
   etiqueta?: string | null;
   creado_en?: string;
+}
+
+export type EstadoBulto = 'disponible' | 'vendido' | 'desarmado';
+
+/** Los bultos de un lote, para resumir la lista cuando son muchos. */
+export interface LoteDeBultos {
+  lote: string;
+  bultos: VarianteCodigo[];
+  kg: number;
+  /** Cuántos siguen disponibles y cuántos kilos representan. */
+  disponibles: number;
+  kgDisponibles: number;
 }
 
 /**
  * Cómo se presenta y se vende una variante:
  *  paquete → la cantidad son kilos  y `precio` es el precio por kilo
- *  cono    → la cantidad son piezas y `precio` es el precio de un cono
+ *  cono    → la cantidad son KILOS y `precio` es el precio por kilo (el mismo del
+ *             paquete): es el mismo hilo, solo enconado
  *  simple  → la cantidad va en la unidad del producto
  */
 export type TipoPresentacion = 'simple' | 'paquete' | 'cono';
@@ -42,10 +72,7 @@ export interface Variante {
   id: number;
   producto_id: number;
   producto?: string; // presente en el listado /variantes
-  codigos?: VarianteCodigo[]; // códigos de barras adicionales (agrupados por color)
-  color_id?: number | null;
-  color?: string | null;
-  codigo_hex?: string | null;
+  codigos?: VarianteCodigo[]; // sus bultos físicos, con peso y lote
   sku: string;
   codigo_barras?: string | null;
   presentacion?: string | null;
@@ -63,12 +90,12 @@ export interface Variante {
   peso_kg?: string | number | null;
   /** Solo conos: paquete del que se desarman. */
   origen_variante_id?: number | null;
-  /** Solo conos: cuántos salen de un paquete. */
+  /** Solo conos: cuántos salen de un paquete. Informativo; se vende por kilo. */
   piezas_por_origen?: number | null;
   modo_precio?: ModoPrecio;
   /** Abreviatura de la unidad de peso del producto (g, kg, t). */
   unidad?: string;
-  /** Unidad en que se captura la cantidad de ESTA presentación: kg o pieza. */
+  /** Unidad de venta. Hoy siempre kg: todo el hilo se vende por peso. */
   unidad_venta?: string;
   // Datos del paquete de origen, para explicar de dónde salió el precio.
   paquete_sku?: string | null;
@@ -122,6 +149,11 @@ export interface Producto {
   nombre: string;
   descripcion?: string | null;
   grosor_calibre?: string | null;
+  /**
+   * Precio de lista del hilo por unidad de peso. Las presentaciones que se creen
+   * después lo heredan; el que se cobra sigue siendo el de la variante.
+   */
+  precio_kg?: string | number | null;
   /** Se maneja como paquete que se desarma en conos. */
   multipresentacion?: boolean | number;
   /** Sus presentaciones se etiquetan por lote (el stock no se separa). */
@@ -149,5 +181,4 @@ export interface Opcion {
   nombre: string;
   abreviatura?: string;
   porcentaje?: string;
-  codigo_hex?: string | null;
 }

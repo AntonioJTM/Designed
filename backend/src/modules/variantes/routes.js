@@ -11,7 +11,6 @@ const router = Router();
 const crearSchema = z
   .object({
     producto_id: z.coerce.number().int().positive(),
-    color_id: z.coerce.number().int().positive().nullable().optional(),
     sku: z.string().trim().min(1).max(60),
     codigo_barras: z.string().trim().max(60).nullable().optional(),
     presentacion: z.string().trim().max(40).optional(),
@@ -44,9 +43,14 @@ const precioTipoSchema = z
   })
   .strict();
 
+// Un código es un BULTO: puede traer su peso real, su lote y cuántos conos
+// rinde. Todo opcional, porque también sirve para un código de barras suelto.
 const codigoSchema = z
   .object({
     codigo: z.string().trim().min(1).max(60),
+    peso_kg: z.coerce.number().positive().max(100000).nullable().optional(),
+    lote: z.string().trim().max(40).nullable().optional(),
+    conos: z.coerce.number().int().positive().max(10000).nullable().optional(),
     etiqueta: z.string().trim().max(60).optional(),
   })
   .strict();
@@ -64,6 +68,8 @@ router.delete('/:id', ...soloStaff, controller.eliminar);
 router.put('/:id/precios', ...soloStaff, validate(precioTipoSchema), controller.fijarPrecioTipo);
 
 // Códigos de barras adicionales de una variante
+// Antes de '/:id' para que 'resolver' no se interprete como un id.
+router.get('/resolver/:codigo', ...soloStaff, controller.resolverCodigo);
 router.get('/:id/codigos', controller.listarCodigos);
 router.post('/:id/codigos', ...soloStaff, validate(codigoSchema), controller.agregarCodigo);
 router.delete('/codigos/:codigoId', ...soloStaff, controller.eliminarCodigo);

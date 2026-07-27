@@ -106,7 +106,11 @@ export class CatalogoService {
       .get<ApiResponse<VarianteCodigo[]>>(`${this.base}/variantes/${varianteId}/codigos`)
       .pipe(map(data));
   }
-  agregarCodigo(varianteId: number, body: { codigo: string; etiqueta?: string }): Observable<VarianteCodigo> {
+  /** Da de alta un bulto: su código y, si se conocen, su peso real y su lote. */
+  agregarCodigo(
+    varianteId: number,
+    body: { codigo: string; peso_kg?: number; lote?: string; conos?: number; etiqueta?: string }
+  ): Observable<VarianteCodigo> {
     return this.http
       .post<ApiResponse<VarianteCodigo>>(`${this.base}/variantes/${varianteId}/codigos`, body)
       .pipe(map(data));
@@ -151,7 +155,7 @@ export class CatalogoService {
   }
 
   // ---- Opciones (lookups) ----
-  opciones(tipo: 'lineas' | 'colores' | 'unidades' | 'impuestos'): Observable<Opcion[]> {
+  opciones(tipo: 'lineas' | 'unidades' | 'impuestos'): Observable<Opcion[]> {
     return this.http.get<ApiResponse<Opcion[]>>(`${this.base}/opciones/${tipo}`).pipe(map(data));
   }
 }
