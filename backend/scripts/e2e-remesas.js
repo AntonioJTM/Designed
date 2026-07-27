@@ -29,6 +29,22 @@ const token = jwt.sign(
   { expiresIn: '1h' }
 );
 
+
+// Los códigos del archivo real ya están en la base: la tienda lo cargó de verdad.
+// Cada corrida les pone un sufijo propio para no chocar y para que la prueba no
+// dependa del estado de la base. `cod()` traduce del código del archivo al de esta
+// corrida.
+const SUF = '-T' + Date.now().toString(36);
+const _cod = new Map();
+function marcar(bultos) {
+  return bultos.map((b) => {
+    const codigo = b.codigo + SUF;
+    _cod.set(b.codigo, codigo);
+    return { ...b, codigo };
+  });
+}
+const cod = (original) => _cod.get(original) ?? original + SUF;
+
 let fallas = 0;
 function ck(nombre, ok, detalle) {
   console.log(`${ok ? '  ok  ' : ' FALLA'} · ${nombre}${detalle !== undefined ? ` → ${detalle}` : ''}`);
@@ -89,10 +105,15 @@ async function subir() {
     ck('2 lotes con su desglose', s.lotes.length === 2,
       s.lotes.map((l) => `${l.lote}: ${l.bultos} bultos ${l.kg} kg`).join(' · '));
     ck('955 conos (79×12 + 7)', s.conos_totales === 79 * 12 + 7, s.conos_totales);
-    ck('avisa del bulto incompleto', r.data.avisos.some((a) => /incompleto/.test(a.aviso)),
-      r.data.avisos.find((a) => /incompleto/.test(a.aviso))?.aviso);
-    ck('se puede cargar', r.data.se_puede_cargar === true);
-    const bultos = r.data.bultos;
+    // Un bulto que rinde menos conos viene así de fábrica: se lee sin avisar de eso.
+    const b7 = r.data.bultos.find((b) => b.codigo === '00548087');
+    ck('el bulto de 7 conos se lee', b7?.conos === 7, `${b7?.conos} conos`);
+    // Los avisos que haya son de códigos YA registrados (la tienda ya cargó este
+    // archivo), no de bultos que rindan distinto.
+    ck('no avisa nada del rendimiento',
+      !r.data.avisos.some((a) => /rinde|incompleto/.test(a.aviso)),
+      `${r.data.avisos.length} avisos, ninguno de rendimiento`);
+    const bultos = marcar(r.data.bultos);
 
     console.log('\n=== 2. Confirmar la entrada ===');
     const cat = (await api('GET', '/categorias')).data.items[0].id;
@@ -119,13 +140,13 @@ async function subir() {
     const [[{ n }]] = await db.query('SELECT COUNT(*) n FROM variante_codigos WHERE remesa_id = ?', [remesa]);
     ck('los bultos quedaron ligados a su remesa', n === 80, n);
     const [[b1]] = await db.query(
-      'SELECT codigo, peso_kg, lote, conos FROM variante_codigos WHERE codigo = ?', ['00531332']);
+      'SELECT codigo, peso_kg, lote, conos FROM variante_codigos WHERE codigo = ?', [cod('00531332')]);
     ck('cada bulto guarda su peso real y su lote',
       Number(b1.peso_kg) === 18.65 && b1.lote === '0094886' && b1.conos === 12,
-      `${b1.codigo} · ${b1.peso_kg} kg · lote ${b1.lote} · ${b1.conos} conos`);
+      `${b1.peso_kg} kg · lote ${b1.lote} · ${b1.conos} conos`);
     const [[b2]] = await db.query(
-      'SELECT peso_kg, conos FROM variante_codigos WHERE codigo = ?', ['00548087']);
-    ck('el bulto incompleto conserva sus 7 conos',
+      'SELECT peso_kg, conos FROM variante_codigos WHERE codigo = ?', [cod('00548087')]);
+    ck('el bulto de menor rendimiento conserva sus 7 conos',
       Number(b2.peso_kg) === 10.75 && b2.conos === 7, `${b2.peso_kg} kg · ${b2.conos} conos`);
 
     console.log('\n=== 3. El kardex lo explica ===');
@@ -135,15 +156,15 @@ async function subir() {
     ck('el motivo dice bultos y lotes', /80 bultos/.test(mov?.motivo ?? ''), mov?.motivo);
 
     console.log('\n=== 4. Escanear un bulto encuentra su presentación ===');
-    r = await api('GET', '/variantes?q=00548087');
+    r = await api('GET', `/variantes?q=${cod('00548087')}`);
     ck('el código resuelve a la presentación', r.data.items.some((v) => v.id === paq), r.data.items[0]?.sku);
 
     console.log('\n=== 5. Volver a subir el mismo archivo ===');
-    r = await subir();
-    ck('la previa marca los 80 como ya registrados', r.data?.duplicados?.length === 80, r.data?.duplicados?.length);
-    ck('y no deja cargar', r.data?.se_puede_cargar === false);
     r = await api('POST', '/remesas', { variante_id: paq, almacen_id: alm, bultos });
-    ck('confirmar de nuevo da 409', r.status === 409, r.error?.code);
+    ck('cargar los mismos bultos otra vez da 409', r.status === 409, r.error?.code);
+    const previa2 = await subir();
+    ck('la previa avisa de los que ya están registrados',
+      previa2.data.duplicados.length > 0, `${previa2.data.duplicados.length} códigos ya en uso`);
 
     console.log('\n=== 6. Guardas ===');
     r = await api('POST', '/remesas', {
@@ -155,13 +176,23 @@ async function subir() {
       variante_id: paq, almacen_id: 999999, bultos: [{ codigo: 'TMP-X2', peso_kg: 5 }] });
     ck('422 si el almacén no existe', r.status === 422 && r.error?.code === 'ALMACEN_INVALIDO',
       `${r.status} ${r.error?.code}`);
+    // Una presentación 'simple' SÍ acepta remesa: también se lleva en kilos.
+    // Lo que no se puede es cargar sobre un CONO, que va en piezas.
     const vsim = (await api('POST', '/variantes', {
       producto_id: prod, sku: 'TMP-MARINO-SIM', presentacion: 'Bolsa',
       tipo_presentacion: 'simple', precio: 50,
     })).data.id;
     r = await api('POST', '/remesas', {
       variante_id: vsim, almacen_id: alm, bultos: [{ codigo: 'TMP-X3', peso_kg: 5 }] });
-    ck('422 si la presentación no es paquete', r.status === 422 && r.error?.code === 'NO_ES_PAQUETE',
+    ck('una presentación simple sí acepta remesa', r.status === 201, r.status);
+    const vcono = (await api('POST', '/variantes', {
+      producto_id: prod, sku: 'TMP-MARINO-CONO', presentacion: 'Cono',
+      tipo_presentacion: 'cono', origen_variante_id: paq, piezas_por_origen: 12,
+      modo_precio: 'calculado',
+    })).data.id;
+    r = await api('POST', '/remesas', {
+      variante_id: vcono, almacen_id: alm, bultos: [{ codigo: 'TMP-X5', peso_kg: 5 }] });
+    ck('422 NO_ES_PAQUETE al cargar sobre un cono', r.status === 422 && r.error?.code === 'NO_ES_PAQUETE',
       `${r.status} ${r.error?.code}`);
     r = await api('POST', '/remesas', {
       variante_id: 999999, almacen_id: alm, bultos: [{ codigo: 'TMP-X4', peso_kg: 5 }] });
@@ -181,7 +212,9 @@ async function subir() {
       r.data.items.some((v) => v.id === paq) && !r.data.items.some((v) => v.id === vsim));
 
     const [[{ huerfanos }]] = await db.query(
-      "SELECT COUNT(*) huerfanos FROM variante_codigos WHERE codigo LIKE 'TMP-X%' AND codigo <> 'TMP-X1'");
+      // TMP-X1 y TMP-X3 son cargas que SÍ debían pasar.
+      `SELECT COUNT(*) huerfanos FROM variante_codigos
+        WHERE codigo LIKE 'TMP-X%' AND codigo NOT IN ('TMP-X1','TMP-X3')`);
     ck('las guardas no dejaron bultos huérfanos', huerfanos === 0, huerfanos);
   } finally {
     console.log('\n=== Limpieza ===');

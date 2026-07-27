@@ -44,7 +44,6 @@ export interface PorReabastecer {
   variante_id: number;
   sku: string;
   producto: string;
-  color?: string | null;
   almacen: string;
   cantidad: string;
   cantidad_reservada: string;

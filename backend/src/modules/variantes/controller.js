@@ -81,6 +81,16 @@ async function listarCodigos(req, res, next) {
   }
 }
 
+/** Resuelve un código escaneado: presentación + el bulto, si lo es. */
+async function resolverCodigo(req, res, next) {
+  try {
+    const data = await service.resolverCodigo(req.params.codigo);
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 async function agregarCodigo(req, res, next) {
   try {
     const data = await service.agregarCodigo(Number(req.params.id), req.body);
@@ -109,4 +119,5 @@ module.exports = {
   listarCodigos,
   agregarCodigo,
   eliminarCodigo,
+  resolverCodigo,
 };

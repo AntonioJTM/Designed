@@ -16,6 +16,12 @@ export const ADMIN_ROUTES: Routes = [
         loadComponent: () => import('./productos/productos-list').then((m) => m.ProductosList),
       },
       {
+        // Antes de 'productos/:id' no hace falta: la ruta es más específica.
+        path: 'productos/:id/presentaciones',
+        loadComponent: () =>
+          import('./productos/producto-presentaciones').then((m) => m.ProductoPresentaciones),
+      },
+      {
         path: 'productos/:id',
         loadComponent: () => import('./productos/producto-form').then((m) => m.ProductoForm),
       },

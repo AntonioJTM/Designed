@@ -31,7 +31,7 @@
               <div>
                 <div>{{ v.presentacion || v.sku }}</div>
                 <div class="muted" style="font-size:0.8rem">
-                  {{ v.color ? v.color + ' · ' : '' }}SKU {{ v.sku }}
+                  SKU {{ v.sku }}
                 </div>
                 @if (disponible(v) <= 0) {
                   <div class="sin-stock">Sin existencias</div>

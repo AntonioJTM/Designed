@@ -7,6 +7,7 @@ import { Paginado } from '../models/catalogo.models';
 import {
   Caja,
   CanalVenta,
+  DevolucionLinea,
   EstadoPedido,
   MetodoPago,
   Pedido,
@@ -28,6 +29,11 @@ export interface ItemPedido {
   variante_id: number;
   cantidad: number;
   descuento?: number;
+  /**
+   * Bultos escaneados que formaron la cantidad. Se guardan con el pedido para
+   * poder saber después de qué lote era el hilo que se entregó.
+   */
+  bultos?: { codigo: string; peso_kg: number; lote?: string | null }[];
 }
 export interface PagoPedido {
   metodo_pago_id: number;
@@ -114,9 +120,21 @@ export class VentasService {
     const params = new HttpParams().set('limit', 50);
     return this.http.get<ApiResponse<Paginado<Pedido>>>(`${this.base}/pedidos/mis`, { params }).pipe(map(data));
   }
-  cambiarEstado(id: number, estado: EstadoPedido): Observable<Pedido> {
+  /**
+   * Cambia el estado. Al cancelar o devolver se puede indicar en qué presentación
+   * regresa cada línea (paquete entregado → conos devueltos); sin eso vuelve tal
+   * como se vendió.
+   */
+  cambiarEstado(
+    id: number,
+    estado: EstadoPedido,
+    devoluciones?: DevolucionLinea[]
+  ): Observable<Pedido> {
     return this.http
-      .patch<ApiResponse<Pedido>>(`${this.base}/pedidos/${id}/estado`, { estado })
+      .patch<ApiResponse<Pedido>>(`${this.base}/pedidos/${id}/estado`, {
+        estado,
+        devoluciones: devoluciones?.length ? devoluciones : undefined,
+      })
       .pipe(map(data));
   }
 }

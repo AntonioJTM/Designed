@@ -26,11 +26,11 @@ createdb tienda_hilos
 psql -d tienda_hilos -f db/schema_postgres.sql
 ```
 
-Al terminar tendrás 44 tablas, 4 vistas de reportes y datos semilla (roles, unidades, IVA, etc.).
+Al terminar tendrás 45 tablas, 4 vistas de reportes y datos semilla (roles, unidades, IVA, etc.).
 
 ## 3. Ver el diagrama entidad-relación
 Abre `db/erd.mermaid` en VS Code con la extensión **Markdown Preview Mermaid** o
-**Mermaid Editor**. Muestra las 44 tablas con sus llaves primarias (PK) y foráneas (FK).
+**Mermaid Editor**. Muestra las 45 tablas con sus llaves primarias (PK) y foráneas (FK).
 
 ---
 
@@ -111,7 +111,7 @@ pantalla de inventario con alertas de stock. Consume la API en /api/v1.
 ---
 
 ## 6. Archivos de este repo
-- `db/schema_mysql.sql` — esquema principal (validado, 44 tablas + 4 vistas + datos semilla).
+- `db/schema_mysql.sql` — esquema principal (validado, 45 tablas + 4 vistas + datos semilla).
 - `db/schema_postgres.sql` — el mismo modelo en PostgreSQL.
 - `db/erd.mermaid` — diagrama entidad-relación completo.
 - `CLAUDE.md` — contexto y reglas que Claude Code usa automáticamente.

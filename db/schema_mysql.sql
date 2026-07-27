@@ -98,14 +98,6 @@ CREATE TABLE lineas (
     activo      BOOLEAN NOT NULL DEFAULT TRUE
 ) ENGINE=InnoDB;
 
-CREATE TABLE colores (
-    id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    nombre            VARCHAR(60) NOT NULL,
-    codigo_hex        CHAR(7),
-    codigo_fabricante VARCHAR(30),
-    UNIQUE (nombre, codigo_fabricante)
-) ENGINE=InnoDB;
-
 CREATE TABLE unidades_medida (
     id          SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     nombre      VARCHAR(30) NOT NULL UNIQUE,
@@ -129,6 +121,9 @@ CREATE TABLE productos (
     descripcion      TEXT,
     -- El calibre válido lo define el material en `categorias.calibres`.
     grosor_calibre   VARCHAR(30),
+    -- Precio de LISTA del hilo por unidad de peso. No es el que se cobra —ese es
+    -- producto_variantes.precio— pero las presentaciones nuevas lo heredan.
+    precio_kg        DECIMAL(12,2),
     -- multipresentacion: se maneja como paquete que se desarma en conos.
     -- por_lotes: sus presentaciones se etiquetan por lote (el stock NO se separa).
     multipresentacion BOOLEAN NOT NULL DEFAULT FALSE,
@@ -156,7 +151,6 @@ CREATE TABLE productos (
 CREATE TABLE producto_variantes (
     id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     producto_id        BIGINT UNSIGNED NOT NULL,
-    color_id           INT UNSIGNED,
     sku                VARCHAR(60) NOT NULL UNIQUE,
     codigo_barras      VARCHAR(60) UNIQUE,
     presentacion       VARCHAR(40),
@@ -176,10 +170,8 @@ CREATE TABLE producto_variantes (
     creado_en          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     actualizado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (producto_id)        REFERENCES productos(id) ON DELETE CASCADE,
-    FOREIGN KEY (color_id)           REFERENCES colores(id),
     FOREIGN KEY (origen_variante_id) REFERENCES producto_variantes(id) ON DELETE SET NULL,
     INDEX idx_variantes_producto (producto_id),
-    INDEX idx_variantes_color (color_id),
     INDEX idx_variantes_origen (origen_variante_id),
     INDEX idx_variantes_lote (lote)
 ) ENGINE=InnoDB;
@@ -218,7 +210,12 @@ CREATE TABLE variante_conversiones (
     almacen_destino_id  SMALLINT UNSIGNED NOT NULL,
     paquetes            DECIMAL(12,3) NOT NULL CHECK (paquetes > 0),
     kg_consumidos       DECIMAL(12,3) NOT NULL CHECK (kg_consumidos > 0),
+    -- Peso que GANA el hilo al enconarse (el tubo de cada cono). Lo captura la
+    -- tienda; no se calcula. kg_consumidos + destare_kg = lo que pesó enconado.
+    destare_kg          DECIMAL(12,3),
     piezas_generadas    DECIMAL(12,3) NOT NULL CHECK (piezas_generadas > 0),
+    -- Bulto que se desarmó, cuando el desarme se hizo escaneándolo.
+    codigo_bulto       VARCHAR(60),
     usuario_id          BIGINT UNSIGNED,
     motivo              VARCHAR(255),
     creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -255,14 +252,27 @@ CREATE TABLE variante_codigos (
     -- Peso real de ESTE bulto: al escanearlo se cobra por él, no por el nominal.
     peso_kg     DECIMAL(12,3),
     lote        VARCHAR(40),
-    -- Conos que rinde este bulto (varía cuando viene incompleto).
+    -- Conos que rinde este bulto: varía entre bultos, así vienen de fábrica.
     conos       INT UNSIGNED,
+    -- Dónde está el bulto. Lo pone la remesa que lo trajo y lo cambia el
+    -- traspaso: así el traspaso descuenta el peso REAL de los que se mandan.
+    almacen_id  SMALLINT UNSIGNED,
+    -- Un bulto es una pieza única: se consume UNA vez, al venderse o al
+    -- desarmarse. Cancelar o devolver el pedido lo regresa a 'disponible'.
+    estado         VARCHAR(12) NOT NULL DEFAULT 'disponible'
+                     CHECK (estado IN ('disponible','vendido','desarmado')),
+    consumido_en   DATETIME,
+    consumido_tipo VARCHAR(20),
+    consumido_id   BIGINT UNSIGNED,
     remesa_id   BIGINT UNSIGNED,
     etiqueta    VARCHAR(60),
     creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (variante_id) REFERENCES producto_variantes(id) ON DELETE CASCADE,
+    FOREIGN KEY (almacen_id)  REFERENCES almacenes(id),
     INDEX idx_variante_codigos_variante (variante_id),
     INDEX idx_variante_codigos_lote (lote),
+    INDEX idx_variante_codigos_estado (estado),
+    INDEX idx_variante_codigos_almacen (almacen_id),
     INDEX idx_variante_codigos_remesa (remesa_id)
 ) ENGINE=InnoDB;
 
@@ -621,6 +631,26 @@ CREATE TABLE pedido_detalle (
     INDEX idx_pedido_detalle_pedido (pedido_id)
 ) ENGINE=InnoDB;
 
+-- Qué BULTOS formaron cada línea del pedido. Como cada bulto pesa distinto y
+-- trae su lote, esto es lo que permite responder de qué lote era el hilo que se
+-- le entregó a un cliente. El código, el peso y el lote se CONGELAN aquí (igual
+-- que pedido_detalle.precio_unitario): variante_codigo_id es la referencia viva
+-- y queda en NULL si el bulto se borra, pero el pedido sigue siendo fiel.
+-- Es opcional: la tienda en línea y las ventas a granel no escanean bultos.
+CREATE TABLE pedido_detalle_bultos (
+    id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    detalle_id         BIGINT UNSIGNED NOT NULL,
+    variante_codigo_id BIGINT UNSIGNED,
+    codigo             VARCHAR(60) NOT NULL,
+    peso_kg            DECIMAL(12,3) NOT NULL CHECK (peso_kg > 0),
+    lote               VARCHAR(40),
+    FOREIGN KEY (detalle_id) REFERENCES pedido_detalle(id) ON DELETE CASCADE,
+    FOREIGN KEY (variante_codigo_id) REFERENCES variante_codigos(id) ON DELETE SET NULL,
+    INDEX idx_pdb_detalle (detalle_id),
+    INDEX idx_pdb_codigo (codigo),
+    INDEX idx_pdb_lote (lote)
+) ENGINE=InnoDB;
+
 CREATE TABLE pagos (
     id                     BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     pedido_id              BIGINT UNSIGNED NOT NULL,
@@ -739,13 +769,12 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ---------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW v_stock_disponible AS
-SELECT  i.variante_id, pv.sku, p.nombre AS producto, c.nombre AS color,
+SELECT  i.variante_id, pv.sku, p.nombre AS producto,
         a.nombre AS almacen, i.cantidad, i.cantidad_reservada,
         (i.cantidad - i.cantidad_reservada) AS disponible, i.stock_minimo
 FROM inventario i
 JOIN producto_variantes pv ON pv.id = i.variante_id
 JOIN productos p           ON p.id = pv.producto_id
-LEFT JOIN colores c        ON c.id = pv.color_id
 JOIN almacenes a           ON a.id = i.almacen_id;
 
 CREATE OR REPLACE VIEW v_alertas_stock AS

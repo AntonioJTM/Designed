@@ -51,7 +51,7 @@ mysql -h 192.168.100.122 -P 3306 -u root -p copia < db/dump_desarrollo_2026-07-2
 
 ## 3. Crear la base desde cero (esquema completo)
 
-El esquema canónico validado está en `db/schema_mysql.sql` (44 tablas base + vistas
+El esquema canónico validado está en `db/schema_mysql.sql` (46 tablas base + vistas
 + datos semilla).
 
 ```sql
@@ -86,6 +86,13 @@ Cambios de esquema aplicados después del `schema_mysql.sql` base. Viven en
 | `db/migrations/2026-07_producto_peso_kg.sql` | `productos.peso_gramos` (DECIMAL(8,2), gramos) pasa a `peso_kg` DECIMAL(12,3): topaba en 1 tonelada y reventaba con "Out of range value". Convierte los valores existentes dividiendo entre 1000. **Ya aplicada en `desarrollo`.** |
 | `db/migrations/2026-07_almacen_matriz.sql` | Columna `almacenes.es_matriz`: marca el almacén que surte a las sucursales. **Ya aplicada en `desarrollo`** (quedó en `Tienda principal`). |
 | `db/migrations/2026-07_traspasos.sql` | Tablas `traspasos` y `traspaso_detalle` para surtir sucursales desde la matriz. **Ya aplicada en `desarrollo`.** |
+| `db/migrations/2026-07_bultos_trazabilidad.sql` | Tabla `pedido_detalle_bultos` (qué bultos se entregaron en cada línea del pedido, congelados) y `variante_conversiones.codigo_bulto` (cuál bulto se desarmó). **Ya aplicada en `desarrollo`.** |
+| `db/migrations/2026-07_cono_por_kilo.sql` | El cono se vende POR KILO al mismo precio del paquete (antes por pieza). No cambia el esquema: convierte el precio y pasa el inventario de conos de piezas a kilos, reconstruido desde `variante_conversiones`. Solo válida sin ventas de conos previas. **Ya aplicada en `desarrollo`.** |
+| `db/migrations/2026-07_desarme_destare.sql` | `variante_conversiones.destare_kg`: lo que gana de peso el hilo al enconarse (el tubo de cada cono). Lo captura la tienda; no cambia lo que se descuenta del paquete. **Ya aplicada en `desarrollo`.** |
+| `db/migrations/2026-07_bulto_almacen.sql` | `variante_codigos.almacen_id`: cada bulto sabe en qué almacén está, para que el traspaso descuente el peso REAL de los que se mandan. **Ya aplicada en `desarrollo`.** |
+| `db/migrations/2026-07_quitar_color.sql` | Elimina `producto_variantes.color_id` y la tabla `colores` (el color ES el producto), y recrea `v_stock_disponible` y `v_alertas_stock` sin esa columna. **Ya aplicada en `desarrollo`.** |
+| `db/migrations/2026-07_producto_precio_kg.sql` | `productos.precio_kg`: precio de lista del hilo por kilo. Las presentaciones nuevas lo heredan; el que se cobra sigue siendo el de la variante. **Ya aplicada en `desarrollo`.** |
+| `db/migrations/2026-07_bultos_estado.sql` | `variante_codigos.estado` (disponible/vendido/desarmado) + `consumido_en`, `consumido_tipo`, `consumido_id`: un bulto se consume una sola vez. Marca los ya vendidos o desarmados con el rastro existente. **Ya aplicada en `desarrollo`.** |
 | `db/migrations/2026-07_paquetes_y_conos.sql` | Presentaciones en `producto_variantes` (`tipo_presentacion`, `peso_kg`, `origen_variante_id`, `piezas_por_origen`, `modo_precio`) y tabla `variante_conversiones` para desarmar paquetes en conos. **Ya aplicada en `desarrollo`.** |
 
 ```sql
@@ -104,6 +111,13 @@ SOURCE db/migrations/2026-07_linea_material_calibres.sql;
 SOURCE db/migrations/2026-07_quitar_peso_producto.sql;
 SOURCE db/migrations/2026-07_lotes_multipresentacion_precios.sql;
 SOURCE db/migrations/2026-07_remesas_bultos.sql;
+SOURCE db/migrations/2026-07_bultos_trazabilidad.sql;
+SOURCE db/migrations/2026-07_bultos_estado.sql;
+SOURCE db/migrations/2026-07_producto_precio_kg.sql;
+SOURCE db/migrations/2026-07_quitar_color.sql;
+SOURCE db/migrations/2026-07_bulto_almacen.sql;
+SOURCE db/migrations/2026-07_desarme_destare.sql;
+SOURCE db/migrations/2026-07_cono_por_kilo.sql;
 ```
 
 (Las tablas usan `CREATE TABLE IF NOT EXISTS`, así que es seguro re-ejecutarlas.)
@@ -169,6 +183,12 @@ código `1` si alguna comprobación falla.
 > paquete válida**. Con una `simple` el endpoint también responde 422, pero por
 > la otra razón (`NO_ES_PAQUETE`), y la prueba pasaría engañada.
 
+> Las suites que usan el `.xlsx` real le ponen a los códigos un sufijo propio por
+> corrida (`marcar()` / `cod()` en cada guion). Es a propósito: los códigos del
+> archivo ya están ocupados en la base porque la tienda lo cargó de verdad, y sin
+> el sufijo las pruebas chocarían. Si escribes una prueba nueva que lea ese
+> archivo, cópiale el helper.
+
 ---
 
 ## Referencia de archivos
@@ -178,6 +198,16 @@ backend/
   scripts/
     dump-db.js      ← genera el respaldo (.sql)
     e2e-remesas.js  ← prueba E2E de la recepción de remesas
+    e2e-trazabilidad.js ← prueba E2E del rastro de bultos y el desarme
+    e2e-bultos-estado.js ← prueba E2E del estado del bulto (no se vende 2 veces)
+    e2e-cancelacion.js ← prueba E2E de la cancelación (regresa el inventario)
+    e2e-cancelacion-caja.js ← prueba E2E del efectivo al cancelar
+    e2e-devolucion-presentacion.js ← prueba E2E de devolver en otra presentación
+    e2e-carga-por-producto.js ← prueba E2E del vaciado masivo desde el producto
+    e2e-bajar-a-mostrador.js ← prueba E2E de escanear el paquete y bajar conos
+    e2e-traspaso-paquetes.js ← prueba E2E del traspaso por paquetes con peso real
+    limpiar-para-pruebas.js ← deja la base lista para capturar (conserva personal y config)
+    generar-muestras-xlsx.js ← genera listas de empaque de prueba en muestras/
     README.md       ← este archivo
   .env              ← credenciales de conexión (no se versiona)
 db/

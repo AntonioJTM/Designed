@@ -6,7 +6,7 @@ const { AppError } = require('../../middlewares/error');
 
 // Acceso a datos de inventario (multi-almacén) y su bitácora (kardex).
 // REGLA: todo cambio de existencias = UPDATE inventario + INSERT movimiento,
-// siempre dentro de una transacción (ver registrarMovimiento / transferir).
+// siempre dentro de una transacción (ver registrarMovimiento / crearTraspaso).
 
 // Signo del efecto sobre las existencias según el tipo de movimiento.
 // 'ajuste' es especial: la cantidad enviada es el valor absoluto objetivo.
@@ -16,7 +16,7 @@ const SIGNO = { entrada: 1, devolucion: 1, salida: -1, merma: -1 };
 const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 
 const SELECT_STOCK = `
-  SELECT i.id, i.variante_id, pv.sku, p.nombre AS producto, col.nombre AS color,
+  SELECT i.id, i.variante_id, pv.sku, p.nombre AS producto,
          i.almacen_id, a.nombre AS almacen,
          i.cantidad, i.cantidad_reservada,
          (i.cantidad - i.cantidad_reservada) AS disponible,
@@ -24,7 +24,6 @@ const SELECT_STOCK = `
     FROM inventario i
     JOIN producto_variantes pv ON pv.id = i.variante_id
     JOIN productos p           ON p.id = pv.producto_id
-    LEFT JOIN colores col      ON col.id = pv.color_id
     JOIN almacenes a           ON a.id = i.almacen_id
 `;
 
@@ -77,10 +76,8 @@ async function resumenPorAlmacen() {
     `SELECT a.id AS almacen_id, a.nombre, a.es_punto_venta, a.es_matriz,
             a.es_tienda_linea, a.activo,
             COALESCE(SUM(CASE WHEN i.cantidad > 0 THEN 1 ELSE 0 END), 0) AS skus,
-            COALESCE(SUM(CASE WHEN pv.tipo_presentacion = 'cono'
-                              THEN i.cantidad ELSE 0 END), 0) AS piezas,
-            COALESCE(SUM(CASE WHEN pv.tipo_presentacion <> 'cono'
-                              THEN i.cantidad ELSE 0 END), 0) AS kilos,
+            0 AS piezas,
+            COALESCE(SUM(i.cantidad), 0) AS kilos,
             COALESCE(SUM(CASE WHEN (i.cantidad - i.cantidad_reservada) <= i.stock_minimo
                               THEN 1 ELSE 0 END), 0) AS alertas
        FROM almacenes a
@@ -113,7 +110,8 @@ async function resumenPorAlmacen() {
         presentacion: d.presentacion,
         tipo_presentacion: d.tipo_presentacion,
         peso_kg: d.peso_kg,
-        unidad: d.tipo_presentacion === 'cono' ? 'pz' : 'kg',
+        // Todo se lleva en kilos, también los conos.
+        unidad: 'kg',
         existencias: {},
         total: 0,
       });
@@ -188,7 +186,7 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limi
             cvo.sku AS conversion_paquete, cvd.sku AS conversion_cono,
             CASE pv.tipo_presentacion
               WHEN 'paquete' THEN 'kg'
-              WHEN 'cono'    THEN 'pz'
+              WHEN 'cono'    THEN 'kg'
               ELSE um.abreviatura
             END AS unidad,
             pv.tipo_presentacion, pv.peso_kg
@@ -294,48 +292,6 @@ async function registrarMovimiento(datos, usuarioId) {
 }
 
 /**
- * Transferencia entre almacenes: salida en origen + entrada en destino,
- * dos movimientos 'transferencia' dentro de una sola transacción.
- */
-async function transferir(datos, usuarioId) {
-  const { variante_id, almacen_origen_id, almacen_destino_id, cantidad } = datos;
-  if (almacen_origen_id === almacen_destino_id) {
-    throw new AppError(422, 'ALMACENES_IGUALES', 'El origen y el destino deben ser distintos');
-  }
-  return withTransaction(async (conn) => {
-    const filaOrigen = await _leerCantidad(conn, variante_id, almacen_origen_id);
-    const actualOrigen = filaOrigen ? Number(filaOrigen.cantidad) : 0;
-    if (actualOrigen - cantidad < 0) {
-      throw new AppError(409, 'STOCK_INSUFICIENTE',
-        `Existencias insuficientes en el origen: hay ${actualOrigen}, se intenta transferir ${cantidad}`);
-    }
-    const filaDestino = await _leerCantidad(conn, variante_id, almacen_destino_id);
-    const actualDestino = filaDestino ? Number(filaDestino.cantidad) : 0;
-
-    await _aplicarSaldo(conn, variante_id, almacen_origen_id, actualOrigen - cantidad);
-    await _aplicarSaldo(conn, variante_id, almacen_destino_id, actualDestino + cantidad);
-
-    const base = {
-      variante_id,
-      tipo: 'transferencia',
-      costo_unitario: datos.costo_unitario ?? null,
-      referencia_tipo: 'transferencia',
-      referencia_id: null,
-      usuario_id: usuarioId ?? null,
-      motivo: datos.motivo ?? null,
-    };
-    await _insertarMovimiento(conn, { ...base, almacen_id: almacen_origen_id, cantidad: -cantidad });
-    await _insertarMovimiento(conn, { ...base, almacen_id: almacen_destino_id, cantidad });
-
-    return {
-      variante_id,
-      origen: { almacen_id: almacen_origen_id, saldo_nuevo: actualOrigen - cantidad },
-      destino: { almacen_id: almacen_destino_id, saldo_nuevo: actualDestino + cantidad },
-    };
-  });
-}
-
-/**
  * Desarma paquetes y los convierte en conos.
  *
  * Consume `paquetes × peso_kg` kilos de la variante paquete en el almacén de
@@ -343,6 +299,78 @@ async function transferir(datos, usuarioId) {
  * (normalmente el mostrador). Deja en el kardex una salida y una entrada
  * ligadas por el mismo folio de `variante_conversiones`.
  */
+/**
+ * Los bultos disponibles de una variante en un almacén, del más antiguo al más
+ * nuevo. Es el orden en que salen (FIFO): quien surte pide "5 paquetes" y el
+ * sistema toma estos cinco, sin que nadie busque un bulto concreto en la bodega.
+ */
+async function bultosDisponibles(conn, varianteId, almacenId, limite = null) {
+  const sql =
+    `SELECT id, codigo, peso_kg, lote
+       FROM variante_codigos
+      WHERE variante_id = :v AND almacen_id = :a AND estado = 'disponible'
+        AND peso_kg IS NOT NULL
+      ORDER BY id` + (limite ? ' LIMIT :limite FOR UPDATE' : '');
+  const [rows] = await (conn ?? pool).query(sql, { v: varianteId, a: almacenId, limite });
+  return rows;
+}
+
+/**
+ * Cuántos paquetes hay de una variante en un almacén y cuánto pesan de verdad.
+ * Con esto la pantalla puede decir "100 kg ≈ 5 paquetes" usando el peso REAL
+ * promedio y no el nominal, que nunca corresponde.
+ */
+async function disponibilidadEnPaquetes(varianteId, almacenId) {
+  const [[fila]] = await pool.query(
+    `SELECT COUNT(*) AS paquetes, COALESCE(SUM(peso_kg), 0) AS kg,
+            COALESCE(AVG(peso_kg), 0) AS promedio,
+            COALESCE(MIN(peso_kg), 0) AS minimo, COALESCE(MAX(peso_kg), 0) AS maximo
+       FROM variante_codigos
+      WHERE variante_id = :v AND almacen_id = :a AND estado = 'disponible'
+        AND peso_kg IS NOT NULL`,
+    { v: varianteId, a: almacenId }
+  );
+  const [[saldo]] = await pool.query(
+    'SELECT COALESCE(cantidad, 0) AS kg FROM inventario WHERE variante_id = :v AND almacen_id = :a',
+    { v: varianteId, a: almacenId }
+  );
+  return {
+    paquetes: Number(fila.paquetes),
+    kg_en_bultos: round3(fila.kg),
+    peso_promedio: round3(fila.promedio),
+    peso_min: round3(fila.minimo),
+    peso_max: round3(fila.maximo),
+    // El saldo de inventario puede diferir de la suma de bultos: hay mercancía
+    // que entró sin bultos (captura manual) o bultos sin ubicar.
+    kg_inventario: round3(saldo?.kg ?? 0),
+  };
+}
+
+/** El cono que sale de un paquete, o null si todavía no se ha dado de alta. */
+async function conoDe(paqueteId) {
+  const [rows] = await pool.query(
+    `SELECT id, sku, piezas_por_origen, precio, modo_precio
+       FROM producto_variantes
+      WHERE origen_variante_id = :id AND tipo_presentacion = 'cono' AND activo = 1
+      ORDER BY id LIMIT 1`,
+    { id: paqueteId }
+  );
+  return rows[0] || null;
+}
+
+/** En qué almacenes hay existencias de una variante, para proponer el origen. */
+async function existenciasDe(varianteId) {
+  const [rows] = await pool.query(
+    `SELECT i.almacen_id, a.nombre AS almacen, i.cantidad
+       FROM inventario i
+       JOIN almacenes a ON a.id = i.almacen_id
+      WHERE i.variante_id = :id AND i.cantidad > 0
+      ORDER BY i.cantidad DESC`,
+    { id: varianteId }
+  );
+  return rows;
+}
+
 async function desarmar(datos, usuarioId) {
   const { cono_variante_id, almacen_origen_id, almacen_destino_id, paquetes } = datos;
 
@@ -370,16 +398,56 @@ async function desarmar(datos, usuarioId) {
         `La variante ${cono.sku} no es una presentación de tipo cono`);
     }
 
+    // Si el desarme se hizo escaneando un bulto, ese bulto se consume: no se
+    // puede desarmar dos veces ni venderse después. Se bloquea antes de tocar
+    // saldos para que el 409 no deje nada a medias.
+    let bulto = null;
+    if (datos.codigo_bulto) {
+      const [brows] = await conn.query(
+        'SELECT id, codigo, estado FROM variante_codigos WHERE codigo = :c LIMIT 1 FOR UPDATE',
+        { c: datos.codigo_bulto }
+      );
+      bulto = brows[0] ?? null;
+      if (!bulto) {
+        throw new AppError(422, 'BULTO_DESCONOCIDO',
+          `El bulto ${datos.codigo_bulto} no está registrado`);
+      }
+      if (bulto.estado !== 'disponible') {
+        throw new AppError(409, 'BULTO_NO_DISPONIBLE',
+          `El bulto ${bulto.codigo} ya está ${bulto.estado}; no se puede desarmar.`);
+      }
+    }
+
     const pesoPaquete = Number(cono.paquete_peso_kg);
     const piezas = Number(cono.piezas_por_origen);
+    // El peso del paquete puede estar pendiente si nunca llegó una remesa: aquí
+    // sí hace falta, porque de él salen los kilos a descontar.
+    if (!pesoPaquete || pesoPaquete <= 0) {
+      throw new AppError(422, 'PAQUETE_SIN_PESO',
+        `"${cono.paquete_sku}" todavía no tiene peso de paquete. Lo pone la carga del ` +
+        `Excel, o captúralo en la presentación.`);
+    }
     // Por omisión se consume el peso nominal del paquete, pero se puede ajustar
     // cuando el bulto real no pesó exactamente eso.
     const kgConsumidos =
       datos.kg != null ? round3(datos.kg) : round3(pesoPaquete * paquetes);
-    const piezasGeneradas = round3(piezas * paquetes);
+    // Igual con las piezas: hay bultos que rinden menos conos —vienen así de
+    // fábrica— y darles de alta los nominales infla el inventario de conos.
+    const piezasGeneradas =
+      datos.conos != null ? round3(datos.conos) : round3(piezas * paquetes);
     if (kgConsumidos <= 0) {
       throw new AppError(422, 'KG_INVALIDOS', 'Los kilos a consumir deben ser mayores a cero');
     }
+
+    // DESTARE: lo que GANA de peso el hilo al enconarse, por el tubo de cada
+    // cono. Lo captura la tienda; el sistema no lo calcula porque depende del
+    // tubo que se use. Solo dice cuánto pesó el resultado: del paquete sale
+    // `kgConsumidos` y eso es lo que se descuenta del inventario.
+    const destareKg = datos.destare_kg != null ? round3(datos.destare_kg) : null;
+    if (destareKg != null && destareKg < 0) {
+      throw new AppError(422, 'DESTARE_INVALIDO', 'El destare no puede ser negativo');
+    }
+    const kgEnconados = round3(kgConsumidos + (destareKg ?? 0));
 
     // Descuenta kilos del paquete.
     const filaPaq = await _leerCantidad(conn, cono.origen_variante_id, almacen_origen_id);
@@ -394,14 +462,17 @@ async function desarmar(datos, usuarioId) {
     const saldoCono = filaCono ? Number(filaCono.cantidad) : 0;
 
     await _aplicarSaldo(conn, cono.origen_variante_id, almacen_origen_id, saldoPaq - kgConsumidos);
-    await _aplicarSaldo(conn, cono_variante_id, almacen_destino_id, saldoCono + piezasGeneradas);
+    // El cono entra en KILOS, ya con el destare: es el mismo hilo, solo enconado,
+    // y se vende por peso. `piezasGeneradas` queda como dato informativo.
+    await _aplicarSaldo(conn, cono_variante_id, almacen_destino_id, round3(saldoCono + kgEnconados));
 
     const [conv] = await conn.query(
       `INSERT INTO variante_conversiones
          (variante_origen_id, variante_destino_id, almacen_origen_id, almacen_destino_id,
-          paquetes, kg_consumidos, piezas_generadas, usuario_id, motivo)
+          paquetes, kg_consumidos, destare_kg, piezas_generadas, codigo_bulto,
+          usuario_id, motivo)
        VALUES (:origen, :destino, :alm_origen, :alm_destino,
-               :paquetes, :kg, :piezas, :usuario, :motivo)`,
+               :paquetes, :kg, :destare, :piezas, :codigo_bulto, :usuario, :motivo)`,
       {
         origen: cono.origen_variante_id,
         destino: cono_variante_id,
@@ -409,11 +480,28 @@ async function desarmar(datos, usuarioId) {
         alm_destino: almacen_destino_id,
         paquetes,
         kg: kgConsumidos,
+        destare: destareKg,
         piezas: piezasGeneradas,
+        codigo_bulto: datos.codigo_bulto ?? null,
         usuario: usuarioId ?? null,
         motivo: datos.motivo ?? null,
       }
     );
+
+    // El bulto queda consumido: se convirtió en conos. Y se corrige su ubicación
+    // al almacén de donde de verdad salió: el traspaso asigna bultos por FIFO,
+    // pero quien surte se lleva los que tiene a mano, así que lo que vale es
+    // dónde se escaneó.
+    if (bulto) {
+      await conn.query(
+        `UPDATE variante_codigos
+            SET estado = 'desarmado', consumido_en = NOW(),
+                consumido_tipo = 'conversion', consumido_id = :conv,
+                almacen_id = :almacen
+          WHERE id = :id`,
+        { conv: conv.insertId, id: bulto.id, almacen: almacen_origen_id }
+      );
+    }
 
     // Kardex: los dos lados comparten folio para poder reconstruir el desarme.
     const base = {
@@ -430,19 +518,25 @@ async function desarmar(datos, usuarioId) {
       cantidad: -kgConsumidos,
       motivo:
         datos.motivo ??
-        `Desarme de ${paquetes} paquete(s) (${kgConsumidos} kg) en ${piezasGeneradas} cono(s)`,
+        `Desarme de ${paquetes} paquete(s) (${kgConsumidos} kg) en ${piezasGeneradas} cono(s)` +
+        (destareKg ? ` · quedan ${kgEnconados} kg enconados (+${destareKg} de destare)` : ''),
     });
     await _insertarMovimiento(conn, {
       ...base,
       variante_id: cono_variante_id,
       almacen_id: almacen_destino_id,
       tipo: 'entrada',
-      cantidad: piezasGeneradas,
-      motivo: datos.motivo ?? `Desarme de ${paquetes} paquete(s) de ${cono.paquete_sku}`,
+      cantidad: kgEnconados,
+      motivo:
+        datos.motivo ??
+        `Enconado de ${paquetes} paquete(s) de ${cono.paquete_sku}: ${piezasGeneradas} cono(s)` +
+        (destareKg ? ` · ${kgConsumidos} kg + ${destareKg} de destare` : ''),
     });
 
     return {
       conversion_id: conv.insertId,
+      destare_kg: destareKg,
+      kg_enconados: kgEnconados,
       producto: cono.producto,
       paquetes,
       kg_consumidos: kgConsumidos,
@@ -458,7 +552,7 @@ async function desarmar(datos, usuarioId) {
         variante_id: cono_variante_id,
         sku: cono.sku,
         almacen_id: almacen_destino_id,
-        saldo_nuevo: round3(saldoCono + piezasGeneradas),
+        saldo_nuevo: round3(saldoCono + kgEnconados),
       },
     };
   });
@@ -512,13 +606,31 @@ async function crearTraspaso(datos, usuarioId) {
       const esPaquete = v.tipo_presentacion === 'paquete';
       let paquetes = null;
       let cantidad;
+      // Bultos concretos que se van a mover, cuando se pide por paquetes.
+      let bultos = [];
+      // True si el peso salió del nominal por no haber bultos ubicados.
+      let estimado = false;
       if (esPaquete && item.paquetes != null) {
         if (!v.peso_kg || Number(v.peso_kg) <= 0) {
           throw new AppError(422, 'PAQUETE_SIN_PESO',
             `"${v.producto} · ${v.sku}" no tiene peso de paquete configurado`);
         }
         paquetes = Number(item.paquetes);
-        cantidad = round3(paquetes * Number(v.peso_kg));
+        // Se toman los bultos que DE VERDAD hay en el origen, del más antiguo al
+        // más nuevo, y se descuenta su peso real. Antes se multiplicaba por el
+        // peso nominal y eso nunca cuadra: los bultos pesan distinto (10.75 a
+        // 19.80 kg contra un nominal de 19.094).
+        // Quien surte solo dice "5 paquetes": el sistema elige cuáles.
+        bultos = await bultosDisponibles(conn, v.id, almacen_origen_id, paquetes);
+        if (bultos.length >= paquetes) {
+          cantidad = round3(bultos.reduce((acc, b) => acc + Number(b.peso_kg), 0));
+        } else {
+          // No hay bultos ubicados para cubrirlo (mercancía capturada a mano, o
+          // bultos sin almacén). Se cae al peso nominal y se avisa en la línea.
+          bultos = [];
+          cantidad = round3(paquetes * Number(v.peso_kg));
+          estimado = true;
+        }
       } else if (item.cantidad != null) {
         cantidad = round3(item.cantidad);
       } else {
@@ -532,16 +644,24 @@ async function crearTraspaso(datos, usuarioId) {
       const filaOrigen = await _leerCantidad(conn, v.id, almacen_origen_id);
       const saldoOrigen = filaOrigen ? Number(filaOrigen.cantidad) : 0;
       if (saldoOrigen < cantidad) {
-        const unidad = esPaquete ? 'kg' : 'pz';
+        // Todo se lleva en kilos, también los conos.
         throw new AppError(409, 'STOCK_INSUFICIENTE',
-          `No alcanza "${v.producto} · ${v.sku}": hay ${saldoOrigen} ${unidad} en el origen ` +
-          `y el traspaso pide ${cantidad} ${unidad}.`);
+          `No alcanza "${v.producto} · ${v.sku}": hay ${saldoOrigen} kg en el origen ` +
+          `y el traspaso pide ${cantidad} kg.`);
       }
       const filaDestino = await _leerCantidad(conn, v.id, almacen_destino_id);
       const saldoDestino = filaDestino ? Number(filaDestino.cantidad) : 0;
 
       await _aplicarSaldo(conn, v.id, almacen_origen_id, round3(saldoOrigen - cantidad));
       await _aplicarSaldo(conn, v.id, almacen_destino_id, round3(saldoDestino + cantidad));
+
+      // Los bultos viajan: quedan ubicados en la sucursal que los recibe.
+      if (bultos.length) {
+        await conn.query(
+          'UPDATE variante_codigos SET almacen_id = :destino WHERE id IN (:ids)',
+          { destino: almacen_destino_id, ids: bultos.map((b) => b.id) }
+        );
+      }
 
       await conn.query(
         `INSERT INTO traspaso_detalle (traspaso_id, variante_id, paquetes, cantidad)
@@ -568,7 +688,12 @@ async function crearTraspaso(datos, usuarioId) {
         producto: v.producto,
         paquetes,
         cantidad,
-        unidad: esPaquete ? 'kg' : 'pz',
+        unidad: 'kg',
+        // Qué bultos se movieron y su peso: es lo que hace que la cuenta cuadre.
+        bultos: bultos.map((b) => ({ codigo: b.codigo, peso_kg: b.peso_kg, lote: b.lote })),
+        // Avisa cuando el peso es una estimación por falta de bultos ubicados.
+        peso_estimado: estimado,
+        peso_nominal: esPaquete && v.peso_kg ? round3(paquetes * Number(v.peso_kg)) : null,
         saldo_origen: round3(saldoOrigen - cantidad),
         saldo_destino: round3(saldoDestino + cantidad),
       });
@@ -658,7 +783,8 @@ async function listarConversiones({ variante_id, limit, offset }) {
   const params = { variante_id, limit, offset };
 
   const [rows] = await pool.query(
-    `SELECT c.id, c.paquetes, c.kg_consumidos, c.piezas_generadas, c.motivo, c.creado_en,
+    `SELECT c.id, c.paquetes, c.kg_consumidos, c.destare_kg, c.piezas_generadas, c.codigo_bulto,
+            c.motivo, c.creado_en,
             c.variante_origen_id, vo.sku AS paquete_sku,
             c.variante_destino_id, vd.sku AS cono_sku,
             prod.nombre AS producto,
@@ -705,8 +831,11 @@ module.exports = {
   alertas,
   listarMovimientos,
   registrarMovimiento,
-  transferir,
   desarmar,
+  conoDe,
+  bultosDisponibles,
+  disponibilidadEnPaquetes,
+  existenciasDe,
   listarConversiones,
   crearTraspaso,
   listarTraspasos,

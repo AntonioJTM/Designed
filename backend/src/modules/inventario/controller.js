@@ -66,12 +66,13 @@ async function registrarMovimiento(req, res, next) {
   }
 }
 
-async function transferir(req, res, next) {
+/** Qué trae el bulto escaneado: paquete, kilos, conos y dónde hay existencias. */
+async function previaDesarmeBulto(req, res, next) {
   try {
-    const data = await service.transferir(req.body, req.auth.sub);
-    res.status(201).json({ data, error: null });
+    const data = await service.previaDesarmeBulto(req.params.codigo);
+    return res.json({ data, error: null });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 }
 
@@ -94,6 +95,20 @@ async function listarConversiones(req, res, next) {
     res.json({ data, error: null });
   } catch (err) {
     next(err);
+  }
+}
+
+/** Cuántos paquetes son X kilos, con los pesos reales de la bodega. */
+async function equivalenciaPaquetes(req, res, next) {
+  try {
+    const data = await service.equivalenciaPaquetes({
+      variante_id: Number(req.query.variante_id),
+      almacen_id: Number(req.query.almacen_id),
+      kg: req.query.kg != null ? Number(req.query.kg) : null,
+    });
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
   }
 }
 
@@ -142,10 +157,11 @@ module.exports = {
   alertas,
   listarMovimientos,
   registrarMovimiento,
-  transferir,
   desarmar,
+  previaDesarmeBulto,
   listarConversiones,
   crearTraspaso,
+  equivalenciaPaquetes,
   listarTraspasos,
   obtenerTraspaso,
   configurar,

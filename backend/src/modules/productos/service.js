@@ -1,6 +1,7 @@
 'use strict';
 
 const model = require('./model');
+const variantesService = require('../variantes/service');
 const almacenesModel = require('../almacenes/model');
 const { AppError } = require('../../middlewares/error');
 const { paginado } = require('../../utils/query');
@@ -38,12 +39,38 @@ async function crear(datos) {
     nombre: datos.nombre,
     descripcion: datos.descripcion ?? null,
     grosor_calibre: datos.grosor_calibre ?? null,
+    precio_kg: datos.precio_kg ?? null,
     multipresentacion: datos.multipresentacion ?? false,
     por_lotes: datos.por_lotes ?? false,
     destacado: datos.destacado ?? false,
     activo: datos.activo ?? true,
   };
   const creado = await model.crear(registro);
+
+  // El hilo SIEMPRE entra en paquetes, así que su presentación se crea sola: el
+  // SKU y el código de barras son el nombre del color (la tienda no maneja SKU
+  // propios) y el precio lo hereda del producto. El PESO queda pendiente: lo pone
+  // la carga del Excel con el promedio real de los bultos.
+  //
+  // Si la presentación falla, el producto NO se pierde: se devuelve igual y el
+  // usuario puede capturarla a mano. Sería peor perder el alta completa.
+  try {
+    const sku = await variantesService.skuDesdeNombre(datos.nombre);
+    // 'paquete' necesita la bandera de multipresentación; sin ella la
+    // presentación es 'simple', que también se lleva en kilos.
+    const esPaquete = !!registro.multipresentacion;
+    await variantesService.crear({
+      producto_id: creado.id,
+      sku,
+      codigo_barras: sku,
+      presentacion: esPaquete ? 'Paquete' : null,
+      tipo_presentacion: esPaquete ? 'paquete' : 'simple',
+    });
+  } catch (err) {
+    // Queda en el log: el alta del producto sí funcionó.
+    console.error(`[productos] no se pudo crear la presentación de "${datos.nombre}":`, err.message);
+  }
+
   return obtener(creado.id);
 }
 
@@ -60,6 +87,7 @@ async function actualizar(id, datos) {
     nombre: merge('nombre'),
     descripcion: merge('descripcion'),
     grosor_calibre: merge('grosor_calibre'),
+    precio_kg: merge('precio_kg'),
     multipresentacion: merge('multipresentacion'),
     por_lotes: merge('por_lotes'),
     destacado: merge('destacado'),

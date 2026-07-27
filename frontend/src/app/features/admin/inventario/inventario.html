@@ -104,45 +104,110 @@
   </div>
 }
 
-<!-- Selector de variante (compartido) -->
+<!-- Bajar conos a mostrador: escanear el paquete y confirmar -->
 <div class="card">
-  <h3 style="margin-top:0">1 · Elige la variante (SKU)</h3>
-  <div class="form-grid">
-    <label class="field">
-      Buscar / escanear (SKU, código o producto)
-      <span class="input-scan">
-        <input #bcInv type="text" [(ngModel)]="qVar"
-               (keydown.enter)="$event.preventDefault(); buscarVariantes()"
-               placeholder="Escanea el código o teclea SKU/nombre" />
-        <button type="button" class="btn btn-ghost btn-sm" (click)="bcInv.focus()" title="Escanear">📷</button>
-      </span>
-    </label>
-    <label class="field">
-      Resultado
-      <select [(ngModel)]="varianteSel">
-        <option value="">— Selecciona —</option>
-        @for (v of resultadosVar(); track v.id) {
-        <option [ngValue]="v.id">{{ v.sku }} · {{ v.producto }} {{ v.presentacion ? '· ' + v.presentacion : '' }}
-        </option>
+  <h3 style="margin-top:0">Bajar conos a mostrador</h3>
+  <p class="muted" style="margin-top:0; font-size:0.85rem">
+    Escanea el paquete que vas a abrir: el sistema dice cuántos conos trae y, al confirmar, lo
+    deshace —descuenta sus kilos de la bodega y da entrada al mostrador—. El cono se vende por
+    kilo, al mismo precio; si le pones destare, esos kilos se suman.
+  </p>
+
+    <!-- 1 · Escanear el bulto: es el flujo normal -->
+    <div class="input-scan" style="max-width:560px; margin-bottom:0.5rem">
+      <input type="text" [(ngModel)]="codigoDesarme"
+             (keydown.enter)="$event.preventDefault(); escanearParaBajar()"
+             placeholder="Escanea el paquete que vas a bajar" />
+      <button class="btn btn-primary" (click)="escanearParaBajar()">Leer</button>
+    </div>
+
+    @if (previaBulto(); as pb) {
+      <div class="previa-calculo">
+        <div class="renglon">
+          <span>
+            <b>{{ pb.paquete.producto }}</b>
+            <span class="muted"> · bulto {{ pb.bulto.codigo }}</span>
+            @if (pb.bulto.lote) { <span class="muted"> · lote {{ pb.bulto.lote }}</span> }
+          </span>
+          <span class="neg">−{{ pb.bulto.peso_kg | cantidad: 'kg' }}</span>
+        </div>
+        <div class="renglon">
+          <span>
+            Salen <b>{{ pb.conos_a_generar }}</b> conos
+            @if (!pb.cono) {
+              <span class="muted"> · se dará de alta la presentación</span>
+            }
+          </span>
+          <span style="color:#166534">
+            +{{ pesoEnconado() | cantidad: 'kg' }}
+          </span>
+        </div>
+        @if (destare) {
+          <div class="renglon">
+            <span class="muted">
+              {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ destare }} de destare
+            </span>
+            <span class="muted">se venden por kilo</span>
+          </div>
         }
-      </select>
-    </label>
-  </div>
-  <div style="margin-top:0.75rem">
-    <button class="btn btn-ghost btn-sm" (click)="buscarVariantes()">Buscar variantes</button>
-  </div>
-</div>
+      </div>
 
-<!-- Desarmar paquetes en conos -->
-@if (conos().length > 0) {
-  <div class="card">
-    <h3 style="margin-top:0">Desarmar paquete en conos</h3>
-    <p class="muted" style="margin-top:0; font-size:0.85rem">
-      Abre paquetes de bodega y baja los conos a mostrador. Descuenta los kilos del paquete y da
-      entrada a los conos, dejando las dos patas en el kardex.
-    </p>
+      <div class="form-grid" style="margin-top:0.75rem">
+        <label class="field">
+          Sale de
+          <select [(ngModel)]="desarme.origen">
+            @for (e of pb.existencias; track e.almacen_id) {
+              <option [ngValue]="e.almacen_id">
+                {{ e.almacen }} — hay {{ e.cantidad | cantidad: 'kg' }}
+              </option>
+            }
+            @if (pb.existencias.length === 0) {
+              @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+            }
+          </select>
+          @if (pb.existencias.length === 0) {
+            <span class="muted" style="font-size:0.72rem">
+              Este paquete no tiene existencias en ningún almacén.
+            </span>
+          }
+        </label>
+        <label class="field">
+          Baja a (mostrador)
+          <select [(ngModel)]="bajarA">
+            @for (a of almacenes(); track a.id) {
+              <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_punto_venta ? ' · mostrador' : '' }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          Destare (kg) <span class="muted">(opcional)</span>
+          <input type="number" step="0.001" min="0" [(ngModel)]="destare" placeholder="Ej. 0.5" />
+          <span class="muted" style="font-size:0.72rem">
+            Lo que gana de peso al enconarse, por el tubo de cada cono. Se suma a los kilos que
+            entran al mostrador; no cambia lo que se descuenta del paquete.
+          </span>
+        </label>
+        <label class="field full">
+          Motivo (opcional)
+          <input type="text" [(ngModel)]="desarme.motivo" placeholder="Ej. Surtido de mostrador" />
+        </label>
+      </div>
 
-    <div class="form-grid">
+      <div style="margin-top:1rem; display:flex; gap:0.5rem">
+        <button class="btn btn-primary" (click)="bajarAMostrador()" [disabled]="bajando()">
+          {{ bajando() ? 'Bajando…' : 'Bajar a mostrador' }}
+        </button>
+        <button class="btn btn-ghost" (click)="olvidarBulto()" [disabled]="bajando()">Cancelar</button>
+      </div>
+    }
+
+    <!-- 2 · Sin lector: se captura a mano -->
+    @if (!previaBulto() && conos().length > 0) {
+      <details style="margin-top:1rem">
+        <summary class="muted" style="cursor:pointer; font-size:0.85rem">
+          Capturar a mano, sin escanear
+        </summary>
+        <div class="form-grid" style="margin-top:0.75rem">
       <label class="field">
         Cono a producir
         <select [(ngModel)]="desarme.cono_id">
@@ -167,6 +232,14 @@
                [placeholder]="previaDesarme() ? previaDesarme()!.nominal + ' kg' : 'peso nominal'" />
         <span class="muted" style="font-size:0.72rem">
           Solo si el bulto no pesó lo nominal. Vacío usa el peso del paquete.
+        </span>
+      </label>
+      <label class="field">
+        Conos reales <span class="muted">(opcional)</span>
+        <input type="number" step="1" min="1" [(ngModel)]="desarme.conos"
+               [placeholder]="previaDesarme() ? previaDesarme()!.piezasNominal + ' conos' : 'los nominales'" />
+        <span class="muted" style="font-size:0.72rem">
+          Solo si el bulto rinde menos de lo normal. Vacío usa los nominales.
         </span>
       </label>
       <label class="field">
@@ -199,25 +272,33 @@
           <span class="neg">−{{ p.kg | cantidad: 'kg' }}</span>
         </div>
         <div class="renglon">
-          <span>{{ p.conoSku }}</span>
+          <span>
+            {{ p.conoSku }}
+            @if (p.piezasAjustadas) {
+              <span class="muted">· ajustado, nominal {{ p.piezasNominal | cantidad }}</span>
+            }
+          </span>
           <span style="color:#166534">+{{ p.piezas | cantidad }} conos</span>
         </div>
       </div>
     }
 
-    <div style="margin-top:1rem">
-      <button class="btn btn-primary" (click)="desarmar()">Desarmar</button>
-    </div>
-  </div>
+        <div style="margin-top:1rem">
+          <button class="btn btn-ghost btn-sm" (click)="desarmar()">Desarmar</button>
+        </div>
+      </details>
+    }
+</div>
 
-  @if (conversiones().length > 0) {
-    <div class="card">
-      <h3 style="margin-top:0">Desarmes recientes</h3>
+@if (conversiones().length > 0) {
+  <div class="card">
+    <h3 style="margin-top:0">Bajadas recientes a mostrador</h3>
       <table class="grid">
         <thead>
           <tr>
             <th>Producto</th><th>Paquete</th><th class="num">Paquetes</th>
-            <th class="num">Kilos</th><th class="num">Conos</th><th>Destino</th><th>Cuándo</th>
+            <th class="num">Kilos que salen</th><th class="num">Kilos enconados</th>
+            <th class="num">Conos</th><th>Destino</th><th>Cuándo</th>
           </tr>
         </thead>
         <tbody>
@@ -226,22 +307,64 @@
               <td>{{ c.producto }}</td>
               <td class="muted">{{ c.paquete_sku }} → {{ c.cono_sku }}</td>
               <td class="num">{{ c.paquetes | cantidad }}</td>
-              <td class="num neg">−{{ c.kg_consumidos | cantidad }}</td>
-              <td class="num">+{{ c.piezas_generadas | cantidad }}</td>
+              <td class="num neg">
+                −{{ c.kg_consumidos | cantidad }}
+                @if (c.destare_kg) {
+                  <div class="muted" style="font-size:0.7rem">+{{ c.destare_kg | cantidad }} destare</div>
+                }
+              </td>
+              <td class="num" style="color:#166534">
+                +{{ num(c.kg_consumidos) + num(c.destare_kg) | cantidad: 'kg' }}
+              </td>
+              <td class="num muted">{{ c.piezas_generadas | cantidad }}</td>
               <td class="muted">{{ c.almacen_destino }}</td>
               <td class="muted">{{ c.creado_en | fecha }}</td>
             </tr>
           }
-        </tbody>
-      </table>
-    </div>
-  }
+      </tbody>
+    </table>
+  </div>
 }
 
-<div class="form-grid" style="align-items:start">
-  <!-- Movimiento -->
-  <div class="card">
-    <h3 style="margin-top:0">2 · Registrar movimiento</h3>
+<!-- Movimiento manual: primero se elige la variante -->
+<div class="card">
+  <h3 style="margin-top:0">1 · Elige la variante (SKU)</h3>
+  <p class="muted" style="margin-top:0; font-size:0.85rem">
+    Para cuadrar el inventario con un conteo físico, o dar de baja mercancía dañada.
+  </p>
+  <div class="form-grid">
+    <label class="field">
+      Buscar / escanear (SKU, código o producto)
+      <span class="input-scan">
+        <input #bcInv type="text" [(ngModel)]="qVar"
+               (keydown.enter)="$event.preventDefault(); buscarVariantes()"
+               placeholder="Escanea el código o teclea SKU/nombre" />
+        <button type="button" class="btn btn-ghost btn-sm" (click)="bcInv.focus()" title="Escanear">📷</button>
+      </span>
+    </label>
+    <label class="field">
+      Resultado
+      <select [(ngModel)]="varianteSel">
+        <option value="">— Selecciona —</option>
+        @for (v of resultadosVar(); track v.id) {
+        <option [ngValue]="v.id">{{ v.sku }} · {{ v.producto }} {{ v.presentacion ? '· ' + v.presentacion : '' }}
+        </option>
+        }
+      </select>
+    </label>
+  </div>
+  <div style="margin-top:0.75rem">
+    <button class="btn btn-ghost btn-sm" (click)="buscarVariantes()">Buscar variantes</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">2 · Ajustar o dar de baja</h3>
+  <p class="muted" style="margin-top:0; font-size:0.85rem">
+    <b>Ajuste:</b> la cantidad que escribas queda como el saldo real, sin importar lo que hubiera.
+    Es para cuando cuentas físicamente y no cuadra.<br />
+    <b>Merma:</b> resta lo que se dañó, se mojó o se perdió.
+  </p>
     <div class="field">
       Tipo
       <select [(ngModel)]="mov.tipo">
@@ -255,45 +378,14 @@
       </select>
     </div>
     <div class="field">
-      {{ esAjuste() ? 'Cantidad objetivo (saldo real contado)' : 'Cantidad' }}
+      {{ esAjuste() ? 'Saldo real contado' : 'Cantidad a dar de baja' }}
       <input type="number" step="0.001" [(ngModel)]="mov.cantidad" />
-    </div>
-    <div class="field">
-      Costo unitario <span class="muted">(opcional)</span>
-      <input type="number" step="0.01" [(ngModel)]="mov.costo_unitario" />
     </div>
     <div class="field">
       Motivo <span class="muted">(opcional)</span>
       <input type="text" [(ngModel)]="mov.motivo" />
     </div>
-    <button class="btn btn-primary" style="margin-top:0.75rem" (click)="registrarMovimiento()">Registrar</button>
-  </div>
-
-  <!-- Transferencia -->
-  <div class="card">
-    <h3 style="margin-top:0">Transferir entre almacenes</h3>
-    <div class="field">
-      Origen
-      <select [(ngModel)]="transf.origen">
-        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
-      </select>
-    </div>
-    <div class="field">
-      Destino
-      <select [(ngModel)]="transf.destino">
-        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
-      </select>
-    </div>
-    <div class="field">
-      Cantidad
-      <input type="number" step="0.001" [(ngModel)]="transf.cantidad" />
-    </div>
-    <div class="field">
-      Motivo <span class="muted">(opcional)</span>
-      <input type="text" [(ngModel)]="transf.motivo" />
-    </div>
-    <button class="btn btn-primary" style="margin-top:0.75rem" (click)="transferir()">Transferir</button>
-  </div>
+  <button class="btn btn-primary" style="margin-top:0.75rem" (click)="registrarMovimiento()">Registrar</button>
 </div>
 
 <!-- Existencias -->
@@ -343,7 +435,7 @@
     @for (s of stock(); track s.id) {
     <tr>
       <td>{{ s.sku }}</td>
-      <td>{{ s.producto }}{{ s.color ? ' · ' + s.color : '' }}</td>
+      <td>{{ s.producto }}</td>
       <td>{{ s.almacen }}</td>
       <td class="num">{{ s.cantidad | cantidad }}</td>
       <td class="num">{{ s.cantidad_reservada | cantidad }}</td>

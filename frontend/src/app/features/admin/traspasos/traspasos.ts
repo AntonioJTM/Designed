@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  EquivalenciaPaquetes,
   InventarioService,
   ResultadoTraspaso,
   Traspaso,
@@ -92,7 +93,49 @@ export class Traspasos {
     return this.esPaquete(v) ? 'paquetes' : (v.unidad_venta ?? 'kg');
   }
 
-  /** Kilos que representan N paquetes, para mostrarlo al lado. */
+  /**
+   * Peso real de los bultos que hay en el origen, por variante. Se consulta al
+   * agregar la línea: el peso NOMINAL de la presentación no sirve para estimar,
+   * porque los bultos varían mucho entre sí.
+   */
+  readonly pesos = signal<Record<number, EquivalenciaPaquetes>>({});
+
+  /** Kilos que van a salir, con el peso real promedio de la bodega. */
+  kilosReales(l: LineaEnvio): number | null {
+    const eq = this.pesos()[l.variante.id];
+    if (!eq || !eq.peso_referencia) return null;
+    return Math.round(l.cantidad * eq.peso_referencia * 1000) / 1000;
+  }
+
+  /** Cuántos paquetes hay en el origen, para no pedir más. */
+  disponibles(l: LineaEnvio): number | null {
+    return this.pesos()[l.variante.id]?.disponible.paquetes ?? null;
+  }
+
+  /** Rango de peso de esos bultos: explica por qué el total es aproximado. */
+  rangoPeso(l: LineaEnvio): string | null {
+    const d = this.pesos()[l.variante.id]?.disponible;
+    if (!d || !d.paquetes) return null;
+    if (d.peso_min === d.peso_max) return `${d.peso_min} kg cada uno`;
+    return `de ${d.peso_min} a ${d.peso_max} kg cada uno`;
+  }
+
+  /** Consulta los pesos reales de una variante en el almacén de origen. */
+  private cargarPesos(varianteId: number): void {
+    if (!this.origen) return;
+    this.inv.equivalenciaPaquetes(varianteId, Number(this.origen)).subscribe({
+      next: (eq) => this.pesos.update((m) => ({ ...m, [varianteId]: eq })),
+      error: () => {},
+    });
+  }
+
+  /** Al cambiar el origen cambian los pesos: se vuelven a consultar. */
+  alCambiarOrigen(): void {
+    this.pesos.set({});
+    for (const l of this.lineas()) this.cargarPesos(l.variante.id);
+  }
+
+  /** Kilos que representan N paquetes según el peso NOMINAL (referencia vieja). */
   kilosDe(l: LineaEnvio): number | null {
     if (!this.esPaquete(l.variante) || !l.variante.peso_kg) return null;
     return Math.round(l.cantidad * Number(l.variante.peso_kg) * 1000) / 1000;
@@ -114,6 +157,7 @@ export class Traspasos {
     }
     this.error.set(null);
     this.lineas.update((arr) => [...arr, { variante: v, cantidad: 1 }]);
+    this.cargarPesos(v.id);
     this.q = '';
     this.resultados.set([]);
   }

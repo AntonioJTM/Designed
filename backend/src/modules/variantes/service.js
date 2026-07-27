@@ -20,22 +20,26 @@ async function obtener(id) {
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 
-/** Exige precio capturado en las presentaciones que no lo derivan del paquete. */
-function _exigirPrecio(precio) {
-  if (precio == null) {
-    throw new AppError(422, 'PRECIO_REQUERIDO', 'Falta el precio de la variante');
-  }
-  return precio;
+/**
+ * Precio de la presentación. Si no se capturó, hereda el precio de lista del
+ * producto (`productos.precio_kg`): la tienda lo piensa así —el precio es del
+ * hilo— y evita teclear lo mismo en cada presentación. Solo falla si no hay
+ * ninguno de los dos.
+ */
+function _exigirPrecio(precio, producto = null) {
+  if (precio != null) return precio;
+  if (producto?.precio_kg != null) return producto.precio_kg;
+  throw new AppError(422, 'PRECIO_REQUERIDO',
+    'Falta el precio: captúralo en la presentación o pon el precio por kilo del producto');
 }
 
 /**
- * Precio de un cono derivado de su paquete: se reparte el valor del paquete
- * completo entre los conos que salen de él.
- *
- *   paquete de 10 kg a $200/kg = $2,000 · 8 conos → $250 por cono
+ * Precio de un cono: el MISMO precio por kilo del paquete. No hay precio por
+ * pieza —el cono es el mismo hilo, solo enconado, y se vende por peso—. Lo que
+ * gana la tienda al enconar viene del DESTARE: el tubo suma kilos vendibles.
  */
-function precioDelCono({ precio_kg, peso_kg, piezas }) {
-  return round2((Number(precio_kg) * Number(peso_kg)) / Number(piezas));
+function precioDelCono({ precio_kg }) {
+  return round2(Number(precio_kg));
 }
 
 /**
@@ -59,24 +63,23 @@ async function _resolverPresentacion(datos, actual = null, producto = null) {
       origen_variante_id: null,
       piezas_por_origen: null,
       modo_precio: 'manual',
-      precio: _exigirPrecio(datos.precio !== undefined ? datos.precio : actual?.precio),
+      precio: _exigirPrecio(datos.precio !== undefined ? datos.precio : actual?.precio, producto),
     };
   }
 
   if (tipo === 'paquete') {
+    // El peso puede quedar PENDIENTE: cuando el producto se acaba de dar de alta
+    // todavía no ha llegado mercancía, y el peso real lo pone la carga del Excel
+    // (el promedio de los bultos). Se exige al desarmar, que es cuando importa.
     const peso = datos.peso_kg !== undefined ? datos.peso_kg : actual?.peso_kg;
-    if (!peso || Number(peso) <= 0) {
-      throw new AppError(422, 'PESO_REQUERIDO',
-        'Un paquete necesita su peso en kilos para poder desarmarlo y calcular precios');
-    }
     return {
       tipo_presentacion: 'paquete',
-      peso_kg: peso,
+      peso_kg: peso && Number(peso) > 0 ? peso : null,
       origen_variante_id: null,
       piezas_por_origen: null,
-      // El paquete siempre lleva precio por kilo capturado a mano.
+      // El paquete lleva precio por kilo: el capturado, o el del producto.
       modo_precio: 'manual',
-      precio: _exigirPrecio(datos.precio !== undefined ? datos.precio : actual?.precio),
+      precio: _exigirPrecio(datos.precio !== undefined ? datos.precio : actual?.precio, producto),
     };
   }
 
@@ -115,16 +118,12 @@ async function _resolverPresentacion(datos, actual = null, producto = null) {
   // el usuario y aquí solo se exige que venga.
   let precio;
   if (modo === 'calculado') {
-    precio = precioDelCono({
-      precio_kg: paquete.precio,
-      peso_kg: paquete.peso_kg,
-      piezas,
-    });
+    precio = precioDelCono({ precio_kg: paquete.precio });
   } else {
     precio = datos.precio !== undefined ? datos.precio : actual?.precio;
     if (precio == null) {
       throw new AppError(422, 'PRECIO_REQUERIDO',
-        'Con precio por pieza tienes que capturar el precio del cono');
+        'Con precio propio tienes que capturar el precio por kilo del cono');
     }
   }
 
@@ -151,13 +150,30 @@ async function _sincronizarConos(paqueteId) {
   for (const cono of await model.derivadasDe(paqueteId)) {
     await model.fijarPrecio(
       cono.id,
-      precioDelCono({
-        precio_kg: paquete.precio,
-        peso_kg: paquete.peso_kg,
-        piezas: cono.piezas_por_origen,
-      })
+      precioDelCono({ precio_kg: paquete.precio })
     );
   }
+}
+
+/**
+ * SKU a partir del nombre del producto, único. "MARINO OSCURO 2/30" pasa a
+ * MARINO-OSCURO-2-30. Se usa al crear la presentación sola: la tienda no maneja
+ * SKU propios, el identificador es el nombre del color.
+ */
+async function skuDesdeNombre(nombre) {
+  const base =
+    String(nombre ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 45) || 'PRESENTACION';
+
+  for (let i = 0; i < 50; i++) {
+    const sku = i === 0 ? base : `${base}-${i + 1}`;
+    if (!(await model.porSku(sku))) return sku;
+  }
+  throw new AppError(409, 'SKU_OCUPADO',
+    `No se pudo generar un SKU libre a partir de "${nombre}"`);
 }
 
 async function crear(datos) {
@@ -167,7 +183,6 @@ async function crear(datos) {
   const presentacion = await _resolverPresentacion(datos, null, producto);
   const registro = {
     producto_id: datos.producto_id,
-    color_id: datos.color_id ?? null,
     sku: datos.sku.trim(),
     codigo_barras: datos.codigo_barras?.trim() || null,
     presentacion: datos.presentacion ?? null,
@@ -188,7 +203,6 @@ async function actualizar(id, datos) {
   const presentacion = await _resolverPresentacion(datos, actual, producto);
 
   const registro = {
-    color_id: merge('color_id'),
     sku: datos.sku !== undefined ? datos.sku.trim() : actual.sku,
     codigo_barras:
       datos.codigo_barras !== undefined ? datos.codigo_barras?.trim() || null : actual.codigo_barras,
@@ -248,9 +262,9 @@ async function listarCodigos(varianteId) {
   return model.codigosDe(varianteId);
 }
 
-async function agregarCodigo(varianteId, { codigo, etiqueta }) {
+async function agregarCodigo(varianteId, datos) {
   await obtener(varianteId);
-  const cod = codigo.trim();
+  const cod = datos.codigo.trim();
   const dueno = await model.variantePorCodigo(cod);
   if (dueno && dueno !== varianteId) {
     throw new AppError(409, 'CODIGO_EN_USO', 'Ese código ya está asignado a otra variante');
@@ -258,7 +272,29 @@ async function agregarCodigo(varianteId, { codigo, etiqueta }) {
   if (dueno === varianteId) {
     throw new AppError(409, 'CODIGO_DUPLICADO', 'Esa variante ya tiene ese código');
   }
-  return model.agregarCodigo(varianteId, cod, etiqueta);
+  return model.agregarCodigo(varianteId, { ...datos, codigo: cod });
+}
+
+/**
+ * Lo que necesita el lector de códigos: la presentación que se vende y, si el
+ * código escaneado es de un bulto concreto, ese bulto con su peso real.
+ *
+ * Con eso el POS cobra por lo que pesa el bulto que tiene en la mano, que es el
+ * punto de registrar los bultos uno por uno.
+ */
+async function resolverCodigo(codigo) {
+  const cod = String(codigo).trim();
+  if (!cod) throw new AppError(422, 'CODIGO_REQUERIDO', 'Escanea o teclea un código');
+
+  const varianteId = await model.variantePorCodigo(cod);
+  if (!varianteId) {
+    throw new AppError(404, 'CODIGO_DESCONOCIDO', `El código ${cod} no está registrado`);
+  }
+  const variante = await obtener(varianteId);
+  // null cuando el código es el principal de la presentación: no es un bulto y
+  // no tiene peso propio, así que el POS usará la cantidad que se teclee.
+  const bulto = await model.bultoPorCodigo(cod);
+  return { variante, bulto };
 }
 
 async function eliminarCodigo(codigoId) {
@@ -268,6 +304,7 @@ async function eliminarCodigo(codigoId) {
 }
 
 module.exports = {
+  skuDesdeNombre,
   listar,
   obtener,
   crear,
@@ -278,4 +315,5 @@ module.exports = {
   listarCodigos,
   agregarCodigo,
   eliminarCodigo,
+  resolverCodigo,
 };

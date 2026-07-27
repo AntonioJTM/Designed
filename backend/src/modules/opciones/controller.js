@@ -15,17 +15,6 @@ async function lineas(req, res, next) {
   }
 }
 
-async function colores(req, res, next) {
-  try {
-    const [rows] = await pool.query(
-      'SELECT id, nombre, codigo_hex, codigo_fabricante FROM colores ORDER BY nombre'
-    );
-    res.json({ data: rows, error: null });
-  } catch (err) {
-    next(err);
-  }
-}
-
 async function unidades(req, res, next) {
   try {
     const [rows] = await pool.query(
@@ -59,4 +48,4 @@ async function metodosPago(req, res, next) {
   }
 }
 
-module.exports = { lineas, colores, unidades, impuestos, metodosPago };
+module.exports = { lineas, unidades, impuestos, metodosPago };

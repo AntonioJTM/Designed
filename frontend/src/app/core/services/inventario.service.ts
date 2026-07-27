@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
-import { Paginado, Variante } from '../models/catalogo.models';
+import { EstadoBulto, Paginado, Variante } from '../models/catalogo.models';
 import {
   Almacen,
   AlmacenInput,
@@ -37,27 +37,42 @@ export interface MovimientoInput {
   motivo?: string;
 }
 
-export interface TransferenciaInput {
-  variante_id: number;
-  almacen_origen_id: number;
-  almacen_destino_id: number;
-  cantidad: number;
-  motivo?: string;
+/**
+ * Lo que trae un bulto escaneado, para bajarlo a mostrador. `cono` viene en null
+ * cuando el producto todavía no tiene presentación de cono: se crea al confirmar,
+ * con los conos que dice el bulto.
+ */
+export interface PreviaDesarme {
+  bulto: { codigo: string; peso_kg: string; lote?: string | null; conos?: number | null; remesa_folio?: string | null };
+  paquete: { variante_id: number; sku: string; producto: string; presentacion?: string | null; peso_kg: string; precio: string };
+  cono: { variante_id: number; sku: string; piezas_por_origen: number; precio: string } | null;
+  conos_a_generar: number | null;
+  existencias: { almacen_id: number; almacen: string; cantidad: string }[];
 }
 
 /** Desarme de paquetes en conos. El peso y los conos por paquete ya están en la variante. */
 export interface DesarmeInput {
-  cono_variante_id: number;
+  /** Con `codigo_bulto` no hace falta: se resuelve del bulto. */
+  cono_variante_id?: number;
   almacen_origen_id: number;
   almacen_destino_id: number;
-  paquetes: number;
+  paquetes?: number;
   /** Kilos reales. Sin esto se usa paquetes × peso nominal del paquete. */
   kg?: number;
+  /** Conos que rinde de verdad. Sin esto se usan los nominales del cono. */
+  conos?: number;
+  /** Lo que gana de peso el hilo al enconarse (el tubo de cada cono). */
+  destare_kg?: number;
+  /** Bulto que se desarmó, para dejar el rastro en el kardex. */
+  codigo_bulto?: string;
   motivo?: string;
 }
 
 export interface ResultadoDesarme {
   conversion_id: number;
+  /** El destare capturado, y el peso ya con él sumado. */
+  destare_kg?: number | null;
+  kg_enconados?: number;
   producto: string;
   paquetes: number;
   kg_consumidos: number;
@@ -137,6 +152,26 @@ export interface ResultadoRemesa {
   saldo_nuevo: number;
 }
 
+/**
+ * Lo que devuelve el lector al escanear. `bulto` viene en null cuando el código
+ * es el principal de la presentación: no es un bulto y no tiene peso propio.
+ */
+export interface CodigoResuelto {
+  variante: Variante;
+  bulto: {
+    id: number;
+    variante_id: number;
+    codigo: string;
+    peso_kg?: string | null;
+    lote?: string | null;
+    conos?: number | null;
+    estado?: EstadoBulto;
+    consumido_folio?: string | null;
+    consumido_tipo?: 'pedido' | 'conversion' | null;
+    remesa_folio?: string | null;
+  } | null;
+}
+
 export interface Remesa {
   id: number;
   folio: string;
@@ -149,6 +184,29 @@ export interface Remesa {
   lotes?: string | null;
   archivo?: string | null;
   creado_en: string;
+}
+
+/** Cuántos paquetes son X kilos, con los pesos reales de la bodega. */
+export interface EquivalenciaPaquetes {
+  sku: string;
+  producto: string;
+  peso_nominal?: string | null;
+  disponible: {
+    paquetes: number;
+    kg_en_bultos: number;
+    peso_promedio: number;
+    peso_min: number;
+    peso_max: number;
+    kg_inventario: number;
+  };
+  peso_referencia: number;
+  /** True si no hay bultos ubicados y se usó el peso nominal. */
+  referencia_nominal: boolean;
+  sugerencia: {
+    kg_pedidos: number;
+    paquetes_exactos: number;
+    opciones: { paquetes: number; kg_aprox: number; diferencia: number }[];
+  } | null;
 }
 
 export interface TraspasoItemInput {
@@ -172,6 +230,11 @@ export interface TraspasoLinea {
   producto: string;
   paquetes: number | string | null;
   cantidad: number | string;
+  /** Los bultos que de verdad se movieron, con su peso real. */
+  bultos?: { codigo: string; peso_kg: string; lote?: string | null }[];
+  /** True cuando el peso salió del nominal por no haber bultos ubicados. */
+  peso_estimado?: boolean;
+  peso_nominal?: number | null;
   unidad?: string;
   tipo_presentacion?: string;
   saldo_origen?: number;
@@ -205,6 +268,7 @@ export interface Conversion {
   cono_sku: string;
   paquetes: string;
   kg_consumidos: string;
+  destare_kg?: string | null;
   piezas_generadas: string;
   almacen_origen: string;
   almacen_destino: string;
@@ -237,9 +301,14 @@ export class InventarioService {
       .pipe(map(data));
   }
 
-  /** Confirma la remesa: registra los bultos y da entrada al total en kilos. */
+  /**
+   * Confirma la remesa: registra los bultos y da entrada al total en kilos.
+   * Se manda `producto_id` (crea la presentación si al producto le falta) o
+   * `variante_id` para cargar sobre una presentación que ya existe.
+   */
   confirmarRemesa(body: {
-    variante_id: number;
+    producto_id?: number;
+    variante_id?: number;
     almacen_id: number;
     archivo?: string | null;
     notas?: string;
@@ -289,6 +358,19 @@ export class InventarioService {
     return this.http
       .get<ApiResponse<Paginado<Variante>>>(`${this.base}/variantes`, { params })
       .pipe(map((r) => data(r).items));
+  }
+
+  /**
+   * Resuelve un código escaneado: la presentación que se vende y, si el código
+   * es de un bulto concreto, ese bulto con su peso real. Con eso el mostrador
+   * cobra por lo que pesa el bulto que tiene en la mano.
+   */
+  resolverCodigo(codigo: string): Observable<CodigoResuelto> {
+    return this.http
+      .get<ApiResponse<CodigoResuelto>>(
+        `${this.base}/variantes/resolver/${encodeURIComponent(codigo)}`
+      )
+      .pipe(map(data));
   }
 
   /**
@@ -343,13 +425,17 @@ export class InventarioService {
       .pipe(map(data));
   }
 
-  transferir(body: TransferenciaInput): Observable<unknown> {
+
+  /** Desarma paquetes y los convierte en conos en el almacén destino. */
+  /** Qué trae el bulto escaneado. No mueve nada: es para mostrarlo antes. */
+  previaDesarme(codigo: string): Observable<PreviaDesarme> {
     return this.http
-      .post<ApiResponse<unknown>>(`${this.base}/inventario/transferencias`, body)
+      .get<ApiResponse<PreviaDesarme>>(
+        `${this.base}/inventario/desarmes/previa/${encodeURIComponent(codigo)}`
+      )
       .pipe(map(data));
   }
 
-  /** Desarma paquetes y los convierte en conos en el almacén destino. */
   desarmar(body: DesarmeInput): Observable<ResultadoDesarme> {
     return this.http
       .post<ApiResponse<ResultadoDesarme>>(`${this.base}/inventario/desarmes`, body)
@@ -360,6 +446,18 @@ export class InventarioService {
    * Traspaso de matriz a sucursal. En variantes de tipo paquete se manda
    * `paquetes`; en las demás, `cantidad` en su propia unidad.
    */
+  /**
+   * Traduce kilos ↔ paquetes con el peso REAL de los bultos que hay en el
+   * almacén. Sirve para decir "100 kg ≈ 5 paquetes (95.4 kg, faltan 4.6)".
+   */
+  equivalenciaPaquetes(variante_id: number, almacen_id: number, kg?: number): Observable<EquivalenciaPaquetes> {
+    let params = new HttpParams().set('variante_id', variante_id).set('almacen_id', almacen_id);
+    if (kg != null) params = params.set('kg', kg);
+    return this.http
+      .get<ApiResponse<EquivalenciaPaquetes>>(`${this.base}/inventario/equivalencia-paquetes`, { params })
+      .pipe(map(data));
+  }
+
   crearTraspaso(body: TraspasoInput): Observable<ResultadoTraspaso> {
     return this.http
       .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos`, body)
