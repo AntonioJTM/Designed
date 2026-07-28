@@ -70,7 +70,14 @@
       "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --hide-scrollbars --window-size=1400,820 --screenshot=/c/Users/PLANDI/AppData/Local/Temp/claude/d--Imagenes-Designed/dfd072fd-8060-4c0a-9abe-c24e6dfb0228/scratchpad/camp.png \"$\\(pwd -W\\)/tmp-camp.html\")",
       "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --hide-scrollbars --window-size=1400,760 --screenshot=/c/Users/PLANDI/AppData/Local/Temp/claude/d--Imagenes-Designed/dfd072fd-8060-4c0a-9abe-c24e6dfb0228/scratchpad/camp2.png \"$\\(pwd -W\\)/tmp-camp.html\")",
       "Bash(echo \"=== confirmo que el working tree tiene la migracion a lineas ===\")",
-      "Bash(grep -n \"JOIN lineas\\\\|JOIN marcas\" backend/src/modules/productos/model.js)"
+      "Bash(grep -n \"JOIN lineas\\\\|JOIN marcas\" backend/src/modules/productos/model.js)",
+      "Bash(chmod +x deploy/deploy.sh deploy/logs.sh)",
+      "Bash(bash -n deploy/deploy.sh)",
+      "Bash(bash -n deploy/logs.sh)",
+      "Bash(bash deploy/deploy.sh tonteria)",
+      "Bash(bash deploy/deploy.sh all)",
+      "Bash(HEALTH_PORT=9999 bash deploy/deploy.sh backend)",
+      "Bash(npm run *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\PLANDI\\AppData\\Local\\Temp\\claude\\d--Imagenes-Designed\\d79a2359-4b85-4742-99e0-839344f3a2b9\\scratchpad"
