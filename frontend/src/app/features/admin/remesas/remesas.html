@@ -37,12 +37,17 @@
     </p>
   } @else {
     <div class="form-grid">
+      <!--
+        La opción lleva color, CALIBRE, material y línea. Con solo el color no se
+        puede elegir bien —el mismo color en dos calibres son dos productos— y ya
+        se cargaron tres listas de empaque al hilo equivocado.
+      -->
       <label class="field">
-        Presentación
+        A qué hilo entra
         <select [(ngModel)]="varianteSel">
           <option value="">— Selecciona —</option>
           @for (p of paquetes(); track p.id) {
-            <option [ngValue]="p.id">{{ p.producto }} · {{ p.sku }}</option>
+            <option [ngValue]="p.id">{{ etiquetaPaquete(p) }} · {{ p.sku }}</option>
           }
         </select>
         @if (paqueteSel(); as p) {
@@ -79,6 +84,21 @@
 
   @if (leyendo()) {
     <p class="muted" style="margin-top:1rem">Leyendo el archivo…</p>
+  }
+
+  <!--
+    El proveedor nombra sus listas "COLOR CALIBRE.xlsx", así que se puede cotejar
+    contra el hilo elegido. Es un AVISO, no un bloqueo: la convención no es
+    garantía y puede haber archivos con otro nombre.
+  -->
+  @if (avisoArchivo(); as aviso) {
+    <p class="aviso" style="margin-top:1rem">
+      ⚠ {{ aviso }}
+      <br />
+      <span style="font-size:0.85rem">
+        Si el nombre del archivo está mal y el hilo es el correcto, cárgala sin problema.
+      </span>
+    </p>
   }
 
   @if (previa(); as p) {
@@ -183,7 +203,20 @@
 @if (historial().length > 0) {
   <div class="page-head" style="margin-top:2rem">
     <h2 style="font-size:1.1rem; margin:0">Remesas recibidas</h2>
+    @if (sospechosas() > 0) {
+      <span class="pill off">
+        ⚠ {{ sospechosas() }}
+        {{ sospechosas() === 1 ? 'no cuadra' : 'no cuadran' }} con el nombre de su archivo
+      </span>
+    }
   </div>
+  @if (sospechosas() > 0) {
+    <p class="muted" style="font-size:0.8rem; margin-top:0">
+      El archivo del proveedor se llama «COLOR CALIBRE.xlsx». Donde el nombre no coincide con el
+      hilo, la remesa pudo haber entrado al producto equivocado — revísalas. Puede ser también que
+      el archivo viniera con otro nombre.
+    </p>
+  }
   <table class="grid">
     <thead>
       <tr>
@@ -200,7 +233,13 @@
               <div class="muted" style="font-size:0.72rem">{{ r.archivo }}</div>
             }
           </td>
-          <td>{{ r.producto }} <span class="muted">· {{ r.sku }}</span></td>
+          <td>
+            {{ r.producto }}{{ r.calibre ? ' ' + r.calibre : '' }}
+            <span class="muted">· {{ r.sku }}</span>
+            @if (avisoHistorial(r); as aviso) {
+              <div class="neg" style="font-size:0.72rem">⚠ {{ aviso }}</div>
+            }
+          </td>
           <td class="muted">{{ r.almacen }}</td>
           <td class="num">{{ r.num_bultos }}</td>
           <td class="num">{{ r.kg_total | cantidad: 'kg' }}</td>

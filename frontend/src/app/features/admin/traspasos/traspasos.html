@@ -1,39 +1,106 @@
 <div class="page-head">
   <h1>Surtir sucursal</h1>
+  @if (pendientes().length > 0) {
+    <span class="pill warn">
+      {{ pendientes().length }} {{ pendientes().length === 1 ? 'pendiente' : 'pendientes' }}
+    </span>
+  }
 </div>
 
 @if (error()) { <p class="alert">{{ error() }}</p> }
 @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
 
 <p class="muted" style="margin-bottom:1.25rem">
-  Manda mercancía de la matriz a una sucursal. La captura es por <b>paquetes</b>: teclea 70 y el
-  sistema toma los paquetes más antiguos de la bodega y descuenta SU peso real, así que la cuenta
-  cuadra aunque cada paquete pese distinto. Los kilos que se muestran son aproximados —el promedio
-  de los que hay— y el exacto se sabe al enviar. Sale del origen y entra al destino de inmediato; en
-  la sucursal deciden si los desarman en conos o los venden por paquete.
+  Un traspaso pasa por tres pasos: se <b>solicita</b> —se revisa que haya existencia y la mercancía
+  queda apartada—, se <b>envía</b> desde el origen y queda <b>en tránsito</b>, y la sucursal
+  <b>acepta</b> lo que le llegó. Se pide en <b>kilos</b>, que es como pide la sucursal: al lado se
+  muestra a cuántos paquetes equivale, con el peso real de los bultos que hay. Solo se mandan
+  <b>paquetes</b> cerrados; los conos se hacen allá, al desarmarlos.
 </p>
 
-<!-- Comprobante del último envío -->
+<!-- Lo que está esperando algo: es lo primero que hay que ver -->
+@if (pendientes().length > 0) {
+  <div class="card">
+    <h3 style="margin-top:0">Pendientes</h3>
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Folio</th><th>Ruta</th><th>Qué lleva</th><th>Estado</th><th>Quién lo pidió</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (t of pendientes(); track t.id) {
+          <tr>
+            <td>
+              <b>{{ t.folio }}</b>
+              <div class="muted th-sub">{{ t.creado_en | fecha }}</div>
+            </td>
+            <td class="muted">{{ t.almacen_origen }} → {{ t.almacen_destino }}</td>
+            <td>
+              @for (l of t.lineas; track l.variante_id) {
+                <div style="font-size:0.82rem">
+                  <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
+                  @if (l.paquetes) {
+                    <span class="muted">({{ l.paquetes | cantidad }} paq)</span>
+                  }
+                </div>
+              }
+              @if (t.notas) {
+                <div class="muted th-sub">{{ t.notas }}</div>
+              }
+            </td>
+            <td>
+              <span class="pill" [class]="'pill ' + claseEstado(t.estado)">
+                {{ textoEstado(t.estado) }}
+              </span>
+              <div class="muted th-sub">{{ siguientePaso(t) }}</div>
+              @if (t.enviado_en) {
+                <div class="muted th-sub">
+                  Salió el {{ t.enviado_en | fecha }}
+                  @if (t.enviado_por) { · {{ t.enviado_por }} }
+                </div>
+              }
+            </td>
+            <td class="muted">{{ t.usuario || '—' }}</td>
+            <td class="acciones">
+              @if (t.estado === 'solicitado') {
+                <button class="btn btn-primary btn-sm" (click)="enviarTraspaso(t)">Enviar</button>
+              } @else if (t.estado === 'en_transito') {
+                <button class="btn btn-primary btn-sm" (click)="abrirRecepcion(t)">
+                  Acusar recibo
+                </button>
+              }
+              <button class="btn btn-danger btn-sm" (click)="cancelar(t)">Cancelar</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
+
+<!-- Comprobante de la última solicitud -->
 @if (ultimo(); as u) {
   <div class="card" style="border-color:#bbf7d0; background:#f0fdf4">
-    <h3 style="margin-top:0">✅ Traspaso {{ u.folio }}</h3>
+    <h3 style="margin-top:0">✅ Solicitud {{ u.folio }}</h3>
+    <p class="muted" style="margin-top:0; font-size:0.85rem">
+      Apartada en el origen. Todavía no se movió nada: aparece arriba, en Pendientes, para enviarla.
+    </p>
     <table class="grid mini">
       <thead>
-        <tr><th>Producto</th><th class="num">Enviado</th><th class="num">Queda en origen</th></tr>
+        <tr><th>Hilo</th><th class="num">Se pidió</th><th class="num">Hay en origen</th></tr>
       </thead>
       <tbody>
         @for (l of u.lineas; track l.variante_id) {
           <tr>
             <td>{{ l.producto }} <span class="muted">· {{ l.sku }}</span></td>
             <td class="num">
+              {{ l.cantidad | cantidad: 'kg' }}
               @if (l.paquetes) {
-                {{ l.paquetes | cantidad }} paquetes
-                <div class="muted" style="font-size:0.75rem">{{ l.cantidad | cantidad: 'kg' }}</div>
-              } @else {
-                {{ l.cantidad | cantidad: l.unidad }}
+                <div class="muted" style="font-size:0.75rem">{{ l.paquetes | cantidad }} paquetes</div>
               }
             </td>
-            <td class="num muted">{{ l.saldo_origen | cantidad }}</td>
+            <td class="num muted">{{ l.saldo_origen | cantidad: 'kg' }}</td>
           </tr>
         }
       </tbody>
@@ -69,10 +136,10 @@
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0">2 · Qué se manda</h3>
+  <h3 style="margin-top:0">2 · Qué se pide</h3>
   <div class="input-scan" style="max-width:560px">
     <input type="text" #bq [(ngModel)]="q" (keydown.enter)="$event.preventDefault(); buscar()"
-           placeholder="Escanea o teclea SKU / nombre del producto" />
+           placeholder="Escanea o teclea el color, el calibre o el SKU" />
     <button type="button" class="btn btn-ghost btn-sm" (click)="buscar()">Buscar</button>
   </div>
 
@@ -82,12 +149,15 @@
         @for (v of resultados(); track v.id) {
           <tr>
             <td>
-              {{ v.producto }} <span class="muted">· {{ v.sku }}</span>
-              @if (v.tipo_presentacion === 'paquete') {
-                <span class="pill ok">paquete de {{ v.peso_kg }} kg</span>
-              } @else if (v.tipo_presentacion === 'cono') {
-                <span class="pill warn">cono</span>
-              }
+              <!-- El hilo con todos sus datos: el color solo no distingue calibres. -->
+              <b>{{ v.producto }}{{ v.calibre ? ' ' + v.calibre : '' }}</b>
+              <span class="muted">· {{ v.sku }}</span>
+              <div class="muted th-sub">
+                {{ v.material || '—' }}{{ v.linea ? ' · ' + v.linea : '' }}
+                @if (v.tipo_presentacion === 'paquete') {
+                  · paquete de {{ v.peso_kg }} kg
+                }
+              </div>
             </td>
             <td style="width:1%">
               <button class="btn btn-primary btn-sm" (click)="agregar(v)">Agregar</button>
@@ -99,40 +169,64 @@
   }
 
   @if (lineas().length === 0) {
-    <p class="muted" style="margin-top:1rem">Todavía no has agregado productos al traspaso.</p>
+    <p class="muted" style="margin-top:1rem">Todavía no has agregado nada a la solicitud.</p>
   } @else {
     <table class="grid" style="margin-top:1rem">
       <thead>
-        <tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Equivale a</th><th></th></tr>
+        <tr>
+          <th>Hilo</th><th class="num">Kilos que se piden</th><th class="num">Equivale a</th>
+          <th class="num">Hay libre</th><th></th>
+        </tr>
       </thead>
       <tbody>
         @for (l of lineas(); track l.variante.id) {
-          <tr>
+          <!--
+            La fila se tiñe de fondo, NO de texto: `neg` en el <tr> pintaba de
+            rojo hasta el nombre del hilo y el rojo debe marcar el dato que falla.
+          -->
+          <tr [class.fila-alerta]="insuficiente(l)">
             <td>
-              <b>{{ l.variante.producto }}</b>
-              <div class="muted" style="font-size:0.78rem">{{ l.variante.sku }}</div>
+              <b>{{ l.variante.producto }}{{ l.variante.calibre ? ' ' + l.variante.calibre : '' }}</b>
+              <div class="muted th-sub">
+                {{ l.variante.sku }}
+                @if (l.variante.material) { · {{ l.variante.material }} }
+                @if (l.variante.linea) { · {{ l.variante.linea }} }
+              </div>
             </td>
+            <!-- Se pide en KILOS: es como pide la sucursal y es la unidad del inventario. -->
             <td class="num">
               <span class="cant-unidad" style="justify-content:flex-end">
-                <input type="number" step="0.001" min="0" [ngModel]="l.cantidad"
-                       (ngModelChange)="cambiarCantidad(l, $event)"
-                       style="width:90px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px; text-align:right" />
-                <span class="muted">{{ unidadCaptura(l.variante) }}</span>
+                <input type="number" step="0.001" min="0" [ngModel]="l.kg"
+                       (ngModelChange)="cambiarKg(l, $event)" placeholder="0"
+                       style="width:100px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px; text-align:right" />
+                <span class="muted">kg</span>
               </span>
-              @if (disponibles(l); as hay) {
-                <div class="muted" style="font-size:0.7rem">hay {{ hay }} en el origen</div>
-              }
             </td>
+            <!-- Los paquetes son solo referencia, para leerlo como lo cuenta la tienda. -->
             <td class="num muted">
-              @if (kilosReales(l); as kg) {
-                ≈ {{ kg | cantidad: 'kg' }}
+              @if (enPaquetes(l); as paq) {
+                ≈ {{ paq }} paquetes
                 @if (rangoPeso(l); as r) {
                   <div class="muted" style="font-size:0.7rem">{{ r }}</div>
                 }
-              } @else if (kilosDe(l); as kg) {
-                ≈ {{ kg | cantidad: 'kg' }}
-                <div class="muted" style="font-size:0.7rem">peso nominal</div>
               } @else { — }
+              @if (disponibles(l); as hay) {
+                <div class="muted" style="font-size:0.7rem">hay {{ hay }} bultos en el origen</div>
+              }
+            </td>
+            <!--
+              La comparación va en KILOS aunque se capture en paquetes: el
+              inventario se lleva en kilos y es lo que de verdad decide si alcanza.
+            -->
+            <td class="num">
+              @if (kilosLibres(l); as hay) {
+                <span [class.neg]="insuficiente(l)">{{ hay | cantidad: 'kg' }}</span>
+                @if (insuficiente(l)) {
+                  <div class="neg" style="font-size:0.72rem">⚠ inventario insuficiente</div>
+                }
+              } @else {
+                <span class="muted">—</span>
+              }
             </td>
             <td style="width:1%">
               <button class="btn btn-danger btn-sm" (click)="quitar(l)">✕</button>
@@ -142,54 +236,171 @@
       </tbody>
     </table>
 
+    @if (hayInsuficientes()) {
+      <p class="alert" style="margin-top:1rem">
+        ⚠ Hay líneas que piden más de lo que hay libre en {{ nombreAlmacen(origen) }}. Ajusta las
+        cantidades o quítalas: la solicitud no se puede mandar así.
+      </p>
+    }
+
     <div class="previa-calculo">
       <div class="renglon total">
         <span>
           {{ lineas().length }} producto(s) de <b>{{ nombreAlmacen(origen) }}</b>
           a <b>{{ nombreAlmacen(destino) }}</b>
         </span>
-        @if (totalPaquetes() > 0) {
-          <b>{{ totalPaquetes() }} paquetes</b>
+        @if (totalKg() > 0) {
+          <b>{{ totalKg() | cantidad: 'kg' }}</b>
         }
       </div>
     </div>
 
     <div style="margin-top:1rem">
-      <button class="btn btn-primary" [disabled]="enviando()" (click)="enviar()">
-        {{ enviando() ? 'Enviando…' : 'Enviar traspaso' }}
+      <button class="btn btn-primary" [disabled]="enviando() || hayInsuficientes()"
+              (click)="solicitar()">
+        {{ enviando() ? 'Guardando…' : 'Crear solicitud' }}
       </button>
+      <span class="muted" style="font-size:0.78rem; margin-left:0.6rem">
+        Aparta la mercancía. El envío es el paso siguiente.
+      </span>
     </div>
   }
 </div>
 
-<!-- Historial -->
-@if (historial().length > 0) {
+<!-- Historial de los que ya se cerraron -->
+@if (cerrados().length > 0) {
   <div class="page-head" style="margin-top:2rem">
-    <h2 style="font-size:1.1rem; margin:0">Traspasos recientes</h2>
+    <h2 style="font-size:1.1rem; margin:0">Traspasos cerrados</h2>
   </div>
   <table class="grid">
     <thead>
-      <tr><th>Folio</th><th>Ruta</th><th>Contenido</th><th>Quién</th><th>Cuándo</th></tr>
+      <tr>
+        <th>Folio</th><th>Ruta</th><th>Qué llevó</th><th>Estado</th>
+        <th>Quién firmó de recibido</th>
+      </tr>
     </thead>
     <tbody>
-      @for (t of historial(); track t.id) {
+      @for (t of cerrados(); track t.id) {
         <tr>
-          <td><b>{{ t.folio }}</b></td>
+          <td>
+            <b>{{ t.folio }}</b>
+            <div class="muted th-sub">{{ t.creado_en | fecha }}</div>
+          </td>
           <td class="muted">{{ t.almacen_origen }} → {{ t.almacen_destino }}</td>
           <td>
             @for (l of t.lineas; track l.variante_id) {
               <div style="font-size:0.82rem">
-                {{ l.paquetes ? (l.paquetes | cantidad) + ' paq' : (l.cantidad | cantidad) }} · {{ l.producto }}
+                <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
+                @if (recibidoDe(l); as r) {
+                  <span class="muted">— {{ r }}</span>
+                }
               </div>
             }
-            @if (t.notas) {
-              <div class="muted" style="font-size:0.75rem">{{ t.notas }}</div>
+            @if (t.notas) { <div class="muted th-sub">{{ t.notas }}</div> }
+            @if (t.recepcion_notas) {
+              <div class="muted th-sub">Al recibir: {{ t.recepcion_notas }}</div>
+            }
+            @if (t.motivo_cancelacion) {
+              <div class="muted th-sub">Cancelado: {{ t.motivo_cancelacion }}</div>
             }
           </td>
-          <td class="muted">{{ t.usuario || '—' }}</td>
-          <td class="muted">{{ t.creado_en | fecha }}</td>
+          <td>
+            <span class="pill" [class]="'pill ' + claseEstado(t.estado)">
+              {{ textoEstado(t.estado) }}
+            </span>
+          </td>
+          <td class="muted">
+            @if (t.estado === 'recibido') {
+              {{ t.recibido_por || '—' }}
+              @if (t.recibido_en) {
+                <div class="th-sub">{{ t.recibido_en | fecha }}</div>
+              }
+            } @else {
+              {{ t.cancelado_por || '—' }}
+            }
+          </td>
         </tr>
       }
     </tbody>
   </table>
+}
+
+<!--
+  Acuse de recibo. Es el punto de todo el flujo: alguien de la sucursal dice qué
+  llegó y queda su nombre. Por omisión viene precargado con todo lo enviado.
+-->
+@if (recibiendo(); as t) {
+  <div class="modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-recibir-titulo">
+      <div class="modal-head">
+        <h2 id="modal-recibir-titulo">Acusar recibo · {{ t.folio }}</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarRecepcion()" aria-label="Cerrar">
+          ✕
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p class="muted" style="margin-top:0; font-size:0.85rem">
+          Llegó de <b>{{ t.almacen_origen }}</b> a <b>{{ t.almacen_destino }}</b>. Revisa lo que de
+          verdad bajaron de la camioneta y corrige lo que falte: entra al inventario solo lo que
+          aceptes, y la diferencia queda asentada como faltante con tu nombre.
+        </p>
+
+        @if (error()) { <p class="alert" style="margin-top:0">{{ error() }}</p> }
+
+        <table class="grid mini">
+          <thead>
+            <tr><th>Hilo</th><th class="num">Se envió</th><th class="num">Llegó</th></tr>
+          </thead>
+          <tbody>
+            @for (l of lineasRecepcion(); track l.detalle_id) {
+              <tr>
+                <td>{{ l.etiqueta }}</td>
+                <td class="num muted">
+                  {{ l.enviado }} {{ l.enPaquetes ? 'paq' : 'kg' }}
+                </td>
+                <td class="num">
+                  <span class="cant-unidad" style="justify-content:flex-end">
+                    <input type="number" [step]="l.enPaquetes ? 1 : 0.001" min="0" [max]="l.enviado"
+                           [ngModel]="l.recibido"
+                           (ngModelChange)="cambiarRecibido(l.detalle_id, $event)"
+                           style="width:90px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px; text-align:right" />
+                    <span class="muted">{{ l.enPaquetes ? 'paq' : 'kg' }}</span>
+                  </span>
+                  @if (l.recibido < l.enviado) {
+                    <div class="neg" style="font-size:0.72rem">
+                      faltan {{ l.enviado - l.recibido }}
+                    </div>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <label class="field" style="margin-top:1rem">
+          Notas de la recepción <span class="muted">(opcional)</span>
+          <input type="text" [(ngModel)]="notasRecepcion"
+                 placeholder="Ej. Un paquete venía mojado" />
+        </label>
+
+        @if (faltantesRecepcion().length > 0) {
+          <p class="aviso" style="margin-top:1rem">
+            ⚠ {{ faltantesRecepcion().length }}
+            {{ faltantesRecepcion().length === 1 ? 'línea llega' : 'líneas llegan' }} incompletas.
+            La diferencia se va a dar de baja como faltante, con el folio del traspaso y tu nombre.
+          </p>
+        }
+      </div>
+
+      <div class="modal-foot">
+        <span class="nota">Al aceptar, la mercancía entra al inventario de la sucursal.</span>
+        <button type="button" class="btn btn-ghost" (click)="cerrarRecepcion()">Cancelar</button>
+        <button type="button" class="btn btn-primary" [disabled]="enviando()"
+                (click)="confirmarRecepcion()">
+          {{ enviando() ? 'Guardando…' : 'Acepto que recibí esto' }}
+        </button>
+      </div>
+    </div>
+  </div>
 }

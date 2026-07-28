@@ -27,6 +27,14 @@ export interface StockItem {
   variante_id: number;
   sku: string;
   producto: string;
+  /** Presentación, para no tener que adivinarla desde el SKU. */
+  presentacion?: string | null;
+  tipo_presentacion?: string | null;
+  peso_kg?: string | null;
+  /** Clasificación del hilo: material, línea de procedencia y calibre. */
+  calibre?: string | null;
+  material?: string | null;
+  linea?: string | null;
   almacen_id: number;
   almacen: string;
   cantidad: string;

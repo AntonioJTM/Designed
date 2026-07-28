@@ -4,20 +4,49 @@ import { RouterLink } from '@angular/router';
 import {
   Conversion,
   InventarioService,
-  PreviaDesarme,
-  ResultadoDesarme,
+  ResumenAlmacen,
   ResumenAlmacenes,
   ResumenFila,
 } from '../../../core/services/inventario.service';
-import { Almacen, StockItem, TipoMovimiento } from '../../../core/models/inventario.models';
+import { Almacen, StockItem } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
-import { FechaPipe } from '../../../shared/fecha.pipe';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
+import { FechaPipe } from '../../../shared/fecha.pipe';
+import { BarraApilada, StackedBars } from '../../../shared/charts/stacked-bars';
+import { DesarmeModal } from './desarme-modal';
+import { MovimientoModal } from './movimiento-modal';
 
+/** Un producto (color + calibre) con sus presentaciones juntas. */
+interface GrupoColor {
+  /** Se agrupa por el producto, NO por el nombre: dos calibres son dos productos. */
+  clave: string;
+  producto: string;
+  calibre?: string | null;
+  material?: string | null;
+  linea?: string | null;
+  filas: ResumenFila[];
+  total: number;
+}
+
+/**
+ * Pantalla de Inventario: es para MIRAR. Las acciones son modales.
+ *
+ * Está armada para contestar tres preguntas en ese orden, que es como las hace la
+ * tienda: cuánto hay en cada almacén (tarjetas), dónde está cada color (gráfica
+ * apilada), y el detalle exacto (tabla agrupada por color + buscador).
+ */
 @Component({
   selector: 'app-inventario',
-  imports: [FormsModule, RouterLink, CantidadPipe, FechaPipe],
+  imports: [
+    FormsModule,
+    RouterLink,
+    CantidadPipe,
+    FechaPipe,
+    StackedBars,
+    DesarmeModal,
+    MovimientoModal,
+  ],
   templateUrl: './inventario.html',
 })
 export class Inventario {
@@ -31,101 +60,34 @@ export class Inventario {
   readonly totalAlertas = signal(0);
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
-  readonly mensaje = signal<string | null>(null);
+
+  /** Qué modal está abierto. */
+  readonly modal = signal<'desarme' | 'movimiento' | null>(null);
 
   // Filtros de la tabla de existencias
   filtroAlmacen: number | '' = '';
   filtroQ = '';
   soloBajo = false;
 
-  // Selector de variante compartido por los formularios
-  qVar = '';
-  resultadosVar = signal<Variante[]>([]);
-  varianteSel: number | '' = '';
-
   /**
-   * Solo los dos que no cubre ningún otro flujo:
-   *   · ajuste → cuadrar el sistema con un conteo físico
-   *   · merma  → dar de baja mercancía dañada o perdida
-   * 'entrada' la hace la remesa, 'devolucion' la cancelación del pedido, y
-   * 'salida' se usaba para transferir, que ahora va por traspasos.
+   * Datos que consume el modal de desarme. Se cargan aquí y entran por input para
+   * que el modal abra armado, sin esperar peticiones ni cambiar de tamaño.
    */
-  readonly tipos: TipoMovimiento[] = ['ajuste', 'merma'];
-
-  // Formulario de ajuste / merma
-  mov = {
-    tipo: 'ajuste' as TipoMovimiento,
-    almacen_id: '' as number | '',
-    cantidad: null as number | null,
-    motivo: '',
-  };
-
-  // Desarme de paquetes en conos
   readonly conos = signal<Variante[]>([]);
   readonly conversiones = signal<Conversion[]>([]);
-  readonly ultimoDesarme = signal<ResultadoDesarme | null>(null);
-  desarme = {
-    cono_id: '' as number | '',
-    origen: '' as number | '',
-    destino: '' as number | '',
-    paquetes: 1 as number | null,
-    // Vacío = se usa el peso nominal del paquete.
-    kg: null as number | null,
-    // Vacío = se usan los conos nominales del cono elegido.
-    conos: null as number | null,
-    codigo_bulto: '',
-    motivo: '',
-  };
 
-  /** Código que se está escaneando para bajar ese bulto a mostrador. */
-  codigoDesarme = '';
-  /** Lo que trae el bulto escaneado, tal como lo resolvió el backend. */
-  readonly previaBulto = signal<PreviaDesarme | null>(null);
-  /** Almacén al que bajan los conos (el mostrador). */
-  bajarA: number | '' = '';
   /**
-   * Lo que GANA de peso el hilo al enconarse: el tubo de cada cono. Lo captura la
-   * tienda porque depende del tubo que use; el sistema no lo adivina. Vacío = 0.
+   * Colores de la gráfica: los tres primeros slots de la paleta validada. Un
+   * cuarto almacén NO recibe color propio —cae en "otros"— porque la paleta solo
+   * está validada hasta tres y el cuarto par no pasa las puertas. El detalle
+   * exacto de cada almacén está en la tabla de abajo.
    */
-  destare: number | null = null;
-  readonly bajando = signal(false);
-
-  readonly esAjuste = computed(() => this.mov.tipo === 'ajuste');
-
-  /** Cono elegido para desarmar, con los datos de su paquete de origen. */
-  readonly conoSel = computed(() =>
-    this.conos().find((c) => c.id === Number(this.desarme.cono_id)) ?? null
-  );
-
-  /** Lo que va a pasar al desarmar, calculado en vivo para confirmarlo antes. */
-  readonly previaDesarme = computed(() => {
-    const c = this.conoSel();
-    const n = Number(this.desarme.paquetes);
-    if (!c || !n || !c.paquete_peso_kg || !c.piezas_por_origen) return null;
-    // Peso nominal según el paquete, y el real si se ajustó a mano.
-    const nominal = Number(c.paquete_peso_kg) * n;
-    const kg = this.desarme.kg != null ? Number(this.desarme.kg) : nominal;
-    const piezasNominal = Number(c.piezas_por_origen) * n;
-    const piezas = this.desarme.conos != null ? Number(this.desarme.conos) : piezasNominal;
-    return {
-      kg,
-      nominal,
-      ajustado: kg !== nominal,
-      piezas,
-      piezasNominal,
-      // Hay bultos que rinden menos conos que el nominal.
-      piezasAjustadas: piezas !== piezasNominal,
-      paqueteSku: c.paquete_sku,
-      conoSku: c.sku,
-    };
-  });
+  private readonly COLORES = ['var(--viz-series-1)', 'var(--viz-series-2)', 'var(--viz-series-3)'];
+  private readonly COLOR_OTROS = 'var(--viz-otros)';
 
   constructor() {
     this.inv.almacenes().subscribe({
-      next: (a) => {
-        this.almacenes.set(a);
-        if (a[0]) this.mov.almacen_id = a[0].id;
-      },
+      next: (a) => this.almacenes.set(a),
       error: (e) => this.error.set(this.msg(e)),
     });
     this.cargarStock();
@@ -142,15 +104,182 @@ export class Inventario {
     });
   }
 
+  // ---- Totales de arriba ----
+
+  /** Kilos de toda la tienda, para leer cada almacén como proporción. */
+  readonly kilosTotales = computed(() =>
+    (this.resumen()?.almacenes ?? []).reduce((s, a) => s + Number(a.kilos), 0)
+  );
+
+  /** Cuántos productos distintos hay con existencias. */
+  readonly coloresConStock = computed(
+    () =>
+      new Set(
+        (this.resumen()?.filas ?? []).filter((f) => f.total > 0).map((f) => this.clave(f))
+      ).size
+  );
+
+  /** Clave de agrupación: el producto. Cae al nombre si el backend es viejo. */
+  private clave(f: ResumenFila): string {
+    return String(f.producto_id ?? f.producto);
+  }
+
+  /** Cómo se nombra el hilo en la pantalla: el color y su calibre. */
+  nombreCompleto(f: { producto: string; calibre?: string | null }): string {
+    return f.calibre ? `${f.producto} ${f.calibre}` : f.producto;
+  }
+
+  /** Material y línea de procedencia, juntos. */
+  clasificacion(f: { material?: string | null; linea?: string | null }): string {
+    return [f.material, f.linea].filter(Boolean).join(' · ') || '—';
+  }
+
+  /** Qué porcentaje del total está en ese almacén. */
+  porcentaje(a: ResumenAlmacen): number {
+    const total = this.kilosTotales();
+    return total > 0 ? Math.round((Number(a.kilos) / total) * 100) : 0;
+  }
+
+  // ---- Gráfica: dónde está cada color ----
+
+  /** Las series de la gráfica: los almacenes que de verdad tienen algo. */
+  readonly seriesGrafica = computed(() => {
+    const conStock = (this.resumen()?.almacenes ?? []).filter((a) => Number(a.kilos) > 0);
+    return conStock.map((a, i) => ({
+      almacen_id: a.almacen_id,
+      nombre: a.nombre,
+      color: i < this.COLORES.length ? this.COLORES[i] : this.COLOR_OTROS,
+      // Del cuarto en adelante todos comparten el gris de "otros".
+      otros: i >= this.COLORES.length,
+    }));
+  });
+
+  /**
+   * Kilos por COLOR, partidos por almacén. Se suman las presentaciones del mismo
+   * color (paquete + cono) porque es el mismo hilo: la pregunta es "cuánto negro
+   * hay y dónde", no "cuánto negro enconado".
+   */
+  readonly grafica = computed<BarraApilada[]>(() => {
+    const series = this.seriesGrafica();
+    if (series.length === 0) return [];
+
+    // Se agrupa por PRODUCTO: dos calibres del mismo color son dos barras, y sin
+    // el calibre en la etiqueta se verían como dos renglones iguales.
+    const porColor = new Map<string, { fila: ResumenFila; kilos: Map<number, number> }>();
+    for (const f of this.resumen()?.filas ?? []) {
+      if (f.total <= 0) continue;
+      const k = this.clave(f);
+      const dest = porColor.get(k) ?? { fila: f, kilos: new Map<number, number>() };
+      for (const s of series) {
+        const c = Number(f.existencias[String(s.almacen_id)]?.cantidad ?? 0);
+        if (c > 0) dest.kilos.set(s.almacen_id, (dest.kilos.get(s.almacen_id) ?? 0) + c);
+      }
+      porColor.set(k, dest);
+    }
+
+    const barras = [...porColor.values()]
+      .map(({ fila, kilos: porAlmacen }) => ({
+        label: this.nombreCompleto(fila),
+        detalle: this.clasificacion(fila),
+        total: Math.round([...porAlmacen.values()].reduce((s, v) => s + v, 0) * 1000) / 1000,
+        segmentos: series
+          .map((s) => ({
+            serie: s.nombre,
+            value: Math.round((porAlmacen.get(s.almacen_id) ?? 0) * 1000) / 1000,
+            color: s.color,
+          }))
+          .filter((s) => s.value > 0),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    // Más de 10 barras no se leen: el resto se junta en un renglón.
+    if (barras.length <= 10) return barras;
+    const resto = barras.slice(10);
+    const juntas = new Map<string, { serie: string; value: number; color: string }>();
+    for (const b of resto) {
+      for (const s of b.segmentos) {
+        const acc = juntas.get(s.serie) ?? { serie: s.serie, value: 0, color: s.color };
+        acc.value = Math.round((acc.value + s.value) * 1000) / 1000;
+        juntas.set(s.serie, acc);
+      }
+    }
+    return [
+      ...barras.slice(0, 10),
+      {
+        label: `Otros ${resto.length} hilos`,
+        detalle: 'suma de los que no caben en la gráfica',
+        total: Math.round(resto.reduce((s, b) => s + b.total, 0) * 1000) / 1000,
+        segmentos: [...juntas.values()],
+      },
+    ];
+  });
+
+  // ---- Tabla agrupada por color ----
+
   /** Renglones del comparativo, opcionalmente solo los que tienen existencias. */
   filasResumen(): ResumenFila[] {
     const filas = this.resumen()?.filas ?? [];
     return this.soloConStock() ? filas.filter((f) => f.total > 0) : filas;
   }
 
+  /**
+   * Las presentaciones del mismo color van juntas. Antes cada una era un renglón
+   * suelto con el nombre del color repetido, y la tabla parecía tener duplicados
+   * ("AMARILLO" dos veces, una de paquete y otra de cono).
+   */
+  readonly grupos = computed<GrupoColor[]>(() => {
+    const filas = this.soloConStock()
+      ? (this.resumen()?.filas ?? []).filter((f) => f.total > 0)
+      : (this.resumen()?.filas ?? []);
+
+    const porColor = new Map<string, GrupoColor>();
+    for (const f of filas) {
+      const k = this.clave(f);
+      const g =
+        porColor.get(k) ??
+        ({
+          clave: k,
+          producto: f.producto,
+          calibre: f.calibre,
+          material: f.material,
+          linea: f.linea,
+          filas: [],
+          total: 0,
+        } as GrupoColor);
+      g.filas.push(f);
+      g.total = Math.round((g.total + f.total) * 1000) / 1000;
+      porColor.set(k, g);
+    }
+    // El paquete primero y el cono después: es el orden en que pasa en la tienda.
+    for (const g of porColor.values()) {
+      g.filas.sort((a, b) => (a.tipo_presentacion === 'cono' ? 1 : 0) - (b.tipo_presentacion === 'cono' ? 1 : 0));
+    }
+    return [...porColor.values()].sort((a, b) => b.total - a.total);
+  });
+
   /** Existencia de una variante en un almacén concreto. */
   celda(f: ResumenFila, almacenId: number): { cantidad: string; bajo_minimo: boolean } | null {
     return f.existencias[String(almacenId)] ?? null;
+  }
+
+  /** Cómo se llama la presentación en la tabla. */
+  etiquetaPresentacion(f: ResumenFila): string {
+    if (f.tipo_presentacion === 'cono') return 'Cono';
+    if (f.tipo_presentacion === 'paquete') {
+      return Number(f.peso_kg) > 0 ? `Paquete de ${Number(f.peso_kg)} kg` : 'Paquete (sin peso)';
+    }
+    return f.presentacion || 'Sencilla';
+  }
+
+  /**
+   * Qué parte de TODO el inventario es ese hilo. Es lo que llena la barra de la
+   * columna del total, y va escrito al lado: una barra sin decir contra qué se
+   * mide no significa nada (antes se medía contra el hilo más grande, que no se
+   * veía en ninguna parte).
+   */
+  porcentajeDelTotal(total: number): number {
+    const t = this.kilosTotales();
+    return t > 0 ? Math.round((total / t) * 100) : 0;
   }
 
   /** Los DECIMAL llegan como string; en la plantilla se comparan como número. */
@@ -166,7 +295,11 @@ export class Inventario {
   }
 
   /** Etiqueta corta del papel que juega el almacén. */
-  papel(a: { es_matriz: boolean | number; es_punto_venta: boolean | number; es_tienda_linea: boolean | number }): string {
+  papel(a: {
+    es_matriz: boolean | number;
+    es_punto_venta: boolean | number;
+    es_tienda_linea: boolean | number;
+  }): string {
     const partes: string[] = [];
     if (a.es_matriz) partes.push('matriz');
     partes.push(a.es_punto_venta ? 'tienda' : 'bodega');
@@ -174,14 +307,33 @@ export class Inventario {
     return partes.join(' · ');
   }
 
-  /** Trae las presentaciones de tipo cono: son las que se pueden desarmar. */
+  // ---- Buscador de existencias ----
+
+  /** La columna "Reservada" solo aparece si alguien reservó algo. */
+  readonly hayReservas = computed(() =>
+    this.stock().some((s) => Number(s.cantidad_reservada) > 0)
+  );
+
+  /** Y la de mínimo, solo si hay alguno capturado. */
+  readonly hayMinimos = computed(() => this.stock().some((s) => Number(s.stock_minimo) > 0));
+
+  /** Presentación de un renglón de existencias, sin adivinar por el SKU. */
+  presentacionStock(s: StockItem): string {
+    if (s.tipo_presentacion === 'cono') return 'Cono';
+    if (s.tipo_presentacion === 'paquete') {
+      return Number(s.peso_kg) > 0 ? `Paquete de ${Number(s.peso_kg)} kg` : 'Paquete';
+    }
+    return s.presentacion || '—';
+  }
+
+  bajoMinimo(s: StockItem): boolean {
+    return Number(s.stock_minimo) > 0 && Number(s.disponible) <= Number(s.stock_minimo);
+  }
+
+  /** Trae las presentaciones de tipo cono: son las que se pueden desarmar a mano. */
   private cargarConos(): void {
     this.inv.buscarVariantes('').subscribe({
-      next: (vs) => {
-        const conos = vs.filter((v) => v.tipo_presentacion === 'cono');
-        this.conos.set(conos);
-        if (conos[0]) this.desarme.cono_id = conos[0].id;
-      },
+      next: (vs) => this.conos.set(vs.filter((v) => v.tipo_presentacion === 'cono')),
       error: () => {},
     });
   }
@@ -193,135 +345,13 @@ export class Inventario {
     });
   }
 
-  /**
-   * Escanea el bulto y muestra qué trae: el paquete, sus kilos REALES y cuántos
-   * conos rinde. No mueve nada todavía. El dato de los conos viene del bulto (la
-   * lista de empaque lo trae), así que no hay que configurar la presentación de
-   * cono antes: si no existe, se crea al confirmar.
-   */
-  escanearParaBajar(): void {
-    const cod = this.codigoDesarme.trim();
-    if (!cod) return;
-    this.error.set(null);
-    this.mensaje.set(null);
-    this.inv.previaDesarme(cod).subscribe({
-      next: (p) => {
-        this.previaBulto.set(p);
-        this.codigoDesarme = '';
-        this.destare = null;
-        // Origen: donde de verdad está la mercancía. Destino: un mostrador.
-        if (p.existencias.length) this.desarme.origen = p.existencias[0].almacen_id;
-        const mostrador = this.almacenes().find(
-          (a) => a.es_punto_venta && a.id !== this.desarme.origen
-        ) ?? this.almacenes().find((a) => a.es_punto_venta);
-        this.bajarA = mostrador?.id ?? '';
-      },
-      error: (e) => {
-        this.previaBulto.set(null);
-        this.error.set(this.msg(e));
-      },
-    });
-  }
-
-  /** Peso que va a quedar enconado: el del bulto más el destare capturado. */
-  pesoEnconado(): number | null {
-    const p = this.previaBulto();
-    if (!p) return null;
-    const kg = Number(p.bulto.peso_kg);
-    const d = this.destare != null ? Number(this.destare) : 0;
-    return Math.round((kg + d) * 1000) / 1000;
-  }
-
-  olvidarBulto(): void {
-    this.previaBulto.set(null);
-    this.codigoDesarme = '';
-  }
-
-  /**
-   * Baja el bulto a mostrador: descuenta sus kilos del paquete y da entrada a sus
-   * conos. Va solo con el código; el backend resuelve el resto y crea la
-   * presentación de cono si es la primera vez.
-   */
-  bajarAMostrador(): void {
-    const p = this.previaBulto();
-    if (!p) return;
-    if (!this.desarme.origen || !this.bajarA) {
-      this.error.set('Elige de qué bodega sale y a qué mostrador baja.');
-      return;
-    }
-    this.bajando.set(true);
-    this.error.set(null);
-    this.inv
-      .desarmar({
-        codigo_bulto: p.bulto.codigo,
-        almacen_origen_id: Number(this.desarme.origen),
-        almacen_destino_id: Number(this.bajarA),
-        destare_kg: this.destare != null && this.destare > 0 ? Number(this.destare) : undefined,
-        motivo: this.desarme.motivo.trim() || undefined,
-      })
-      .subscribe({
-        next: (r) => {
-          this.ultimoDesarme.set(r);
-          this.mensaje.set(
-            `Bulto ${p.bulto.codigo} bajado: −${r.kg_consumidos} kg de ${r.paquete.sku}, ` +
-            `+${r.kg_enconados ?? r.kg_consumidos} kg de ${r.cono.sku} ` +
-            `(${r.piezas_generadas} conos)` +
-            (r.destare_kg ? ` · incluye ${r.destare_kg} kg de destare.` : '.')
-          );
-          this.previaBulto.set(null);
-          this.destare = null;
-          this.desarme.motivo = '';
-          this.bajando.set(false);
-          this.cargarStock();
-          this.cargarAlertas();
-          this.cargarConos();
-          this.cargarConversiones();
-          this.cargarResumen();
-        },
-        error: (e) => {
-          this.error.set(this.msg(e));
-          this.bajando.set(false);
-        },
-      });
-  }
-
-  desarmar(): void {
-    const c = this.conoSel();
-    if (!c || !this.desarme.origen || !this.desarme.destino || !this.desarme.paquetes) {
-      this.error.set('Elige el cono, los almacenes y cuántos paquetes vas a desarmar.');
-      return;
-    }
-    this.error.set(null);
-    this.mensaje.set(null);
-    this.inv
-      .desarmar({
-        cono_variante_id: c.id,
-        almacen_origen_id: Number(this.desarme.origen),
-        almacen_destino_id: Number(this.desarme.destino),
-        paquetes: Number(this.desarme.paquetes),
-        kg: this.desarme.kg != null ? Number(this.desarme.kg) : undefined,
-        conos: this.desarme.conos != null ? Number(this.desarme.conos) : undefined,
-        codigo_bulto: this.desarme.codigo_bulto.trim() || undefined,
-        motivo: this.desarme.motivo.trim() || undefined,
-      })
-      .subscribe({
-        next: (r) => {
-          this.ultimoDesarme.set(r);
-          this.mensaje.set(
-            `Se desarmaron ${r.paquetes} paquete(s): −${r.kg_consumidos} kg de ${r.paquete.sku}, ` +
-            `+${r.kg_enconados ?? r.kg_consumidos} kg de ${r.cono.sku} (${r.piezas_generadas} conos).`
-          );
-          this.desarme.motivo = '';
-          this.desarme.kg = null;
-          this.desarme.conos = null;
-          this.desarme.codigo_bulto = '';
-          this.cargarStock();
-          this.cargarAlertas();
-          this.cargarConversiones();
-          this.cargarResumen();
-        },
-        error: (e) => this.error.set(this.msg(e)),
-      });
+  /** Un modal movió existencias: se recarga todo lo que se ve en pantalla. */
+  alMover(): void {
+    this.cargarStock();
+    this.cargarAlertas();
+    this.cargarConos();
+    this.cargarConversiones();
+    this.cargarResumen();
   }
 
   cargarStock(): void {
@@ -349,54 +379,6 @@ export class Inventario {
       next: (a) => this.totalAlertas.set(a.length),
       error: () => {},
     });
-  }
-
-  buscarVariantes(): void {
-    const q = this.qVar.trim();
-    if (!q) return;
-    this.error.set(null);
-    this.inv.buscarVariantes(q).subscribe({
-      next: (v) => {
-        this.resultadosVar.set(v);
-        if (v.length === 1) {
-          // Coincidencia única (típico al escanear un código): se autoselecciona.
-          this.varianteSel = v[0].id;
-          this.mensaje.set(`Variante: ${v[0].sku} · ${v[0].producto}`);
-        } else if (v.length === 0) {
-          this.mensaje.set(null);
-          this.error.set('No se encontró ninguna variante con ese código.');
-        }
-      },
-      error: (e) => this.error.set(this.msg(e)),
-    });
-  }
-
-  registrarMovimiento(): void {
-    this.error.set(null);
-    this.mensaje.set(null);
-    if (!this.varianteSel || !this.mov.almacen_id || this.mov.cantidad == null) {
-      this.error.set('Elige variante, almacén y cantidad.');
-      return;
-    }
-    this.inv
-      .registrarMovimiento({
-        variante_id: Number(this.varianteSel),
-        almacen_id: Number(this.mov.almacen_id),
-        tipo: this.mov.tipo,
-        cantidad: this.mov.cantidad,
-        motivo: this.mov.motivo.trim() || undefined,
-      })
-      .subscribe({
-        next: (r) => {
-          this.mensaje.set(`Movimiento registrado. Saldo: ${r.saldo_anterior} → ${r.saldo_nuevo}.`);
-          this.mov.cantidad = null;
-          this.mov.motivo = '';
-          this.cargarStock();
-          this.cargarAlertas();
-          this.cargarResumen();
-        },
-        error: (e) => this.error.set(this.msg(e)),
-      });
   }
 
   private msg(e: unknown): string {

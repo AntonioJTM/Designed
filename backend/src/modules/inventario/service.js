@@ -247,11 +247,28 @@ async function equivalenciaPaquetes({ variante_id, almacen_id, kg }) {
   return resp;
 }
 
-async function crearTraspaso(datos, usuarioId) {
+/**
+ * El traspaso tiene tres pasos y cada uno tiene su función: solicitar (aparta),
+ * enviar (sale del origen) y recibir (entra al destino, con acuse). Antes era uno
+ * solo, inmediato.
+ */
+async function solicitarTraspaso(datos, usuarioId) {
   if (!datos.items?.length) {
-    throw new AppError(422, 'SIN_LINEAS', 'Agrega al menos un producto al traspaso');
+    throw new AppError(422, 'SIN_LINEAS', 'Agrega al menos un producto a la solicitud');
   }
-  return model.crearTraspaso(datos, usuarioId);
+  return model.solicitarTraspaso(datos, usuarioId);
+}
+
+async function enviarTraspaso(id, usuarioId) {
+  return model.enviarTraspaso(id, usuarioId);
+}
+
+async function recibirTraspaso(id, usuarioId, datos) {
+  return model.recibirTraspaso(id, usuarioId, datos ?? {});
+}
+
+async function cancelarTraspaso(id, usuarioId, motivo) {
+  return model.cancelarTraspaso(id, usuarioId, motivo);
 }
 
 async function listarTraspasos(filtros) {
@@ -284,7 +301,10 @@ module.exports = {
   desarmar,
   previaDesarmeBulto,
   listarConversiones,
-  crearTraspaso,
+  solicitarTraspaso,
+  enviarTraspaso,
+  recibirTraspaso,
+  cancelarTraspaso,
   equivalenciaPaquetes,
   listarTraspasos,
   obtenerTraspaso,

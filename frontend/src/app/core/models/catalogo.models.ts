@@ -95,6 +95,14 @@ export interface Variante {
   modo_precio?: ModoPrecio;
   /** Abreviatura de la unidad de peso del producto (g, kg, t). */
   unidad?: string;
+  /**
+   * Cómo se identifica el hilo del que es esta presentación. Lo necesita el
+   * selector de la remesa: con solo el color no se distingue el mismo color en
+   * dos calibres, y son dos productos.
+   */
+  calibre?: string | null;
+  material?: string | null;
+  linea?: string | null;
   /** Unidad de venta. Hoy siempre kg: todo el hilo se vende por peso. */
   unidad_venta?: string;
   // Datos del paquete de origen, para explicar de dónde salió el precio.

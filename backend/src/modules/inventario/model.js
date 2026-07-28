@@ -17,6 +17,11 @@ const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 
 const SELECT_STOCK = `
   SELECT i.id, i.variante_id, pv.sku, p.nombre AS producto,
+         pv.presentacion, pv.tipo_presentacion, pv.peso_kg,
+         -- Cómo se clasifica el hilo: material, línea de procedencia y calibre.
+         -- Sin esto la pantalla solo mostraba el COLOR, y el mismo color en otro
+         -- calibre es otro producto.
+         p.grosor_calibre AS calibre, cat.nombre AS material, lin.nombre AS linea,
          i.almacen_id, a.nombre AS almacen,
          i.cantidad, i.cantidad_reservada,
          (i.cantidad - i.cantidad_reservada) AS disponible,
@@ -24,8 +29,18 @@ const SELECT_STOCK = `
     FROM inventario i
     JOIN producto_variantes pv ON pv.id = i.variante_id
     JOIN productos p           ON p.id = pv.producto_id
+    JOIN categorias cat        ON cat.id = p.categoria_id
+    LEFT JOIN lineas lin       ON lin.id = p.linea_id
     JOIN almacenes a           ON a.id = i.almacen_id
 `;
+
+/**
+ * Qué cuenta como alerta de stock. El `stock_minimo > 0` es imprescindible: sin
+ * él, una fila en CERO y sin mínimo definido (0 <= 0) se contaba como alerta, y
+ * la pantalla decía cosas como "0 productos · sin existencias · 1 bajo mínimo"
+ * en un almacén vacío. Sin mínimo capturado no hay nada que avisar.
+ */
+const COND_ALERTA = '(i.stock_minimo > 0 AND (i.cantidad - i.cantidad_reservada) <= i.stock_minimo)';
 
 async function listarStock({ almacen_id, variante_id, q, bajo_stock, limit, offset }) {
   const where = [];
@@ -43,7 +58,7 @@ async function listarStock({ almacen_id, variante_id, q, bajo_stock, limit, offs
     params.q = `%${q}%`;
   }
   if (bajo_stock) {
-    where.push('(i.cantidad - i.cantidad_reservada) <= i.stock_minimo');
+    where.push(COND_ALERTA);
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -78,8 +93,14 @@ async function resumenPorAlmacen() {
             COALESCE(SUM(CASE WHEN i.cantidad > 0 THEN 1 ELSE 0 END), 0) AS skus,
             0 AS piezas,
             COALESCE(SUM(i.cantidad), 0) AS kilos,
-            COALESCE(SUM(CASE WHEN (i.cantidad - i.cantidad_reservada) <= i.stock_minimo
-                              THEN 1 ELSE 0 END), 0) AS alertas
+            -- Desglose por presentación: cuánto sigue en paquete y cuánto ya se
+            -- enconó. En el mostrador es la diferencia entre lo que hay que bajar
+            -- y lo que ya se puede vender por cono.
+            COALESCE(SUM(CASE WHEN pv.tipo_presentacion = 'cono' THEN i.cantidad ELSE 0 END), 0)
+              AS kilos_cono,
+            COALESCE(SUM(CASE WHEN pv.tipo_presentacion <> 'cono' THEN i.cantidad ELSE 0 END), 0)
+              AS kilos_paquete,
+            COALESCE(SUM(CASE WHEN ${COND_ALERTA} THEN 1 ELSE 0 END), 0) AS alertas
        FROM almacenes a
        LEFT JOIN inventario i          ON i.almacen_id = a.id
        LEFT JOIN producto_variantes pv ON pv.id = i.variante_id
@@ -92,10 +113,16 @@ async function resumenPorAlmacen() {
   const [detalle] = await pool.query(
     `SELECT i.variante_id, i.almacen_id, i.cantidad, i.stock_minimo,
             pv.sku, pv.presentacion, pv.tipo_presentacion, pv.peso_kg,
-            prod.nombre AS producto
+            pv.producto_id, prod.nombre AS producto,
+            -- El calibre y la línea distinguen productos que se llaman igual:
+            -- "MARINO OSCURO 1/30" y "MARINO OSCURO 2/30" son dos productos.
+            prod.grosor_calibre AS calibre, cat.nombre AS material,
+            lin.nombre AS linea
        FROM inventario i
        JOIN producto_variantes pv ON pv.id = i.variante_id
        JOIN productos prod        ON prod.id = pv.producto_id
+       JOIN categorias cat        ON cat.id = prod.categoria_id
+       LEFT JOIN lineas lin       ON lin.id = prod.linea_id
       WHERE i.cantidad > 0 OR i.stock_minimo > 0
       ORDER BY prod.nombre, pv.sku`
   );
@@ -106,7 +133,11 @@ async function resumenPorAlmacen() {
       porVariante.set(d.variante_id, {
         variante_id: d.variante_id,
         sku: d.sku,
+        producto_id: d.producto_id,
         producto: d.producto,
+        calibre: d.calibre,
+        material: d.material,
+        linea: d.linea,
         presentacion: d.presentacion,
         tipo_presentacion: d.tipo_presentacion,
         peso_kg: d.peso_kg,
@@ -133,10 +164,10 @@ async function resumenPorAlmacen() {
   };
 }
 
-/** Existencias por debajo (o al nivel) del stock mínimo. */
+/** Existencias por debajo (o al nivel) del stock mínimo, con mínimo capturado. */
 async function alertas() {
   const [rows] = await pool.query(
-    `${SELECT_STOCK} WHERE (i.cantidad - i.cantidad_reservada) <= i.stock_minimo
+    `${SELECT_STOCK} WHERE ${COND_ALERTA}
       ORDER BY (i.cantidad - i.cantidad_reservada) - i.stock_minimo`
   );
   return rows;
@@ -221,10 +252,33 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limi
 /** Lee existencias de una variante en un almacén (0 si no hay fila). */
 async function _leerCantidad(conn, variante_id, almacen_id) {
   const [rows] = await conn.query(
-    'SELECT id, cantidad FROM inventario WHERE variante_id = :variante_id AND almacen_id = :almacen_id FOR UPDATE',
+    `SELECT id, cantidad, cantidad_reservada FROM inventario
+      WHERE variante_id = :variante_id AND almacen_id = :almacen_id FOR UPDATE`,
     { variante_id, almacen_id }
   );
   return rows[0] || null;
+}
+
+/**
+ * Mueve lo APARTADO de una variante en un almacén. Positivo aparta, negativo
+ * libera; nunca baja de cero (la columna lo prohíbe).
+ *
+ * El apartado es BLANDO: lo usa la solicitud de traspaso para que se vea que esos
+ * kilos ya están prometidos, pero la venta de mostrador NO lo respeta —el cliente
+ * que está enfrente manda— así que puede quedar por encima de la existencia. El
+ * envío lo revalida y ahí sale el problema, no antes.
+ */
+async function _moverReserva(conn, variante_id, almacen_id, delta) {
+  const fila = await _leerCantidad(conn, variante_id, almacen_id);
+  const actual = fila ? Number(fila.cantidad_reservada) : 0;
+  const nueva = Math.max(0, round3(actual + delta));
+  await conn.query(
+    `INSERT INTO inventario (variante_id, almacen_id, cantidad, cantidad_reservada)
+     VALUES (:variante_id, :almacen_id, 0, :nueva)
+     ON DUPLICATE KEY UPDATE cantidad_reservada = :nueva`,
+    { variante_id, almacen_id, nueva }
+  );
+  return nueva;
 }
 
 /** Aplica un nuevo saldo (upsert) a la fila de inventario. */
@@ -558,14 +612,46 @@ async function desarmar(datos, usuarioId) {
   });
 }
 
+/** Un traspaso pasa por aquí: solicitado → en tránsito → recibido. */
+const ESTADOS_TRASPASO = ['solicitado', 'en_transito', 'recibido', 'cancelado'];
+
+/** Datos de la variante que necesita un traspaso, con su validación básica. */
+async function _varianteParaTraspaso(conn, varianteId) {
+  const [rows] = await conn.query(
+    `SELECT pv.id, pv.sku, pv.tipo_presentacion, pv.peso_kg, pv.activo,
+            prod.nombre AS producto
+       FROM producto_variantes pv
+       JOIN productos prod ON prod.id = pv.producto_id
+      WHERE pv.id = :id`,
+    { id: varianteId }
+  );
+  const v = rows[0];
+  if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `La variante ${varianteId} no existe`);
+  if (!v.activo) {
+    throw new AppError(422, 'VARIANTE_INACTIVA', `"${v.producto} · ${v.sku}" está inactiva`);
+  }
+  // La sucursal se surte con PAQUETES cerrados; los conos nacen allá, al
+  // desarmarlos. Mandar conos sería mover piezas ya abiertas y no tiene sentido.
+  if (v.tipo_presentacion === 'cono') {
+    throw new AppError(422, 'NO_SE_TRASPASAN_CONOS',
+      `"${v.producto} · ${v.sku}" es un cono: a la sucursal se le manda el paquete y allá se ` +
+      `desarma. Elige la presentación de paquete.`);
+  }
+  return v;
+}
+
 /**
- * Traspaso de matriz a sucursal: varias líneas en un solo documento con folio.
+ * SOLICITAR un traspaso: el documento con folio y sus líneas, sin mover nada.
  *
- * El movimiento es inmediato (sale del origen y entra al destino en la misma
- * transacción). Cuando la variante es un paquete, la línea llega en PAQUETES y
- * aquí se convierte a kilos, que es como se lleva su inventario.
+ * Antes el traspaso era inmediato —salía y entraba en la misma transacción—; el
+ * usuario pidió el 2026-07-28 modelar el camino, con acuse de quien recibe.
+ *
+ * Aquí solo se valida y se APARTA en el origen. La mercancía sale al enviar y
+ * entra al recibir. Cuando la variante es un paquete la línea llega en PAQUETES y
+ * se convierte a kilos, que es como se lleva el inventario: la conversión usa los
+ * bultos que de verdad hay (su peso real) y cae al nominal si no hay ubicados.
  */
-async function crearTraspaso(datos, usuarioId) {
+async function solicitarTraspaso(datos, usuarioId) {
   const { almacen_origen_id, almacen_destino_id, items } = datos;
   if (almacen_origen_id === almacen_destino_id) {
     throw new AppError(422, 'ALMACENES_IGUALES', 'El origen y el destino deben ser distintos');
@@ -574,8 +660,9 @@ async function crearTraspaso(datos, usuarioId) {
   return withTransaction(async (conn) => {
     const folio = `TRA-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
     const [t] = await conn.query(
-      `INSERT INTO traspasos (folio, almacen_origen_id, almacen_destino_id, usuario_id, notas)
-       VALUES (:folio, :origen, :destino, :usuario, :notas)`,
+      `INSERT INTO traspasos
+         (folio, almacen_origen_id, almacen_destino_id, estado, usuario_id, notas)
+       VALUES (:folio, :origen, :destino, 'solicitado', :usuario, :notas)`,
       {
         folio,
         origen: almacen_origen_id,
@@ -588,27 +675,11 @@ async function crearTraspaso(datos, usuarioId) {
     const lineas = [];
 
     for (const item of items) {
-      const [vrows] = await conn.query(
-        `SELECT pv.id, pv.sku, pv.tipo_presentacion, pv.peso_kg, pv.activo,
-                prod.nombre AS producto
-           FROM producto_variantes pv
-           JOIN productos prod ON prod.id = pv.producto_id
-          WHERE pv.id = :id`,
-        { id: item.variante_id }
-      );
-      const v = vrows[0];
-      if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `La variante ${item.variante_id} no existe`);
-      if (!v.activo) {
-        throw new AppError(422, 'VARIANTE_INACTIVA', `"${v.producto} · ${v.sku}" está inactiva`);
-      }
-
-      // Un paquete se captura en paquetes; el inventario va en kilos.
+      const v = await _varianteParaTraspaso(conn, item.variante_id);
       const esPaquete = v.tipo_presentacion === 'paquete';
+
       let paquetes = null;
       let cantidad;
-      // Bultos concretos que se van a mover, cuando se pide por paquetes.
-      let bultos = [];
-      // True si el peso salió del nominal por no haber bultos ubicados.
       let estimado = false;
       if (esPaquete && item.paquetes != null) {
         if (!v.peso_kg || Number(v.peso_kg) <= 0) {
@@ -616,18 +687,13 @@ async function crearTraspaso(datos, usuarioId) {
             `"${v.producto} · ${v.sku}" no tiene peso de paquete configurado`);
         }
         paquetes = Number(item.paquetes);
-        // Se toman los bultos que DE VERDAD hay en el origen, del más antiguo al
-        // más nuevo, y se descuenta su peso real. Antes se multiplicaba por el
-        // peso nominal y eso nunca cuadra: los bultos pesan distinto (10.75 a
-        // 19.80 kg contra un nominal de 19.094).
-        // Quien surte solo dice "5 paquetes": el sistema elige cuáles.
-        bultos = await bultosDisponibles(conn, v.id, almacen_origen_id, paquetes);
+        // Se PREVÉ con los bultos que hay hoy, pero no se apartan todavía: los
+        // definitivos se eligen al enviar, porque de aquí a entonces el mostrador
+        // pudo haber vendido alguno.
+        const bultos = await bultosDisponibles(conn, v.id, almacen_origen_id, paquetes);
         if (bultos.length >= paquetes) {
           cantidad = round3(bultos.reduce((acc, b) => acc + Number(b.peso_kg), 0));
         } else {
-          // No hay bultos ubicados para cubrirlo (mercancía capturada a mano, o
-          // bultos sin almacén). Se cae al peso nominal y se avisa en la línea.
-          bultos = [];
           cantidad = round3(paquetes * Number(v.peso_kg));
           estimado = true;
         }
@@ -641,65 +707,364 @@ async function crearTraspaso(datos, usuarioId) {
         throw new AppError(422, 'CANTIDAD_INVALIDA', 'Las cantidades deben ser mayores a cero');
       }
 
-      const filaOrigen = await _leerCantidad(conn, v.id, almacen_origen_id);
-      const saldoOrigen = filaOrigen ? Number(filaOrigen.cantidad) : 0;
-      if (saldoOrigen < cantidad) {
-        // Todo se lleva en kilos, también los conos.
+      // Se mide contra lo DISPONIBLE (existencia menos lo ya apartado a otras
+      // solicitudes): así dos sucursales no se pelean los mismos kilos.
+      const fila = await _leerCantidad(conn, v.id, almacen_origen_id);
+      const saldo = fila ? Number(fila.cantidad) : 0;
+      const apartado = fila ? Number(fila.cantidad_reservada) : 0;
+      const libre = round3(saldo - apartado);
+      if (libre < cantidad) {
         throw new AppError(409, 'STOCK_INSUFICIENTE',
-          `No alcanza "${v.producto} · ${v.sku}": hay ${saldoOrigen} kg en el origen ` +
-          `y el traspaso pide ${cantidad} kg.`);
-      }
-      const filaDestino = await _leerCantidad(conn, v.id, almacen_destino_id);
-      const saldoDestino = filaDestino ? Number(filaDestino.cantidad) : 0;
-
-      await _aplicarSaldo(conn, v.id, almacen_origen_id, round3(saldoOrigen - cantidad));
-      await _aplicarSaldo(conn, v.id, almacen_destino_id, round3(saldoDestino + cantidad));
-
-      // Los bultos viajan: quedan ubicados en la sucursal que los recibe.
-      if (bultos.length) {
-        await conn.query(
-          'UPDATE variante_codigos SET almacen_id = :destino WHERE id IN (:ids)',
-          { destino: almacen_destino_id, ids: bultos.map((b) => b.id) }
-        );
+          `No alcanza "${v.producto} · ${v.sku}": en el origen hay ${saldo} kg` +
+          (apartado > 0 ? ` (${apartado} kg ya apartados a otra solicitud)` : '') +
+          `, quedan ${libre} kg libres y se piden ${cantidad} kg.`);
       }
 
-      await conn.query(
+      await _moverReserva(conn, v.id, almacen_origen_id, cantidad);
+
+      const [d] = await conn.query(
         `INSERT INTO traspaso_detalle (traspaso_id, variante_id, paquetes, cantidad)
          VALUES (:traspaso_id, :variante_id, :paquetes, :cantidad)`,
         { traspaso_id: traspasoId, variante_id: v.id, paquetes, cantidad }
       );
 
-      // Kardex: las dos patas comparten el folio del traspaso.
-      const base = {
-        variante_id: v.id,
-        tipo: 'transferencia',
-        costo_unitario: null,
-        referencia_tipo: 'traspaso',
-        referencia_id: traspasoId,
-        usuario_id: usuarioId ?? null,
-        motivo: datos.notas ?? `Traspaso ${folio}`,
-      };
-      await _insertarMovimiento(conn, { ...base, almacen_id: almacen_origen_id, cantidad: -cantidad });
-      await _insertarMovimiento(conn, { ...base, almacen_id: almacen_destino_id, cantidad });
-
       lineas.push({
+        detalle_id: d.insertId,
         variante_id: v.id,
         sku: v.sku,
         producto: v.producto,
         paquetes,
         cantidad,
         unidad: 'kg',
-        // Qué bultos se movieron y su peso: es lo que hace que la cuenta cuadre.
-        bultos: bultos.map((b) => ({ codigo: b.codigo, peso_kg: b.peso_kg, lote: b.lote })),
-        // Avisa cuando el peso es una estimación por falta de bultos ubicados.
         peso_estimado: estimado,
         peso_nominal: esPaquete && v.peso_kg ? round3(paquetes * Number(v.peso_kg)) : null,
-        saldo_origen: round3(saldoOrigen - cantidad),
-        saldo_destino: round3(saldoDestino + cantidad),
+        saldo_origen: saldo,
+        apartado_origen: round3(apartado + cantidad),
       });
     }
 
-    return { id: traspasoId, folio, almacen_origen_id, almacen_destino_id, lineas };
+    return {
+      id: traspasoId,
+      folio,
+      estado: 'solicitado',
+      almacen_origen_id,
+      almacen_destino_id,
+      lineas,
+    };
+  });
+}
+
+/**
+ * ENVIAR: la mercancía sale del origen y queda en camino.
+ *
+ * Los bultos se eligen AQUÍ y no al solicitar: entre la solicitud y el envío el
+ * mostrador pudo vender alguno, y el que sale es el que de verdad está. Por eso se
+ * vuelve a validar la existencia; si ya no alcanza, 409 y no se envía nada.
+ */
+async function enviarTraspaso(id, usuarioId) {
+  return withTransaction(async (conn) => {
+    const [trows] = await conn.query('SELECT * FROM traspasos WHERE id = :id FOR UPDATE', { id });
+    const t = trows[0];
+    if (!t) throw new AppError(404, 'NO_ENCONTRADO', 'Traspaso no encontrado');
+    if (t.estado !== 'solicitado') {
+      throw new AppError(409, 'ESTADO_INVALIDO',
+        `El traspaso ${t.folio} está "${t.estado}": solo se puede enviar una solicitud.`);
+    }
+
+    const [det] = await conn.query(
+      'SELECT * FROM traspaso_detalle WHERE traspaso_id = :id ORDER BY id',
+      { id }
+    );
+    const lineas = [];
+
+    for (const d of det) {
+      const v = await _varianteParaTraspaso(conn, d.variante_id);
+      const solicitado = Number(d.cantidad);
+      let cantidad = solicitado;
+      let bultos = [];
+      let estimado = false;
+
+      if (v.tipo_presentacion === 'paquete' && d.paquetes != null) {
+        // Se pidió por PAQUETES: se rehace la cuenta con los bultos que hay AHORA
+        // y lo que sale es su peso real.
+        const paquetes = Number(d.paquetes);
+        bultos = await bultosDisponibles(conn, v.id, t.almacen_origen_id, paquetes);
+        if (bultos.length >= paquetes) {
+          cantidad = round3(bultos.reduce((acc, b) => acc + Number(b.peso_kg), 0));
+        } else {
+          bultos = [];
+          cantidad = round3(paquetes * Number(v.peso_kg));
+          estimado = true;
+        }
+      } else if (v.tipo_presentacion === 'paquete') {
+        // Se pidió por KILOS, que es como pide la sucursal ("mándame 100 kg de
+        // negro"). Los kilos son EXACTOS: se manda lo que dice la solicitud, sin
+        // redondear a bultos enteros.
+        //
+        // Los bultos se acomodan igual, aunque nadie los escanee: se toman los más
+        // antiguos que caben SIN pasarse de los kilos que salen, para que la cuenta
+        // de paquetes por almacén no se quede pegada. Es aproximado a propósito —la
+        // ubicación del bulto siempre lo ha sido, los saldos son la verdad— y se
+        // corrige sola cuando en la sucursal escanean uno al vender.
+        const enOrigen = await bultosDisponibles(conn, v.id, t.almacen_origen_id);
+        let acumulado = 0;
+        for (const b of enOrigen) {
+          const siguiente = round3(acumulado + Number(b.peso_kg));
+          if (siguiente > cantidad) break;
+          acumulado = siguiente;
+          bultos.push(b);
+        }
+      }
+
+      const fila = await _leerCantidad(conn, v.id, t.almacen_origen_id);
+      const saldo = fila ? Number(fila.cantidad) : 0;
+      if (saldo < cantidad) {
+        throw new AppError(409, 'STOCK_INSUFICIENTE',
+          `Ya no alcanza "${v.producto} · ${v.sku}": quedan ${saldo} kg en el origen y el ` +
+          `traspaso pide ${cantidad} kg. Ajusta la solicitud o cancélala.`);
+      }
+
+      // Sale del origen. Todavía NO entra al destino: va en camino.
+      await _aplicarSaldo(conn, v.id, t.almacen_origen_id, round3(saldo - cantidad));
+      // Se libera el apartado de ESTA solicitud, que ya se convirtió en salida.
+      await _moverReserva(conn, v.id, t.almacen_origen_id, -solicitado);
+
+      // Los bultos ya apuntan a la sucursal: su ubicación es aproximada a
+      // propósito (nadie escanea al salir) y los saldos son la verdad.
+      if (bultos.length) {
+        await conn.query(
+          'UPDATE variante_codigos SET almacen_id = :destino WHERE id IN (:ids)',
+          { destino: t.almacen_destino_id, ids: bultos.map((b) => b.id) }
+        );
+      }
+
+      await conn.query(
+        'UPDATE traspaso_detalle SET cantidad = :cantidad WHERE id = :id',
+        { cantidad, id: d.id }
+      );
+
+      await _insertarMovimiento(conn, {
+        variante_id: v.id,
+        almacen_id: t.almacen_origen_id,
+        tipo: 'transferencia',
+        cantidad: -cantidad,
+        costo_unitario: null,
+        referencia_tipo: 'traspaso',
+        referencia_id: t.id,
+        usuario_id: usuarioId ?? null,
+        motivo: `Envío del traspaso ${t.folio}`,
+      });
+
+      lineas.push({
+        detalle_id: d.id,
+        variante_id: v.id,
+        sku: v.sku,
+        producto: v.producto,
+        paquetes: d.paquetes != null ? Number(d.paquetes) : null,
+        cantidad,
+        solicitado,
+        ajustado: cantidad !== solicitado,
+        peso_estimado: estimado,
+        bultos: bultos.map((b) => ({ codigo: b.codigo, peso_kg: b.peso_kg, lote: b.lote })),
+        saldo_origen: round3(saldo - cantidad),
+      });
+    }
+
+    await conn.query(
+      `UPDATE traspasos SET estado = 'en_transito', enviado_en = NOW(), enviado_por = :u
+        WHERE id = :id`,
+      { u: usuarioId ?? null, id }
+    );
+
+    return { id: t.id, folio: t.folio, estado: 'en_transito', lineas };
+  });
+}
+
+/**
+ * RECIBIR: el responsable de la sucursal acepta y dice QUÉ llegó.
+ *
+ * Entra al destino lo que se envió, y si llegó menos, la diferencia se asienta
+ * como MERMA con el folio del traspaso: así el kardex explica los kilos que se
+ * perdieron en el camino, en vez de que aparezcan como si nunca hubieran salido.
+ * Queda guardado quién aceptó y cuándo, que es el punto de todo esto.
+ *
+ * `recibido` es opcional: sin él se acepta el envío completo.
+ */
+async function recibirTraspaso(id, usuarioId, datos = {}) {
+  return withTransaction(async (conn) => {
+    const [trows] = await conn.query('SELECT * FROM traspasos WHERE id = :id FOR UPDATE', { id });
+    const t = trows[0];
+    if (!t) throw new AppError(404, 'NO_ENCONTRADO', 'Traspaso no encontrado');
+    if (t.estado !== 'en_transito') {
+      throw new AppError(409, 'ESTADO_INVALIDO',
+        `El traspaso ${t.folio} está "${t.estado}": solo se recibe lo que va en tránsito.`);
+    }
+
+    const [det] = await conn.query(
+      'SELECT * FROM traspaso_detalle WHERE traspaso_id = :id ORDER BY id',
+      { id }
+    );
+    const porDetalle = new Map((datos.recibido ?? []).map((r) => [Number(r.detalle_id), r]));
+    const lineas = [];
+
+    for (const d of det) {
+      const v = await _varianteParaTraspaso(conn, d.variante_id);
+      const enviado = Number(d.cantidad);
+      const dicho = porDetalle.get(d.id);
+
+      // Lo que llegó, en la unidad que sea más natural: paquetes si así se pidió.
+      let recibida = enviado;
+      let paquetesRecibidos = d.paquetes != null ? Number(d.paquetes) : null;
+      if (dicho) {
+        if (dicho.paquetes != null && d.paquetes != null) {
+          paquetesRecibidos = Number(dicho.paquetes);
+          const porPaquete = Number(d.paquetes) > 0 ? enviado / Number(d.paquetes) : 0;
+          recibida = round3(paquetesRecibidos * porPaquete);
+        } else if (dicho.cantidad != null) {
+          recibida = round3(Number(dicho.cantidad));
+        }
+      }
+      if (recibida < 0) {
+        throw new AppError(422, 'CANTIDAD_INVALIDA', 'Lo recibido no puede ser negativo');
+      }
+      if (recibida > enviado) {
+        throw new AppError(422, 'RECIBE_MAS_DE_LO_ENVIADO',
+          `De "${v.producto} · ${v.sku}" se enviaron ${enviado} kg y estás aceptando ` +
+          `${recibida} kg. Si llegó de más, revisa el envío.`);
+      }
+
+      const fila = await _leerCantidad(conn, v.id, t.almacen_destino_id);
+      const saldo = fila ? Number(fila.cantidad) : 0;
+
+      // Entra al destino solo lo que de verdad llegó…
+      await _aplicarSaldo(conn, v.id, t.almacen_destino_id, round3(saldo + recibida));
+      await _insertarMovimiento(conn, {
+        variante_id: v.id,
+        almacen_id: t.almacen_destino_id,
+        tipo: 'transferencia',
+        cantidad: enviado,
+        costo_unitario: null,
+        referencia_tipo: 'traspaso',
+        referencia_id: t.id,
+        usuario_id: usuarioId ?? null,
+        motivo: `Recepción del traspaso ${t.folio}`,
+      });
+
+      // …y si llegó menos, el faltante se asienta aparte, con su explicación, para
+      // que el kardex cuadre: entró lo enviado y se dio de baja la diferencia.
+      const faltante = round3(enviado - recibida);
+      if (faltante > 0) {
+        await _insertarMovimiento(conn, {
+          variante_id: v.id,
+          almacen_id: t.almacen_destino_id,
+          tipo: 'merma',
+          cantidad: -faltante,
+          costo_unitario: null,
+          referencia_tipo: 'traspaso',
+          referencia_id: t.id,
+          usuario_id: usuarioId ?? null,
+          motivo:
+            `Faltante en el traspaso ${t.folio}: se enviaron ${enviado} kg y llegaron ${recibida} kg`,
+        });
+      }
+
+      await conn.query(
+        `UPDATE traspaso_detalle
+            SET cantidad_recibida = :recibida, paquetes_recibidos = :paquetes
+          WHERE id = :id`,
+        { recibida, paquetes: paquetesRecibidos, id: d.id }
+      );
+
+      lineas.push({
+        detalle_id: d.id,
+        variante_id: v.id,
+        sku: v.sku,
+        producto: v.producto,
+        enviado,
+        recibida,
+        faltante,
+        paquetes: d.paquetes != null ? Number(d.paquetes) : null,
+        paquetes_recibidos: paquetesRecibidos,
+        saldo_destino: round3(saldo + recibida),
+      });
+    }
+
+    await conn.query(
+      `UPDATE traspasos
+          SET estado = 'recibido', recibido_en = NOW(), recibido_por = :u,
+              recepcion_notas = :notas
+        WHERE id = :id`,
+      { u: usuarioId ?? null, notas: datos.notas ?? null, id }
+    );
+
+    const faltantes = lineas.filter((l) => l.faltante > 0).length;
+    return { id: t.id, folio: t.folio, estado: 'recibido', faltantes, lineas };
+  });
+}
+
+/**
+ * CANCELAR. Si estaba solicitado, solo se libera lo apartado. Si ya iba en
+ * tránsito, la mercancía REGRESA al origen con su movimiento y los bultos
+ * vuelven. Un traspaso recibido ya no se cancela: eso se corrige con otro
+ * traspaso de vuelta.
+ */
+async function cancelarTraspaso(id, usuarioId, motivo) {
+  return withTransaction(async (conn) => {
+    const [trows] = await conn.query('SELECT * FROM traspasos WHERE id = :id FOR UPDATE', { id });
+    const t = trows[0];
+    if (!t) throw new AppError(404, 'NO_ENCONTRADO', 'Traspaso no encontrado');
+    if (t.estado === 'recibido') {
+      throw new AppError(409, 'ESTADO_INVALIDO',
+        `El traspaso ${t.folio} ya se recibió: para devolver la mercancía haz un traspaso de vuelta.`);
+    }
+    if (t.estado === 'cancelado') {
+      throw new AppError(409, 'ESTADO_INVALIDO', `El traspaso ${t.folio} ya estaba cancelado.`);
+    }
+
+    const [det] = await conn.query(
+      'SELECT * FROM traspaso_detalle WHERE traspaso_id = :id ORDER BY id',
+      { id }
+    );
+
+    for (const d of det) {
+      const cantidad = Number(d.cantidad);
+      if (t.estado === 'solicitado') {
+        // Nada se movió: solo se suelta lo apartado.
+        await _moverReserva(conn, d.variante_id, t.almacen_origen_id, -cantidad);
+        continue;
+      }
+      // Iba en camino: la mercancía vuelve a donde salió.
+      const fila = await _leerCantidad(conn, d.variante_id, t.almacen_origen_id);
+      const saldo = fila ? Number(fila.cantidad) : 0;
+      await _aplicarSaldo(conn, d.variante_id, t.almacen_origen_id, round3(saldo + cantidad));
+      await _insertarMovimiento(conn, {
+        variante_id: d.variante_id,
+        almacen_id: t.almacen_origen_id,
+        tipo: 'transferencia',
+        cantidad,
+        costo_unitario: null,
+        referencia_tipo: 'traspaso',
+        referencia_id: t.id,
+        usuario_id: usuarioId ?? null,
+        motivo: `Cancelación del traspaso ${t.folio}: la mercancía regresó`,
+      });
+      // Y los bultos que ya apuntaban a la sucursal se regresan al origen.
+      await conn.query(
+        `UPDATE variante_codigos SET almacen_id = :origen
+          WHERE variante_id = :v AND almacen_id = :destino AND estado = 'disponible'`,
+        { origen: t.almacen_origen_id, destino: t.almacen_destino_id, v: d.variante_id }
+      );
+    }
+
+    await conn.query(
+      `UPDATE traspasos
+          SET estado = 'cancelado', cancelado_en = NOW(), cancelado_por = :u,
+              motivo_cancelacion = :motivo
+        WHERE id = :id`,
+      { u: usuarioId ?? null, motivo: motivo ?? null, id }
+    );
+
+    return { id: t.id, folio: t.folio, estado: 'cancelado', estado_anterior: t.estado };
   });
 }
 
@@ -709,14 +1074,21 @@ async function listarTraspasos({ almacen_destino_id, limit, offset }) {
   const params = { almacen_destino_id, limit, offset };
 
   const [rows] = await pool.query(
-    `SELECT t.id, t.folio, t.notas, t.creado_en,
+    `SELECT t.id, t.folio, t.estado, t.notas, t.creado_en,
+            t.almacen_origen_id, t.almacen_destino_id,
+            t.enviado_en, t.recibido_en, t.cancelado_en,
+            t.recepcion_notas, t.motivo_cancelacion,
             ao.nombre AS almacen_origen, ad.nombre AS almacen_destino,
-            u.nombre AS usuario,
+            u.nombre AS usuario, ue.nombre AS enviado_por, ur.nombre AS recibido_por,
+            uc.nombre AS cancelado_por,
             (SELECT COUNT(*) FROM traspaso_detalle d WHERE d.traspaso_id = t.id) AS num_lineas
        FROM traspasos t
-       JOIN almacenes ao    ON ao.id = t.almacen_origen_id
-       JOIN almacenes ad    ON ad.id = t.almacen_destino_id
-       LEFT JOIN usuarios u ON u.id = t.usuario_id
+       JOIN almacenes ao     ON ao.id = t.almacen_origen_id
+       JOIN almacenes ad     ON ad.id = t.almacen_destino_id
+       LEFT JOIN usuarios u  ON u.id = t.usuario_id
+       LEFT JOIN usuarios ue ON ue.id = t.enviado_por
+       LEFT JOIN usuarios ur ON ur.id = t.recibido_por
+       LEFT JOIN usuarios uc ON uc.id = t.cancelado_por
        ${where}
       ORDER BY t.creado_en DESC, t.id DESC
       LIMIT :limit OFFSET :offset`,
@@ -729,11 +1101,15 @@ async function listarTraspasos({ almacen_destino_id, limit, offset }) {
 
   if (rows.length) {
     const [det] = await pool.query(
-      `SELECT d.traspaso_id, d.variante_id, d.paquetes, d.cantidad,
-              pv.sku, pv.tipo_presentacion, prod.nombre AS producto
+      `SELECT d.id AS detalle_id, d.traspaso_id, d.variante_id, d.paquetes, d.cantidad,
+              d.cantidad_recibida, d.paquetes_recibidos,
+              pv.sku, pv.tipo_presentacion, pv.peso_kg, prod.nombre AS producto,
+              prod.grosor_calibre AS calibre, cat.nombre AS material, lin.nombre AS linea
          FROM traspaso_detalle d
          JOIN producto_variantes pv ON pv.id = d.variante_id
          JOIN productos prod        ON prod.id = pv.producto_id
+         JOIN categorias cat        ON cat.id = prod.categoria_id
+         LEFT JOIN lineas lin       ON lin.id = prod.linea_id
         WHERE d.traspaso_id IN (:ids)
         ORDER BY d.id`,
       { ids: rows.map((r) => r.id) }
@@ -748,13 +1124,20 @@ async function listarTraspasos({ almacen_destino_id, limit, offset }) {
 /** Un traspaso con sus líneas, para poder ver qué se mandó desde el kardex. */
 async function obtenerTraspaso(id) {
   const [rows] = await pool.query(
-    `SELECT t.id, t.folio, t.notas, t.creado_en,
+    `SELECT t.id, t.folio, t.estado, t.notas, t.creado_en,
+            t.almacen_origen_id, t.almacen_destino_id,
+            t.enviado_en, t.recibido_en, t.cancelado_en,
+            t.recepcion_notas, t.motivo_cancelacion,
             ao.nombre AS almacen_origen, ad.nombre AS almacen_destino,
-            u.nombre AS usuario
+            u.nombre AS usuario, ue.nombre AS enviado_por, ur.nombre AS recibido_por,
+            uc.nombre AS cancelado_por
        FROM traspasos t
-       JOIN almacenes ao    ON ao.id = t.almacen_origen_id
-       JOIN almacenes ad    ON ad.id = t.almacen_destino_id
-       LEFT JOIN usuarios u ON u.id = t.usuario_id
+       JOIN almacenes ao     ON ao.id = t.almacen_origen_id
+       JOIN almacenes ad     ON ad.id = t.almacen_destino_id
+       LEFT JOIN usuarios u  ON u.id = t.usuario_id
+       LEFT JOIN usuarios ue ON ue.id = t.enviado_por
+       LEFT JOIN usuarios ur ON ur.id = t.recibido_por
+       LEFT JOIN usuarios uc ON uc.id = t.cancelado_por
       WHERE t.id = :id LIMIT 1`,
     { id }
   );
@@ -762,11 +1145,15 @@ async function obtenerTraspaso(id) {
   if (!traspaso) return null;
 
   const [lineas] = await pool.query(
-    `SELECT d.variante_id, d.paquetes, d.cantidad,
-            pv.sku, pv.tipo_presentacion, pv.peso_kg, prod.nombre AS producto
+    `SELECT d.id AS detalle_id, d.variante_id, d.paquetes, d.cantidad,
+            d.cantidad_recibida, d.paquetes_recibidos,
+            pv.sku, pv.tipo_presentacion, pv.peso_kg, prod.nombre AS producto,
+            prod.grosor_calibre AS calibre, cat.nombre AS material, lin.nombre AS linea
        FROM traspaso_detalle d
        JOIN producto_variantes pv ON pv.id = d.variante_id
        JOIN productos prod        ON prod.id = pv.producto_id
+       JOIN categorias cat        ON cat.id = prod.categoria_id
+       LEFT JOIN lineas lin       ON lin.id = prod.linea_id
       WHERE d.traspaso_id = :id
       ORDER BY d.id`,
     { id }
@@ -837,7 +1224,11 @@ module.exports = {
   disponibilidadEnPaquetes,
   existenciasDe,
   listarConversiones,
-  crearTraspaso,
+  ESTADOS_TRASPASO,
+  solicitarTraspaso,
+  enviarTraspaso,
+  recibirTraspaso,
+  cancelarTraspaso,
   listarTraspasos,
   obtenerTraspaso,
   configurar,

@@ -25,6 +25,11 @@ const SELECT_BASE = `
            ELSE um.abreviatura
          END AS unidad_venta,
          prod.multipresentacion, prod.por_lotes,
+         -- Cómo se identifica el hilo. Va aquí porque el selector de "a qué
+         -- presentación entra la remesa" decía solo "AMARILLO · AMARILLO", y con
+         -- el mismo color en dos calibres no hay forma de elegir bien: ya se
+         -- cargaron tres listas de empaque al producto equivocado.
+         prod.grosor_calibre AS calibre, cat.nombre AS material, lin.nombre AS linea,
          org.sku      AS paquete_sku,
          org.precio   AS paquete_precio_kg,
          org.peso_kg  AS paquete_peso_kg,
@@ -32,6 +37,8 @@ const SELECT_BASE = `
     FROM producto_variantes pv
     JOIN productos prod                 ON prod.id = pv.producto_id
     JOIN unidades_medida um             ON um.id = prod.unidad_medida_id
+    JOIN categorias cat                 ON cat.id = prod.categoria_id
+    LEFT JOIN lineas lin                ON lin.id = prod.linea_id
     LEFT JOIN producto_variantes org    ON org.id = pv.origen_variante_id
 `;
 

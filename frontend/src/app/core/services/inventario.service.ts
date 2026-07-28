@@ -93,6 +93,9 @@ export interface ResumenAlmacen {
   skus: number | string;
   kilos: string;
   piezas: string;
+  /** Desglose: cuánto sigue en paquete y cuánto ya se enconó. */
+  kilos_paquete?: string;
+  kilos_cono?: string;
   alertas: number | string;
 }
 
@@ -100,7 +103,13 @@ export interface ResumenAlmacen {
 export interface ResumenFila {
   variante_id: number;
   sku: string;
+  /** Se agrupa por este id y NO por el nombre: el mismo color en otro calibre es otro producto. */
+  producto_id?: number;
   producto: string;
+  /** Cómo se clasifica el hilo. */
+  calibre?: string | null;
+  material?: string | null;
+  linea?: string | null;
   presentacion?: string | null;
   tipo_presentacion?: string;
   peso_kg?: string | null;
@@ -176,6 +185,8 @@ export interface Remesa {
   id: number;
   folio: string;
   producto: string;
+  /** Para cotejarlo con el nombre del archivo. */
+  calibre?: string | null;
   sku: string;
   almacen: string;
   usuario?: string | null;
@@ -225,9 +236,15 @@ export interface TraspasoInput {
 }
 
 export interface TraspasoLinea {
+  /** Id de la línea: con él se declara lo recibido. */
+  detalle_id?: number;
   variante_id: number;
   sku: string;
   producto: string;
+  /** Cómo se identifica el hilo: no basta el color. */
+  calibre?: string | null;
+  material?: string | null;
+  linea?: string | null;
   paquetes: number | string | null;
   cantidad: number | string;
   /** Los bultos que de verdad se movieron, con su peso real. */
@@ -239,23 +256,60 @@ export interface TraspasoLinea {
   tipo_presentacion?: string;
   saldo_origen?: number;
   saldo_destino?: number;
+  /** Lo que de verdad llegó, cuando ya se recibió. */
+  cantidad_recibida?: string | number | null;
+  paquetes_recibidos?: string | number | null;
+  /** Solo al enviar/recibir: cuánto se pidió y qué faltó. */
+  solicitado?: number;
+  enviado?: number;
+  recibida?: number;
+  faltante?: number;
+  /**
+   * True cuando al enviar cambió el peso respecto a lo solicitado: salieron los
+   * bultos que de verdad había y pesan distinto.
+   */
+  ajustado?: boolean;
 }
+
+/** Por dónde va un traspaso. */
+export type EstadoTraspaso = 'solicitado' | 'en_transito' | 'recibido' | 'cancelado';
 
 export interface ResultadoTraspaso {
   id: number;
   folio: string;
-  almacen_origen_id: number;
-  almacen_destino_id: number;
+  estado?: EstadoTraspaso;
+  almacen_origen_id?: number;
+  almacen_destino_id?: number;
+  /** Cuántas líneas llegaron incompletas, al recibir. */
+  faltantes?: number;
   lineas: TraspasoLinea[];
+}
+
+/** Lo que el responsable declara al aceptar el traspaso. */
+export interface RecepcionInput {
+  notas?: string;
+  recibido?: { detalle_id: number; paquetes?: number; cantidad?: number }[];
 }
 
 export interface Traspaso {
   id: number;
   folio: string;
+  estado: EstadoTraspaso;
+  almacen_origen_id?: number;
+  almacen_destino_id?: number;
   almacen_origen: string;
   almacen_destino: string;
+  /** Quién lo pidió, quién lo envió y quién firmó de recibido. */
   usuario?: string | null;
+  enviado_por?: string | null;
+  recibido_por?: string | null;
+  cancelado_por?: string | null;
+  enviado_en?: string | null;
+  recibido_en?: string | null;
+  cancelado_en?: string | null;
   notas?: string | null;
+  recepcion_notas?: string | null;
+  motivo_cancelacion?: string | null;
   num_lineas: number | string;
   creado_en: string;
   lineas: TraspasoLinea[];
@@ -455,6 +509,35 @@ export class InventarioService {
     if (kg != null) params = params.set('kg', kg);
     return this.http
       .get<ApiResponse<EquivalenciaPaquetes>>(`${this.base}/inventario/equivalencia-paquetes`, { params })
+      .pipe(map(data));
+  }
+
+  /** Paso 1: la solicitud. Aparta en el origen, no mueve nada. */
+  solicitarTraspaso(body: TraspasoInput): Observable<ResultadoTraspaso> {
+    return this.http
+      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos`, body)
+      .pipe(map(data));
+  }
+
+  /** Paso 2: sale del origen y queda en camino. */
+  enviarTraspaso(id: number): Observable<ResultadoTraspaso> {
+    return this.http
+      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/enviar`, {})
+      .pipe(map(data));
+  }
+
+  /** Paso 3: el responsable acepta y dice qué llegó. */
+  recibirTraspaso(id: number, body: RecepcionInput = {}): Observable<ResultadoTraspaso> {
+    return this.http
+      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/recibir`, body)
+      .pipe(map(data));
+  }
+
+  cancelarTraspaso(id: number, motivo?: string): Observable<ResultadoTraspaso> {
+    return this.http
+      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/cancelar`, {
+        motivo,
+      })
       .pipe(map(data));
   }
 

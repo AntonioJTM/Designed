@@ -91,16 +91,143 @@ table.grid .acciones { display: flex; gap: 0.4rem; }
 .muted { color: #6b7280; }
 .empty { text-align: center; color: #9ca3af; padding: 2rem; }
 
+/* ---- Modal (alta/edición sin salir del listado) ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #11182799;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+}
+.modal {
+  position: relative; /* ancla del velo de carga */
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 900px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 4rem);
+}
+
+/* Formularios cortos (materiales): 900 px se ven vacíos de más. */
+.modal.angosto { max-width: 620px; }
+
+/*
+  Aparece con un desvanecido corto. SIN desplazamiento vertical: el modal se
+  dibuja de una vez con su tamaño final —el formulario no espera a que carguen
+  las opciones— y moverlo de arriba a abajo volvería a dar la impresión de que
+  se está armando a pedazos.
+*/
+.modal-overlay { animation: modal-fondo 0.12s ease-out; }
+.modal { animation: modal-entra 0.14s ease-out; }
+@keyframes modal-fondo { from { opacity: 0; } }
+@keyframes modal-entra { from { opacity: 0; transform: scale(0.99); } }
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay, .modal { animation: none; }
+}
+/*
+  Velo de carga: tapa el modal entero, que ya está dibujado a su tamaño final
+  con los campos vacíos. Se quita al llegar los datos.
+*/
+.modal-cargando {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 12px;
+  background: #ffffffe0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: girar 0.7s linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2s; }
+}
+
+.modal-head {
+  /* Por encima del velo: la ✕ sigue sirviendo mientras carga. */
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.modal-head h2 { margin: 0; font-size: 1.15rem; }
+.modal-cerrar {
+  background: none;
+  border: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+/* El cuerpo es el que hace scroll: la barra de botones queda siempre visible. */
+.modal-body { padding: 1.25rem; overflow-y: auto; }
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0 0 12px 12px;
+}
+.modal-foot .nota { margin-right: auto; font-size: 0.8rem; color: #6b7280; }
+
+.field input:disabled, .field select:disabled, .field textarea:disabled {
+  background: #f9fafb;
+  color: #9ca3af;
+  cursor: default;
+}
+
 /* Gráficas (paleta dataviz validada, modo claro) */
 :root {
   --viz-series-1: #2a78d6; /* azul */
   --viz-series-2: #eb6834; /* naranja */
+  /*
+    Tercer slot de la paleta de referencia. Validado con el script de la guía
+    contra el fondo blanco de las tarjetas: los TRES juntos pasan banda de
+    luminosidad, croma, separación para daltonismo (peor par ΔE 9.2, mínimo 8) y
+    visión normal (27.6, mínimo 15). El aqua queda por debajo de 3:1 de contraste,
+    así que la gráfica que lo use DEBE traer etiquetas visibles y su tabla al lado
+    —las dos cosas están—. No metas un cuarto color sin volver a correr el script.
+  */
+  --viz-series-3: #1baf7a; /* aqua */
+  /* Para "otros": gris neutro, no es una serie más. */
+  --viz-otros: #a3a2a0;
   --viz-baseline: #c3c2b7;
   --viz-grid: #e1e0d9;
   --viz-muted: #898781;
   --viz-text: #0b0b0b;
 }
 .viz-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+/*
+  Las gráficas que se miden solas (`stacked-bars`) NO llevan tope de ancho: se
+  dibujan al ancho real y por eso el texto sale de su tamaño sin dejar hueco.
+  Un tope aquí volvería a dejar media tarjeta vacía.
+*/
 .viz-svg .viz-value { fill: var(--viz-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .viz-svg .viz-axis { fill: var(--viz-muted); font-size: 11px; }
 .viz-svg path[fill^='var'] { transition: opacity 0.12s; }
@@ -108,6 +235,68 @@ table.grid .acciones { display: flex; gap: 0.4rem; }
 .viz-legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; font-size: 0.85rem; color: #374151; }
 .viz-legend .item { display: inline-flex; align-items: center; gap: 0.4rem; }
 .viz-legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* ================= Inventario ================= */
+/* Tarjeta por almacén: cifra grande, su parte del total y el desglose. */
+.almacen-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.almacen-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0;
+}
+.almacen-card .cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.almacen-card .nombre { font-weight: 600; font-size: 0.95rem; }
+.almacen-card .cifra { font-size: 1.5rem; line-height: 1.1; }
+.almacen-card .cifra.vacia { font-size: 1rem; color: #9ca3af; font-weight: 500; }
+.almacen-card .pie { font-size: 0.78rem; }
+.almacen-card .desglose {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.85rem;
+}
+.almacen-card .desglose > span { display: flex; flex-direction: column; }
+.almacen-card .desglose .muted { font-size: 0.72rem; }
+
+/*
+  Barra de proporción. Es contexto, no un dato con su propio eje: va en el gris
+  del carril de las gráficas y sin número encima —el porcentaje se escribe al lado.
+*/
+.barra-share {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--viz-grid);
+  overflow: hidden;
+}
+.barra-share > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--viz-series-1);
+}
+.barra-share.mini { height: 4px; margin-top: 0.3rem; }
+
+/* Tabla del detalle: cada color es un grupo de renglones, separado del siguiente. */
+table.grid.tabla-colores tbody.grupo { border-bottom: 1px solid #e5e7eb; }
+table.grid.tabla-colores tbody.grupo:last-child { border-bottom: 0; }
+table.grid.tabla-colores tbody.grupo tr:not(:last-child) td { border-bottom: 0; }
+table.grid.tabla-colores tbody.grupo tr td { border-bottom-color: #f8fafc; }
+table.grid.tabla-colores .total-color { vertical-align: middle; background: #fbfcfe; }
+/* Segundo renglón de una celda (SKU, papel del almacén, equivalencia en paquetes). */
+.th-sub { font-size: 0.72rem; font-weight: 400; }
 
 /* KPIs de reportes */
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
@@ -155,6 +344,12 @@ table.grid .acciones { display: flex; gap: 0.4rem; }
 
 table.grid th.num, table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .neg { color: #b91c1c; }
+/*
+  Renglón con un problema (una línea de traspaso que no alcanza). Se marca con el
+  FONDO: `neg` en el <tr> tiñe de rojo todo el texto, hasta el nombre del hilo, y
+  el rojo tiene que señalar el dato que falla, no el renglón entero.
+*/
+table.grid tr.fila-alerta > td { background: #fef2f2; }
 
 .semana-nav {
   display: flex;

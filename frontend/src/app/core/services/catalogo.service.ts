@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, map } from 'rxjs';
+import { Observable, map, shareReplay } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
 import {
@@ -155,7 +155,21 @@ export class CatalogoService {
   }
 
   // ---- Opciones (lookups) ----
+  /**
+   * Cache de los lookups. Líneas, unidades e impuestos no se editan desde el
+   * panel y son los mismos toda la sesión: se piden UNA vez y las siguientes
+   * veces el modal del producto abre ya armado, sin el parpadeo de los selects.
+   */
+  private readonly cacheOpciones = new Map<string, Observable<Opcion[]>>();
+
   opciones(tipo: 'lineas' | 'unidades' | 'impuestos'): Observable<Opcion[]> {
-    return this.http.get<ApiResponse<Opcion[]>>(`${this.base}/opciones/${tipo}`).pipe(map(data));
+    let obs = this.cacheOpciones.get(tipo);
+    if (!obs) {
+      obs = this.http
+        .get<ApiResponse<Opcion[]>>(`${this.base}/opciones/${tipo}`)
+        .pipe(map(data), shareReplay({ bufferSize: 1, refCount: false }));
+      this.cacheOpciones.set(tipo, obs);
+    }
+    return obs;
   }
 }

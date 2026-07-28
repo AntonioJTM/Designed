@@ -112,10 +112,41 @@ async function equivalenciaPaquetes(req, res, next) {
   }
 }
 
-async function crearTraspaso(req, res, next) {
+async function solicitarTraspaso(req, res, next) {
   try {
-    const data = await service.crearTraspaso(req.body, req.auth.sub);
+    const data = await service.solicitarTraspaso(req.body, req.auth.sub);
     res.status(201).json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function enviarTraspaso(req, res, next) {
+  try {
+    const data = await service.enviarTraspaso(Number(req.params.id), req.auth.sub);
+    res.json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function recibirTraspaso(req, res, next) {
+  try {
+    const data = await service.recibirTraspaso(Number(req.params.id), req.auth.sub, req.body);
+    res.json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function cancelarTraspaso(req, res, next) {
+  try {
+    const data = await service.cancelarTraspaso(
+      Number(req.params.id),
+      req.auth.sub,
+      req.body?.motivo
+    );
+    res.json({ data, error: null });
   } catch (err) {
     next(err);
   }
@@ -160,7 +191,10 @@ module.exports = {
   desarmar,
   previaDesarmeBulto,
   listarConversiones,
-  crearTraspaso,
+  solicitarTraspaso,
+  enviarTraspaso,
+  recibirTraspaso,
+  cancelarTraspaso,
   equivalenciaPaquetes,
   listarTraspasos,
   obtenerTraspaso,

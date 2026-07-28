@@ -113,6 +113,10 @@ async function crearRemesa(datos, usuarioId) {
 const SELECT_REMESA = `
   SELECT r.id, r.folio, r.num_bultos, r.kg_total, r.lotes, r.archivo, r.notas, r.creado_en,
          r.variante_id, pv.sku, prod.nombre AS producto,
+         -- El calibre viaja para poder cotejarlo con el nombre del archivo: el
+         -- del proveedor se llama "COLOR CALIBRE.xlsx" y así el historial marca
+         -- las que entraron al hilo equivocado.
+         prod.grosor_calibre AS calibre,
          r.almacen_id, a.nombre AS almacen, u.nombre AS usuario
     FROM remesas r
     JOIN producto_variantes pv ON pv.id = r.variante_id

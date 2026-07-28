@@ -1,0 +1,54 @@
+<!--
+  No se cierra al hacer clic en el fondo, igual que el modal del producto: el
+  formulario se llena a mano y un clic distraído borraría la captura. Se sale con
+  la ✕, con "Cancelar" o con Escape.
+-->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-material-titulo">
+    <div class="modal-head">
+      <h2 id="modal-material-titulo">{{ esEdicion() ? 'Editar material' : 'Nuevo material' }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="guardar()">
+      <div class="modal-body">
+        @if (error()) {
+          <p class="alert" style="margin-top:0">{{ error() }}</p>
+        }
+
+        <div class="form-grid">
+          <label class="field">
+            Nombre
+            <input type="text" formControlName="nombre" placeholder="Ej. Acrilán" />
+          </label>
+          <label class="field">
+            Orden
+            <input type="number" formControlName="orden" />
+          </label>
+          <label class="field full">
+            Calibres de este material
+            <input type="text" formControlName="calibres" placeholder="Ej. 1/30, 2/30" />
+            <span class="muted" style="font-size:0.72rem">
+              Separados por coma. Son los únicos que se ofrecerán al dar de alta un
+              producto de este material.
+            </span>
+          </label>
+          <label class="field full">
+            Descripción
+            <textarea formControlName="descripcion" rows="2"></textarea>
+          </label>
+          <label class="field check">
+            <input type="checkbox" formControlName="activo" /> Activo
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+          {{ guardando() ? 'Guardando…' : (esEdicion() ? 'Guardar cambios' : 'Crear material') }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -12,6 +12,7 @@ import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
+import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
 
 /**
  * Recepción de remesas: se sube la lista de empaque del proveedor y cada
@@ -59,9 +60,48 @@ export class Remesas {
     return this.verTodos() ? b : b.slice(0, 15);
   });
 
-  readonly paqueteSel = computed(() =>
-    this.paquetes().find((p) => p.id === Number(this.varianteSel)) ?? null
-  );
+  /** Es un MÉTODO: `varianteSel` es un campo de ngModel, no una señal. */
+  paqueteSel(): Variante | null {
+    return this.paquetes().find((p) => p.id === Number(this.varianteSel)) ?? null;
+  }
+
+  /** Cómo se identifica un hilo en el selector: color, calibre, material y línea. */
+  etiquetaPaquete(p: Variante): string {
+    const partes = [p.producto];
+    if (p.calibre) partes.push(p.calibre);
+    const clas = [p.material, p.linea].filter(Boolean).join(' · ');
+    return clas ? `${partes.join(' ')} — ${clas}` : partes.join(' ');
+  }
+
+  /**
+   * Coteja el nombre del archivo contra el hilo elegido. El proveedor nombra sus
+   * listas "COLOR CALIBRE.xlsx", así que se puede avisar cuando no cuadran: ya se
+   * cargaron tres al producto equivocado, una de ellas con el color bueno y el
+   * calibre malo. Solo AVISA: la convención no es garantía.
+   */
+  avisoArchivo(): string | null {
+    const p = this.paqueteSel();
+    if (!p || !this.archivo) return null;
+    return textoAviso(cotejarArchivo(this.archivo.name, p));
+  }
+
+  /**
+   * Al elegir el archivo, si todavía no hay presentación elegida y el nombre
+   * apunta a una sola, se preselecciona. No pisa una elección hecha a mano.
+   */
+  private sugerirPorArchivo(): void {
+    if (this.varianteSel || !this.archivo) return;
+    const candidatos = this.paquetes().filter(
+      (p) => cotejarArchivo(this.archivo!.name, p).length === 0
+    );
+    if (candidatos.length === 1) {
+      this.varianteSel = candidatos[0].id;
+      this.mensaje.set(
+        `Por el nombre del archivo se eligió ${this.etiquetaPaquete(candidatos[0])}. ` +
+          `Cámbialo si no es.`
+      );
+    }
+  }
 
   constructor() {
     this.inv.almacenes().subscribe({
@@ -81,6 +121,19 @@ export class Remesas {
     this.cargarHistorial();
   }
 
+  /**
+   * Cotejo de una remesa YA cargada. Sirve para señalar en el historial las que
+   * entraron al hilo equivocado: hay tres del 2026-07-28 y a ojo no se ven.
+   */
+  avisoHistorial(r: Remesa): string | null {
+    return textoAviso(cotejarArchivo(r.archivo, r));
+  }
+
+  /** Cuántas remesas del historial no cuadran con su archivo. */
+  readonly sospechosas = computed(
+    () => this.historial().filter((r) => this.avisoHistorial(r) !== null).length
+  );
+
   private cargarHistorial(): void {
     this.inv.remesas().subscribe({
       next: (p) => this.historial.set(p.items),
@@ -95,7 +148,10 @@ export class Remesas {
     this.ultima.set(null);
     this.error.set(null);
     this.mensaje.set(null);
-    if (this.archivo) this.leerArchivo();
+    if (this.archivo) {
+      this.sugerirPorArchivo();
+      this.leerArchivo();
+    }
   }
 
   leerArchivo(): void {

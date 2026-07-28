@@ -72,6 +72,31 @@ const traspasoSchema = z
   })
   .strict();
 
+/**
+ * Lo que el responsable declara al recibir. Sin `recibido` se acepta el envío
+ * completo; con él se dice línea por línea qué llegó de verdad.
+ */
+const recepcionSchema = z
+  .object({
+    notas: z.string().trim().max(1000).optional(),
+    recibido: z
+      .array(
+        z
+          .object({
+            detalle_id: z.coerce.number().int().positive(),
+            paquetes: z.coerce.number().min(0).max(1000000).optional(),
+            cantidad: z.coerce.number().min(0).max(1000000).optional(),
+          })
+          .strict()
+      )
+      .optional(),
+  })
+  .strict();
+
+const cancelacionSchema = z
+  .object({ motivo: z.string().trim().max(255).optional() })
+  .strict();
+
 const configurarSchema = z
   .object({
     variante_id: z.coerce.number().int().positive(),
@@ -99,7 +124,13 @@ router.get('/traspasos/:id', ...soloStaff, controller.obtenerTraspaso);
 // Escrituras (staff): movimientos, desarmes, traspasos y configuración de umbrales.
 router.post('/movimientos', ...soloStaff, validate(movimientoSchema), controller.registrarMovimiento);
 router.post('/desarmes', ...soloStaff, validate(desarmarSchema), controller.desarmar);
-router.post('/traspasos', ...soloStaff, validate(traspasoSchema), controller.crearTraspaso);
+// El traspaso tiene tres pasos: se solicita (aparta), se envía (sale) y se
+// recibe (entra, con el acuse de quien lo aceptó). Cualquiera del staff puede
+// recibir; queda guardado su nombre y la hora.
+router.post('/traspasos', ...soloStaff, validate(traspasoSchema), controller.solicitarTraspaso);
+router.post('/traspasos/:id/enviar', ...soloStaff, controller.enviarTraspaso);
+router.post('/traspasos/:id/recibir', ...soloStaff, validate(recepcionSchema), controller.recibirTraspaso);
+router.post('/traspasos/:id/cancelar', ...soloStaff, validate(cancelacionSchema), controller.cancelarTraspaso);
 router.put('/configuracion', ...soloStaff, validate(configurarSchema), controller.configurar);
 
 module.exports = router;

@@ -1,0 +1,239 @@
+<!-- No cierra al hacer clic en el fondo: se sale con la ✕, "Cerrar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-desarme-titulo">
+    <div class="modal-head">
+      <h2 id="modal-desarme-titulo">Bajar conos a mostrador</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p class="muted" style="margin-top:0; font-size:0.85rem">
+        Escanea el paquete que vas a abrir: el sistema dice cuántos conos trae y, al confirmar, lo
+        deshace —descuenta sus kilos de la bodega y da entrada al mostrador—. El cono se vende por
+        kilo, al mismo precio; si le pones destare, esos kilos se suman.
+      </p>
+
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+      @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+      <!-- 1 · Escanear el bulto: es el flujo normal -->
+      <div class="input-scan" style="max-width:560px">
+        <input #lector type="text" [(ngModel)]="codigo"
+               (keydown.enter)="$event.preventDefault(); escanear()"
+               placeholder="Escanea el paquete que vas a bajar" />
+        <button type="button" class="btn btn-primary" (click)="escanear()">Leer</button>
+      </div>
+
+      @if (previaBulto(); as pb) {
+        <div class="previa-calculo">
+          <div class="renglon">
+            <span>
+              <b>{{ pb.paquete.producto }}</b>
+              <span class="muted"> · bulto {{ pb.bulto.codigo }}</span>
+              @if (pb.bulto.lote) { <span class="muted"> · lote {{ pb.bulto.lote }}</span> }
+            </span>
+            <span class="neg">−{{ pb.bulto.peso_kg | cantidad: 'kg' }}</span>
+          </div>
+          <div class="renglon">
+            <span>
+              Salen <b>{{ pb.conos_a_generar }}</b> conos
+              @if (!pb.cono) {
+                <span class="muted"> · se dará de alta la presentación</span>
+              }
+            </span>
+            <span style="color:#166534">+{{ pesoEnconado() | cantidad: 'kg' }}</span>
+          </div>
+          @if (destare) {
+            <div class="renglon">
+              <span class="muted">
+                {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ destare }} de destare
+              </span>
+              <span class="muted">se venden por kilo</span>
+            </div>
+          }
+        </div>
+
+        <div class="form-grid" style="margin-top:0.75rem">
+          <label class="field">
+            Sale de
+            <select [(ngModel)]="origen">
+              @for (e of pb.existencias; track e.almacen_id) {
+                <option [ngValue]="e.almacen_id">
+                  {{ e.almacen }} — hay {{ e.cantidad | cantidad: 'kg' }}
+                </option>
+              }
+              @if (pb.existencias.length === 0) {
+                @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+              }
+            </select>
+            @if (pb.existencias.length === 0) {
+              <span class="muted" style="font-size:0.72rem">
+                Este paquete no tiene existencias en ningún almacén.
+              </span>
+            }
+          </label>
+          <label class="field">
+            Baja a (mostrador)
+            <select [(ngModel)]="bajarA">
+              @for (a of almacenes(); track a.id) {
+                <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_punto_venta ? ' · mostrador' : '' }}</option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            Destare (kg) <span class="muted">(opcional)</span>
+            <input type="number" step="0.001" min="0" [(ngModel)]="destare" placeholder="Ej. 0.5" />
+            <span class="muted" style="font-size:0.72rem">
+              Lo que gana de peso al enconarse, por el tubo de cada cono. Se suma a los kilos que
+              entran al mostrador; no cambia lo que se descuenta del paquete.
+            </span>
+          </label>
+          <label class="field">
+            Motivo (opcional)
+            <input type="text" [(ngModel)]="motivo" placeholder="Ej. Surtido de mostrador" />
+          </label>
+        </div>
+      }
+
+      <!-- 2 · Sin lector: se captura a mano -->
+      @if (!previaBulto() && conos().length > 0) {
+        <details style="margin-top:1rem">
+          <summary class="muted" style="cursor:pointer; font-size:0.85rem">
+            Capturar a mano, sin escanear
+          </summary>
+          <div class="form-grid" style="margin-top:0.75rem">
+            <label class="field">
+              Cono a producir
+              <select [(ngModel)]="manual.cono_id">
+                @for (c of conos(); track c.id) {
+                  <option [ngValue]="c.id">{{ c.sku }} · {{ c.producto }}</option>
+                }
+              </select>
+              @if (conoSel(); as c) {
+                <span class="muted" style="font-size:0.72rem">
+                  Sale del paquete {{ c.paquete_sku }} de {{ c.paquete_peso_kg | cantidad: 'kg' }} ·
+                  {{ c.piezas_por_origen }} conos por paquete
+                </span>
+              }
+            </label>
+            <label class="field">
+              Paquetes a desarmar
+              <input type="number" step="1" min="1" [(ngModel)]="manual.paquetes" />
+            </label>
+            <label class="field">
+              Kilos reales <span class="muted">(opcional)</span>
+              <input type="number" step="0.001" min="0" [(ngModel)]="manual.kg"
+                     [placeholder]="previaManual() ? previaManual()!.nominal + ' kg' : 'peso nominal'" />
+              <span class="muted" style="font-size:0.72rem">
+                Solo si el bulto no pesó lo nominal. Vacío usa el peso del paquete.
+              </span>
+            </label>
+            <label class="field">
+              Conos reales <span class="muted">(opcional)</span>
+              <input type="number" step="1" min="1" [(ngModel)]="manual.conos"
+                     [placeholder]="previaManual() ? previaManual()!.piezasNominal + ' conos' : 'los nominales'" />
+              <span class="muted" style="font-size:0.72rem">
+                Solo si el bulto rinde menos de lo normal. Vacío usa los nominales.
+              </span>
+            </label>
+            <label class="field">
+              Sale de (bodega)
+              <select [(ngModel)]="manual.origen">
+                @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+              </select>
+            </label>
+            <label class="field">
+              Entra a (mostrador)
+              <select [(ngModel)]="manual.destino">
+                @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+              </select>
+            </label>
+            <label class="field full">
+              Motivo (opcional)
+              <input type="text" [(ngModel)]="motivo" placeholder="Ej. Surtido de mostrador" />
+            </label>
+          </div>
+
+          @if (previaManual(); as p) {
+            <div class="previa-calculo">
+              <div class="renglon">
+                <span>
+                  {{ p.paqueteSku }}
+                  @if (p.ajustado) {
+                    <span class="muted">· ajustado, nominal {{ p.nominal | cantidad: 'kg' }}</span>
+                  }
+                </span>
+                <span class="neg">−{{ p.kg | cantidad: 'kg' }}</span>
+              </div>
+              <div class="renglon">
+                <span>
+                  {{ p.conoSku }}
+                  @if (p.piezasAjustadas) {
+                    <span class="muted">· ajustado, nominal {{ p.piezasNominal | cantidad }}</span>
+                  }
+                </span>
+                <span style="color:#166534">+{{ p.piezas | cantidad }} conos</span>
+              </div>
+            </div>
+          }
+
+          <div style="margin-top:1rem">
+            <button type="button" class="btn btn-ghost btn-sm" (click)="desarmarManual()"
+                    [disabled]="bajando()">
+              Desarmar sin escanear
+            </button>
+          </div>
+        </details>
+      }
+
+      <!-- Las últimas bajadas: contesta "¿ya lo bajé?" sin salir del modal. -->
+      @if (ultimas().length > 0) {
+        <h4 style="margin:1.5rem 0 0.5rem; font-size:0.9rem">Últimas bajadas</h4>
+        <table class="grid mini">
+          <thead>
+            <tr>
+              <th>Producto</th><th>Paquete</th><th class="num">Kilos</th>
+              <th class="num">Conos</th><th>Destino</th><th>Cuándo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of ultimas(); track c.id) {
+              <tr>
+                <td>{{ c.producto }}</td>
+                <td class="muted">{{ c.paquete_sku }} → {{ c.cono_sku }}</td>
+                <td class="num">
+                  <span class="neg">−{{ c.kg_consumidos | cantidad }}</span>
+                  <span class="muted"> / </span>
+                  <span style="color:#166534">
+                    +{{ num(c.kg_consumidos) + num(c.destare_kg) | cantidad }}
+                  </span>
+                </td>
+                <td class="num muted">{{ c.piezas_generadas | cantidad }}</td>
+                <td class="muted">{{ c.almacen_destino }}</td>
+                <td class="muted">{{ c.creado_en | fecha }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        <p class="muted" style="font-size:0.78rem; margin-bottom:0">
+          El histórico completo está en el Kardex.
+        </p>
+      }
+    </div>
+
+    <div class="modal-foot">
+      @if (previaBulto()) {
+        <span class="nota">Revisa lo que trae el bulto antes de confirmar.</span>
+        <button type="button" class="btn btn-ghost" (click)="olvidarBulto()" [disabled]="bajando()">
+          Otro bulto
+        </button>
+        <button type="button" class="btn btn-primary" (click)="bajar()" [disabled]="bajando()">
+          {{ bajando() ? 'Bajando…' : 'Bajar a mostrador' }}
+        </button>
+      } @else {
+        <span class="nota">Escanea un paquete para empezar.</span>
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+      }
+    </div>
+  </div>
+</div>
