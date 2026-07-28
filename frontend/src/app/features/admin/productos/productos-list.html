@@ -11,10 +11,10 @@
   <div class="form-grid">
     <label class="field">
       Buscar
-      <input type="text" [(ngModel)]="q" (keyup.enter)="buscar()" placeholder="Nombre, slug o descripción" />
+      <input type="text" [(ngModel)]="q" (keyup.enter)="buscar()" placeholder="Color o descripción" />
     </label>
     <label class="field">
-      Categoría
+      Material
       <select [(ngModel)]="categoriaId">
         <option value="">— Todas —</option>
         @for (c of categorias(); track c.id) {
@@ -35,14 +35,25 @@
 } @else {
   <table class="grid">
     <thead>
-      <tr><th>Nombre</th><th>Categoría</th><th>Unidad</th><th>Destacado</th><th>Estado</th><th></th></tr>
+      <tr>
+        <th>Color</th><th>Material</th><th>Calibre</th><th>Línea</th>
+        <th>Precio</th><th>Destacado</th><th>Estado</th><th></th>
+      </tr>
     </thead>
     <tbody>
       @for (p of productos(); track p.id) {
         <tr>
           <td>{{ p.nombre }}</td>
           <td>{{ p.categoria }}</td>
-          <td class="muted">{{ p.unidad }}</td>
+          <td>{{ p.grosor_calibre || '—' }}</td>
+          <td>{{ p.linea || '—' }}</td>
+          <td>
+            @if (p.precio_kg != null) {
+              ${{ p.precio_kg }}<span class="muted">/{{ p.unidad }}</span>
+            } @else {
+              <span class="muted">sin precio</span>
+            }
+          </td>
           <td>{{ p.destacado ? '★' : '' }}</td>
           <td>
             <span class="pill" [class.ok]="p.activo" [class.off]="!p.activo">
@@ -50,6 +61,9 @@
             </span>
           </td>
           <td class="acciones">
+            <a class="btn btn-primary btn-sm" [routerLink]="['/admin/productos', p.id, 'presentaciones']">
+              Presentaciones
+            </a>
             <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/productos', p.id]">Editar</a>
             <button class="btn btn-danger btn-sm" (click)="eliminar(p)">Eliminar</button>
           </td>

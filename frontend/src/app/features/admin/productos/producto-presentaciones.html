@@ -1,0 +1,436 @@
+<div class="page-head">
+  <h1>Presentaciones</h1>
+  <a class="btn btn-ghost" [routerLink]="['/admin/productos', id()]">← Volver al producto</a>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else {
+  <div class="card">
+    <div class="form-grid">
+      <div><span class="muted">Producto</span><br /><b>{{ nombreProducto() }}</b></div>
+      <div>
+        <span class="muted">Precio de lista</span><br />
+        @if (precioProducto() != null) {
+          ${{ precioProducto() }} <span class="muted">/ {{ unidadProducto() }}</span>
+        } @else {
+          <span class="muted">sin capturar</span>
+        }
+      </div>
+    </div>
+    <p class="muted" style="margin-bottom:0; font-size:0.82rem">
+      Las presentaciones nuevas arrancan con el precio de lista del producto. Si no lo tiene,
+      captúralo en el producto o ponle precio a cada presentación.
+    </p>
+  </div>
+
+  <!-- Carga masiva: la lista de empaque del proveedor -->
+  <div class="card">
+    <h3 style="margin-top:0">Cargar del Excel del proveedor</h3>
+    <p class="muted" style="margin-top:0; font-size:0.85rem">
+      Sube la lista de empaque y se registran todos los bultos —con su peso real y su lote— y
+      entra la mercancía al inventario, en un solo paso. Si el producto todavía no tiene
+      presentación, se crea con el peso promedio de los bultos y su precio de lista.
+    </p>
+
+    <div class="form-grid">
+      <label class="field">
+        Archivo (.xlsx)
+        <input type="file" accept=".xlsx" (change)="elegirArchivo($event)" />
+      </label>
+      <label class="field">
+        Entra al almacén
+        <select [(ngModel)]="almacenCarga">
+          @for (a of almacenes(); track a.id) {
+            <option [ngValue]="a.id">{{ a.nombre }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    @if (leyendo()) { <p class="muted">Leyendo el archivo…</p> }
+
+    @if (previa(); as pr) {
+      <div class="previa-calculo" style="margin-top:1rem">
+        <div class="renglon">
+          <span><b>{{ pr.resumen.num_bultos }}</b> bultos</span>
+          <span><b>{{ pr.resumen.kg_total | cantidad: 'kg' }}</b></span>
+        </div>
+        <div class="renglon">
+          <span class="muted">
+            Pesos de {{ pr.resumen.peso_min | cantidad: 'kg' }} a
+            {{ pr.resumen.peso_max | cantidad: 'kg' }}
+            @if (pr.resumen.conos_totales) { · {{ pr.resumen.conos_totales }} conos en total }
+          </span>
+        </div>
+        @for (l of pr.resumen.lotes; track l.lote) {
+          <div class="renglon">
+            <span class="muted">Lote {{ l.lote }} · {{ l.bultos }} bultos</span>
+            <span class="muted">{{ l.kg | cantidad: 'kg' }}</span>
+          </div>
+        }
+      </div>
+
+      @if (bloqueantes().length) {
+        <p class="alert" style="margin-top:0.75rem">
+          No se puede cargar: {{ bloqueantes().length }}
+          {{ bloqueantes().length === 1 ? 'código ya está' : 'códigos ya están' }} registrados.
+        </p>
+        <ul class="muted" style="font-size:0.8rem">
+          @for (a of bloqueantes().slice(0, 5); track a.fila) { <li>Fila {{ a.fila }}: {{ a.aviso }}</li> }
+        </ul>
+      }
+
+      @if (advertencias().length) {
+        <p class="aviso" style="margin-top:0.75rem">
+          {{ advertencias().length }}
+          {{ advertencias().length === 1 ? 'aviso' : 'avisos' }}, no impiden cargar:
+        </p>
+        <ul class="muted" style="font-size:0.8rem">
+          @for (a of advertencias().slice(0, 5); track a.fila) { <li>Fila {{ a.fila }}: {{ a.aviso }}</li> }
+        </ul>
+      }
+
+      <table class="grid" style="margin-top:0.75rem">
+        <thead><tr><th>Código</th><th class="num">Peso</th><th>Lote</th><th class="num">Conos</th></tr></thead>
+        <tbody>
+          @for (b of bultosVisibles(); track b.codigo) {
+            <tr>
+              <td>{{ b.codigo }}</td>
+              <td class="num">{{ b.peso_kg | cantidad: 'kg' }}</td>
+              <td class="muted">{{ b.lote || '—' }}</td>
+              <td class="num">{{ b.conos ?? '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      @if (pr.bultos.length > bultosVisibles().length) {
+        <button class="btn btn-ghost btn-sm" (click)="verTodosBultos.set(true)">
+          Ver los {{ pr.bultos.length }} bultos
+        </button>
+      }
+
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary" (click)="confirmarCarga()"
+                [disabled]="cargandoRemesa() || !pr.se_puede_cargar">
+          {{ cargandoRemesa() ? 'Cargando…' : 'Cargar e ingresar al inventario' }}
+        </button>
+      </div>
+    }
+
+    @if (ultimaCarga(); as u) {
+      <div class="exito" style="margin-top:1rem">
+        <b>Remesa {{ u.folio }}</b><br />
+        {{ u.num_bultos }} bultos · {{ u.kg_total | cantidad: 'kg' }}<br />
+        <span class="muted">
+          Inventario: {{ u.saldo_anterior | cantidad: 'kg' }} → {{ u.saldo_nuevo | cantidad: 'kg' }}
+        </span>
+      </div>
+    }
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Variantes (SKU)</h3>
+    @if (variantes().length === 0) {
+      <p class="muted">
+        Todavía sin presentaciones. Captúralas aquí abajo. Mientras no tenga ninguna, el
+        producto no se vende ni se inventaría —está guardado y esperando.
+      </p>
+    } @else {
+      <table class="grid" style="margin-bottom:1rem">
+        <thead>
+          <tr>
+            <th>SKU</th><th>Presentación</th>
+            <th class="num">Precio público</th><th>Otros precios</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (v of variantes(); track v.id) {
+            <tr>
+              <td>{{ v.sku }}</td>
+              <td>
+                {{ v.presentacion || '—' }}
+                @if (v.tipo_presentacion === 'paquete') {
+                  <div class="muted" style="font-size:0.75rem">
+                    @if (v.peso_kg) {
+                      Paquete de {{ v.peso_kg | cantidad: 'kg' }} · se vende por kilo
+                    } @else {
+                      Se vende por kilo · el peso del paquete lo pone la primera carga del Excel
+                    }
+                  </div>
+                } @else if (v.tipo_presentacion === 'cono') {
+                  <div class="muted" style="font-size:0.75rem">
+                    {{ v.piezas_por_origen }} conos por paquete {{ v.paquete_sku }} · se vende por pieza
+                    @if (v.modo_precio === 'calculado') { <span class="pill ok">precio calculado</span> }
+                  </div>
+                }
+              </td>
+              <td class="num">
+                ${{ v.precio }}
+                <div class="muted" style="font-size:0.75rem">
+                  {{ v.tipo_presentacion === 'paquete' ? 'por kg' : v.tipo_presentacion === 'cono' ? 'por cono' : '' }}
+                </div>
+              </td>
+              <td>
+                @if (tiposConPrecio().length === 0) {
+                  <span class="muted">solo público</span>
+                } @else {
+                  @for (tc of tiposConPrecio(); track tc.id) {
+                    <div style="font-size:0.8rem">
+                      {{ tc.nombre }}:
+                      @if (precioDe(v, tc.id); as pr) {
+                        <b>${{ pr.toFixed(2) }}</b>
+                      } @else {
+                        <span class="muted">público</span>
+                      }
+                    </div>
+                  }
+                }
+              </td>
+              <td class="acciones">
+                @if (tiposConPrecio().length > 0) {
+                  <button class="btn btn-ghost btn-sm" (click)="togglePrecios(v)">
+                    {{ editandoPrecios() === v.id ? '▾' : '▸' }} Precios
+                  </button>
+                }
+                <button class="btn btn-ghost btn-sm" (click)="toggleCodigos(v)">
+                  {{ expandida() === v.id ? '▾' : '▸' }} Códigos
+                </button>
+                <button class="btn btn-danger btn-sm" (click)="eliminarVariante(v)">Eliminar</button>
+              </td>
+            </tr>
+            @if (editandoPrecios() === v.id) {
+              <tr class="detalle-row">
+                <td colspan="6">
+                  <div style="padding:1.25rem">
+                    <h4 style="margin:0 0 0.6rem; font-size:0.9rem">
+                      Precios de {{ v.sku }} por tipo de cliente
+                    </h4>
+                    <p class="muted" style="margin:0 0 0.75rem; font-size:0.8rem">
+                      El público paga ${{ v.precio }}. Deja vacío el de un tipo para que
+                      también pague el precio público.
+                    </p>
+                    <div class="form-concepto" style="border-top:0; margin-top:0; padding-top:0">
+                      @for (tc of tiposConPrecio(); track tc.id) {
+                        <label class="field">
+                          {{ tc.nombre }}
+                          <input type="number" step="0.01" min="0"
+                                 [(ngModel)]="precioTipo[tc.id]" [name]="'pt' + tc.id"
+                                 [placeholder]="v.precio" />
+                        </label>
+                        <button class="btn btn-primary btn-sm" (click)="guardarPrecioTipo(v, tc.id)">
+                          Guardar
+                        </button>
+                      }
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            }
+
+            @if (expandida() === v.id) {
+              <tr>
+                <td colspan="6" style="background:#f8fafc">
+                  <p class="muted" style="margin:0 0 0.5rem; font-size:0.82rem">
+                    Bultos de esta presentación: cada uno con su código, su peso real y su lote.
+                    Escanea cualquiera y el sistema lo reconoce como esta presentación.
+                    El código principal es <b>{{ v.codigo_barras || '—' }}</b>.
+                  </p>
+
+                  @if (codigosDe(v.id).length) {
+                    <p style="margin:0 0 0.5rem; font-size:0.82rem">
+                      <b>{{ bultosDisponibles(v.id) }}</b> de
+                      {{ codigosDe(v.id).length }} bultos disponibles
+                      @if (kgDeBultos(v.id) > 0) {
+                        · <b>{{ kgDeBultos(v.id) | cantidad: 'kg' }}</b> sin vender
+                      }
+                      @if (lotesDe(v.id).length > 1) {
+                        · {{ lotesDe(v.id).length }} lotes del mismo hilo, y el inventario los suma juntos
+                      }
+                    </p>
+
+                    @for (g of lotesDe(v.id); track g.lote) {
+                      <div style="margin-bottom:0.6rem">
+                        <p class="muted" style="margin:0 0 0.25rem; font-size:0.78rem">
+                          Lote <b>{{ g.lote }}</b> · {{ g.disponibles }} de {{ g.bultos.length }}
+                          disponibles
+                          @if (g.kgDisponibles > 0) { · {{ g.kgDisponibles | cantidad: 'kg' }} }
+                        </p>
+                        <ul style="list-style:none; padding:0; margin:0; display:flex; flex-wrap:wrap; gap:0.4rem">
+                          @for (c of g.bultos; track c.id) {
+                            <li class="pill"
+                                [style.background]="estaDisponible(c) ? '#eef2ff' : '#f1f5f9'"
+                                [style.color]="estaDisponible(c) ? '#3730a3' : '#64748b'"
+                                [style.text-decoration]="estaDisponible(c) ? 'none' : 'line-through'"
+                                style="display:inline-flex; gap:0.4rem; align-items:center"
+                                [title]="estaDisponible(c) ? 'Disponible'
+                                  : (c.estado === 'vendido' ? 'Vendido' : 'Desarmado')
+                                    + (c.consumido_folio ? ' en ' + c.consumido_folio : '')">
+                              {{ c.codigo }}
+                              @if (c.peso_kg) {
+                                <span class="muted">· {{ c.peso_kg | cantidad: 'kg' }}</span>
+                              }
+                              @if (c.conos) { <span class="muted">· {{ c.conos }} conos</span> }
+                              @if (!estaDisponible(c)) {
+                                <span class="muted">· {{ c.estado }}</span>
+                              }
+                              <button class="btn btn-danger btn-sm" style="padding:0 0.35rem"
+                                      (click)="eliminarCodigoVar(c.id, v.id)">✕</button>
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                  } @else {
+                    <p class="muted" style="margin:0 0 0.5rem; font-size:0.82rem">
+                      Sin bultos registrados. Llegan solos al recibir una remesa, o captúralos aquí.
+                    </p>
+                  }
+
+                  <div class="input-scan" style="max-width:640px">
+                    <input type="text" [(ngModel)]="nuevoCodigo" name="nc"
+                           (keydown.enter)="capturarCodigoVar($event, v.id)"
+                           placeholder="Escanea o teclea el código del bulto" />
+                    <input type="number" step="0.001" min="0" [(ngModel)]="nuevoPeso" name="np"
+                           style="max-width:110px" placeholder="Peso kg" />
+                    <input type="text" [(ngModel)]="nuevoLote" name="nl"
+                           style="max-width:130px" placeholder="Lote" />
+                    <input type="number" step="1" min="1" [(ngModel)]="nuevoConos" name="ncn"
+                           style="max-width:110px" placeholder="Conos" />
+                    <button class="btn btn-primary btn-sm" (click)="agregarCodigoVar(v.id)">+ Añadir</button>
+                  </div>
+                  <span class="muted" style="font-size:0.72rem">
+                    Añadir un bulto aquí NO mueve el inventario: para que entre la mercancía usa
+                    Recibir remesa.
+                  </span>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (yaTienePresentacion()) {
+      <p class="muted" style="font-size:0.85rem; margin-bottom:0">
+        Este producto ya tiene su presentación. Las remesas siguientes se cargan sobre ella con el
+        Excel de arriba: se agregan bultos, no presentaciones nuevas.
+      </p>
+    } @else {
+    <h4 style="margin:1rem 0 0.5rem">Capturar la presentación a mano</h4>
+    <p class="muted" style="margin-top:0; font-size:0.82rem">
+      Normalmente no hace falta: la crea la carga del Excel. Es un <b>paquete</b> que se vende por
+      kilo, como todo el hilo.
+    </p>
+    <form [formGroup]="varForm" (ngSubmit)="agregarVariante()">
+      <div class="form-grid">
+        <label class="field">
+          Código de barras
+          <span class="input-scan">
+            <input type="text" #bc formControlName="codigo_barras"
+                   placeholder="Escanea o teclea el código"
+                   (input)="sincronizarSku()"
+                   (keydown.enter)="capturarCodigo($event)" />
+            <button type="button" class="btn btn-ghost btn-sm" (click)="bc.focus()" title="Escanear código">📷</button>
+          </span>
+          <span class="muted" style="font-size:0.72rem">
+            Es el identificador de la presentación: el SKU se llena con él.
+          </span>
+        </label>
+        <label class="field">
+          SKU
+          <input type="text" formControlName="sku" (input)="marcarSkuManual()" />
+          <span class="muted" style="font-size:0.72rem">
+            @if (skuManual) {
+              Lo estás capturando a mano. Bórralo para que vuelva a seguir al código.
+            } @else {
+              Se toma del código de barras. Puedes cambiarlo si necesitas otro.
+            }
+          </span>
+        </label>
+        <label class="field">
+          Presentación <input type="text" formControlName="presentacion" placeholder="Paquete 10 kg" />
+        </label>
+        @if (esPorLotes()) {
+          <label class="field">
+            Lote
+            <input type="text" formControlName="lote" placeholder="Ej. MAR-26" />
+            <span class="muted" style="font-size:0.72rem">
+              Etiqueta de la remesa. No separa las existencias.
+            </span>
+          </label>
+        }
+
+        @if (varForm.controls.tipo_presentacion.value === 'paquete') {
+          <label class="field">
+            Peso del paquete (kg)
+            <input type="number" step="0.001" min="0" formControlName="peso_kg" placeholder="Ej. 10" />
+            <span class="muted" style="font-size:0.72rem">
+              Es lo que se descuenta al desarmarlo en conos.
+            </span>
+          </label>
+          <label class="field">
+            Precio público por kilo
+            <input type="number" step="0.01" min="0" formControlName="precio"
+                   [placeholder]="precioProducto() != null ? precioProducto() + ' (del producto)' : ''" />
+            <span class="muted" style="font-size:0.72rem">
+              Es el de mostrador. Si lo dejas vacío toma el precio de lista del producto.
+              Los demás tipos de cliente se capturan por presentación, en la tabla de arriba.
+            </span>
+          </label>
+        }
+
+        <label class="field">Precio oferta <input type="number" step="0.01" formControlName="precio_oferta" /></label>
+        <label class="field">Costo <input type="number" step="0.01" formControlName="costo" /></label>
+      </div>
+
+
+      @if (faltaEnVariante(); as falta) {
+        <p class="aviso" style="margin-top:1rem">{{ falta }}</p>
+      }
+      <div style="margin-top:1rem">
+        <button type="submit" class="btn btn-primary btn-sm" [disabled]="!!faltaEnVariante()">
+          Guardar la presentación
+        </button>
+      </div>
+    </form>
+    }
+  </div>
+
+  <!-- Imágenes -->
+  <div class="card">
+    <h3 style="margin-top:0">Imágenes</h3>
+    @if (imagenes().length === 0) {
+      <p class="muted">Sin imágenes.</p>
+    } @else {
+      <table class="grid" style="margin-bottom:1rem">
+        <thead><tr><th>URL</th><th>Principal</th><th>Orden</th><th></th></tr></thead>
+        <tbody>
+          @for (img of imagenes(); track img.id) {
+            <tr>
+              <td class="muted" style="word-break:break-all">{{ img.url }}</td>
+              <td>{{ img.es_principal ? '★' : '' }}</td>
+              <td>{{ img.orden }}</td>
+              <td class="acciones">
+                <button class="btn btn-danger btn-sm" (click)="eliminarImagen(img)">Eliminar</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <form [formGroup]="imgForm" (ngSubmit)="agregarImagen()">
+      <div class="form-grid">
+        <label class="field full">URL de la imagen <input type="url" formControlName="url" placeholder="https://…" /></label>
+        <label class="field check"><input type="checkbox" formControlName="es_principal" /> Principal</label>
+      </div>
+      <div style="margin-top:1rem">
+        <button type="submit" class="btn btn-primary btn-sm">+ Agregar imagen</button>
+      </div>
+    </form>
+  </div>
+}

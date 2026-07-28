@@ -20,15 +20,20 @@
 } @else {
   <div class="grid-prod">
     @for (p of productos(); track p.id) {
-      <a class="prod-card" [routerLink]="['/tienda/producto', p.id]">
+      <a class="prod-card" [class.agotado]="agotado(p)" [routerLink]="['/tienda/producto', p.id]">
         <div class="thumb">
           @if (p.imagen) { <img [src]="p.imagen" [alt]="p.nombre" /> } @else { 🧶 }
+          @if (agotado(p)) { <span class="badge-agotado">Sin existencias</span> }
         </div>
         <div class="body">
           <span class="cat">{{ p.categoria }}</span>
           <span class="nombre">{{ p.nombre }}</span>
           <span class="precio">
-            @if (p.precio_desde) { desde ${{ p.precio_desde }} } @else { <span class="muted">Sin precio</span> }
+            @if (p.precio_desde) {
+              desde ${{ p.precio_desde }}<span class="por-unidad">/{{ p.unidad || 'kg' }}</span>
+            } @else {
+              <span class="muted">Sin precio</span>
+            }
           </span>
         </div>
       </a>

@@ -3,3 +3,8 @@ dist/
 .env
 *.log
 .DS_Store
+
+# Respaldos de la BD: contienen correos reales y hashes de contraseñas.
+# No deben subirse al repo. Ver nota en CAMBIOS.txt sobre el dump del 2026-07-24
+# que quedó versionado antes de esta regla.
+db/dump_*.sql

@@ -10,6 +10,7 @@ async function listar(req, res, next) {
       producto_id: req.query.producto_id ? Number(req.query.producto_id) : undefined,
       q: req.query.q,
       activo: parseBool(req.query.activo),
+      tipo_presentacion: req.query.tipo_presentacion,
       page,
       limit,
       offset,
@@ -58,9 +59,32 @@ async function eliminar(req, res, next) {
 
 // ---- Códigos de barras adicionales ----
 
+async function fijarPrecioTipo(req, res, next) {
+  try {
+    const data = await service.fijarPrecioTipo(
+      Number(req.params.id),
+      req.body.tipo_cliente_id,
+      req.body.precio
+    );
+    res.json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function listarCodigos(req, res, next) {
   try {
     const data = await service.listarCodigos(Number(req.params.id));
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** Resuelve un código escaneado: presentación + el bulto, si lo es. */
+async function resolverCodigo(req, res, next) {
+  try {
+    const data = await service.resolverCodigo(req.params.codigo);
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -91,7 +115,9 @@ module.exports = {
   crear,
   actualizar,
   eliminar,
+  fijarPrecioTipo,
   listarCodigos,
   agregarCodigo,
   eliminarCodigo,
+  resolverCodigo,
 };

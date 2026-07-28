@@ -7,6 +7,9 @@ export interface CartItem {
   presentacion?: string | null;
   precio: number;
   imagen?: string | null;
+  /** Unidad de peso en que se vende (kg, g, t). El precio es por esa unidad. */
+  unidad?: string;
+  /** Cantidad en la unidad de peso del producto; admite decimales (2.5 kg). */
   cantidad: number;
 }
 
@@ -34,9 +37,14 @@ export class CartService {
     this.guardar();
   }
 
+  /** La venta es por peso: admite decimales, con 3 como en DECIMAL(12,3). */
   cambiarCantidad(variante_id: number, cantidad: number): void {
-    if (cantidad <= 0) return this.quitar(variante_id);
-    this.items.update((arr) => arr.map((i) => (i.variante_id === variante_id ? { ...i, cantidad } : i)));
+    const n = Number(cantidad);
+    if (!Number.isFinite(n) || n <= 0) return this.quitar(variante_id);
+    const redondeada = Math.round(n * 1000) / 1000;
+    this.items.update((arr) =>
+      arr.map((i) => (i.variante_id === variante_id ? { ...i, cantidad: redondeada } : i))
+    );
     this.guardar();
   }
 

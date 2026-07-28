@@ -10,10 +10,10 @@ const router = Router();
 
 const crearSchema = z
   .object({
-    padre_id: z.coerce.number().int().positive().nullable().optional(),
     nombre: z.string().trim().min(1).max(100),
-    slug: z.string().trim().max(120).optional(),
     descripcion: z.string().trim().optional(),
+    // Calibres válidos de este material, separados por coma: "1/30,2/30".
+    calibres: z.string().trim().max(255).nullable().optional(),
     imagen_url: z.string().trim().max(255).optional(),
     orden: z.coerce.number().int().optional(),
     activo: z.coerce.boolean().optional(),

@@ -12,6 +12,25 @@ async function listar(req, res, next) {
   }
 }
 
+/** Almacén del que descuenta la tienda en línea. */
+async function tiendaLinea(req, res, next) {
+  try {
+    const data = await service.tiendaLinea();
+    res.json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Almacén que surte a las sucursales. */
+async function matriz(req, res, next) {
+  try {
+    res.json({ data: await service.matriz(), error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function obtener(req, res, next) {
   try {
     const data = await service.obtener(Number(req.params.id));
@@ -39,4 +58,13 @@ async function actualizar(req, res, next) {
   }
 }
 
-module.exports = { listar, obtener, crear, actualizar };
+async function eliminar(req, res, next) {
+  try {
+    await service.eliminar(Number(req.params.id));
+    res.json({ data: { eliminado: true }, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listar, tiendaLinea, matriz, obtener, crear, actualizar, eliminar };

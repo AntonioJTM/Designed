@@ -1,0 +1,345 @@
+<div class="page-head">
+  <h1>Nómina semanal</h1>
+  <a class="btn btn-ghost" routerLink="/admin/nomina/configuracion">Configurar sueldos</a>
+</div>
+
+@if (error()) {
+  <p class="alert">{{ error() }}</p>
+}
+@if (mensaje()) {
+  <p class="ok-msg">{{ mensaje() }}</p>
+}
+
+<!-- Selector de semana -->
+<div class="card semana-nav">
+  <button type="button" class="btn btn-ghost btn-sm" (click)="moverSemana(-7)">‹ Semana anterior</button>
+
+  <div class="semana-info">
+    @if (semana(); as s) {
+      <b>{{ s.fecha_inicio }} → {{ s.fecha_fin }}</b>
+      <span class="muted">Se paga el sábado {{ s.fecha_pago }}</span>
+    }
+  </div>
+
+  <label class="field ir-a">
+    <span class="muted">Ir a la semana de</span>
+    <input type="date" [(ngModel)]="fecha" (change)="cargarSemana()" />
+  </label>
+
+  <button type="button" class="btn btn-ghost btn-sm" (click)="moverSemana(7)">Semana siguiente ›</button>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (!periodo()) {
+  <!-- La semana existe pero aún no se ha abierto su nómina -->
+  <div class="card vacio-semana">
+    <p>Todavía no hay nómina para esta semana.</p>
+    <button type="button" class="btn btn-primary" [disabled]="ocupado()" (click)="crear()">
+      Crear nómina de esta semana
+    </button>
+  </div>
+} @else if (periodo(); as p) {
+  <!-- Estado y acciones -->
+  <div class="card acciones-periodo">
+    <div>
+      <span
+        class="pill"
+        [class.ok]="p.estado === 'pagado'"
+        [class.off]="p.estado === 'cancelado'"
+        [class.warn]="p.estado === 'borrador'"
+      >
+        {{ p.estado === 'borrador' ? 'Borrador' : p.estado === 'pagado' ? 'Pagada' : 'Cancelada' }}
+      </span>
+      @if (p.estado === 'borrador') {
+        <span class="muted"> · Los montos se recalculan con las ventas actuales.</span>
+      } @else if (p.estado === 'pagado') {
+        <span class="muted"> · Cerrada: los montos ya no cambian.</span>
+      }
+    </div>
+
+    <div class="botones">
+      @if (p.estado === 'borrador') {
+        <button type="button" class="btn btn-ghost" [disabled]="ocupado()" (click)="calcular()">
+          {{ p.recibos.length ? 'Recalcular' : 'Calcular nómina' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="ocupado() || p.recibos.length === 0"
+          (click)="marcarPagada()"
+        >
+          Marcar como pagada
+        </button>
+        <button type="button" class="btn btn-danger" [disabled]="ocupado()" (click)="cancelar()">
+          Cancelar
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (p.recibos.length === 0) {
+    <p class="empty">
+      Aún no se calcula esta nómina. Pulsa <b>Calcular nómina</b> para traer los sueldos y las
+      ventas de la semana.
+    </p>
+  } @else {
+    <!-- Resumen -->
+    <div class="kpis">
+      <div class="card kpi">
+        <span class="muted">Sueldos base</span>
+        <b>${{ mx(totales().sueldos) }}</b>
+      </div>
+      <div class="card kpi">
+        <span class="muted">Comisiones</span>
+        <b>${{ mx(totales().comisiones) }}</b>
+        <span class="muted">sobre ${{ mx(totales().ventas) }} de venta neta</span>
+      </div>
+      <div class="card kpi">
+        <span class="muted">Horas extra − descuentos</span>
+        <b>${{ mx(totales().percepciones - totales().deducciones) }}</b>
+      </div>
+      <div class="card kpi total">
+        <span class="muted">Total a pagar</span>
+        <b>${{ mx(totales().total) }}</b>
+        <span class="muted">{{ totales().empleados }} empleados</span>
+      </div>
+    </div>
+
+    <!-- Recibos -->
+    <table class="grid nomina-tabla">
+      <thead>
+        <tr>
+          <th>Empleado</th>
+          <th class="num">Sueldo base</th>
+          <th class="num">Venta neta</th>
+          <th class="num">Comisión</th>
+          <th class="num">Horas extra</th>
+          <th class="num">Descuentos</th>
+          <th class="num">Total</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of p.recibos; track r.id) {
+          <tr [class.abierta]="expandido() === r.id">
+            <td>
+              <b>{{ r.usuario }}</b>
+              <div class="muted" style="font-size: 0.78rem">{{ r.rol }}</div>
+            </td>
+            <td class="num">${{ mx(r.sueldo_base) }}</td>
+            <td class="num">
+              ${{ mx(r.ventas_netas) }}
+              <div class="muted" style="font-size: 0.75rem">{{ r.num_pedidos }} pedidos</div>
+            </td>
+            <td class="num">
+              @if (num(r.porcentaje_comision) > 0) {
+                ${{ mx(r.comision) }}
+                <div class="muted" style="font-size: 0.75rem">{{ mx(r.porcentaje_comision) }}%</div>
+              } @else {
+                <span class="muted">—</span>
+              }
+            </td>
+            <td class="num">
+              {{ num(r.otras_percepciones) ? '$' + mx(r.otras_percepciones) : '—' }}
+            </td>
+            <td class="num neg">
+              {{ num(r.deducciones) ? '−$' + mx(r.deducciones) : '—' }}
+            </td>
+            <td class="num">
+              <b [class.neg]="num(r.total_pagar) < 0">${{ mx(r.total_pagar) }}</b>
+            </td>
+            <td>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="alternar(r)">
+                {{ expandido() === r.id ? 'Cerrar' : 'Detalle' }}
+              </button>
+            </td>
+          </tr>
+
+          @if (expandido() === r.id) {
+            <tr class="detalle-row">
+              <td colspan="8">
+                <div class="detalle-nomina">
+                  <!-- Conceptos capturados -->
+                  <div>
+                    <h4>Ajustes del recibo</h4>
+                    @if (r.conceptos.length === 0) {
+                      <p class="muted">Sin horas extra ni descuentos capturados.</p>
+                    } @else {
+                      <table class="grid mini">
+                        <tbody>
+                          @for (c of r.conceptos; track c.id) {
+                            <tr>
+                              <td>
+                                {{ etiquetaConcepto(c.clave) }}
+                                @if (c.cantidad) {
+                                  <span class="muted"> · {{ mx(c.cantidad) }} h</span>
+                                }
+                                @if (c.descripcion) {
+                                  <div class="muted" style="font-size: 0.78rem">{{ c.descripcion }}</div>
+                                }
+                              </td>
+                              <td class="num" [class.neg]="c.tipo === 'deduccion'">
+                                {{ c.tipo === 'deduccion' ? '−' : '+' }}${{ mx(c.importe) }}
+                              </td>
+                              <td style="width: 1%">
+                                @if (editable()) {
+                                  <button
+                                    type="button"
+                                    class="btn btn-danger btn-sm"
+                                    [disabled]="ocupado()"
+                                    (click)="quitarConcepto(c.id)"
+                                  >
+                                    Quitar
+                                  </button>
+                                }
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    }
+
+                    @if (editable()) {
+                      <div class="form-concepto">
+                        <label class="field">
+                          Concepto
+                          <select [(ngModel)]="form.clave">
+                            <option value="horas_extra">Horas extra</option>
+                            <option value="falta">Falta</option>
+                            <option value="descuento">Descuento</option>
+                          </select>
+                        </label>
+                        @if (form.clave === 'horas_extra') {
+                          <label class="field">
+                            Horas
+                            <input type="number" step="0.5" min="0" [(ngModel)]="form.cantidad" />
+                          </label>
+                        }
+                        <label class="field">
+                          Importe
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            [(ngModel)]="form.importe"
+                            [placeholder]="form.clave === 'horas_extra' ? 'automático' : '0.00'"
+                          />
+                        </label>
+                        <label class="field">
+                          Nota
+                          <input type="text" [(ngModel)]="form.descripcion" placeholder="Opcional" />
+                        </label>
+                        <button
+                          type="button"
+                          class="btn btn-primary btn-sm"
+                          [disabled]="ocupado()"
+                          (click)="agregarConcepto(r)"
+                        >
+                          Agregar
+                        </button>
+                      </div>
+                      @if (form.clave === 'horas_extra') {
+                        <p class="muted" style="font-size: 0.8rem">
+                          Si dejas el importe vacío se calcula con el valor de hora configurado para
+                          este empleado.
+                        </p>
+                      }
+                    }
+                  </div>
+
+                  <!-- Ventas que formaron la comisión -->
+                  <div>
+                    <h4>Ventas de la semana</h4>
+                    @if (!ventas()) {
+                      <p class="muted">Cargando…</p>
+                    } @else if (ventas()!.pedidos.length === 0) {
+                      <p class="muted">Sin ventas registradas a su nombre en esta semana.</p>
+                    } @else {
+                      <table class="grid mini">
+                        <thead>
+                          <tr>
+                            <th>Pedido</th>
+                            <th>Fecha</th>
+                            <th class="num">Venta neta</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (v of ventas()!.pedidos; track v.id) {
+                            <tr>
+                              <td>
+                                {{ v.numero_pedido }}
+                                <div class="muted" style="font-size: 0.75rem">
+                                  {{ v.canal === 'punto_venta' ? 'Mostrador' : 'En línea' }}
+                                </div>
+                              </td>
+                              <td class="muted">{{ v.creado_en | fecha }}</td>
+                              <td class="num">${{ mx(v.venta_neta) }}</td>
+                            </tr>
+                          }
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colspan="2"><b>Base comisionable</b></td>
+                            <td class="num"><b>${{ mx(ventas()!.venta_neta) }}</b></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                      <p class="muted" style="font-size: 0.8rem">
+                        Venta neta = subtotal − descuento. No incluye IVA ni costo de envío.
+                      </p>
+                    }
+                  </div>
+                </div>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  }
+}
+
+<!-- Historial -->
+@if (historial().length > 0) {
+  <div class="page-head" style="margin-top: 2rem">
+    <h2 style="font-size: 1.1rem; margin: 0">Semanas anteriores</h2>
+  </div>
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Semana</th>
+        <th>Se pagó</th>
+        <th>Estado</th>
+        <th class="num">Empleados</th>
+        <th class="num">Total</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (h of historial(); track h.id) {
+        <tr>
+          <td>{{ h.fecha_inicio }} → {{ h.fecha_fin }}</td>
+          <td>{{ h.fecha_pago }}</td>
+          <td>
+            <span
+              class="pill"
+              [class.ok]="h.estado === 'pagado'"
+              [class.off]="h.estado === 'cancelado'"
+              [class.warn]="h.estado === 'borrador'"
+            >
+              {{ h.estado === 'borrador' ? 'Borrador' : h.estado === 'pagado' ? 'Pagada' : 'Cancelada' }}
+            </span>
+          </td>
+          <td class="num">{{ h.num_recibos }}</td>
+          <td class="num">${{ mx(h.total_nomina) }}</td>
+          <td>
+            <button type="button" class="btn btn-ghost btn-sm" (click)="irASemanaDe(h.fecha_inicio)">
+              Ver
+            </button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

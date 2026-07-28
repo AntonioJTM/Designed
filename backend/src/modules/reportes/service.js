@@ -1,6 +1,7 @@
 'use strict';
 
 const model = require('./model');
+const { hoyLocal } = require('../../utils/fechas');
 
 /**
  * Normaliza el rango de fechas. Sin parámetros → el día de hoy.
@@ -8,7 +9,7 @@ const model = require('./model');
  * de modo que el filtro sea [desde, hastaExcl).
  */
 function rango(desdeStr, hastaStr) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyLocal();
   const desde = (desdeStr || hoy).slice(0, 10);
   const hasta = (hastaStr || desde).slice(0, 10);
 

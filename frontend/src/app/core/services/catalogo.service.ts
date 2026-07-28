@@ -10,6 +10,7 @@ import {
   Paginado,
   Producto,
   ProductoDetalle,
+  TipoCliente,
   Variante,
   VarianteCodigo,
 } from '../models/catalogo.models';
@@ -105,7 +106,11 @@ export class CatalogoService {
       .get<ApiResponse<VarianteCodigo[]>>(`${this.base}/variantes/${varianteId}/codigos`)
       .pipe(map(data));
   }
-  agregarCodigo(varianteId: number, body: { codigo: string; etiqueta?: string }): Observable<VarianteCodigo> {
+  /** Da de alta un bulto: su código y, si se conocen, su peso real y su lote. */
+  agregarCodigo(
+    varianteId: number,
+    body: { codigo: string; peso_kg?: number; lote?: string; conos?: number; etiqueta?: string }
+  ): Observable<VarianteCodigo> {
     return this.http
       .post<ApiResponse<VarianteCodigo>>(`${this.base}/variantes/${varianteId}/codigos`, body)
       .pipe(map(data));
@@ -124,8 +129,33 @@ export class CatalogoService {
     return this.http.delete<ApiResponse<unknown>>(`${this.base}/imagenes/${id}`).pipe(map(data));
   }
 
+  // ---- Tipos de cliente (listas de precio) ----
+  tiposCliente(): Observable<TipoCliente[]> {
+    return this.http
+      .get<ApiResponse<TipoCliente[]>>(`${environment.apiUrl}/tipos-cliente`)
+      .pipe(map(data));
+  }
+  crearTipoCliente(body: { nombre: string; orden?: number }): Observable<TipoCliente> {
+    return this.http
+      .post<ApiResponse<TipoCliente>>(`${environment.apiUrl}/tipos-cliente`, body)
+      .pipe(map(data));
+  }
+  /** Precio de una presentación para un tipo de cliente. `null` lo borra. */
+  fijarPrecioTipo(
+    varianteId: number,
+    tipo_cliente_id: number,
+    precio: number | null
+  ): Observable<Variante> {
+    return this.http
+      .put<ApiResponse<Variante>>(`${this.base}/variantes/${varianteId}/precios`, {
+        tipo_cliente_id,
+        precio,
+      })
+      .pipe(map(data));
+  }
+
   // ---- Opciones (lookups) ----
-  opciones(tipo: 'marcas' | 'materiales' | 'colores' | 'unidades' | 'impuestos'): Observable<Opcion[]> {
+  opciones(tipo: 'lineas' | 'unidades' | 'impuestos'): Observable<Opcion[]> {
     return this.http.get<ApiResponse<Opcion[]>>(`${this.base}/opciones/${tipo}`).pipe(map(data));
   }
 }

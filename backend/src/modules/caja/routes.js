@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -16,6 +16,8 @@ const cajaSchema = z
     activo: z.coerce.boolean().optional(),
   })
   .strict();
+
+const actualizarCajaSchema = cajaSchema.partial();
 
 const abrirSchema = z
   .object({
@@ -37,8 +39,14 @@ const cerrarSchema = z.object({ monto_final: z.coerce.number().nonnegative() }).
 // Todo el módulo es de staff.
 router.use(...soloStaff);
 
+// Cualquier cajero necesita ver las cajas para abrir su turno, pero darlas de
+// alta o modificarlas es configuración: solo administradores.
+const soloAdmin = requireRol('administrador');
+
 router.get('/cajas', controller.listarCajas);
-router.post('/cajas', validate(cajaSchema), controller.crearCaja);
+router.post('/cajas', soloAdmin, validate(cajaSchema), controller.crearCaja);
+router.put('/cajas/:id', soloAdmin, validate(actualizarCajaSchema), controller.actualizarCaja);
+router.delete('/cajas/:id', soloAdmin, controller.eliminarCaja);
 
 router.post('/sesiones', validate(abrirSchema), controller.abrirSesion);
 router.get('/sesiones/abierta', controller.sesionAbierta); // ?caja_id=

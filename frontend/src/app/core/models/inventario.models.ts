@@ -5,7 +5,20 @@ export interface Almacen {
   nombre: string;
   direccion?: string | null;
   es_punto_venta: boolean | number;
+  /** Solo uno puede tenerlo: es el almacén del que descuenta la tienda web. */
+  es_tienda_linea: boolean | number;
+  /** Solo uno puede tenerlo: es el que surte a las demás sucursales. */
+  es_matriz: boolean | number;
   activo: boolean | number;
+}
+
+export interface AlmacenInput {
+  nombre?: string;
+  direccion?: string | null;
+  es_punto_venta?: boolean;
+  es_tienda_linea?: boolean;
+  es_matriz?: boolean;
+  activo?: boolean;
 }
 
 /** Fila de existencias por variante + almacén. Decimales llegan como string. */
@@ -14,7 +27,6 @@ export interface StockItem {
   variante_id: number;
   sku: string;
   producto: string;
-  color?: string | null;
   almacen_id: number;
   almacen: string;
   cantidad: string;
@@ -43,6 +55,38 @@ export interface Movimiento {
   usuario?: string | null;
   motivo?: string | null;
   creado_en: string;
+  producto?: string;
+  /** Unidad de la cantidad: kg para peso, pz para conos. Nunca es dinero. */
+  unidad?: string;
+  tipo_presentacion?: string;
+  peso_kg?: string | null;
+  // Descripción en lenguaje de tienda, calculada por el backend.
+  concepto?: string;
+  /** Folio del documento que lo originó (venta o traspaso). */
+  folio?: string | null;
+  /** Documento que se puede abrir desde el kardex. */
+  detalle_tipo?: 'pedido' | 'traspaso' | 'conversion' | null;
+  detalle_id?: number | null;
+}
+
+/** Traspaso con sus líneas, para ver qué se mandó. */
+export interface TraspasoDetalle {
+  id: number;
+  folio: string;
+  almacen_origen: string;
+  almacen_destino: string;
+  usuario?: string | null;
+  notas?: string | null;
+  creado_en: string;
+  lineas: {
+    variante_id: number;
+    sku: string;
+    producto: string;
+    tipo_presentacion?: string;
+    peso_kg?: string | null;
+    paquetes: string | null;
+    cantidad: string;
+  }[];
 }
 
 export interface ResultadoMovimiento {

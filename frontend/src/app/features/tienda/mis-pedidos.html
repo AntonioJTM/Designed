@@ -19,7 +19,7 @@
           <td style="padding:0.6rem">{{ p.numero_pedido }}</td>
           <td style="padding:0.6rem">{{ p.estado }}</td>
           <td style="padding:0.6rem">${{ p.total }}</td>
-          <td style="padding:0.6rem" class="muted">{{ p.creado_en }}</td>
+          <td style="padding:0.6rem" class="muted">{{ p.creado_en | fecha }}</td>
         </tr>
       }
     </tbody>

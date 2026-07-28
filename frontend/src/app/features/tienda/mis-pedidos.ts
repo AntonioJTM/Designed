@@ -3,11 +3,12 @@ import { RouterLink } from '@angular/router';
 import { VentasService } from '../../core/services/ventas.service';
 import { TokenService } from '../../core/services/token.service';
 import { Pedido } from '../../core/models/ventas.models';
+import { FechaPipe } from '../../shared/fecha.pipe';
 import { ApiError } from '../../core/models/auth.models';
 
 @Component({
   selector: 'app-mis-pedidos',
-  imports: [RouterLink],
+  imports: [RouterLink, FechaPipe],
   templateUrl: './mis-pedidos.html',
 })
 export class MisPedidos {
