@@ -2,7 +2,6 @@
 
 const model = require('./model');
 const { AppError } = require('../../middlewares/error');
-const { slugify } = require('../../utils/slug');
 const { paginado } = require('../../utils/query');
 
 async function listar(filtros) {
@@ -16,12 +15,21 @@ async function obtener(id) {
   return cat;
 }
 
+/**
+ * Normaliza la lista de calibres: recorta espacios, quita repetidos y vacíos,
+ * y la deja como "1/30,2/30". null si no se especificó ninguno.
+ */
+function _normalizarCalibres(valor) {
+  if (valor === undefined || valor === null) return null;
+  const lista = [...new Set(String(valor).split(',').map((c) => c.trim()).filter(Boolean))];
+  return lista.length ? lista.join(',') : null;
+}
+
 async function crear(datos) {
   const registro = {
-    padre_id: datos.padre_id ?? null,
     nombre: datos.nombre,
-    slug: datos.slug?.trim() || slugify(datos.nombre),
     descripcion: datos.descripcion ?? null,
+    calibres: _normalizarCalibres(datos.calibres),
     imagen_url: datos.imagen_url ?? null,
     orden: datos.orden ?? 0,
     activo: datos.activo ?? true,
@@ -31,14 +39,11 @@ async function crear(datos) {
 
 async function actualizar(id, datos) {
   const actual = await obtener(id);
-  if (datos.padre_id === id) {
-    throw new AppError(422, 'PADRE_INVALIDO', 'Una categoría no puede ser su propio padre');
-  }
   const registro = {
-    padre_id: datos.padre_id !== undefined ? datos.padre_id : actual.padre_id,
     nombre: datos.nombre ?? actual.nombre,
-    slug: datos.slug?.trim() || (datos.nombre ? slugify(datos.nombre) : actual.slug),
     descripcion: datos.descripcion !== undefined ? datos.descripcion : actual.descripcion,
+    calibres:
+      datos.calibres !== undefined ? _normalizarCalibres(datos.calibres) : actual.calibres,
     imagen_url: datos.imagen_url !== undefined ? datos.imagen_url : actual.imagen_url,
     orden: datos.orden !== undefined ? datos.orden : actual.orden,
     activo: datos.activo !== undefined ? datos.activo : actual.activo,

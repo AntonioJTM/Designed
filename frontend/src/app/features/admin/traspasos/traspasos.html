@@ -1,0 +1,195 @@
+<div class="page-head">
+  <h1>Surtir sucursal</h1>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+<p class="muted" style="margin-bottom:1.25rem">
+  Manda mercancía de la matriz a una sucursal. La captura es por <b>paquetes</b>: teclea 70 y el
+  sistema toma los paquetes más antiguos de la bodega y descuenta SU peso real, así que la cuenta
+  cuadra aunque cada paquete pese distinto. Los kilos que se muestran son aproximados —el promedio
+  de los que hay— y el exacto se sabe al enviar. Sale del origen y entra al destino de inmediato; en
+  la sucursal deciden si los desarman en conos o los venden por paquete.
+</p>
+
+<!-- Comprobante del último envío -->
+@if (ultimo(); as u) {
+  <div class="card" style="border-color:#bbf7d0; background:#f0fdf4">
+    <h3 style="margin-top:0">✅ Traspaso {{ u.folio }}</h3>
+    <table class="grid mini">
+      <thead>
+        <tr><th>Producto</th><th class="num">Enviado</th><th class="num">Queda en origen</th></tr>
+      </thead>
+      <tbody>
+        @for (l of u.lineas; track l.variante_id) {
+          <tr>
+            <td>{{ l.producto }} <span class="muted">· {{ l.sku }}</span></td>
+            <td class="num">
+              @if (l.paquetes) {
+                {{ l.paquetes | cantidad }} paquetes
+                <div class="muted" style="font-size:0.75rem">{{ l.cantidad | cantidad: 'kg' }}</div>
+              } @else {
+                {{ l.cantidad | cantidad: l.unidad }}
+              }
+            </td>
+            <td class="num muted">{{ l.saldo_origen | cantidad }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
+
+<div class="card">
+  <h3 style="margin-top:0">1 · A dónde va</h3>
+  <div class="form-grid">
+    <label class="field">
+      Sale de
+      <select [(ngModel)]="origen" (ngModelChange)="alCambiarOrigen()">
+        @for (a of almacenes(); track a.id) {
+          <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_matriz ? ' · matriz' : '' }}</option>
+        }
+      </select>
+      @if (matriz(); as m) {
+        <span class="muted" style="font-size:0.72rem">Se propone la matriz: {{ m.nombre }}.</span>
+      }
+    </label>
+    <label class="field">
+      Llega a
+      <select [(ngModel)]="destino">
+        @for (a of destinos(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+      </select>
+    </label>
+    <label class="field full">
+      Notas <span class="muted">(opcional)</span>
+      <input type="text" [(ngModel)]="notas" placeholder="Ej. Envío semanal en la camioneta" />
+    </label>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">2 · Qué se manda</h3>
+  <div class="input-scan" style="max-width:560px">
+    <input type="text" #bq [(ngModel)]="q" (keydown.enter)="$event.preventDefault(); buscar()"
+           placeholder="Escanea o teclea SKU / nombre del producto" />
+    <button type="button" class="btn btn-ghost btn-sm" (click)="buscar()">Buscar</button>
+  </div>
+
+  @if (resultados().length > 0) {
+    <table class="grid mini" style="margin-top:0.75rem">
+      <tbody>
+        @for (v of resultados(); track v.id) {
+          <tr>
+            <td>
+              {{ v.producto }} <span class="muted">· {{ v.sku }}</span>
+              @if (v.tipo_presentacion === 'paquete') {
+                <span class="pill ok">paquete de {{ v.peso_kg }} kg</span>
+              } @else if (v.tipo_presentacion === 'cono') {
+                <span class="pill warn">cono</span>
+              }
+            </td>
+            <td style="width:1%">
+              <button class="btn btn-primary btn-sm" (click)="agregar(v)">Agregar</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  @if (lineas().length === 0) {
+    <p class="muted" style="margin-top:1rem">Todavía no has agregado productos al traspaso.</p>
+  } @else {
+    <table class="grid" style="margin-top:1rem">
+      <thead>
+        <tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Equivale a</th><th></th></tr>
+      </thead>
+      <tbody>
+        @for (l of lineas(); track l.variante.id) {
+          <tr>
+            <td>
+              <b>{{ l.variante.producto }}</b>
+              <div class="muted" style="font-size:0.78rem">{{ l.variante.sku }}</div>
+            </td>
+            <td class="num">
+              <span class="cant-unidad" style="justify-content:flex-end">
+                <input type="number" step="0.001" min="0" [ngModel]="l.cantidad"
+                       (ngModelChange)="cambiarCantidad(l, $event)"
+                       style="width:90px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px; text-align:right" />
+                <span class="muted">{{ unidadCaptura(l.variante) }}</span>
+              </span>
+              @if (disponibles(l); as hay) {
+                <div class="muted" style="font-size:0.7rem">hay {{ hay }} en el origen</div>
+              }
+            </td>
+            <td class="num muted">
+              @if (kilosReales(l); as kg) {
+                ≈ {{ kg | cantidad: 'kg' }}
+                @if (rangoPeso(l); as r) {
+                  <div class="muted" style="font-size:0.7rem">{{ r }}</div>
+                }
+              } @else if (kilosDe(l); as kg) {
+                ≈ {{ kg | cantidad: 'kg' }}
+                <div class="muted" style="font-size:0.7rem">peso nominal</div>
+              } @else { — }
+            </td>
+            <td style="width:1%">
+              <button class="btn btn-danger btn-sm" (click)="quitar(l)">✕</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <div class="previa-calculo">
+      <div class="renglon total">
+        <span>
+          {{ lineas().length }} producto(s) de <b>{{ nombreAlmacen(origen) }}</b>
+          a <b>{{ nombreAlmacen(destino) }}</b>
+        </span>
+        @if (totalPaquetes() > 0) {
+          <b>{{ totalPaquetes() }} paquetes</b>
+        }
+      </div>
+    </div>
+
+    <div style="margin-top:1rem">
+      <button class="btn btn-primary" [disabled]="enviando()" (click)="enviar()">
+        {{ enviando() ? 'Enviando…' : 'Enviar traspaso' }}
+      </button>
+    </div>
+  }
+</div>
+
+<!-- Historial -->
+@if (historial().length > 0) {
+  <div class="page-head" style="margin-top:2rem">
+    <h2 style="font-size:1.1rem; margin:0">Traspasos recientes</h2>
+  </div>
+  <table class="grid">
+    <thead>
+      <tr><th>Folio</th><th>Ruta</th><th>Contenido</th><th>Quién</th><th>Cuándo</th></tr>
+    </thead>
+    <tbody>
+      @for (t of historial(); track t.id) {
+        <tr>
+          <td><b>{{ t.folio }}</b></td>
+          <td class="muted">{{ t.almacen_origen }} → {{ t.almacen_destino }}</td>
+          <td>
+            @for (l of t.lineas; track l.variante_id) {
+              <div style="font-size:0.82rem">
+                {{ l.paquetes ? (l.paquetes | cantidad) + ' paq' : (l.cantidad | cantidad) }} · {{ l.producto }}
+              </div>
+            }
+            @if (t.notas) {
+              <div class="muted" style="font-size:0.75rem">{{ t.notas }}</div>
+            }
+          </td>
+          <td class="muted">{{ t.usuario || '—' }}</td>
+          <td class="muted">{{ t.creado_en | fecha }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

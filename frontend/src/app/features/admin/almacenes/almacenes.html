@@ -1,0 +1,143 @@
+<div class="page-head">
+  <h1>Almacenes</h1>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+<p class="muted" style="margin-bottom:1.25rem">
+  Aquí se registran <b>tanto las tiendas como las bodegas</b>: son lo mismo para el sistema, un
+  lugar que guarda existencias. Una tienda es un almacén con <b>mostrador</b> — vende y almacena a
+  la vez. Cuando abras una sucursal nueva, das de alta un solo registro aquí con "Es punto de
+  venta" activado, y le asignas su caja. Cada uno lleva su propio inventario, así que dos
+  sucursales nunca comparten existencias.
+</p>
+
+@if (matriz(); as m) {
+  <p class="ok-msg" style="margin-bottom:0.6rem">
+    🏭 La matriz es <b>{{ m.nombre }}</b>: es el origen que se propone al surtir sucursales.
+  </p>
+} @else {
+  <p class="aviso" style="margin-bottom:0.6rem">
+    No hay matriz marcada. Marca una para que el formulario de traspasos proponga el origen solo.
+  </p>
+}
+
+@if (surteTienda(); as t) {
+  <p class="ok-msg" style="margin-bottom:1.25rem">
+    🌐 La tienda en línea surte de <b>{{ t.nombre }}</b>.
+  </p>
+} @else {
+  <p class="alert" style="margin-bottom:1.25rem">
+    Ningún almacén está marcado como tienda en línea. Marca uno para que el catálogo web y el
+    checkout miren las mismas existencias.
+  </p>
+}
+
+<div class="card">
+  <h3 style="margin-top:0">{{ editandoId() ? 'Editar almacén' : 'Nuevo almacén' }}</h3>
+  <form [formGroup]="form" (ngSubmit)="guardar()">
+    <div class="form-grid">
+      <label class="field">
+        Nombre
+        <input type="text" formControlName="nombre" placeholder="Ej. Tienda Cuautepec de Hinojosa" />
+      <span class="muted" style="font-size:0.72rem">
+        Ponle el nombre de la sucursal; ese lugar guarda y vende su propio inventario.
+      </span>
+      </label>
+      <label class="field">
+        Dirección
+        <input type="text" formControlName="direccion" placeholder="Opcional" />
+      </label>
+      <label class="field check">
+        <input type="checkbox" formControlName="es_punto_venta" />
+        Es punto de venta — tienda con mostrador
+      </label>
+      <label class="field check">
+        <input type="checkbox" formControlName="es_tienda_linea" /> Surte la tienda en línea
+      </label>
+      <label class="field check">
+        <input type="checkbox" formControlName="es_matriz" /> Es la matriz (surte a las sucursales)
+      </label>
+      <label class="field check">
+        <input type="checkbox" formControlName="activo" /> Activo
+      </label>
+    </div>
+    <p class="muted" style="font-size:0.78rem; margin:0.5rem 0 0">
+      Solo un almacén puede surtir la tienda en línea, y solo uno puede ser la matriz: al marcarlos
+      aquí, se les quita a los demás.
+    </p>
+    <div style="margin-top:1rem; display:flex; gap:0.5rem">
+      <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+        {{ guardando() ? 'Guardando…' : (editandoId() ? 'Guardar cambios' : 'Dar de alta') }}
+      </button>
+      @if (editandoId()) {
+        <button type="button" class="btn btn-ghost" (click)="nuevo()">Cancelar</button>
+      }
+    </div>
+  </form>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (almacenes().length === 0) {
+  <p class="empty">Aún no hay almacenes.</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Almacén</th><th>Cajas</th><th>Tipo</th><th>Matriz</th><th>Tienda en línea</th><th>Estado</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (a of almacenes(); track a.id) {
+        <tr>
+          <td>
+            <b>{{ a.nombre }}</b>
+            @if (a.direccion) {
+              <div class="muted" style="font-size:0.78rem">{{ a.direccion }}</div>
+            }
+          </td>
+          <td>
+            @if (cajasDe(a.id).length === 0) {
+              <span class="muted">—</span>
+            } @else {
+              @for (c of cajasDe(a.id); track c.id) {
+                <div style="font-size:0.82rem">{{ c.nombre }}</div>
+              }
+            }
+          </td>
+          <td class="muted">
+            {{ a.es_punto_venta ? 'Tienda' : 'Bodega' }}
+            <div style="font-size:0.72rem">
+              {{ a.es_punto_venta ? 'vende y almacena' : 'solo almacena' }}
+            </div>
+          </td>
+          <td>
+            @if (a.es_matriz) {
+              <span class="pill ok">Matriz</span>
+            } @else {
+              <button class="btn btn-ghost btn-sm" (click)="marcarMatriz(a)">Marcar</button>
+            }
+          </td>
+          <td>
+            @if (a.es_tienda_linea) {
+              <span class="pill ok">Sí surte</span>
+            } @else {
+              <button class="btn btn-ghost btn-sm" (click)="marcarTiendaLinea(a)">Marcar</button>
+            }
+          </td>
+          <td>
+            <span class="pill" [class.ok]="a.activo" [class.off]="!a.activo">
+              {{ a.activo ? 'Activo' : 'Inactivo' }}
+            </span>
+          </td>
+          <td class="acciones">
+            <button class="btn btn-ghost btn-sm" (click)="editar(a)">Editar</button>
+            <button class="btn btn-danger btn-sm" (click)="eliminar(a)">Eliminar</button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

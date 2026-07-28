@@ -100,7 +100,7 @@
           @for (p of porReabastecer(); track p.variante_id + '-' + p.almacen) {
             <tr>
               <td>{{ p.sku }}</td>
-              <td>{{ p.producto }}{{ p.color ? ' · ' + p.color : '' }}</td>
+              <td>{{ p.producto }}</td>
               <td>{{ p.almacen }}</td>
               <td><span class="pill off">{{ p.disponible }}</span></td>
               <td class="muted">{{ p.stock_minimo }}</td>

@@ -5,29 +5,10 @@ const { pool } = require('../../config/db');
 // Endpoints de solo lectura para poblar selects del panel admin.
 // Son tablas de referencia (catálogos auxiliares) del esquema.
 
-async function marcas(req, res, next) {
+/** Líneas de procedencia del hilo: turco, nacional, chino. */
+async function lineas(req, res, next) {
   try {
-    const [rows] = await pool.query('SELECT id, nombre FROM marcas WHERE activo = 1 ORDER BY nombre');
-    res.json({ data: rows, error: null });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function materiales(req, res, next) {
-  try {
-    const [rows] = await pool.query('SELECT id, nombre FROM materiales ORDER BY nombre');
-    res.json({ data: rows, error: null });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function colores(req, res, next) {
-  try {
-    const [rows] = await pool.query(
-      'SELECT id, nombre, codigo_hex, codigo_fabricante FROM colores ORDER BY nombre'
-    );
+    const [rows] = await pool.query('SELECT id, nombre FROM lineas WHERE activo = 1 ORDER BY nombre');
     res.json({ data: rows, error: null });
   } catch (err) {
     next(err);
@@ -67,4 +48,4 @@ async function metodosPago(req, res, next) {
   }
 }
 
-module.exports = { marcas, materiales, colores, unidades, impuestos, metodosPago };
+module.exports = { lineas, unidades, impuestos, metodosPago };

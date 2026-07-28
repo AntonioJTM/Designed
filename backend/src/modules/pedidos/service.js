@@ -22,8 +22,8 @@ async function listar(filtros) {
   return paginado(rows, total, filtros.page, filtros.limit);
 }
 
-async function cambiarEstado(id, estado) {
-  return model.cambiarEstado(id, estado);
+async function cambiarEstado(id, estado, usuarioId, devoluciones) {
+  return model.cambiarEstado(id, estado, usuarioId, devoluciones);
 }
 
 module.exports = { crear, obtener, listar, cambiarEstado };

@@ -393,7 +393,7 @@ CREATE TABLE `ordenes_compra` (
   `subtotal` decimal(12,2) NOT NULL DEFAULT 0.00,
   `impuestos` decimal(12,2) NOT NULL DEFAULT 0.00,
   `total` decimal(12,2) NOT NULL DEFAULT 0.00,
-  `fecha_pedido` date NOT NULL DEFAULT curdate(),
+  `fecha_pedido` date NOT NULL DEFAULT (CURRENT_DATE),
   `fecha_recepcion` date DEFAULT NULL,
   `notas` text DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
@@ -815,6 +815,10 @@ CREATE TABLE `variante_codigos` (
 INSERT INTO `variante_codigos` (`id`, `variante_id`, `codigo`, `etiqueta`, `creado_en`) VALUES
   (2, 10, 'LOTEB-1784911226912', 'Lote B', '2026-07-24 10:39:58');
 
+-- ---------- Vista: v_stock_disponible ----------
+DROP VIEW IF EXISTS `v_stock_disponible`;
+CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_stock_disponible` AS select `i`.`variante_id` AS `variante_id`,`pv`.`sku` AS `sku`,`p`.`nombre` AS `producto`,`c`.`nombre` AS `color`,`a`.`nombre` AS `almacen`,`i`.`cantidad` AS `cantidad`,`i`.`cantidad_reservada` AS `cantidad_reservada`,`i`.`cantidad` - `i`.`cantidad_reservada` AS `disponible`,`i`.`stock_minimo` AS `stock_minimo` from ((((`inventario` `i` join `producto_variantes` `pv` on(`pv`.`id` = `i`.`variante_id`)) join `productos` `p` on(`p`.`id` = `pv`.`producto_id`)) left join `colores` `c` on(`c`.`id` = `pv`.`color_id`)) join `almacenes` `a` on(`a`.`id` = `i`.`almacen_id`));
+
 -- ---------- Vista: v_alertas_stock ----------
 DROP VIEW IF EXISTS `v_alertas_stock`;
 CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_alertas_stock` AS select `v_stock_disponible`.`variante_id` AS `variante_id`,`v_stock_disponible`.`sku` AS `sku`,`v_stock_disponible`.`producto` AS `producto`,`v_stock_disponible`.`color` AS `color`,`v_stock_disponible`.`almacen` AS `almacen`,`v_stock_disponible`.`cantidad` AS `cantidad`,`v_stock_disponible`.`cantidad_reservada` AS `cantidad_reservada`,`v_stock_disponible`.`disponible` AS `disponible`,`v_stock_disponible`.`stock_minimo` AS `stock_minimo` from `v_stock_disponible` where `v_stock_disponible`.`disponible` <= `v_stock_disponible`.`stock_minimo`;
@@ -822,9 +826,5 @@ CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_alertas_stock
 -- ---------- Vista: v_mas_vendidos ----------
 DROP VIEW IF EXISTS `v_mas_vendidos`;
 CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_mas_vendidos` AS select `pv`.`id` AS `variante_id`,`pv`.`sku` AS `sku`,`p`.`nombre` AS `producto`,sum(`pd`.`cantidad`) AS `unidades_vendidas`,sum(`pd`.`subtotal`) AS `ingresos` from (((`pedido_detalle` `pd` join `producto_variantes` `pv` on(`pv`.`id` = `pd`.`variante_id`)) join `productos` `p` on(`p`.`id` = `pv`.`producto_id`)) join `pedidos` `ped` on(`ped`.`id` = `pd`.`pedido_id`)) where `ped`.`estado` not in ('cancelado','devuelto') group by `pv`.`id`,`pv`.`sku`,`p`.`nombre`;
-
--- ---------- Vista: v_stock_disponible ----------
-DROP VIEW IF EXISTS `v_stock_disponible`;
-CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_stock_disponible` AS select `i`.`variante_id` AS `variante_id`,`pv`.`sku` AS `sku`,`p`.`nombre` AS `producto`,`c`.`nombre` AS `color`,`a`.`nombre` AS `almacen`,`i`.`cantidad` AS `cantidad`,`i`.`cantidad_reservada` AS `cantidad_reservada`,`i`.`cantidad` - `i`.`cantidad_reservada` AS `disponible`,`i`.`stock_minimo` AS `stock_minimo` from ((((`inventario` `i` join `producto_variantes` `pv` on(`pv`.`id` = `i`.`variante_id`)) join `productos` `p` on(`p`.`id` = `pv`.`producto_id`)) left join `colores` `c` on(`c`.`id` = `pv`.`color_id`)) join `almacenes` `a` on(`a`.`id` = `i`.`almacen_id`));
 
 SET FOREIGN_KEY_CHECKS = 1;

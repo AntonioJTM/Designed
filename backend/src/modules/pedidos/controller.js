@@ -54,7 +54,15 @@ async function misPedidos(req, res, next) {
 
 async function cambiarEstado(req, res, next) {
   try {
-    res.json({ data: await service.cambiarEstado(Number(req.params.id), req.body.estado), error: null });
+    // El usuario queda en el kardex del movimiento que repone o vuelve a
+    // descontar la mercancía.
+    const data = await service.cambiarEstado(
+      Number(req.params.id),
+      req.body.estado,
+      req.auth?.sub,
+      req.body.devoluciones
+    );
+    res.json({ data, error: null });
   } catch (err) { next(err); }
 }
 

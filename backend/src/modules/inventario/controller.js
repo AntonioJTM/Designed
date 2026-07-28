@@ -21,6 +21,14 @@ async function listarStock(req, res, next) {
   }
 }
 
+async function resumenPorAlmacen(req, res, next) {
+  try {
+    res.json({ data: await service.resumenPorAlmacen(), error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function alertas(req, res, next) {
   try {
     const data = await service.alertas();
@@ -37,6 +45,8 @@ async function listarMovimientos(req, res, next) {
       variante_id: req.query.variante_id ? Number(req.query.variante_id) : undefined,
       almacen_id: req.query.almacen_id ? Number(req.query.almacen_id) : undefined,
       tipo: req.query.tipo,
+      // Agrupación en lenguaje de tienda: ventas, traspasos, desarmes…
+      concepto: req.query.concepto,
       page,
       limit,
       offset,
@@ -56,10 +66,77 @@ async function registrarMovimiento(req, res, next) {
   }
 }
 
-async function transferir(req, res, next) {
+/** Qué trae el bulto escaneado: paquete, kilos, conos y dónde hay existencias. */
+async function previaDesarmeBulto(req, res, next) {
   try {
-    const data = await service.transferir(req.body, req.auth.sub);
+    const data = await service.previaDesarmeBulto(req.params.codigo);
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function desarmar(req, res, next) {
+  try {
+    const data = await service.desarmar(req.body, req.auth.sub);
     res.status(201).json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listarConversiones(req, res, next) {
+  try {
+    const { page, limit, offset } = parsePagination(req.query);
+    const data = await service.listarConversiones({
+      variante_id: req.query.variante_id ? Number(req.query.variante_id) : null,
+      page, limit, offset,
+    });
+    res.json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Cuántos paquetes son X kilos, con los pesos reales de la bodega. */
+async function equivalenciaPaquetes(req, res, next) {
+  try {
+    const data = await service.equivalenciaPaquetes({
+      variante_id: Number(req.query.variante_id),
+      almacen_id: Number(req.query.almacen_id),
+      kg: req.query.kg != null ? Number(req.query.kg) : null,
+    });
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function crearTraspaso(req, res, next) {
+  try {
+    const data = await service.crearTraspaso(req.body, req.auth.sub);
+    res.status(201).json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listarTraspasos(req, res, next) {
+  try {
+    const { page, limit, offset } = parsePagination(req.query);
+    const data = await service.listarTraspasos({
+      almacen_destino_id: req.query.almacen_destino_id ? Number(req.query.almacen_destino_id) : null,
+      page, limit, offset,
+    });
+    res.json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function obtenerTraspaso(req, res, next) {
+  try {
+    res.json({ data: await service.obtenerTraspaso(Number(req.params.id)), error: null });
   } catch (err) {
     next(err);
   }
@@ -76,9 +153,16 @@ async function configurar(req, res, next) {
 
 module.exports = {
   listarStock,
+  resumenPorAlmacen,
   alertas,
   listarMovimientos,
   registrarMovimiento,
-  transferir,
+  desarmar,
+  previaDesarmeBulto,
+  listarConversiones,
+  crearTraspaso,
+  equivalenciaPaquetes,
+  listarTraspasos,
+  obtenerTraspaso,
   configurar,
 };

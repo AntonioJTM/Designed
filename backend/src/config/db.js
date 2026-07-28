@@ -16,7 +16,11 @@ const pool = mysql.createPool({
   queueLimit: 0,
   namedPlaceholders: true,
   charset: 'utf8mb4',
-  timezone: 'Z',
+  // El servidor MySQL corre en hora local (time_zone = SYSTEM) y CURRENT_TIMESTAMP
+  // guarda esa hora de pared. Con `dateStrings` las fechas vuelven tal cual
+  // ('2026-07-25 11:59:39') en vez de que mysql2 las reinterprete como UTC y las
+  // recorra 6 horas. Todo el sistema opera en una sola zona horaria.
+  dateStrings: true,
   // Evita que DECIMAL vuelva como number y pierda precisión en montos.
   decimalNumbers: false,
 });

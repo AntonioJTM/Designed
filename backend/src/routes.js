@@ -3,6 +3,7 @@
 const { Router } = require('express');
 const usuariosRoutes = require('./modules/usuarios/routes');
 const clientesRoutes = require('./modules/clientes/routes');
+const tiposClienteRoutes = require('./modules/tipos-cliente/routes');
 const categoriasRoutes = require('./modules/categorias/routes');
 const productosRoutes = require('./modules/productos/routes');
 const variantesRoutes = require('./modules/variantes/routes');
@@ -10,8 +11,10 @@ const imagenesRoutes = require('./modules/imagenes/routes');
 const opcionesRoutes = require('./modules/opciones/routes');
 const almacenesRoutes = require('./modules/almacenes/routes');
 const inventarioRoutes = require('./modules/inventario/routes');
+const remesasRoutes = require('./modules/remesas/routes');
 const cajaRoutes = require('./modules/caja/routes');
 const pedidosRoutes = require('./modules/pedidos/routes');
+const nominaRoutes = require('./modules/nomina/routes');
 const reportesRoutes = require('./modules/reportes/routes');
 
 // Enrutador raíz de la API v1. Aquí se montan los módulos por dominio.
@@ -24,6 +27,7 @@ router.get('/', (req, res) => {
 // Seguridad / cuentas
 router.use('/usuarios', usuariosRoutes);
 router.use('/clientes', clientesRoutes);
+router.use('/tipos-cliente', tiposClienteRoutes);
 
 // Catálogo
 router.use('/categorias', categoriasRoutes);
@@ -35,10 +39,14 @@ router.use('/opciones', opcionesRoutes);
 // Inventario
 router.use('/almacenes', almacenesRoutes);
 router.use('/inventario', inventarioRoutes);
+router.use('/remesas', remesasRoutes);
 
 // Ventas y caja
 router.use('/caja', cajaRoutes);
 router.use('/pedidos', pedidosRoutes);
+
+// Nómina del personal
+router.use('/nomina', nominaRoutes);
 
 // Reportes
 router.use('/reportes', reportesRoutes);

@@ -3,6 +3,79 @@
 </div>
 
 @if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+<!-- Administración de cajas (solo administradores) -->
+@if (esAdmin()) {
+  <div class="card">
+    <div class="acciones-periodo">
+      <div>
+        <b>Cajas registradas</b>
+        <span class="muted"> · {{ cajas().length }}</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" (click)="administrando() ? cerrarAdmin() : abrirAdmin()">
+        {{ administrando() ? 'Cerrar' : 'Administrar cajas' }}
+      </button>
+    </div>
+
+    @if (administrando()) {
+      @if (cajas().length > 0) {
+        <table class="grid" style="margin:1rem 0">
+          <thead>
+            <tr><th>Caja</th><th>Almacén</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (c of cajas(); track c.id) {
+              <tr>
+                <td><b>{{ c.nombre }}</b></td>
+                <td class="muted">{{ c.almacen }}</td>
+                <td>
+                  <span class="pill" [class.ok]="c.activo" [class.off]="!c.activo">
+                    {{ c.activo ? 'Activa' : 'Inactiva' }}
+                  </span>
+                </td>
+                <td class="acciones">
+                  <button class="btn btn-ghost btn-sm" (click)="editarCaja(c)">Editar</button>
+                  <button class="btn btn-danger btn-sm" (click)="eliminarCaja(c)">Eliminar</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+
+      <h4 style="margin:1rem 0 0.6rem">
+        {{ editandoCaja() ? 'Editar caja' : 'Nueva caja' }}
+      </h4>
+      <div class="form-grid">
+        <label class="field">
+          Nombre
+          <input type="text" [(ngModel)]="formCaja.nombre" placeholder="Ej. Caja Cuautepec de Hinojosa" />
+        </label>
+        <label class="field">
+          Almacén del que descuenta
+          <select [(ngModel)]="formCaja.almacen_id">
+            @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+          </select>
+          <span class="muted" style="font-size:0.72rem">
+            Las ventas de esta caja salen de las existencias de ese almacén.
+          </span>
+        </label>
+        <label class="field check">
+          <input type="checkbox" [(ngModel)]="formCaja.activo" /> Activa
+        </label>
+      </div>
+      <div style="margin-top:1rem; display:flex; gap:0.5rem">
+        <button class="btn btn-primary" (click)="guardarCaja()">
+          {{ editandoCaja() ? 'Guardar cambios' : 'Dar de alta' }}
+        </button>
+        @if (editandoCaja()) {
+          <button class="btn btn-ghost" (click)="nuevaCaja()">Cancelar</button>
+        }
+      </div>
+    }
+  </div>
+}
 
 <!-- Ticket de venta recién cobrada -->
 @if (ticket(); as t) {
@@ -33,7 +106,15 @@
       <button class="btn btn-primary" (click)="abrirCaja()">Abrir caja</button>
     </div>
     @if (cajas().length === 0) {
-      <p class="muted">No hay cajas registradas. Créalas desde la API (<code>POST /caja/cajas</code>).</p>
+      @if (esAdmin()) {
+        <p class="muted">
+          No hay cajas registradas. Dala de alta arriba, en <b>Administrar cajas</b>.
+        </p>
+      } @else {
+        <p class="muted">
+          No hay cajas registradas. Pídele a un administrador que dé de alta la tuya.
+        </p>
+      }
     }
   </div>
 } @else {
@@ -41,12 +122,33 @@
   <div class="form-grid" style="align-items:start">
     <!-- Columna izquierda: búsqueda + carrito -->
     <div>
+      @if (tiposCliente().length > 1) {
+        <div class="card">
+          <label class="field" style="margin:0">
+            Tipo de cliente
+            <select [(ngModel)]="tipoClienteSel">
+              @for (tc of tiposCliente(); track tc.id) {
+                <option [ngValue]="tc.id">{{ tc.nombre }}</option>
+              }
+            </select>
+            <span class="muted" style="font-size:0.75rem">
+              Define con qué precios se cobra. Cámbialo antes de agregar productos.
+            </span>
+          </label>
+        </div>
+      }
+
       <div class="card">
         <h3 style="margin-top:0">Buscar producto</h3>
         <div style="display:flex; gap:0.5rem">
-          <input type="text" [(ngModel)]="qVar" (keyup.enter)="buscar()" placeholder="SKU o nombre" style="flex:1; padding:0.55rem 0.7rem; border:1px solid #d1d5db; border-radius:8px" />
-          <button class="btn btn-primary" (click)="buscar()">Buscar</button>
+          <input type="text" [(ngModel)]="qVar" (keyup.enter)="escanearOBuscar()"
+                 placeholder="Escanea el bulto, o teclea SKU o nombre"
+                 style="flex:1; padding:0.55rem 0.7rem; border:1px solid #d1d5db; border-radius:8px" />
+          <button class="btn btn-primary" (click)="escanearOBuscar()">Buscar</button>
         </div>
+        <span class="muted" style="font-size:0.75rem">
+          Al escanear un bulto se cobra por lo que ESE bulto pesa.
+        </span>
         @if (resultados().length) {
           <table class="grid" style="margin-top:1rem">
             <tbody>
@@ -54,7 +156,7 @@
                 <tr>
                   <td>{{ r.sku }}</td>
                   <td>{{ r.producto }} {{ r.presentacion ? '· ' + r.presentacion : '' }}</td>
-                  <td>${{ r.precio.toFixed(2) }}</td>
+                  <td>${{ r.precio.toFixed(2) }}<span class="muted">/{{ r.unidad || 'kg' }}</span></td>
                   <td><button class="btn btn-ghost btn-sm" (click)="agregar(r)">Agregar</button></td>
                 </tr>
               }
@@ -74,11 +176,27 @@
               @for (i of carrito(); track i.variante_id) {
                 <tr>
                   <td>{{ i.sku }}</td>
-                  <td>{{ i.producto }}</td>
-                  <td>${{ i.precio.toFixed(2) }}</td>
-                  <td style="width:90px">
-                    <input type="number" min="1" [ngModel]="i.cantidad" (ngModelChange)="cambiarCantidad(i, $event)"
-                           style="width:70px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px" />
+                  <td>
+                    {{ i.producto }}
+                    @if (i.bultos?.length) {
+                      <br />
+                      <span class="muted" style="font-size:0.72rem">
+                        {{ i.bultos!.length }}
+                        {{ i.bultos!.length === 1 ? 'bulto' : 'bultos' }}:
+                        @for (b of i.bultos; track b.codigo) {
+                          {{ b.codigo }} ({{ b.peso_kg }} kg){{ $last ? '' : ' + ' }}
+                        }
+                      </span>
+                    }
+                  </td>
+                  <td>${{ i.precio.toFixed(2) }}<span class="muted">/{{ i.unidad || 'kg' }}</span></td>
+                  <td style="width:120px">
+                    <span class="cant-peso">
+                      <input type="number" step="0.001" min="0.001" [ngModel]="i.cantidad"
+                             (ngModelChange)="cambiarCantidad(i, $event)"
+                             style="width:74px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px" />
+                      <span class="muted">{{ i.unidad || 'kg' }}</span>
+                    </span>
                   </td>
                   <td>${{ (i.precio * i.cantidad).toFixed(2) }}</td>
                   <td><button class="btn btn-danger btn-sm" (click)="quitar(i)">✕</button></td>
@@ -87,8 +205,13 @@
             </tbody>
           </table>
           <p class="muted" style="text-align:right; margin-top:0.75rem">
+            @if (nombreTipoCliente()) {
+              Precios de <b>{{ nombreTipoCliente() }}</b><br />
+            }
             Subtotal estimado (sin IVA): <b>${{ subtotalEstimado().toFixed(2) }}</b><br />
-            <span style="font-size:0.8rem">El total con impuestos lo calcula el servidor al cobrar.</span>
+            <span style="font-size:0.8rem">
+              El precio final y los impuestos los calcula el servidor al cobrar, según el tipo de cliente.
+            </span>
           </p>
         }
       </div>
