@@ -7,7 +7,11 @@
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm --prefix backend run dev\" \"npm --prefix frontend start\"",
     "backend": "npm --prefix backend run dev",
     "frontend": "npm --prefix frontend start",
-    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install"
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "deploy": "bash deploy/deploy.sh all",
+    "deploy:frontend": "bash deploy/deploy.sh frontend",
+    "deploy:backend": "bash deploy/deploy.sh backend",
+    "deploy:logs": "bash deploy/logs.sh"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
