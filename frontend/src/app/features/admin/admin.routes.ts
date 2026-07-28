@@ -22,8 +22,11 @@ export const ADMIN_ROUTES: Routes = [
           import('./productos/producto-presentaciones').then((m) => m.ProductoPresentaciones),
       },
       {
+        // El alta y la edición del producto son un modal sobre el listado; la
+        // pantalla `productos/:id` ya no existe. Se conserva el redirect para
+        // que un enlace o marcador viejo no caiga en el `**` (que va a login).
         path: 'productos/:id',
-        loadComponent: () => import('./productos/producto-form').then((m) => m.ProductoForm),
+        redirectTo: 'productos',
       },
       {
         path: 'inventario',

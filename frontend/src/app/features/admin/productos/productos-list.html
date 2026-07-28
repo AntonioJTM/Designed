@@ -1,10 +1,14 @@
 <div class="page-head">
   <h1>Productos <span class="muted" style="font-size:0.9rem">({{ total() }})</span></h1>
-  <a class="btn btn-primary" routerLink="/admin/productos/nuevo">+ Nuevo producto</a>
+  <button class="btn btn-primary" (click)="abrirNuevo()">+ Nuevo producto</button>
 </div>
 
 @if (error()) {
   <p class="alert">{{ error() }}</p>
+}
+
+@if (mensaje()) {
+  <p class="ok-msg">{{ mensaje() }}</p>
 }
 
 <div class="card">
@@ -64,11 +68,24 @@
             <a class="btn btn-primary btn-sm" [routerLink]="['/admin/productos', p.id, 'presentaciones']">
               Presentaciones
             </a>
-            <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/productos', p.id]">Editar</a>
+            <button class="btn btn-ghost btn-sm" (click)="abrirEdicion(p)">Editar</button>
             <button class="btn btn-danger btn-sm" (click)="eliminar(p)">Eliminar</button>
           </td>
         </tr>
       }
     </tbody>
   </table>
+}
+
+<!--
+  Alta y edición del producto sobre el listado. Se crea al abrirlo y se destruye
+  al cerrarlo, así el formulario arranca limpio cada vez.
+-->
+@if (modal() !== null) {
+  <app-producto-form-modal
+    [productoId]="idModal()"
+    (cerrado)="modal.set(null)"
+    (guardado)="alGuardar($event)"
+    (irAPresentaciones)="aPresentaciones($event)"
+  />
 }

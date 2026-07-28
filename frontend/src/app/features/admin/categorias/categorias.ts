@@ -1,31 +1,29 @@
 import { Component, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Categoria } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { MaterialFormModal } from './material-form-modal';
 
 @Component({
   selector: 'app-categorias',
-  imports: [ReactiveFormsModule],
+  imports: [MaterialFormModal],
   templateUrl: './categorias.html',
 })
 export class Categorias {
-  private readonly fb = inject(FormBuilder);
   private readonly catalogo = inject(CatalogoService);
 
   readonly categorias = signal<Categoria[]>([]);
   readonly cargando = signal(true);
-  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
-  readonly editandoId = signal<number | null>(null);
+  readonly mensaje = signal<string | null>(null);
 
-  readonly form = this.fb.nonNullable.group({
-    nombre: ['', [Validators.required, Validators.minLength(1)]],
-    descripcion: [''],
-    calibres: [''],
-    orden: [0],
-    activo: [true],
-  });
+  /**
+   * Alta y edición viven en un modal sobre el listado, igual que en productos:
+   * `null` = cerrado, `'nuevo'` = alta, un material = edición de ese renglón.
+   * Se guarda el objeto y no el id porque el listado ya trae todos sus datos y
+   * así el modal abre sin pedir nada al servidor.
+   */
+  readonly modal = signal<Categoria | 'nuevo' | null>(null);
 
   constructor() {
     this.cargar();
@@ -45,59 +43,30 @@ export class Categorias {
     });
   }
 
-  nueva(): void {
-    this.editandoId.set(null);
-    this.form.reset({ nombre: '', descripcion: '', calibres: '', orden: 0, activo: true });
+  /** Material que edita el modal (`null` cuando es un alta). */
+  materialModal(): Categoria | null {
+    const m = this.modal();
+    return m === 'nuevo' || m === null ? null : m;
   }
 
-  editar(c: Categoria): void {
-    this.editandoId.set(c.id);
-    this.form.reset({
-      nombre: c.nombre,
-      descripcion: c.descripcion ?? '',
-      calibres: c.calibres ?? '',
-      orden: c.orden,
-      activo: !!c.activo,
-    });
+  abrirNuevo(): void {
+    this.mensaje.set(null);
+    this.modal.set('nuevo');
   }
 
-  guardar(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
-    this.guardando.set(true);
-    this.error.set(null);
+  abrirEdicion(c: Categoria): void {
+    this.mensaje.set(null);
+    this.modal.set(c);
+  }
 
-    const v = this.form.getRawValue();
-    const body: Partial<Categoria> = {
-      nombre: v.nombre,
-      descripcion: v.descripcion.trim() || undefined,
-      calibres: v.calibres.trim() || null,
-      orden: v.orden,
-      activo: v.activo,
-    };
-
-    const id = this.editandoId();
-    const obs = id
-      ? this.catalogo.actualizarCategoria(id, body)
-      : this.catalogo.crearCategoria(body);
-
-    obs.subscribe({
-      next: () => {
-        this.guardando.set(false);
-        this.nueva();
-        this.cargar();
-      },
-      error: (e) => {
-        this.error.set(this.msg(e));
-        this.guardando.set(false);
-      },
-    });
+  alGuardar(c: Categoria): void {
+    this.mensaje.set(`Material "${c.nombre}" guardado.`);
+    this.cargar();
   }
 
   eliminar(c: Categoria): void {
     if (!confirm(`¿Eliminar el material "${c.nombre}"?`)) return;
+    this.mensaje.set(null);
     this.catalogo.eliminarCategoria(c.id).subscribe({
       next: () => this.cargar(),
       error: (e) => this.error.set(this.msg(e)),

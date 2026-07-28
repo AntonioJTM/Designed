@@ -23,6 +23,7 @@ import {
 } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
+import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
 
 /**
  * Presentaciones (SKU) e imágenes de un producto, en su propia pantalla.
@@ -48,6 +49,8 @@ export class ProductoPresentaciones {
 
   // Datos del producto, solo para encabezar la pantalla y heredar el precio.
   readonly nombreProducto = signal('');
+  /** Calibre del producto, para cotejarlo con el nombre del archivo que se sube. */
+  readonly calibreProducto = signal<string | null>(null);
   readonly precioProducto = signal<string | number | null>(null);
   readonly unidadProducto = signal('kg');
   /** El producto admite paquete/cono; sin esto el backend solo acepta 'simple'. */
@@ -119,6 +122,23 @@ export class ProductoPresentaciones {
     const b = this.previa()?.bultos ?? [];
     return this.verTodosBultos() ? b : b.slice(0, 15);
   });
+
+  /**
+   * Coteja el nombre del archivo contra ESTE producto. El proveedor nombra sus
+   * listas "COLOR CALIBRE.xlsx", y aquí el producto ya está fijado: si el nombre
+   * apunta a otro hilo, casi seguro se abrió la pantalla equivocada. Pasó de
+   * verdad: la lista de ROSA MEXICANO 2/30 entró al producto DEV_2 1/30.
+   * Solo avisa; la convención no es garantía.
+   */
+  avisoArchivo(): string | null {
+    if (!this.archivo) return null;
+    return textoAviso(
+      cotejarArchivo(this.archivo.name, {
+        producto: this.nombreProducto(),
+        calibre: this.calibreProducto(),
+      })
+    );
+  }
 
   elegirArchivo(e: Event): void {
     this.archivo = (e.target as HTMLInputElement).files?.[0] ?? null;
@@ -268,6 +288,7 @@ export class ProductoPresentaciones {
 
   private aplicar(p: ProductoDetalle): void {
     this.nombreProducto.set(p.nombre);
+    this.calibreProducto.set(p.grosor_calibre ?? null);
     this.precioProducto.set(p.precio_kg ?? null);
     this.unidadProducto.set(p.unidad ?? 'kg');
     this.esMultipresentacion.set(!!p.multipresentacion);

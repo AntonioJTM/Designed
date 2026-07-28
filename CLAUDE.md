@@ -130,10 +130,12 @@ tienda-hilos/
   `PRESENTACION_INCOMPATIBLE`. La cantidad es editable —pueden regresar 10 conos de 12— y el motivo
   del kardex asienta el equivalente esperado. Un pedido devuelto así NO se puede reactivar
   (409 `DEVUELTO_EN_OTRA_PRESENTACION`): la mercancía ya no está como se vendió.
-- **Bajar conos a mostrador = escanear el paquete.** Está en Admin → Inventario, tarjeta "Bajar
-  conos a mostrador". La tarjeta se muestra SIEMPRE: no la condiciones a que existan conos, porque
-  es justo donde nacen (ya pasó una vez y quedó invisible). El flujo vive en Inventario, no en el
-  catálogo. `GET /inventario/desarmes/previa/:codigo` dice qué trae el bulto (paquete, kilos
+- **Bajar conos a mostrador = escanear el paquete.** Está en Admin → Inventario, en el botón
+  "Bajar conos a mostrador" del encabezado, que abre un modal (`inventario/desarme-modal.ts`). El
+  botón se muestra SIEMPRE: no lo condiciones a que existan conos, porque es justo donde nacen (ya
+  pasó una vez y quedó invisible). El flujo vive en Inventario, no en el catálogo ni en el POS
+  —se valoró ponerlo en el POS, donde de hecho ocurre, y el usuario decidió dejarlo en
+  Inventario—. El modal NO se cierra al confirmar: bajar varios paquetes seguidos es lo normal. `GET /inventario/desarmes/previa/:codigo` dice qué trae el bulto (paquete, kilos
   reales, lote, cuántos conos rinde, si el cono ya existe y en qué almacenes hay existencias) sin
   mover nada. `POST /inventario/desarmes` acepta SOLO `codigo_bulto`: resuelve el paquete, toma los
   kilos y los conos del bulto, y CREA la presentación de cono si el producto no la tiene. No hay
@@ -152,8 +154,14 @@ tienda-hilos/
   da 7 conos y no 12, y ASÍ VIENE DE FÁBRICA, no es un defecto—: darles de alta los nominales
   infla el inventario de conos con piezas que no existen. La carga NO avisa de esos bultos: es
   normal y avisarlo sería ruido.
-- **El movimiento manual solo sirve para AJUSTE y MERMA.** La pantalla de Inventario ofrece esos
-  dos y nada más: `entrada` la hace la remesa, `devolucion` la cancelación del pedido y `salida` la
+- **El movimiento manual solo sirve para AJUSTE y MERMA.** Está en el botón "Ajuste / merma" de
+  Inventario (`inventario/movimiento-modal.ts`). El **ajuste SOBREESCRIBE** el saldo (la cantidad
+  que se teclea es el saldo contado, `delta = contado − actual`) y la **merma RESTA**; los dos
+  rechazan dejarlo en negativo (409 `STOCK_INSUFICIENTE`). Se captura en KILOS, pero como la tienda
+  cuenta en PAQUETES el modal ofrece un selector kg/paquetes para las presentaciones `paquete`:
+  traduce con el peso promedio REAL de los bultos que hay en ESE almacén
+  (`GET /inventario/equivalencia-paquetes`, avisa si cayó al nominal) y al backend le manda siempre
+  kilos. Ofrece esos dos tipos y nada más: `entrada` la hace la remesa, `devolucion` la cancelación del pedido y `salida` la
   reemplazó el traspaso. El **ajuste** es la ÚNICA forma de cuadrar el sistema con un conteo
   físico —no lo quites— y la **merma** de dar de baja hilo dañado. El endpoint
   `POST /inventario/movimientos` sigue aceptando los cinco tipos.
@@ -161,9 +169,39 @@ tienda-hilos/
   `POST /inventario/transferencias` (y su tarjeta en Inventario) porque movía kilos sin mover los
   bultos, y eso descuadraba su ubicación. No lo reintroduzcas: todo va por
   `POST /inventario/traspasos`.
+- **El traspaso tiene TRES pasos: solicitado → en tránsito → recibido.** Ya NO es inmediato; lo
+  cambió el usuario el 2026-07-28 ("necesito un status de en tránsito y así pendiente de envío, y
+  que el responsable acepte de que recibió y que diga qué recibió, para que no haya problemas").
+  · `POST /inventario/traspasos` **solicita**: valida contra lo DISPONIBLE (existencia − apartado) y
+    APARTA en el origen (`inventario.cantidad_reservada`). No mueve nada ni toca el kardex.
+    **Se pide en KILOS**, no en paquetes: "cuando me hacen un pedido no me dicen cuántos paquetes,
+    yo mando por kilos" (usuario, 2026-07-28). La pantalla muestra a cuántos paquetes equivale
+    —con el peso promedio REAL de los bultos que hay en ese almacén— pero eso es solo referencia:
+    lo que viaja en `items[].cantidad` son kilos. `paquetes` sigue existiendo para capturar por
+    bultos si algún día hace falta, y entonces sí el peso sale de los bultos elegidos.
+  · `POST /inventario/traspasos/:id/enviar` **envía**: elige los bultos AHÍ (no al solicitar, porque
+    el mostrador pudo vender alguno), revalida, descuenta del origen con su movimiento, libera el
+    apartado y manda los bultos al destino. La mercancía queda en camino: **salió del origen y
+    todavía no entra al destino**, a propósito.
+    Cuando se pidió en kilos, salen los kilos EXACTOS (no se redondea a bultos enteros) y los bultos
+    se acomodan solos: se mueven los más antiguos que caben sin pasarse de esos kilos. **Nadie
+    escanea al enviar** —solo se escanea al vender y al desarmar— así que la ubicación del bulto es
+    aproximada, como siempre, y se corrige cuando lo escanean en la sucursal.
+  · `POST /inventario/traspasos/:id/recibir` **recibe**: lo firma cualquiera del staff y queda su
+    nombre y la hora. Acepta `recibido: [{detalle_id, paquetes|cantidad}]` para declarar lo que de
+    verdad llegó; entra al destino solo eso y el faltante se asienta como **merma** con el folio
+    (422 `RECIBE_MAS_DE_LO_ENVIADO` si dice que llegó más).
+  · `POST /inventario/traspasos/:id/cancelar`: si estaba solicitado libera el apartado; si iba en
+    tránsito la mercancía REGRESA al origen y los bultos vuelven. Un recibido ya no se cancela
+    (409): eso se corrige con un traspaso de vuelta.
+  **El apartado es BLANDO.** Se ve en inventario y otra solicitud no puede pedir lo ya apartado,
+  pero la venta de mostrador NO lo respeta —el cliente que está enfrente manda— así que
+  `cantidad_reservada` puede quedar por encima de `cantidad`; el envío lo detecta y avisa. No metas
+  la reserva en la validación de la venta sin decidirlo con el usuario.
+  **Solo PAQUETES.** Un cono da 422 `NO_SE_TRASPASAN_CONOS`: a la sucursal se le manda el paquete
+  cerrado y allá se desarma.
 - **Matriz → sucursales, por PAQUETES.** El almacén marcado con `almacenes.es_matriz` (único, como
-  `es_tienda_linea`) es el que surte a las demás. Se surte con `POST /inventario/traspasos`:
-  un documento con folio y varias líneas, movimiento inmediato (no hay estado "en tránsito").
+  `es_tienda_linea`) es el que surte a las demás.
   Las líneas de `paquete` se capturan en PAQUETES —los paquetes son cerrados y nadie los pesa— y el
   backend toma los bultos que DE VERDAD hay en el origen, los más antiguos primero (FIFO),
   descuenta SU peso real y los MUEVE al destino. Así la cuenta cuadra aunque cada bulto pese
@@ -265,6 +303,74 @@ tienda-hilos/
   con `DATE_FORMAT(col, '%Y-%m-%d')` cuando el valor se use para armar rangos o se envíe al frontend.
 
 ## Convenciones de UI
+- **Las notificaciones van en la barra, junto al nombre y el tipo de usuario** (la campana de
+  `admin-layout`). Son pendientes VIVOS que se calculan de la base con `GET /notificaciones`
+  (`modules/notificaciones`): solicitudes de traspaso por surtir, envíos por acusar recibo y
+  existencias bajo su mínimo. **No hay tabla de notificaciones ni "marcar como leída"** a propósito:
+  el aviso tiene que estar ahí hasta que el pendiente se resuelva, y una marca de leído solo lo
+  taparía. Se refresca cada minuto y al abrir el panel. El panel FLOTA hacia arriba sobre el menú:
+  dentro del flujo empujaba la barra (que mide 100vh) y se salía de la pantalla.
+- **Inventario contesta tres preguntas, en ese orden.** Es como las hace la tienda y por eso la
+  pantalla está armada así: (1) *cuánto hay en cada almacén* → una tarjeta por almacén con su
+  cifra, su parte del total y el desglose paquete/enconado; (2) *dónde está cada hilo* → gráfica
+  de barras apiladas (`shared/charts/stacked-bars.ts`), un renglón por hilo y un tramo por
+  almacén; (3) *el detalle exacto* → tabla agrupada por hilo y buscador. **Las presentaciones del
+  mismo hilo van JUNTAS** en la tabla, con el nombre una sola vez: antes cada una era un
+  renglón suelto con el nombre repetido y parecía que la tabla tenía duplicados.
+- **Donde se elige un hilo, la opción lleva COLOR + CALIBRE + material + línea.** No solo el
+  color: el mismo color en dos calibres son dos productos y con "AMARILLO · AMARILLO" no hay forma
+  de elegir bien. Ya costó caro — ver abajo. Aplica al selector de la remesa y a cualquier otro que
+  se agregue; las variantes traen `calibre`, `material` y `linea` desde `variantes/model.js`.
+- **El nombre del archivo de la remesa se COTEJA con el hilo elegido.** El proveedor las nombra
+  «COLOR CALIBRE.xlsx» (`ROJO 1-30.xlsx`), así que `shared/remesa-archivo.ts` lo lee y avisa cuando
+  no cuadra, en los dos cargadores y en el historial. **Avisa, NUNCA bloquea ni corrige solo:** es
+  una convención del proveedor, no una garantía. Nació porque tres listas entraron al hilo
+  equivocado —`ROJO 1-30.xlsx` a AMARILLO, `ROSA MEXICANO 2-30.xlsx` a DEV_2 y `MARINO OSCURO
+  2-30.xlsx` a MARINO OSCURO **1/30**—; la del calibre es la que a ojo no se ve.
+- **En inventario, el hilo se identifica con COLOR + CALIBRE, y se agrupa por `producto_id`.**
+  Nunca por el nombre: "MARINO OSCURO 1/30" y "MARINO OSCURO 2/30" son dos productos y agrupar por
+  nombre los sumaría en un renglón. La pantalla muestra además material y línea (`categorias` y
+  `lineas`), porque con el color solo no se sabe qué hilo es.
+- **Un número en pantalla lleva su unidad, y una barra dice contra qué se mide.** Los encabezados de
+  almacén dicen "· kg", el total del hilo va como "1,919.71 kg · 29% del inventario", y esa barra se
+  llena con ese mismo porcentaje. Antes se medía contra el hilo más grande, que no aparecía en
+  ninguna parte, así que la barra no significaba nada.
+- **Sin mínimo capturado no hay alerta de stock.** `stock_minimo = 0` significa "no configurado",
+  no "el mínimo es cero". La condición vive en `COND_ALERTA` (`inventario/model.js`) y exige
+  `stock_minimo > 0`; sin eso, una fila en cero contaba como alerta y la pantalla decía
+  "0 productos · sin existencias · 1 bajo mínimo" en un almacén vacío.
+- **Gráficas: la paleta está validada, no la cambies a ojo.** `--viz-series-1..3` son los tres
+  primeros slots de la paleta de referencia y pasan las puertas de daltonismo y de visión normal
+  contra el fondo blanco de las tarjetas. Un CUARTO color no se agrega sin volver a correr el
+  validador de la guía (`dataviz`): del cuarto almacén en adelante se usa `--viz-otros` (gris) y el
+  detalle exacto lo da la tabla. Reglas que hay que respetar al tocar una gráfica: hueco de 2 px
+  del color del fondo entre tramos (NUNCA un borde), redondeo de 4 px solo en el extremo del dato,
+  leyenda siempre que haya dos series o más, y una sola etiqueta directa (el total) — los tramos de
+  en medio los explica el tooltip.
+- **Una gráfica ancha va en `.chart-box`.** El SVG se estira al ancho que le den, así que un
+  viewBox angosto dentro de una tarjeta de 1,300 px escala el texto al doble y se ve tosca. El tope
+  de `.chart-box` la deja dibujada casi a su tamaño real.
+- **La pantalla es para MIRAR; las acciones son modales.** Los listados (productos, materiales,
+  inventario) muestran datos y ponen las acciones en botones del encabezado o del renglón, que
+  abren un modal. No dejes formularios desplegados en la pantalla: Inventario llegó a tener siete
+  bloques apilados y no se encontraba nada. El modal se crea al abrirlo y se destruye al cerrarlo,
+  así arranca limpio.
+  · **Nunca cierra al hacer clic en el fondo** (se pierde la captura). Sale con la ✕, con
+    "Cancelar"/"Cerrar" o con **Escape**.
+  · **Los datos que ya tiene el listado entran por input**, no se vuelven a pedir: así el modal
+    abre armado y de un solo tamaño. Cuando SÍ hay que ir al servidor (el modal de producto),
+    dibuja el formulario completo desde el primer cuadro y tápalo con `.modal-cargando`
+    —el velo con spinner— en vez de pintar un "Cargando…" chico que luego crece.
+  · **Los inputs de señal se leen en `ngOnInit`, NUNCA en el constructor:** ahí todavía no están
+    asignados y el modal abre en blanco. Ya pasó con el de producto; hay pruebas que lo cubren.
+  · Un modal que se usa varias veces seguidas (bajar conos, ajuste/merma, capturar colores) NO se
+    cierra al confirmar: avisa, se limpia y espera el siguiente.
+- **Nunca uses `computed()` para una vista previa que dependa de campos `[(ngModel)]`.** Un
+  `computed` solo se invalida cuando cambia una SEÑAL; sobre propiedades normales se calcula una vez
+  y se queda pegado, así que el preview miente al teclear. Ya pasó en el desarme (los "kilos reales"
+  no movían el cálculo). Usa un MÉTODO normal —la detección de cambios lo reevalúa en cada tecla— o
+  convierte los campos a señales. `computed` sí es correcto cuando todo lo que lee son señales
+  (`input()`, `signal()`).
 - **Cantidades sin ceros de relleno.** MySQL devuelve `DECIMAL(12,3)` siempre con tres decimales
   (`350000.000`). En pantalla usa el pipe `cantidad` (`shared/cantidad.pipe.ts`), que recorta los
   ceros sobrantes y agrupa miles: `350,000`, `2.5`, `1.25`. Acepta la unidad como argumento:
@@ -299,8 +405,10 @@ tienda-hilos/
 - [x] Recibir remesas: se sube la lista de empaque `.xlsx` del proveedor, se revisa la vista previa
       y cada renglón entra como un bulto con su peso real y su lote (Admin → Recibir remesa).
       Probado con el archivo real: 80 bultos, 1,527.5 kg, 2 lotes.
-- [ ] Los traspasos son inmediatos: no hay estado "en tránsito" ni confirmación de recepción.
-      Decisión explícita del usuario; si algún día importa el tiempo de camino, hay que agregarlo.
+- [x] El traspaso tiene estados: pendiente de envío → en tránsito → recibido, con acuse de quien
+      recibe (queda su nombre y la hora) y captura de lo que de verdad llegó; el faltante se asienta
+      como merma. Validación de existencias al solicitar, con alerta de inventario insuficiente.
+      Migración: `db/migrations/2026-07_traspasos_estados.sql` (aplicada en "desarrollo").
 - [x] Banderas del producto: `multipresentacion` (habilita paquete/cono) y `por_lotes` (etiqueta
       de remesa en la presentación, sin separar existencias).
 - [x] El desarme acepta el peso REAL del bulto cuando no coincide con el nominal.
@@ -321,6 +429,17 @@ tienda-hilos/
 - [x] El alta de producto captura el precio por kilo del hilo y ya no pide SKU: las presentaciones
       se administran en su propia pantalla y heredan ese precio. Se llega con el botón
       "Presentaciones" de cada renglón del listado, sin pasar por Editar.
+- [x] Inventario quedó solo con lo de mirar: KPIs por almacén, panorama producto × almacén y
+      existencias. "Bajar conos a mostrador" y "Ajuste / merma" son botones del encabezado con su
+      modal; las bajadas recientes viven dentro del modal de conos (las últimas 5).
+- [x] Materiales: el alta y la edición también son un MODAL sobre el listado
+      (`categorias/material-form-modal.ts`). No pide nada al servidor —el renglón ya trae el
+      material completo—, así que abre armado y sin velo.
+- [x] El alta y la edición del producto son un MODAL sobre el listado
+      (`productos/producto-form-modal.ts`), no una pantalla aparte: ya no existe
+      `/admin/productos/:id` (redirige al listado). No se cierra al hacer clic en el fondo —se
+      perdería la captura—; sale con ✕, "Cancelar" o Escape. Al crear ofrece "Capturar otro
+      color" (conserva material, línea, impuesto y calibre) e "Ir a presentaciones".
 - [x] Vaciado masivo: el Excel del proveedor se sube desde la pantalla de presentaciones del
       producto, crea la presentación si falta, registra los bultos y da entrada al inventario.
 - [ ] Nada del escaneo, el panel de cancelación, la pantalla de presentaciones ni la carga masiva

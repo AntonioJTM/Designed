@@ -16,6 +16,7 @@ const cajaRoutes = require('./modules/caja/routes');
 const pedidosRoutes = require('./modules/pedidos/routes');
 const nominaRoutes = require('./modules/nomina/routes');
 const reportesRoutes = require('./modules/reportes/routes');
+const notificacionesRoutes = require('./modules/notificaciones/routes');
 
 // Enrutador raíz de la API v1. Aquí se montan los módulos por dominio.
 const router = Router();
@@ -39,6 +40,8 @@ router.use('/opciones', opcionesRoutes);
 // Inventario
 router.use('/almacenes', almacenesRoutes);
 router.use('/inventario', inventarioRoutes);
+// Lo que está esperando a alguien (la campana del panel).
+router.use('/notificaciones', notificacionesRoutes);
 router.use('/remesas', remesasRoutes);
 
 // Ventas y caja

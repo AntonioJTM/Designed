@@ -1,0 +1,153 @@
+<!-- No cierra al hacer clic en el fondo: se sale con la ✕, "Cerrar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-mov-titulo">
+    <div class="modal-head">
+      <h2 id="modal-mov-titulo">Ajuste o merma</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p class="muted" style="margin-top:0; font-size:0.85rem">
+        <b>Ajuste:</b> la cantidad que escribas queda como el saldo real, sin importar lo que
+        hubiera. Es para cuando cuentas físicamente y no cuadra.<br />
+        <b>Merma:</b> resta lo que se dañó, se mojó o se perdió.
+      </p>
+
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+      @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+      <div class="form-grid">
+        <label class="field full">
+          Buscar / escanear (SKU, código o producto)
+          <span class="input-scan">
+            <input #bc type="text" [(ngModel)]="q"
+                   (keydown.enter)="$event.preventDefault(); buscar()"
+                   placeholder="Escanea el código o teclea SKU/nombre" />
+            <button type="button" class="btn btn-ghost btn-sm" (click)="buscar()">Buscar</button>
+          </span>
+        </label>
+        <label class="field full">
+          Variante
+          <select [(ngModel)]="varianteSel" (ngModelChange)="alElegir()">
+            <option value="">— Selecciona —</option>
+            @for (v of resultados(); track v.id) {
+              <option [ngValue]="v.id">
+                {{ v.sku }} · {{ v.producto }}{{ v.presentacion ? ' · ' + v.presentacion : '' }}
+              </option>
+            }
+          </select>
+          @if (resultados().length === 0) {
+            <span class="muted" style="font-size:0.72rem">
+              Busca primero la variante que vas a mover.
+            </span>
+          }
+        </label>
+        <label class="field">
+          Tipo
+          <select [(ngModel)]="mov.tipo">
+            @for (t of tipos; track t) { <option [value]="t">{{ t }}</option> }
+          </select>
+        </label>
+        <label class="field">
+          Almacén
+          <select [(ngModel)]="mov.almacen_id" (ngModelChange)="alElegir()">
+            @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+          </select>
+        </label>
+
+        <!--
+          El inventario se lleva en kilos, pero la tienda cuenta paquetes. Solo se
+          ofrece para presentaciones de tipo paquete: el cono y el simple van en kilos.
+        -->
+        @if (esPaquete() && pesoRef()) {
+          <label class="field">
+            Capturar en
+            <select [(ngModel)]="unidad">
+              <option value="kg">Kilos (kg)</option>
+              <option value="paq">Paquetes</option>
+            </select>
+          </label>
+        }
+        <label class="field">
+          {{ esAjuste() ? 'Saldo real contado' : 'Cantidad a dar de baja' }}
+          <span class="cant-peso">
+            <input type="number" [step]="unidad === 'paq' ? 1 : 0.001" min="0"
+                   [(ngModel)]="mov.cantidad" />
+            <span class="muted">{{ unidad === 'paq' ? 'paquetes' : 'kg' }}</span>
+          </span>
+        </label>
+        <label class="field full">
+          Motivo <span class="muted">(opcional)</span>
+          <input type="text" [(ngModel)]="mov.motivo"
+                 [placeholder]="esAjuste() ? 'Ej. Conteo físico: 96 paquetes' : 'Ej. Se mojaron 2 bultos'" />
+        </label>
+      </div>
+
+      <!-- Qué va a pasar, antes de confirmarlo -->
+      @if (equivalencia(); as eq) {
+        <div class="previa-calculo">
+          <div class="renglon">
+            <span class="muted">Hoy hay en este almacén</span>
+            <span>
+              {{ saldoActual() }} kg
+              @if (enPaquetes(saldoActual()); as p) { <span class="muted"> · {{ p }} paq</span> }
+            </span>
+          </div>
+
+          @if (unidad === 'paq' && mov.cantidad) {
+            <div class="renglon">
+              <span>{{ mov.cantidad }} paquetes × {{ pesoRef() }} kg</span>
+              <span><b>{{ kilos() }} kg</b></span>
+            </div>
+          }
+
+          @if (saldoResultante() != null) {
+            <div class="renglon total">
+              <span>{{ esAjuste() ? 'Queda en' : 'Baja a' }}</span>
+              <span>
+                <b>{{ saldoResultante() }} kg</b>
+                @if (enPaquetes(saldoResultante()); as p) {
+                  <span class="muted"> · {{ p }} paq</span>
+                }
+              </span>
+            </div>
+            @if (quedaNegativo()) {
+              <p class="aviso" style="margin:0.5rem 0 0">
+                Queda en negativo, así que el sistema lo va a rechazar. Revisa la cantidad.
+              </p>
+            }
+          }
+
+          <p class="muted" style="font-size:0.75rem; margin:0.5rem 0 0">
+            @if (eq.referencia_nominal) {
+              El peso de {{ pesoRef() }} kg es el NOMINAL de la presentación: aquí no hay bultos
+              ubicados de los que sacar el promedio real, así que la cuenta en paquetes es
+              aproximada.
+            } @else {
+              Se traduce con el peso promedio REAL de los {{ eq.disponible.paquetes }} bultos que hay
+              aquí ({{ eq.disponible.peso_min }} a {{ eq.disponible.peso_max }} kg), no con el
+              nominal.
+            }
+          </p>
+        </div>
+
+        @if (unidad === 'paq') {
+          <p class="muted" style="font-size:0.78rem">
+            Si lo que dañaste son bultos concretos, es más exacto capturar sus kilos reales: los
+            bultos pesan distinto entre sí y el promedio deja diferencia.
+          </p>
+        }
+      }
+    </div>
+
+    <div class="modal-foot">
+      <span class="nota">
+        Se guarda en kilos y queda asentado en el kardex.
+      </span>
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+      <button type="button" class="btn btn-primary" (click)="registrar()" [disabled]="guardando()">
+        {{ guardando() ? 'Registrando…' : 'Registrar' }}
+      </button>
+    </div>
+  </div>
+</div>

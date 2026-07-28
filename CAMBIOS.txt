@@ -9,11 +9,40 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-07-26
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-07-28
 ===============================================================================
 
 LO ÚLTIMO QUE SE TERMINÓ
-  El CONO se vende POR KILO al mismo precio del paquete, no por pieza. El desarme
+  EL TRASPASO SE PIDE EN KILOS (no en paquetes: así pide la sucursal y así se manda,
+  sin escanear nada) y hay CAMPANA DE PENDIENTES junto al nombre del usuario: avisa
+  cuando una sucursal pide mercancía, cuando algo va en camino sin acuse y cuando
+  hay existencias bajo su mínimo. Ver la primera entrada fechada.
+  Antes: EL TRASPASO YA NO ES INMEDIATO: solicitud (aparta y valida existencias) → en
+  tránsito (sale del origen) → recibido (el responsable acepta, dice qué llegó y
+  queda su nombre; el faltante se asienta como merma). Solo paquetes, y la alerta
+  de inventario insuficiente compara en kilos. Ver la primera entrada fechada.
+  Antes: ELEGIR EL HILO DE LA REMESA SIN EQUIVOCARSE: el selector ya dice color, calibre,
+  material y línea, y el nombre del archivo se coteja con el hilo elegido. Se
+  descubrió que TRES remesas ya cargadas entraron al producto equivocado, y el
+  historial las marca. Ver la primera entrada fechada.
+  Antes: INVENTARIO QUE SE ENTIENDE: tarjeta por almacén con su parte del total y el
+  desglose paquete/enconado, gráfica de barras apiladas que dice dónde está cada
+  color, y tabla agrupada por color (el nombre una sola vez, ya no parecen
+  duplicados). Se arregló el contador de alertas, que marcaba como "bajo mínimo"
+  las filas en cero sin mínimo capturado. Ver la primera entrada fechada.
+  Antes: INVENTARIO DESAMONTONADA: pasó de siete bloques apilados a tres (KPIs, panorama,
+  existencias). "Bajar conos a mostrador" y "Ajuste / merma" son ahora botones del
+  encabezado con su modal, y las bajadas recientes se fueron DENTRO del modal de
+  conos. Ver la segunda entrada fechada.
+  Antes: MATERIALES también en modal: el formulario ya no vive abierto arriba del listado,
+  se abre con "+ Nuevo material" o con "Editar" de cada renglón. Ver la segunda
+  entrada fechada.
+  Antes: el alta y la edición del producto son un MODAL sobre el listado, no una pantalla
+  aparte: se captura el color, se guarda y se sigue en la misma lista, con el filtro
+  puesto. El modal ofrece "Capturar otro color" (conserva material, línea, impuesto
+  y calibre) e "Ir a presentaciones" para subir el Excel. Ver la segunda entrada
+  fechada.
+  Antes: el CONO se vende POR KILO al mismo precio del paquete, no por pieza. El desarme
   da entrada a los kilos CON el destare (18.5 + 0.5 = 19 kg vendibles), y ahí está
   la ganancia de enconar. Se convirtieron los 4 conos que ya existían.
   Ver la primera entrada fechada.
@@ -97,6 +126,8 @@ LO QUE ESTÁ ABIERTO  ← EMPIEZA POR AQUÍ
 
 CÓMO PROBAR QUE SIGUE FUNCIONANDO
   cd backend
+  node scripts/e2e-traspaso-estados.js     36 comprobaciones, se limpia solo
+  cd ../frontend && npx ng test --watch=false --browsers=ChromeHeadless   (55)
   PORT=3210 node src/server.js &            (usa la base "desarrollo")
   node scripts/e2e-remesas.js               26 comprobaciones, se limpia solo
   BASE=http://localhost:3210/api/v1 node scripts/e2e-trazabilidad.js    (14)
@@ -120,8 +151,6 @@ SIGUIENTE PASO NATURAL
 DEUDAS CONOCIDAS QUE NO SON DE ESTE CAMBIO
   · backend/.env.example está borrado del repo aunque backend/README.md lo
     referencia. Viene así de antes.
-  · Los traspasos son inmediatos, sin estado "en tránsito". Decisión explícita
-    del usuario, no un olvido.
   · Las migraciones de db/migrations/ están aplicadas SOLO en "desarrollo".
 
 CÓMO TRABAJA EL USUARIO
@@ -132,6 +161,507 @@ CÓMO TRABAJA EL USUARIO
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
 
+
+-------------------------------------------------------------------------------
+ 2026-07-28 · El traspaso se pide en KILOS, y la campana de pendientes
+-------------------------------------------------------------------------------
+
+QUÉ DIJO EL USUARIO
+  "Cuando me hacen un pedido a mí no me dicen cuántos paquetes, yo mando por
+  kilos. Y ahora yo no escaneo qué paquetes se mandan, porque el único momento que
+  escaneo es en una venta o para desarmar y pasar a conos, entonces mando por peso
+  y son kg." Y: "si la sucursal de Moroleón me hace un pedido tiene que llegar un
+  tipo de alerta al administrador para que pueda atender... las notificaciones me
+  las puedes poner donde está el nombre de usuario y el tipo."
+
+EL PEDIDO EN KILOS
+  La captura era en PAQUETES y se convertía a kilos con el peso de los bultos. Eso
+  venía de una decisión anterior ("los paquetes son cerrados y nadie los pesa"),
+  pero no es como pide la sucursal. Ahora:
+  · La línea se captura en KILOS y es lo que viaja al backend (`items[].cantidad`).
+  · Al lado se muestra a cuántos PAQUETES equivale, con el peso promedio REAL de
+    los bultos que hay en ese almacén. Es referencia, no la unidad.
+  · Al enviar salen los kilos EXACTOS: no se redondea a bultos enteros.
+  · Los bultos se acomodan solos —se mueven los más antiguos que caben sin pasarse
+    de esos kilos— porque nadie escanea al enviar. La ubicación del bulto siempre
+    ha sido aproximada y se corrige cuando lo escanean al vender en la sucursal.
+  · `paquetes` sigue soportado en el backend por si algún día se captura por
+    bultos; entonces el peso sale de los bultos elegidos, como antes.
+
+LA CAMPANA
+  · Módulo nuevo `backend/src/modules/notificaciones` con `GET /notificaciones`:
+    solicitudes por surtir, envíos por acusar recibo y existencias bajo su mínimo.
+  · En el panel, junto al NOMBRE y el TIPO de usuario —donde lo pidió— con su
+    globo rojo. Cada aviso es un botón que lleva a la pantalla donde se atiende.
+  · Son pendientes VIVOS: se calculan de la base, no hay tabla de notificaciones ni
+    "marcar como leída". Decisión consciente: el aviso debe estar hasta que el
+    pendiente se resuelva, y una marca de leído solo lo taparía. Se refresca cada
+    minuto y al abrir el panel.
+
+  Al verlo renderizado se corrigió que el panel EMPUJABA la barra (que mide 100vh)
+  y se salía de la pantalla por abajo; ahora flota hacia arriba, sobre el menú.
+
+PRUEBAS
+  · e2e-traspaso-estados.js pasó de 28 a 36 comprobaciones, todas en verde. Las
+    nuevas: la línea guarda los kilos exactos, salen exactos sin redondear, mueve
+    bultos completos sin pasarse, y la campana lo lista como pendiente de recibir y
+    DEJA de listarlo al recibirlo.
+  · 55 pruebas de frontend en verde: se pide en kilos, los paquetes son referencia
+    (100 kg ÷ 19.011 = 5.26 paquetes) y el total del pie va en kilos.
+
+-------------------------------------------------------------------------------
+ 2026-07-28 · El traspaso deja de ser inmediato: solicitud, tránsito y acuse
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ EL USUARIO
+  "Lo mismo para surtir sucursal, el mismo detalle [del hilo], y solo se surte en
+  paquetes, en conos no. Al igual aquí necesito como un status de en tránsito y
+  así pendiente de envío, y necesito que el responsable acepte de que recibió y
+  que diga qué recibió para que no haya problemas. Y recuerda que vendemos por
+  kilo no por paquete: aquí se tiene que hacer una solicitud y se tiene que
+  verificar... que el sistema diga si hay en existencia... y si no, que aparezca
+  una alerta de inventario insuficiente."
+
+  Esto REVIERTE una decisión que estaba escrita al revés en CLAUDE.md ("los
+  traspasos son inmediatos... decisión explícita del usuario; si algún día importa
+  el tiempo de camino, hay que agregarlo"). Llegó ese día.
+
+DECISIONES QUE SE LE PREGUNTARON (las tres, como se recomendó)
+  · El apartado es BLANDO: la solicitud aparta y otra solicitud no puede pedir lo
+    mismo, pero si llega un cliente al mostrador la venta SÍ pasa —el cliente que
+    está enfrente manda— y al enviar se revalida.
+  · Se puede recibir MENOS de lo enviado: el faltante se asienta en el kardex.
+  · Recibe cualquiera del staff, y queda su nombre y la hora.
+
+CÓMO QUEDÓ EL FLUJO
+    solicitado  → nada se mueve; se valida contra lo DISPONIBLE (existencia menos
+                  lo apartado) y se aparta en el origen.
+    en_transito → sale del origen con su movimiento. Los bultos se eligen AQUÍ, no
+                  al solicitar: entre un paso y otro el mostrador pudo vender
+                  alguno, así que sale el que de verdad está. Si ya no alcanza,
+                  409 y no se envía nada.
+    recibido    → entra al destino lo que el responsable acepta; el faltante se da
+                  de baja como MERMA con el folio del traspaso, para que el kardex
+                  explique los kilos perdidos en el camino.
+    cancelado   → solicitado: libera el apartado. En tránsito: la mercancía
+                  REGRESA al origen y los bultos vuelven. Recibido: ya no se
+                  cancela (409); eso se corrige con un traspaso de vuelta.
+
+  SOLO PAQUETES: un cono da 422 NO_SE_TRASPASAN_CONOS y ya no aparece en la
+  búsqueda de la pantalla. A la sucursal se le manda el paquete cerrado.
+
+  LA VALIDACIÓN VA EN KILOS aunque se capture en paquetes, porque el inventario se
+  lleva en kilos: la pantalla dice por línea "≈ 171.792 kg / hay libre 76.352 kg ·
+  ⚠ inventario insuficiente", pinta el renglón y no deja crear la solicitud. El
+  backend lo revalida igual.
+
+QUÉ SE TOCÓ
+  · db/migrations/2026-07_traspasos_estados.sql — estado, enviado/recibido/
+    cancelado (en, por), recepcion_notas, motivo_cancelacion, y en el detalle
+    cantidad_recibida y paquetes_recibidos. Los dos traspasos que ya existían
+    quedaron como 'recibido' completos, con sus fechas, para que el historial no
+    mienta. APLICADA en "desarrollo".
+  · `crearTraspaso` se partió en `solicitarTraspaso`, `enviarTraspaso`,
+    `recibirTraspaso` y `cancelarTraspaso`, con `_moverReserva` para el apartado.
+  · Rutas nuevas: POST /traspasos/:id/{enviar,recibir,cancelar}.
+  · El selector de la pantalla ahora dice color, CALIBRE, material y línea, igual
+    que el de remesas. Y las variantes traen esos datos desde el backend.
+  · La pantalla se reorganizó: arriba "Pendientes" con lo que hay que atender y su
+    botón (Enviar / Acusar recibo), abajo la captura de la solicitud, y al final
+    los cerrados con quién firmó de recibido. El acuse es un modal que precarga
+    todo lo enviado y deja corregir lo que faltó.
+
+PRUEBAS
+  · scripts/e2e-traspaso-estados.js — 28 comprobaciones, TODAS en verde. Cubre el
+    flujo completo, que el apartado no se lo pueda llevar otra solicitud, que un
+    cono se rechace, que no se pueda enviar dos veces ni aceptar más de lo
+    enviado, que el kardex quede con sus tres patas (salida, entrada y el faltante
+    como merma con el folio), y las dos cancelaciones.
+    SE LIMPIA SOLO: crea su propio producto, sus bultos y dos almacenes con el
+    prefijo E2E-TRASPASO y los borra al final, comprobando que no quedó nada. Se
+    hizo así a propósito porque la base "desarrollo" ya tiene la captura real del
+    usuario.
+  · 54 pruebas de frontend en verde (11 nuevas): que los conos se filtren, que la
+    alerta de insuficiente compare en kilos, que no mande la solicitud con una
+    línea corta, que el acuse precargue lo enviado y declare lo que llegó.
+  · Se renderizó la pantalla con Chrome headless para verla. Ahí se corrigió que
+    la fila con problema se pintaba de rojo COMPLETA (hasta el nombre del hilo);
+    ahora se marca con el fondo y el rojo queda para el dato que falla.
+
+-------------------------------------------------------------------------------
+ 2026-07-28 · Elegir el hilo de la remesa sin equivocarse (3 ya estaban mal)
+-------------------------------------------------------------------------------
+
+QUÉ DIJO EL USUARIO
+  "Para surtir remesa tienes que saber varios datos del hilo que vas a agregar,
+  porque tenemos muchas variantes cuando se agrega un producto." Y tenía razón: el
+  selector decía solo "AMARILLO · AMARILLO".
+
+LO QUE SE ENCONTRÓ EN LA BASE
+  Se comparó cada archivo cargado contra el producto al que entró. TRES de ocho no
+  cuadran:
+    ROJO 1-30.xlsx           → AMARILLO 1/30        60 bultos, 1,344.75 kg
+    ROSA MEXICANO 2-30.xlsx  → DEV_2 1/30          100 bultos, 1,919.71 kg
+    MARINO OSCURO 2-30.xlsx  → MARINO OSCURO 1/30   80 bultos, 1,527.50 kg
+  La tercera es la peligrosa: color correcto, CALIBRE equivocado. A ojo no se ve, y
+  el calibre cambia el precio.
+
+QUÉ SE HIZO
+  · El selector ahora dice "MARINO OSCURO 1/30 — ACRILAN · Nacional · MARINO-OSCURO".
+    Para eso `variantes/model.js` devuelve `calibre`, `material` y `linea`.
+  · `shared/remesa-archivo.ts`: lee el hilo del NOMBRE del archivo —el proveedor las
+    nombra "COLOR CALIBRE.xlsx", con guion porque la diagonal no se puede en un
+    nombre— y lo coteja con el hilo elegido. Normaliza acentos y mayúsculas.
+  · Aviso en los DOS cargadores (la pantalla de remesas y el del producto, que es
+    por donde entró la de ROSA MEXICANO). Es un AVISO, nunca un bloqueo: la
+    convención no es garantía y un archivo puede venir con otro nombre.
+  · Si todavía no hay hilo elegido y el nombre apunta a uno solo, se PRESELECCIONA
+    y se avisa. No pisa una elección hecha a mano.
+  · El HISTORIAL marca las que no cuadran, con el motivo, y arriba dice cuántas
+    son: así se ven las tres que ya están cargadas. Para eso la lista de remesas
+    devuelve el calibre.
+
+PRUEBAS
+  44 en verde (9 nuevas, con los archivos reales del proveedor y los tres errores
+  reales como casos). Se comprobó que cacha el color, el calibre, y los dos a la
+  vez; que no inventa avisos cuando el producto no tiene calibre capturado; y que
+  un nombre que no sigue la convención no opina del calibre.
+  Un caso de prueba propio estaba mal —usaba "NEGRO 2/30.xlsx", y un nombre de
+  archivo no puede llevar diagonal—; se quitó esa rama del código, que era muerta.
+  Se renderizó con Chrome headless contra la base real para verlo: el selector, el
+  aviso y las tres marcadas en el historial.
+
+PENDIENTE PARA EL USUARIO
+  Las tres remesas mal cargadas NO se tocaron: mover 3,000 kg entre productos es
+  decisión suya. Lo que habría que hacer en cada una es una merma en el producto
+  equivocado y volver a cargar el archivo en el correcto (los códigos de bulto ya
+  están registrados, así que la carga avisaría duplicados: primero hay que borrar
+  esos bultos).
+
+  Y QUEDÓ SIN CONTESTAR una pregunta anterior: si "Recibir remesa" deja de ser una
+  pestaña y se vuelve solo historial + el mismo cargador en modal, o si se borra y
+  todo se carga desde el producto. Hoy siguen los DOS cargadores, y ya divergen: el
+  del producto crea la presentación si falta y no tiene notas; el de la pestaña
+  exige que la presentación exista, tiene notas y el historial. Este cambio sirve
+  igual en cualquiera de las dos salidas.
+
+-------------------------------------------------------------------------------
+ 2026-07-28 · Inventario que se entiende: gráfica, tabla agrupada y menos ruido
+-------------------------------------------------------------------------------
+
+QUÉ DIJO EL USUARIO
+  Mandó dos capturas: "se ve muy confuso todo, qué es qué y qué está dónde", y de
+  la tabla de Existencias de abajo, "no hay mucha información relevante". Pidió
+  más información y autorizó usar gráficas.
+
+QUÉ ESTABA MAL, MIRANDO LA CAPTURA
+  · Cada presentación era un renglón suelto con el NOMBRE DEL COLOR REPETIDO:
+    "AMARILLO" aparecía dos veces (paquete y cono) y la tabla parecía tener
+    duplicados.
+  · La palabra "kg" salía en cada celda: ruido en una tabla donde TODO es kg.
+  · Nada decía de un vistazo dónde está la mercancía; había que leer 11 renglones
+    × 3 columnas y sumar de cabeza.
+  · La tabla de abajo repetía lo de arriba con columnas inútiles: "Reservada" y
+    "Mínimo" en cero para todo, y el SKU duplicando el nombre del producto.
+  · Y un dato que se contradecía: "tienda moroleon · 0 productos · sin existencias
+    · 1 bajo mínimo".
+
+EL BUG DE LAS ALERTAS (era real, se comprobó contra la base)
+  La condición era `(cantidad - reservada) <= stock_minimo`, así que una fila en
+  CERO y sin mínimo capturado (0 <= 0) contaba como alerta. La única "alerta" de
+  la tienda era BEIGE en tienda moroleon con cantidad 0 y mínimo 0. Ahora hay una
+  sola condición, `COND_ALERTA`, que exige `stock_minimo > 0`, y la usan el
+  contador del panorama, el listado de alertas y el filtro "bajo stock". Sin
+  mínimo capturado no hay nada que avisar. Verificado: 1 alerta falsa → 0.
+
+QUÉ SE HIZO EN LA PANTALLA
+  1 · TARJETA POR ALMACÉN, con su cifra grande, la barra de su parte del total
+      (54% / 46%) y el DESGLOSE PAQUETE / YA ENCONADO —el dato que decide si hay
+      que bajar conos al mostrador—. El almacén vacío dice "Sin existencias ·
+      Todavía no ha entrado mercancía", en vez de un cero y una alerta falsa.
+  2 · GRÁFICA "DÓNDE ESTÁ CADA COLOR": barras horizontales apiladas, un renglón
+      por color y un tramo por almacén, ordenadas de mayor a menor. Contesta la
+      pregunta del usuario de un vistazo. Componente nuevo y reutilizable:
+      `shared/charts/stacked-bars.ts`.
+  3 · TABLA AGRUPADA POR COLOR: el nombre del color una sola vez, una columna
+      "Presentación" que dice "Paquete de 19.088 kg" o "Cono" (ya no hay que
+      descifrar el SKU), la unidad en el encabezado y no en cada celda, el
+      equivalente en paquetes debajo de los kilos, y el total del color con su
+      barra de proporción.
+  4 · EL BUSCADOR, con información que sí sirve: presentación, ubicación física y
+      ÚLTIMO MOVIMIENTO. "Reservada" y "Mínimo" solo se dibujan si algún renglón
+      las tiene; si están todas en cero, no ocupan espacio.
+
+BACKEND
+  · `COND_ALERTA` (arriba).
+  · `resumenPorAlmacen` devuelve `kilos_paquete` y `kilos_cono` por almacén.
+  · `SELECT_STOCK` trae `presentacion`, `tipo_presentacion` y `peso_kg`, para que
+    la pantalla no tenga que adivinar la presentación por el SKU ni pedir otra vez
+    las variantes.
+
+LA GRÁFICA, SEGÚN LA GUÍA DE VISUALIZACIÓN
+  Se siguió la skill `dataviz`, que trae reglas que NO son opcionales:
+  · La paleta se VALIDÓ con su script, no a ojo:
+    `node scripts/validate_palette.js "#2a78d6,#eb6834,#1baf7a" --mode light
+     --surface "#ffffff"` → pasa banda de luminosidad, croma, separación para
+    daltonismo (peor par ΔE 9.2, mínimo 8) y visión normal (27.6, mínimo 15). El
+    aqua avisa contraste bajo, lo que obliga a etiquetas visibles y tabla al lado:
+    las dos cosas están. Se agregó `--viz-series-3` y `--viz-otros` a styles.scss.
+  · Del CUARTO almacén en adelante se usa el gris de "otros": la paleta solo está
+    validada hasta tres y el cuarto par no pasa. El detalle exacto lo da la tabla.
+  · Hueco de 2 px del color del fondo entre tramos (no un borde), redondeo de 4 px
+    solo en el extremo del dato, leyenda obligatoria con dos series o más, y una
+    sola etiqueta directa: el total. Los tramos de en medio los explica el tooltip.
+
+Y SE MIRÓ, NO SOLO SE COMPILÓ
+  El último paso de la guía es ver la gráfica. Se generó un HTML con los datos
+  REALES de la base y los estilos del proyecto, y se le tomó captura con Chrome
+  headless. Ahí se cachó un defecto que ninguna prueba iba a marcar: el SVG se
+  estira al ancho de la tarjeta, así que con un viewBox de 640 en una tarjeta de
+  1,300 px escalaba ×2 y TODO el texto salía al doble —la gráfica se veía tosca y
+  los números gritaban—. Se subió el lienzo a 980 y se agregó `.chart-box` con
+  tope de ancho; la segunda captura ya se lee bien. El HTML de prueba se borró.
+
+PRUEBAS
+  33 en verde (14 nuevas). De la gráfica: la barra mayor llena el área y las demás
+  son proporcionales, los tramos van pegados y en orden con su hueco de 2 px, solo
+  el último lleva curvas, un almacén en cero no dibuja tramos invisibles, el total
+  cabe en el lienzo y el nombre largo se recorta. De la pantalla, con los datos
+  reales del 2026-07-28: las presentaciones del mismo color quedan juntas (paquete
+  antes que cono), el total del color suma las dos (248.38 + 23.32 = 271.7), la
+  gráfica ordena de mayor a menor, el almacén vacío no gasta un color de la paleta
+  pero sí tiene su columna, y los porcentajes cuadran (54% + 46%).
+  NO se corrieron las suites E2E del backend: escriben en la misma base donde el
+  usuario ya está capturando en serio. En su lugar se llamaron `resumenPorAlmacen`,
+  `alertas` y `listarStock` directamente contra la base, sin mutar nada.
+
+SEGUNDA VUELTA · falta información, hueco muerto y números sin unidad
+  El usuario revisó y pidió tres cosas concretas:
+  · "Solo veo los colores pero no sé qué tipo son, por ejemplo nacional, y el
+    calibre." Ahora el resumen y el listado de existencias traen MATERIAL, LÍNEA y
+    CALIBRE (`SELECT_STOCK` y la consulta del resumen los sacan de `productos`,
+    `categorias` y `lineas`). En la tabla hay columna "Hilo" (color + calibre) y
+    "Material y línea"; en la gráfica la etiqueta es "NEGRO 2/30" y el material y
+    la línea van en el tooltip.
+    Y de paso se arregló algo que iba a morder: se agrupaba por NOMBRE, así que
+    "MARINO OSCURO 1/30" y "MARINO OSCURO 2/30" —que son DOS productos— se habrían
+    sumado en un solo renglón. Ahora se agrupa por `producto_id`, que también
+    viaja en el resumen. Hay prueba de ese caso exacto.
+  · "La gráfica deja mucho espacio muerto." El SVG se estira al ancho que le den:
+    con viewBox fijo, o escala el texto al doble o sobra media tarjeta. Ahora el
+    componente MIDE su ancho real con un `ResizeObserver` y dibuja a escala 1: las
+    barras llenan la tarjeta y el texto sale de su tamaño a cualquier ancho. Se
+    quitó `.chart-box`, que era el tope que dejaba el hueco.
+  · "Me muestras 1919.71 pero qué es, sé más explícito" y "el total del color, ¿en
+    qué te basas para llenar la barra?". La barra se medía contra el hilo más
+    grande, que no se veía en ninguna parte: ahora es el % DEL INVENTARIO y va
+    escrito al lado ("1,919.71 kg · 29% del inventario"). Los encabezados de
+    almacén dicen "· kg", el total lleva su unidad y las etiquetas de la gráfica
+    también ("1,920 kg").
+  Se volvió a renderizar con Chrome headless al ancho de la captura del usuario
+  (1,660) para confirmarlo. 35 pruebas en verde.
+
+PENDIENTE QUE SE VIO EN LOS DATOS
+  El producto DEV_2 (1,919.71 kg en Tienda principal, 100 bultos) parece residuo
+  de una prueba, no mercancía real. Es el que domina la gráfica. Conviene que el
+  usuario decida si se borra.
+  Nadie ha capturado `stock_minimo` en ningún SKU, así que las alertas de
+  reabastecimiento no van a avisar nunca hasta que se definan mínimos.
+
+-------------------------------------------------------------------------------
+ 2026-07-28 · Inventario desamontonada: las acciones son modales
+-------------------------------------------------------------------------------
+
+DE QUÉ SE HABLÓ
+  El usuario preguntó dónde conviene hacer el desarme (bajar paquetes a conos),
+  porque en la tienda lo hace el MOSTRADOR: a veces porque el cliente quiere 5
+  conos y no un paquete completo, a veces solo para tener surtido. Y dijo que en
+  Inventario "ya veo muy amontonadas muchas tablas".
+
+  Se le propuso ponerlo en el POS —es donde está la persona, el endpoint es
+  `soloStaff` así que un cajero puede, y ahí el almacén destino ya se sabe por la
+  caja de la sesión—. EL USUARIO DECIDIÓ DEJARLO EN INVENTARIO, solo en modal.
+  Queda anotado por si algún día se retoma: el flujo del POS sería escanear y
+  confirmar, sin elegir almacenes.
+
+EL PROBLEMA REAL
+  inventario.html tenía 451 líneas y SIETE bloques apilados: KPIs, panorama
+  producto × almacén, bajar conos, bajadas recientes, "1 · Elige la variante",
+  "2 · Ajustar o dar de baja", y existencias con sus filtros. Tres de ellos
+  tablas. La regla que se aplicó: LA PANTALLA ES PARA MIRAR; LAS ACCIONES SON
+  BOTONES.
+
+QUÉ SE HIZO
+  · `inventario/desarme-modal.ts` / `.html`: bajar conos a mostrador, con el mismo
+    flujo de antes (escanear → previa → confirmar) más la captura a mano en su
+    `<details>`. Dentro lleva las ÚLTIMAS 5 bajadas, que es donde importa la
+    pregunta que contestan ("¿ya lo bajé?"); el histórico completo está en el
+    Kardex.
+  · `inventario/movimiento-modal.ts` / `.html`: ajuste y merma en un solo modal.
+    Las dos tarjetas numeradas ("1 · Elige la variante", "2 · Ajustar") eran un
+    solo flujo partido en dos y ocupaban media pantalla.
+  · Inventario quedó en TRES bloques —KPIs, panorama, existencias— con los dos
+    botones en el encabezado, junto al de Kardex. 451 → 186 líneas de plantilla.
+  · Ninguno de los dos modales pide nada al abrir: almacenes, conos y bajadas
+    entran por input desde el listado, que ya los tenía cargados. Abren armados y
+    sin velo.
+  · Los dos NO se cierran al confirmar: bajar varios paquetes seguidos, o cuadrar
+    varios SKU en un conteo, es lo normal. Avisan, se limpian y esperan el
+    siguiente. El listado recarga existencias, panorama y alertas en cada uno.
+
+AGREGADO EL MISMO DÍA · capturar el ajuste EN PAQUETES
+  El usuario preguntó qué significa "saldo real contado" y cómo se usan los dos
+  tipos "si hablamos de paquetes". Ahí salió el desajuste: el inventario se lleva
+  en KILOS y el campo pedía kilos, pero la tienda cuenta PAQUETES —escribir 96
+  pensando en paquetes dejaba la bodega en 96 kilos—.
+  · El modal ahora trae selector "Capturar en: kilos / paquetes", solo para
+    presentaciones de tipo `paquete` (el cono y el simple van en kilos).
+  · Traduce con `GET /inventario/equivalencia-paquetes`, que usa el peso PROMEDIO
+    REAL de los bultos que hay en ESE almacén, no el nominal. Si no hay bultos
+    ubicados cae al nominal y lo AVISA en pantalla.
+  · Vista previa antes de confirmar: lo que hay hoy (kg y paquetes), la
+    multiplicación (96 × 19.197 = 1,842.912 kg) y cómo queda el saldo, con la
+    diferencia de que el ajuste SOBREESCRIBE y la merma RESTA. Si queda negativo
+    lo avisa antes de que el backend lo rechace.
+  · Al backend se le manda SIEMPRE en kilos.
+  · Se recomienda en pantalla capturar los kilos reales cuando se dañan bultos
+    concretos: pesan de 10.75 a 19.80 kg y el promedio deja diferencia.
+
+BUG QUE SALIÓ AL PASAR EL CÓDIGO · vista previa congelada
+  `previaDesarme`/`conoSel` (y su copia en el modal) eran `computed()` que leían
+  campos de `[(ngModel)]`. Un `computed` solo se invalida cuando cambia una SEÑAL,
+  así que se calculaba una vez y se quedaba pegado: teclear otros kilos o otros
+  conos NO movía el cálculo. Venía del código anterior y no se notaba porque esa
+  parte vive dentro de un `<details>` cerrado. Ahora son métodos normales, que la
+  detección de cambios reevalúa en cada tecla.
+  Se comprobó que el bug era real, no una suposición: una prueba temporal con el
+  mismo patrón (computed sobre una propiedad normal) confirma que el valor no
+  cambia. Quedó anotado en CLAUDE.md para no repetirlo.
+
+PRUEBAS
+  9 casos nuevos en Karma (14 en total, todos verdes):
+  · desarme: escanear muestra el bulto y propone bodega → mostrador; el destare se
+    suma a los kilos que ENTRAN y no a los que salen (10.75 + 0.5 = 11.25);
+    confirmar manda código y almacenes y NO cierra; un código inexistente deja el
+    error sin previa.
+  · movimiento: toma el primer almacén del input; solo ofrece ajuste y merma; una
+    coincidencia única se autoselecciona; sin variante no manda nada; la merma
+    avisa el saldo y NO cierra.
+  Y 5 más por la captura en paquetes (19 en total): traduce 96 paq → 1,842.912 kg
+  con el promedio real y manda kilos; la vista previa reacciona al teclear (1 → 2
+  paquetes cambia el resultado, que es justo lo que el computed no hacía); el
+  ajuste sobreescribe y la merma resta; avisa antes de dejar el saldo negativo; y
+  el mismo caso para el desarme a mano, incluido el bulto que rinde 7 conos y no 12.
+
+-------------------------------------------------------------------------------
+ 2026-07-28 · Materiales, también en modal
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ EL USUARIO
+  "Al igual que en productos hiciste modal el registrar y el editar, quiero que
+  hagas lo mismo en materiales."
+
+QUÉ SE HIZO
+  · `categorias/material-form-modal.ts` / `.html`: el mismo formulario de antes
+    (nombre, orden, calibres, descripción, activo) como modal. Entra el material
+    completo por el input `material` (`null` = alta) y él mismo guarda.
+  · La pantalla de Materiales quedó solo como listado, con "+ Nuevo material" en
+    el encabezado y "Editar" abriendo el modal en cada renglón. Al guardar se
+    recarga la tabla y aparece el aviso.
+  · Estilo `.modal.angosto` (620 px): el formulario del material es corto y con
+    los 900 px del modal del producto se veía vacío.
+  · Se quitó del listado el formulario que vivía abierto arriba —y con él el
+    botón "Cancelar" que solo servía para salir del modo edición—.
+
+DIFERENCIA CON EL MODAL DEL PRODUCTO
+  Este NO pide nada al servidor: el renglón del listado ya trae el material
+  completo, así que abre armado. Por eso no lleva velo de carga ni caché; ese
+  velo existe en productos porque ahí sí hay que ir por el producto y sus
+  opciones.
+
+PRUEBAS
+  `material-form-modal.spec.ts`: editar llena el formulario, el alta arranca
+  vacía y activa, y al guardar avisa al listado y se cierra. `ng build` limpio y
+  6 de 6 en Karma (las 2 del modal de producto, las 3 de este y la de la app).
+
+-------------------------------------------------------------------------------
+ 2026-07-28 · El alta del producto es un MODAL, no otra pantalla
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ EL USUARIO
+  "En vez de que sea agregar un producto así, mejor que sea un modal", con la
+  pantalla /admin/productos/nuevo a la vista.
+
+POR QUÉ IMPORTA
+  Capturar un color costaba dos navegaciones (ir al formulario y volver) y al
+  volver se perdía la búsqueda y el filtro de material del listado. Ahora se
+  captura sobre la lista y la lista se recarga sola.
+
+QUÉ SE HIZO
+  · El formulario del producto se volvió un componente de modal reutilizable
+    (`producto-form-modal.ts` / `.html`), con `productoId` de entrada: `null` es
+    alta, un id es edición. Lo abre el listado y lo destruye al cerrarlo, así el
+    formulario arranca limpio cada vez.
+  · El listado abre el modal desde "+ Nuevo producto" y desde "Editar" de cada
+    renglón (los dos eran enlaces; ahora son botones). Al guardar, el listado se
+    recarga y muestra el aviso; al editar el modal se cierra solo.
+  · Al crear, el modal no se cierra: muestra el aviso de que la presentación en
+    kilos se creó sola y ofrece "Capturar otro color" —que conserva material,
+    línea, impuesto y calibre, porque de una remesa vienen varios colores del
+    mismo hilo— o "Ir a presentaciones" para subir el Excel.
+  · Se eliminó la pantalla `producto-form.ts`/`.html`. La ruta `productos/:id`
+    quedó como redirect a `productos` para que un marcador viejo no caiga en el
+    `**` (que manda a login).
+  · "← Volver al producto" de la pantalla de presentaciones apuntaba a la
+    pantalla que ya no existe; ahora dice "← Volver a productos".
+  · Estilos `.modal-overlay`/`.modal`/`.modal-head`/`.modal-body`/`.modal-foot`
+    en styles.scss (no había ninguno en el proyecto). El cuerpo es el que hace
+    scroll para que los botones queden siempre visibles.
+
+DECISIONES
+  · NO se cierra al hacer clic en el fondo: el formulario se llena a mano y un
+    clic distraído borraría la captura. Se sale con la ✕, con "Cancelar" o con
+    Escape.
+  · La edición usa el MISMO modal. La tarjeta "Presentaciones e imágenes" que
+    traía el formulario en modo edición no se copió: el listado ya tiene su botón
+    "Presentaciones" en cada renglón y repetirlo dentro del modal sobraba.
+
+CORRECCIÓN DEL MISMO DÍA · el modal "se armaba a pedazos"
+  El usuario lo abrió y se veía feo: crecía de arriba hacia abajo. No era la
+  animación, era el TAMAÑO: el modal se pintaba con un "Cargando…" chico y al
+  llegar las 4 peticiones de opciones se estiraba de golpe a su altura real. En
+  edición eran dos estirones, porque el producto se pedía DESPUÉS de las
+  opciones. Tres arreglos:
+  · El formulario se dibuja completo desde el primer cuadro, con los campos
+    deshabilitados mientras cargan. El modal ya nace de su tamaño final y no hay
+    salto.
+  · Y sobre él, un VELO con spinner hasta que llegan los datos (idea del
+    usuario): al principio se veía el formulario vacío y en edición eso parecía
+    un producto sin nada capturado. El velo tapa el modal entero; solo el
+    encabezado queda por encima, para que la ✕ siga sirviendo.
+  · Las opciones y el producto se piden en un solo `forkJoin`: un viaje al
+    servidor en vez de dos en fila.
+  · `CatalogoService.opciones()` cachea líneas, unidades e impuestos con
+    `shareReplay` —no se editan desde el panel y son las mismas toda la sesión—,
+    así que a partir de la segunda vez el modal abre ya armado.
+  La animación quedó en un desvanecido de 0.12 s, SIN desplazamiento vertical
+  (movería otra vez la sensación de que se está armando), y respeta
+  `prefers-reduced-motion`.
+
+SEGUNDA CORRECCIÓN · "no me carga nada cuando doy editar"
+  Editar abría el modal con TODO vacío. La carga estaba en el constructor, y los
+  inputs de señal de Angular todavía no están asignados ahí: `productoId()` valía
+  `null`, así que el modal pedía las opciones pero nunca el producto y se
+  comportaba como un alta. Se movió a `ngOnInit`, que es donde el input ya está.
+  Se agregó `producto-form-modal.spec.ts` (Karma, 2 casos: editar llena el
+  formulario y quita el velo; alta arranca vacío con kilogramo). Se comprobó que
+  la prueba SÍ atrapa el bug: simulando la lectura en el constructor falla con
+  "Expected '' to be 'MARINO OSCURO'".
+  Se corre con:  cd frontend && npx ng test --watch=false --browsers=ChromeHeadless
+
+PRUEBAS
+  `ng build` limpio y 3 de 3 en Karma. La interfaz en sí sigue sin verse en el
+  navegador, igual que el resto del trabajo pendiente de esa deuda.
 
 -------------------------------------------------------------------------------
  2026-07-27 · El CONO se vende POR KILO, no por pieza

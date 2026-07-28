@@ -1,0 +1,163 @@
+<!--
+  Fondo del modal. No se cierra al hacer clic afuera a propósito: el formulario
+  se llena a mano y un clic distraído borraría la captura. Se sale con la ✕,
+  con "Cancelar" o con Escape.
+-->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-producto-titulo">
+    <div class="modal-head">
+      <h2 id="modal-producto-titulo">{{ esEdicion() ? 'Editar producto' : 'Nuevo producto' }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <!--
+      Velo sobre el modal COMPLETO mientras llegan los datos. El formulario ya
+      está dibujado detrás con su tamaño final —así no hay salto al terminar—
+      pero tapado, porque en edición sus campos todavía están vacíos y verlos así
+      parece que el producto no tiene nada capturado. La ✕ queda por encima.
+    -->
+    @if (cargando()) {
+      <div class="modal-cargando" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        Cargando…
+      </div>
+    }
+
+    @if (creado(); as p) {
+      <!-- Guardado: el paso que sigue es capturar sus presentaciones -->
+      <div class="modal-body">
+        <p class="ok-msg">
+          Producto <b>{{ p.nombre }}</b> guardado. Su presentación en kilos se creó sola;
+          los bultos y el inventario entran subiendo el Excel del proveedor en
+          «Presentaciones».
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="otro()">+ Capturar otro color</button>
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+        <button type="button" class="btn btn-primary" (click)="irAPresentaciones.emit(p.id)">
+          Ir a presentaciones →
+        </button>
+      </div>
+    } @else {
+      <!--
+        El formulario se dibuja COMPLETO desde el primer cuadro, aunque las
+        opciones no hayan llegado: si primero se pinta un "Cargando…" y luego el
+        formulario, el modal crece de golpe y se ve como un salto. Mientras
+        carga, queda detrás del velo y con los campos deshabilitados.
+      -->
+      <form [formGroup]="form" (ngSubmit)="guardar()">
+        <div class="modal-body">
+          @if (error()) {
+            <p class="alert" style="margin-top:0">{{ error() }}</p>
+          }
+
+          <div class="form-grid">
+            <label class="field">
+              Nombre <span class="muted">(color)</span>
+              <input type="text" formControlName="nombre" placeholder="Ej. MARINO OSCURO" />
+            </label>
+            <label class="field">
+              Material
+              <select formControlName="categoria_id">
+                <option [ngValue]="null" disabled>— Selecciona —</option>
+                @for (c of categorias(); track c.id) {
+                  <option [ngValue]="c.id">{{ c.nombre }}</option>
+                }
+              </select>
+            </label>
+            <label class="field">
+              Se vende por <span class="muted">(peso)</span>
+              <select formControlName="unidad_medida_id">
+                <option [ngValue]="null" disabled>— Selecciona —</option>
+                @for (u of unidades(); track u.id) {
+                  <option [ngValue]="u.id">{{ u.nombre }} ({{ u.abreviatura }})</option>
+                }
+              </select>
+              <span class="muted" style="font-size:0.78rem">
+                El precio de cada variante es por esta unidad y el inventario se lleva
+                en ella. Admite decimales: puedes vender 2.5 kg.
+              </span>
+            </label>
+            <label class="field">
+              Línea
+              <select formControlName="linea_id">
+                <option [ngValue]="null">— Ninguna —</option>
+                @for (l of lineas(); track l.id) {
+                  <option [ngValue]="l.id">{{ l.nombre }}</option>
+                }
+              </select>
+            </label>
+            <label class="field">
+              Precio por {{ unidadSel() }}
+              <input type="number" step="0.01" min="0" formControlName="precio_kg"
+                     placeholder="Ej. 200.00" />
+              <span class="muted" style="font-size:0.72rem">
+                El precio de lista del hilo. Las presentaciones que se capturen después
+                arrancan con este precio.
+              </span>
+            </label>
+            <label class="field">
+              Impuesto
+              <select formControlName="impuesto_id">
+                <option [ngValue]="null">— Ninguno —</option>
+                @for (i of impuestos(); track i.id) {
+                  <option [ngValue]="i.id">{{ i.nombre }} ({{ i.porcentaje }}%)</option>
+                }
+              </select>
+            </label>
+            <label class="field">
+              Calibre
+              <select formControlName="grosor_calibre">
+                <option value="">— Sin especificar —</option>
+                @for (c of calibres(); track c) { <option [value]="c">{{ c }}</option> }
+              </select>
+              @if (calibres().length === 0) {
+                <span class="muted" style="font-size:0.72rem">
+                  Elige primero el material. Sus calibres se configuran en
+                  Admin → Materiales.
+                </span>
+              }
+            </label>
+
+            <label class="field full">
+              Descripción
+              <textarea formControlName="descripcion" rows="3"></textarea>
+            </label>
+            <label class="field check full">
+              <input type="checkbox" formControlName="multipresentacion" />
+              Multipresentación
+              <span class="muted" style="font-size:0.78rem">
+                — se maneja en paquete y en conos. Necesario para poder desarmarlo.
+              </span>
+            </label>
+            <label class="field check full">
+              <input type="checkbox" formControlName="por_lotes" />
+              Por lotes
+              <span class="muted" style="font-size:0.78rem">
+                — cada presentación lleva su etiqueta de remesa. Las existencias se
+                siguen sumando juntas.
+              </span>
+            </label>
+            <label class="field check">
+              <input type="checkbox" formControlName="destacado" /> Destacado
+            </label>
+            <label class="field check">
+              <input type="checkbox" formControlName="activo" /> Activo
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <span class="nota">
+            Las presentaciones (SKU, código de barras) y las imágenes se capturan aparte.
+          </span>
+          <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando()">
+            {{ guardando() ? 'Guardando…' : (esEdicion() ? 'Guardar cambios' : 'Guardar producto') }}
+          </button>
+        </div>
+      </form>
+    }
+  </div>
+</div>

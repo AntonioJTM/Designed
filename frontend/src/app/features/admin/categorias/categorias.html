@@ -1,49 +1,15 @@
 <div class="page-head">
   <h1>Materiales</h1>
+  <button class="btn btn-primary" (click)="abrirNuevo()">+ Nuevo material</button>
 </div>
 
 @if (error()) {
   <p class="alert">{{ error() }}</p>
 }
 
-<div class="card">
-  <h3 style="margin-top:0">{{ editandoId() ? 'Editar material' : 'Nuevo material' }}</h3>
-  <form [formGroup]="form" (ngSubmit)="guardar()">
-    <div class="form-grid">
-      <label class="field">
-        Nombre
-        <input type="text" formControlName="nombre" placeholder="Ej. Acrilán" />
-      </label>
-      <label class="field">
-        Orden
-        <input type="number" formControlName="orden" />
-      </label>
-      <label class="field">
-        Calibres de este material
-        <input type="text" formControlName="calibres" placeholder="Ej. 1/30, 2/30" />
-        <span class="muted" style="font-size:0.72rem">
-          Separados por coma. Son los únicos que se ofrecerán al dar de alta un
-          producto de este material.
-        </span>
-      </label>
-      <label class="field full">
-        Descripción
-        <textarea formControlName="descripcion" rows="2"></textarea>
-      </label>
-      <label class="field check">
-        <input type="checkbox" formControlName="activo" /> Activa
-      </label>
-    </div>
-    <div style="margin-top:1rem; display:flex; gap:0.5rem">
-      <button type="submit" class="btn btn-primary" [disabled]="guardando()">
-        {{ guardando() ? 'Guardando…' : (editandoId() ? 'Guardar cambios' : 'Crear material') }}
-      </button>
-      @if (editandoId()) {
-        <button type="button" class="btn btn-ghost" (click)="nueva()">Cancelar</button>
-      }
-    </div>
-  </form>
-</div>
+@if (mensaje()) {
+  <p class="ok-msg">{{ mensaje() }}</p>
+}
 
 @if (cargando()) {
   <p class="muted">Cargando…</p>
@@ -66,11 +32,23 @@
             </span>
           </td>
           <td class="acciones">
-            <button class="btn btn-ghost btn-sm" (click)="editar(c)">Editar</button>
+            <button class="btn btn-ghost btn-sm" (click)="abrirEdicion(c)">Editar</button>
             <button class="btn btn-danger btn-sm" (click)="eliminar(c)">Eliminar</button>
           </td>
         </tr>
       }
     </tbody>
   </table>
+}
+
+<!--
+  Alta y edición sobre el listado. Se crea al abrirlo y se destruye al cerrarlo,
+  así el formulario arranca limpio cada vez.
+-->
+@if (modal() !== null) {
+  <app-material-form-modal
+    [material]="materialModal()"
+    (cerrado)="modal.set(null)"
+    (guardado)="alGuardar($event)"
+  />
 }

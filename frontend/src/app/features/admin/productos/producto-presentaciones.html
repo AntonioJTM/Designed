@@ -1,6 +1,6 @@
 <div class="page-head">
   <h1>Presentaciones</h1>
-  <a class="btn btn-ghost" [routerLink]="['/admin/productos', id()]">← Volver al producto</a>
+  <a class="btn btn-ghost" routerLink="/admin/productos">← Volver a productos</a>
 </div>
 
 @if (error()) { <p class="alert">{{ error() }}</p> }
@@ -52,6 +52,22 @@
     </div>
 
     @if (leyendo()) { <p class="muted">Leyendo el archivo…</p> }
+
+    <!--
+      El archivo del proveedor se llama "COLOR CALIBRE.xlsx" y aquí el producto ya
+      está fijado: si no cuadran, probablemente se abrió la pantalla equivocada.
+      Avisa, no bloquea.
+    -->
+    @if (avisoArchivo(); as aviso) {
+      <p class="aviso" style="margin-top:1rem">
+        ⚠ Estás en <b>{{ nombreProducto() }}{{ calibreProducto() ? ' ' + calibreProducto() : '' }}</b>.
+        {{ aviso }}
+        <br />
+        <span style="font-size:0.85rem">
+          Si el nombre del archivo está mal y el producto es el correcto, cárgala sin problema.
+        </span>
+      </p>
+    }
 
     @if (previa(); as pr) {
       <div class="previa-calculo" style="margin-top:1rem">

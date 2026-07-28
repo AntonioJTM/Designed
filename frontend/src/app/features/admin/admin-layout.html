@@ -19,9 +19,72 @@
     </nav>
     <div class="user">
       @if (sesion(); as s) {
-        <span class="nombre">{{ s.nombre }}</span>
-        <span class="rol">{{ s.rol }}</span>
+        <div class="quien">
+          <div>
+            <span class="nombre">{{ s.nombre }}</span>
+            <span class="rol">{{ s.rol }}</span>
+          </div>
+          <!--
+            La campana: lo que está esperando a alguien. Va aquí, junto al nombre y
+            el tipo de usuario, donde la pidió el usuario.
+          -->
+          <button type="button" class="campana" (click)="alternar()"
+                  [attr.aria-expanded]="abierto()"
+                  [attr.aria-label]="total() > 0 ? total() + ' pendientes' : 'Sin pendientes'"
+                  [title]="total() > 0 ? total() + ' cosas esperan atención' : 'Nada pendiente'">
+            🔔
+            @if (total() > 0) {
+              <span class="badge">{{ total() }}</span>
+            }
+          </button>
+        </div>
       }
+
+      @if (abierto()) {
+        <div class="avisos">
+          @if (pendientes(); as p) {
+            @if (p.total === 0) {
+              <p class="vacio">Nada pendiente por ahora.</p>
+            }
+
+            @if (p.traspasos_por_enviar.length > 0) {
+              <h4>Piden mercancía</h4>
+              @for (t of p.traspasos_por_enviar; track t.id) {
+                <button type="button" class="aviso-item" (click)="irA('/admin/traspasos')">
+                  <b>{{ t.almacen_destino }}</b> pide
+                  {{ t.num_lineas }} {{ +t.num_lineas === 1 ? 'producto' : 'productos' }}
+                  <span class="kg">({{ t.kg }} kg)</span>
+                  <span class="cuando">{{ t.creado_en | fecha }} · falta enviarlo</span>
+                </button>
+              }
+            }
+
+            @if (p.traspasos_por_recibir.length > 0) {
+              <h4>Van en camino</h4>
+              @for (t of p.traspasos_por_recibir; track t.id) {
+                <button type="button" class="aviso-item" (click)="irA('/admin/traspasos')">
+                  A <b>{{ t.almacen_destino }}</b>, {{ t.kg }} kg
+                  <span class="cuando">
+                    salió el {{ t.enviado_en | fecha }} · falta que acusen recibo
+                  </span>
+                </button>
+              }
+            }
+
+            @if (p.alertas_stock > 0) {
+              <h4>Inventario</h4>
+              <button type="button" class="aviso-item" (click)="irA('/admin/inventario')">
+                {{ p.alertas_stock }}
+                {{ p.alertas_stock === 1 ? 'presentación' : 'presentaciones' }} bajo su mínimo
+                <span class="cuando">Revisar existencias</span>
+              </button>
+            }
+          } @else {
+            <p class="vacio">Cargando…</p>
+          }
+        </div>
+      }
+
       <button type="button" (click)="salir()">Salir</button>
     </div>
   </aside>
