@@ -12,7 +12,6 @@ Un sistema integral para una tienda de hilos con cinco frentes que comparten **u
 
 ## Stack tecnológico
 - **Base de datos:** MySQL 8 / MariaDB 10.5+ (esquema en `db/schema_mysql.sql`).
-  - Alternativa PostgreSQL disponible en `db/schema_postgres.sql`.
 - **Backend/API:** Node.js + Express (REST, JSON). Usar `mysql2/promise` para el pool de conexiones.
 - **Frontend:** Angular (standalone components + Angular Router; UI a definir).
 - **Auth:** JWT. Contraseñas con `bcrypt`. Nunca guardar texto plano.
@@ -24,7 +23,6 @@ tienda-hilos/
 ├── README.md
 ├── db/
 │   ├── schema_mysql.sql    ← esquema principal (VALIDADO, 36 tablas)
-│   ├── schema_postgres.sql ← equivalente en PostgreSQL
 │   └── erd.mermaid         ← diagrama entidad-relación completo
 ├── backend/                ← API Node/Express (por construir)
 │   ├── src/
@@ -65,7 +63,7 @@ tienda-hilos/
 - Nunca exponer `contrasena_hash` en respuestas.
 
 ## Estado actual
-- [x] Base de datos diseñada y **validada** (corre sin errores en MySQL y PostgreSQL).
+- [x] Base de datos diseñada y **validada** (corre sin errores en MySQL).
 - [x] ERD completo.
 - [x] Backend Node/Express: auth, catálogo, inventario, ventas/caja y reportes (probados E2E).
 - [~] Frontend Angular: panel admin completo (catálogo, inventario, POS, pedidos, reportes).
