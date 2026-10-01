@@ -16,6 +16,8 @@
 const path = require('node:path');
 const fs = require('node:fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Se niega a correr contra la base del servidor. Ver el módulo.
+require('./_no-en-produccion');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
@@ -61,7 +63,7 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.001;
     const almA = (await api('POST', '/almacenes', { nombre: 'TMPC Tienda A', es_punto_venta: true })).data.id;
     const almB = (await api('POST', '/almacenes', { nombre: 'TMPC Tienda B', es_punto_venta: true })).data.id;
     const cajaA = (await api('POST', '/caja/cajas', { almacen_id: almA, nombre: 'TMPC Caja A' })).data.id;
-    const buf = fs.readFileSync(path.join(RAIZ, 'MARINO OSCURO 2-30.xlsx'));
+    const buf = fs.readFileSync(path.join(RAIZ, 'muestras', 'MARINO OSCURO 2-30.xlsx'));
     const pr = await (await fetch(B + '/remesas/previa', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/octet-stream' }, body: buf })).json();
     await api('POST', '/remesas', { variante_id: paq, almacen_id: almA, bultos: marcar(pr.data.bultos) });
     // Stock en B, para comprobar que la cancelación NO lo toca.

@@ -18,6 +18,8 @@
 const path = require('node:path');
 const fs = require('node:fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Se niega a correr contra la base del servidor. Ver el módulo.
+require('./_no-en-produccion');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
@@ -63,13 +65,26 @@ const r3 = (n) => Math.round(n * 1000) / 1000;
     const real = r3(cinco.reduce((s, b) => s + b.peso_kg, 0));
     const nominal = r3(5 * Number(pv.peso_kg));
     const kgAntes = await st(pv.id, bod);
+    // El traspaso son TRES pasos desde el 2026-07-28: solicitar aparta, enviar
+    // descuenta y mueve los bultos. Los bultos se eligen AL ENVIAR, no al
+    // solicitar, porque el mostrador pudo vender alguno entremedio.
     r = await api('POST', '/inventario/traspasos', { almacen_origen_id: bod, almacen_destino_id: tda, items: [{ variante_id: pv.id, paquetes: 5 }] });
+    ck('la solicitud pasa', r.status === 201, r.data.folio);
+    ck('solicitar no mueve mercancía todavía', (await st(pv.id, bod)) === kgAntes, `${await st(pv.id, bod)} kg`);
+    const folio = r.data.id;
+
+    r = await api('POST', `/inventario/traspasos/${folio}/enviar`);
     const l = r.data.lineas[0];
-    ck('el traspaso pasa', r.status === 201, r.data.folio);
+    ck('el envío pasa', r.status === 200, r.data.estado);
     ck('descuenta el peso REAL', Number(l.cantidad) === real, `${l.cantidad} kg`);
     ck('y NO el nominal', Number(l.cantidad) !== nominal, `el nominal habría sido ${nominal} kg`);
-    ck('dice qué bultos salieron', l.bultos?.length === 5, l.bultos.map((b) => b.peso_kg).join(' + '));
+    ck('dice qué bultos salieron', l.bultos?.length === 5, (l.bultos ?? []).map((b) => b.peso_kg).join(' + '));
     ck('marca que el peso no es estimado', l.peso_estimado === false);
+
+    // Y el destino solo recibe cuando alguien acusa: hasta entonces va en camino.
+    ck('en tránsito NO está aún en la tienda', (await st(pv.id, tda)) === 0, `${await st(pv.id, tda)} kg`);
+    r = await api('POST', `/inventario/traspasos/${folio}/recibir`);
+    ck('al recibir entra a la tienda', r.status === 200, r.data.estado);
     ck('la bodega baja exactamente eso', Math.abs(kgAntes - (await st(pv.id, bod)) - real) < 0.001, `${kgAntes} → ${await st(pv.id, bod)}`);
     ck('la tienda recibe exactamente eso', Math.abs((await st(pv.id, tda)) - real) < 0.001, (await st(pv.id, tda)) + ' kg');
 
@@ -93,7 +108,7 @@ const r3 = (n) => Math.round(n * 1000) / 1000;
 
     console.log('\n=== 6. Pedir más de lo que hay ===');
     r = await api('POST', '/inventario/traspasos', { almacen_origen_id: bod, almacen_destino_id: tda, items: [{ variante_id: pv.id, paquetes: 500 }] });
-    ck('409 STOCK_INSUFICIENTE', r.status === 409, `${r.status} ${r.error?.code}`);
+    ck('409 STOCK_INSUFICIENTE al solicitar', r.status === 409, `${r.status} ${r.error?.code}`);
     ck('y no movió nada', (await cuenta(pv.id, tda)) === 5);
   } finally {
     console.log('\n=== Limpieza ===');

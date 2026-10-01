@@ -8,6 +8,14 @@ export const ADMIN_ROUTES: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'productos' },
       {
+        path: 'asistente',
+        loadComponent: () => import('./asistente/asistente').then((m) => m.Asistente),
+      },
+      {
+        path: 'tablero',
+        loadComponent: () => import('./tablero/tablero').then((m) => m.Tablero),
+      },
+      {
         path: 'categorias',
         loadComponent: () => import('./categorias/categorias').then((m) => m.Categorias),
       },
@@ -63,6 +71,28 @@ export const ADMIN_ROUTES: Routes = [
       {
         path: 'almacenes',
         loadComponent: () => import('./almacenes/almacenes').then((m) => m.Almacenes),
+      },
+      {
+        path: 'apartados',
+        loadComponent: () =>
+          import('./apartados/apartados').then((m) => m.ApartadosPantalla),
+      },
+      {
+        path: 'clientes',
+        loadComponent: () => import('./clientes/clientes-list').then((m) => m.ClientesList),
+      },
+      {
+        path: 'clientes/:id',
+        loadComponent: () =>
+          import('./clientes/cliente-expediente').then((m) => m.ClienteExpediente),
+      },
+      {
+        path: 'tipos-cliente',
+        loadComponent: () => import('./tipos-cliente/tipos-cliente').then((m) => m.TiposCliente),
+      },
+      {
+        path: 'configuracion',
+        loadComponent: () => import('./configuracion/configuracion').then((m) => m.Configuracion),
       },
       {
         path: 'usuarios',

@@ -37,7 +37,7 @@
 } @else {
   <table class="grid">
     <thead>
-      <tr><th>Número</th><th>Canal</th><th>Cliente</th><th>Estado</th><th>Total</th><th>Fecha</th><th></th></tr>
+      <tr><th>Número</th><th>Canal</th><th>Cliente</th><th>Entrega</th><th>Estado</th><th>Total</th><th>Fecha</th><th></th></tr>
     </thead>
     <tbody>
       @for (p of pedidos(); track p.id) {
@@ -45,6 +45,8 @@
           <td>{{ p.numero_pedido }}</td>
           <td>{{ p.canal === 'punto_venta' ? 'POS' : 'Online' }}</td>
           <td>{{ p.cliente || '—' }}</td>
+          <!-- Cuáles hay que enviar y cuáles esperan a que pasen por ellos. -->
+          <td class="muted">{{ p.metodo_entrega === 'envio' ? 'Envío' : 'Recoge' }}</td>
           <td><span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">{{ p.estado }}</span></td>
           <td>${{ p.total }}</td>
           <td class="muted">{{ p.creado_en | fecha }}</td>

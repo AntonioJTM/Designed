@@ -1,3 +1,5 @@
+import { Direccion, MetodoEntrega } from './tienda.models';
+
 // Modelos de ventas: pedidos, pagos y caja.
 
 export interface MetodoPago {
@@ -44,7 +46,23 @@ export interface PedidoLinea {
   id: number;
   variante_id: number;
   sku: string;
+  /**
+   * Lo que se vendió, CONGELADO al momento de la venta. Dice el color y la
+   * presentación ("BLANCO · Paquete") pero no qué hilo es: para eso están los
+   * campos de abajo, que se leen vivos del catálogo.
+   */
   descripcion: string;
+  /** Qué hilo es. Vivos del catálogo, no congelados: sirven para atender dudas. */
+  producto?: string;
+  calibre?: string | null;
+  material?: string | null;
+  linea?: string | null;
+  tipo_presentacion?: 'paquete' | 'cono' | 'simple';
+  presentacion?: string | null;
+  /** Lo que pesa un paquete de esta presentación, como referencia. */
+  peso_kg?: string | null;
+  /** El código principal de la presentación (no el de un bulto). */
+  codigo_barras?: string | null;
   cantidad: string;
   precio_unitario: string;
   descuento: string;
@@ -94,17 +112,77 @@ export interface PagoLinea {
   estado: string;
   referencia_transaccion?: string | null;
   creado_en: string;
+  /** Si tiene captura del comprobante subida. El archivo se pide aparte. */
+  tiene_comprobante?: boolean | number;
+  /** Cómo se llamaba el archivo cuando lo mandó el cliente. */
+  comprobante_nombre?: string | null;
+  /** image/jpeg, image/png, image/webp o application/pdf. */
+  comprobante_tipo?: string | null;
+  comprobante_subido_en?: string | null;
+  /** Nombre de quien la subió. */
+  comprobante_subido_por?: string | null;
 }
 
 export type CanalVenta = 'tienda_linea' | 'punto_venta';
 export type EstadoPedido =
+  // 'apartado' = anticipo dejado, mercancía reservada y sin entregar.
+  | 'apartado'
   | 'pendiente' | 'pagado' | 'en_preparacion' | 'enviado' | 'entregado' | 'cancelado' | 'devuelto';
+
+/**
+ * Un apartado vigente: la mercancía está guardada y el cliente va abonando.
+ * Viene de la vista `v_apartados`.
+ */
+export interface Apartado {
+  pedido_id: number;
+  numero_pedido: string;
+  cliente_id?: number | null;
+  cliente?: string | null;
+  nombre_comercial?: string | null;
+  telefono?: string | null;
+  almacen_id?: number | null;
+  almacen?: string | null;
+  total: string | number;
+  abonado: string | number;
+  pendiente: string | number;
+  /** Qué tanto lleva pagado. Sirve para ordenar por "los que ya casi liquidan". */
+  pct_pagado: string | number;
+  creado_en: string;
+  dias_apartado: number;
+  ultimo_abono?: string | null;
+  aparto_con?: string | null;
+}
+
+/** El resumen de los apartados vigentes. */
+export interface Apartados {
+  items: Apartado[];
+  num_apartados: number;
+  /** Cuánto dinero de la tienda está comprometido en mercancía guardada. */
+  total_apartado: number;
+  total_abonado: number;
+}
+
+/** Lo que devuelve un abono a un apartado. */
+export interface ResultadoAbono {
+  pedido_id: number;
+  numero_pedido: string;
+  total: number;
+  abonado: number;
+  pendiente: number;
+  /** Ya lo pagó todo: se puede entregar. */
+  liquidado: boolean;
+}
 
 export interface Pedido {
   id: number;
   numero_pedido: string;
   canal: CanalVenta;
+  /** Cómo llega la mercancía: recogen en tienda o se envía a domicilio. */
+  metodo_entrega: MetodoEntrega;
   estado: EstadoPedido;
+  /** Si ya salió del inventario. Un apartado vigente está en 0. */
+  inventario_descontado?: number | boolean;
+  entregado_en?: string | null;
   cliente?: string | null;
   usuario?: string | null;
   almacen?: string | null;
@@ -118,6 +196,9 @@ export interface Pedido {
   creado_en: string;
   detalle?: PedidoLinea[];
   pagos?: PagoLinea[];
+  direccion_envio_id?: number | null;
+  /** La dirección completa, para que quien surte no tenga que buscarla. */
+  direccion_envio?: Direccion | null;
 }
 
 /** Ítem del carrito POS (estado local en el navegador). */

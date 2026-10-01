@@ -1,0 +1,55 @@
+<!--
+  No se cierra al hacer clic en el fondo, igual que los demás modales del panel:
+  un clic distraído borraría la captura. Se sale con la ✕, con "Cancelar" o con
+  Escape.
+-->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-tipo-titulo">
+    <div class="modal-head">
+      <h2 id="modal-tipo-titulo">
+        {{ esEdicion() ? 'Editar lista de precios' : 'Nueva lista de precios' }}
+      </h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="guardar()">
+      <div class="modal-body">
+        @if (error()) {
+          <p class="alert" style="margin-top: 0">{{ error() }}</p>
+        }
+
+        @if (esPublico()) {
+          <p class="muted" style="margin-top: 0">
+            Es la lista base: cobra el precio de la presentación y no se puede desactivar.
+          </p>
+        }
+
+        <div class="form-grid">
+          <label class="field full">
+            Nombre
+            <input type="text" formControlName="nombre" placeholder="Ej. Medio mayoreo" />
+          </label>
+          <label class="field">
+            Orden
+            <input type="number" formControlName="orden" min="0" max="999" />
+            <span class="muted" style="font-size: 0.72rem">
+              En qué posición aparece al cobrar.
+            </span>
+          </label>
+          @if (!esPublico()) {
+            <label class="field check">
+              <input type="checkbox" formControlName="activo" /> Disponible para cobrar
+            </label>
+          }
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+          {{ guardando() ? 'Guardando…' : esEdicion() ? 'Guardar cambios' : 'Crear lista' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,6 +1,7 @@
 'use strict';
 
 const service = require('./service');
+const { parsePagination, parseBool } = require('../../utils/query');
 
 // Controladores del dominio clientes. Responden con la forma { data, error }.
 
@@ -31,4 +32,81 @@ async function perfil(req, res, next) {
   }
 }
 
-module.exports = { registrar, iniciarSesion, perfil };
+// --- El expediente: solo personal ---
+
+async function listar(req, res, next) {
+  try {
+    const { page, limit, offset } = parsePagination(req.query);
+    const data = await service.listarClientes({
+      q: req.query.q,
+      con_saldo: parseBool(req.query.con_saldo),
+      activo: parseBool(req.query.activo),
+      orden: req.query.orden,
+      page, limit, offset,
+    });
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+async function expediente(req, res, next) {
+  try {
+    res.json({ data: await service.expediente(Number(req.params.id)), error: null });
+  } catch (err) { next(err); }
+}
+
+/** Búsqueda rápida para el mostrador. */
+async function buscar(req, res, next) {
+  try {
+    res.json({ data: await service.buscarParaVenta(req.query.q), error: null });
+  } catch (err) { next(err); }
+}
+
+async function crearDesdeStaff(req, res, next) {
+  try {
+    res.status(201).json({ data: await service.crearDesdeStaff(req.body), error: null });
+  } catch (err) { next(err); }
+}
+
+async function actualizar(req, res, next) {
+  try {
+    const data = await service.actualizarCliente(Number(req.params.id), req.body);
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+// --- Crédito ---
+
+async function estadoDeCuenta(req, res, next) {
+  try {
+    const { limit, offset } = parsePagination(req.query);
+    const data = await service.estadoDeCuenta(Number(req.params.id), { limit, offset });
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+async function abonar(req, res, next) {
+  try {
+    const data = await service.registrarAbono(Number(req.params.id), req.body, req.auth?.sub);
+    res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+async function ajustar(req, res, next) {
+  try {
+    const data = await service.ajustarCredito(Number(req.params.id), req.body, req.auth?.sub);
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/** Quiénes deben. Sin paginar: es una lista corta que se lee de un golpe. */
+async function porCobrar(req, res, next) {
+  try {
+    res.json({ data: await service.porCobrar(), error: null });
+  } catch (err) { next(err); }
+}
+
+module.exports = {
+  registrar, iniciarSesion, perfil,
+  listar, expediente, buscar, crearDesdeStaff, actualizar,
+  estadoDeCuenta, abonar, ajustar, porCobrar,
+};

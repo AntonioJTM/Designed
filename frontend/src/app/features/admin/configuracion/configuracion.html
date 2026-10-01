@@ -1,0 +1,64 @@
+<div class="page-head">
+  <h1>Configuración de la tienda</h1>
+  <button class="btn btn-primary" (click)="guardar()" [disabled]="!hayCambios() || guardando()">
+    {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
+  </button>
+</div>
+
+<p class="muted">
+  Lo que el cliente ve al comprar en línea: cuánto se le cobra por enviarle, a qué cuenta
+  deposita y dónde recoge su pedido.
+</p>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else {
+  <div class="config-grupos">
+    @for (g of grupos; track g.titulo) {
+      @if (opcionesDe(g.prefijos).length) {
+        <section class="card">
+          <h2>{{ g.titulo }}</h2>
+          @for (o of opcionesDe(g.prefijos); track o.clave) {
+            <label class="config-campo">
+              <span class="config-desc">{{ o.descripcion || o.clave }}</span>
+              @if (esNumero(o.clave)) {
+                <div class="config-moneda">
+                  <span>$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    [(ngModel)]="valores[o.clave]"
+                    [name]="o.clave"
+                  />
+                </div>
+              } @else {
+                <input type="text" [(ngModel)]="valores[o.clave]" [name]="o.clave" maxlength="500" />
+              }
+            </label>
+          }
+        </section>
+      }
+    }
+
+    @if (otras().length) {
+      <section class="card">
+        <h2>Otros</h2>
+        @for (o of otras(); track o.clave) {
+          <label class="config-campo">
+            <span class="config-desc">{{ o.descripcion || o.clave }}</span>
+            <input type="text" [(ngModel)]="valores[o.clave]" [name]="o.clave" maxlength="500" />
+          </label>
+        }
+      </section>
+    }
+  </div>
+
+  <p class="muted">
+    Sin costo de envío capturado, enviar a domicilio sale gratis. Sin los datos de
+    transferencia, al cliente que elija esa forma de pago se le pide que llame a la tienda.
+  </p>
+}

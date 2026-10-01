@@ -1,6 +1,15 @@
 node_modules/
 dist/
 .env
+# Credenciales de la base del SERVIDOR. Nunca al repo.
+backend/.env.produccion
+# El respaldo de la configuración local: lleva la contraseña de MySQL y la
+# llave de la IA. Se detectó suelto en `git status` el 2026-09-10; un
+# `git add .` lo habría subido.
+backend/.env.local.respaldo
+# Cualquier otra variante de .env, por si acaso.
+backend/.env.*
+!backend/.env.produccion.ejemplo
 *.log
 .DS_Store
 
@@ -8,3 +17,7 @@ dist/
 # No deben subirse al repo. Ver nota en CAMBIOS.txt sobre el dump del 2026-07-24
 # que quedó versionado antes de esta regla.
 db/dump_*.sql
+
+# Capturas de los comprobantes de pago que sube el personal. Son documentos
+# bancarios de clientes reales: no van al repo. Se respaldan aparte del código.
+backend/uploads/

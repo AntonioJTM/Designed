@@ -1,0 +1,57 @@
+<div class="page-head">
+  <h1>Listas de precio</h1>
+  <button class="btn btn-primary" (click)="abrirNuevo()">+ Nueva lista</button>
+</div>
+
+<p class="muted">
+  Cada tipo de cliente es una lista de precios. El precio propio de cada lista se captura en
+  la pantalla de presentaciones del producto; sin uno capturado, esa lista cobra el precio
+  público.
+</p>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (tipos().length === 0) {
+  <p class="empty">Aún no hay listas de precio.</p>
+} @else {
+  <table class="grid">
+    <thead>
+      <tr><th>Lista</th><th>Orden</th><th>Estado</th><th></th></tr>
+    </thead>
+    <tbody>
+      @for (t of tipos(); track t.id) {
+        <tr>
+          <td>
+            {{ t.nombre }}
+            @if (t.es_publico) { <span class="pill ok">Precio público</span> }
+          </td>
+          <td>{{ t.orden }}</td>
+          <td>
+            <span class="pill" [class.ok]="t.activo" [class.off]="!t.activo">
+              {{ t.activo ? 'Activa' : 'Inactiva' }}
+            </span>
+          </td>
+          <td class="acciones">
+            <button class="btn btn-ghost btn-sm" (click)="abrirEdicion(t)">Editar</button>
+            <!-- El público es la lista base: sin él no hay precio con qué cobrar. -->
+            @if (!t.es_publico) {
+              <button class="btn btn-danger btn-sm" (click)="eliminar(t)">Eliminar</button>
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}
+
+<!-- Se crea al abrirlo y se destruye al cerrarlo: arranca limpio cada vez. -->
+@if (modal() !== null) {
+  <app-tipo-cliente-form-modal
+    [tipo]="tipoModal()"
+    (cerrado)="cerrarModal()"
+    (guardado)="guardado($event)"
+  />
+}

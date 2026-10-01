@@ -107,6 +107,12 @@ export class ProductoPresentaciones {
   readonly mensaje = signal<string | null>(null);
   readonly verTodosBultos = signal(false);
   almacenCarga: number | '' = '';
+  /**
+   * A cómo salió el kilo en esta compra. Opcional a propósito: no se frena una
+   * entrada de mercancía por no tener la factura a mano. Sin él, el costo del
+   * hilo se queda como estaba.
+   */
+  costoKg: number | null = null;
   archivo: File | null = null;
 
   /** Los avisos que impiden cargar (códigos ya registrados). */
@@ -191,15 +197,20 @@ export class ProductoPresentaciones {
         producto_id: id,
         almacen_id: Number(this.almacenCarga),
         archivo: p.archivo,
+        costo_kg: this.costoKg != null && this.costoKg > 0 ? Number(this.costoKg) : null,
         bultos: p.bultos,
       })
       .subscribe({
         next: (r) => {
           this.ultimaCarga.set(r);
           this.mensaje.set(
-            `Remesa ${r.folio}: ${r.num_bultos} bultos, ${r.kg_total} kg al inventario.`
+            `Remesa ${r.folio}: ${r.num_bultos} bultos, ${r.kg_total} kg al inventario.` +
+              (r.costo_promedio != null
+                ? ` Costo del hilo: $${Number(r.costo_promedio).toFixed(2)} por kilo.`
+                : '')
           );
           this.previa.set(null);
+          this.costoKg = null;
           this.archivo = null;
           this.cargandoRemesa.set(false);
           this.recargar();

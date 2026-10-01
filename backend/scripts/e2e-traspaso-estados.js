@@ -11,6 +11,8 @@
  *   node scripts/e2e-traspaso-estados.js
  */
 require('dotenv').config();
+// Se niega a correr contra la base del servidor. Ver el módulo.
+require('./_no-en-produccion');
 const { pool } = require('../src/config/db');
 const model = require('../src/modules/inventario/model');
 const round3 = (n) => Math.round(n * 1000) / 1000;

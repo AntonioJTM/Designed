@@ -16,6 +16,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Se niega a correr contra la base del servidor. Ver el módulo.
+require('./_no-en-produccion');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 const RAIZ = path.join(__dirname, '..', '..');
@@ -50,7 +52,7 @@ let f=0;const ck=(n,ok,d)=>{console.log((ok?'  ok  ':' FALLA')+' · '+n+(d!==und
   const cono=(await api('POST','/variantes',{producto_id:p,sku:'TMPT-CONO',presentacion:'Cono',tipo_presentacion:'cono',origen_variante_id:paq,piezas_por_origen:12,modo_precio:'calculado'})).data.id;
   const alm=(await api('POST','/almacenes',{nombre:'TMPT Bodega',es_punto_venta:true})).data.id;
   const caja=(await api('POST','/caja/cajas',{almacen_id:alm,nombre:'TMPT Caja'})).data.id;
-  const buf=fs.readFileSync(RAIZ+'/MARINO OSCURO 2-30.xlsx');
+  const buf=fs.readFileSync(path.join(RAIZ, 'muestras', 'MARINO OSCURO 2-30.xlsx'));
   const pr=await (await fetch(B+'/remesas/previa',{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/octet-stream'},body:buf})).json();
   await api('POST','/remesas',{variante_id:paq,almacen_id:alm,bultos:marcar(pr.data.bultos)});
 

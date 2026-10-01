@@ -525,3 +525,297 @@ table.grid.mini tfoot td { background: #f8fafc; border-top: 1px solid #e5e7eb; }
 @media (max-width: 700px) {
   .detalle { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------------------
+   Checkout de la tienda en línea
+   Dos columnas: las decisiones a la izquierda, el resumen fijo a la derecha,
+   para que el total siga a la vista mientras se elige. En pantalla angosta se
+   apilan y el resumen queda al final, que es donde se confirma.
+--------------------------------------------------------------------------- */
+.checkout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.5rem; align-items: start; }
+@media (max-width: 860px) { .checkout { grid-template-columns: 1fr; } }
+
+.checkout-pasos { display: flex; flex-direction: column; gap: 1rem; }
+.checkout .paso { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 1.25rem; }
+.checkout .paso h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+.checkout-resumen { position: sticky; top: 1rem; }
+.checkout .fila.descuento { color: #166534; }
+
+/* Las opciones son botones grandes: se elige con un toque, no con un radio
+   diminuto. El borde marca la elegida sin depender solo del color. */
+.checkout .opciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
+.checkout .opcion {
+  display: flex; flex-direction: column; gap: 0.2rem; text-align: left;
+  background: #fff; border: 2px solid #e7e5e4; border-radius: 10px;
+  padding: 0.85rem 1rem; cursor: pointer; font: inherit; color: inherit;
+}
+.checkout .opcion:hover { border-color: #d6d3d1; }
+.checkout .opcion.elegida { border-color: #7c2d12; background: #fff7ed; }
+.checkout .opcion .muted { font-size: 0.82rem; }
+
+.checkout .direcciones { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-start; }
+.checkout .direccion {
+  display: flex; gap: 0.6rem; align-items: flex-start; width: 100%;
+  border: 1px solid #e7e5e4; border-radius: 10px; padding: 0.75rem 0.9rem; cursor: pointer;
+}
+.checkout .direccion.elegida { border-color: #7c2d12; background: #fff7ed; }
+.checkout .direccion input { margin-top: 0.25rem; }
+
+.checkout .form-direccion { width: 100%; border-top: 1px dashed #e7e5e4; padding-top: 1rem; }
+.checkout .form-direccion .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }
+.checkout .form-direccion label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: #57534e; }
+.checkout .form-direccion label.ancho { grid-column: 1 / -1; }
+.checkout .form-direccion input {
+  padding: 0.5rem 0.65rem; border: 1px solid #d6d3d1; border-radius: 8px; font: inherit;
+}
+.checkout .form-direccion .acciones { display: flex; gap: 0.6rem; margin-top: 1rem; }
+
+.checkout .cupon { display: flex; gap: 0.6rem; }
+.checkout .cupon input {
+  flex: 1; padding: 0.55rem 0.7rem; border: 1px solid #d6d3d1; border-radius: 8px; font: inherit;
+}
+.checkout .enlace {
+  background: none; border: none; color: #7c2d12; text-decoration: underline;
+  cursor: pointer; font: inherit; padding: 0;
+}
+
+/* Los datos de depósito, en la confirmación. Etiqueta a la izquierda y el dato
+   a la derecha para que la CLABE se lea de un golpe y se pueda copiar. */
+.datos-pago { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.75rem 0; }
+.datos-pago > div { display: flex; justify-content: space-between; gap: 1rem; }
+.datos-pago span { color: #57534e; }
+.datos-pago b { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------------------
+   Configuración de la tienda (panel)
+--------------------------------------------------------------------------- */
+.config-grupos { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; align-items: start; }
+.config-grupos .card h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+.config-campo { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1rem; }
+.config-campo:last-child { margin-bottom: 0; }
+.config-desc { font-size: 0.82rem; color: #57534e; }
+.config-campo input {
+  padding: 0.5rem 0.65rem; border: 1px solid #d6d3d1; border-radius: 8px; font: inherit; width: 100%;
+}
+/* El signo de pesos va pegado al campo para que se lea "son pesos" sin tener
+   que decirlo en la etiqueta. */
+.config-moneda { display: flex; align-items: center; gap: 0.4rem; }
+.config-moneda > span { color: #57534e; font-weight: 600; }
+
+/* La dirección de entrega en el detalle del pedido. Va dentro de la tarjeta de
+   datos, separada por una línea: es información de otro tipo (a dónde va) y
+   quien surte la busca de un vistazo. */
+.envio-a { border-top: 1px solid #eee; margin-top: 1rem; padding-top: 1rem; }
+.envio-a h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
+.envio-a p { margin: 0; line-height: 1.5; }
+
+/* ---------------------------------------------------------------------------
+   Detalle del pedido: artículos y comprobante
+--------------------------------------------------------------------------- */
+/* Qué hilo es: calibre · material · línea. El color solo no lo identifica. */
+.ficha-hilo { font-size: 0.78rem; color: #7c2d12; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+
+/* Los bultos van en su propio renglón bajo la línea, no apretados en la celda:
+   son el código, el peso real y el lote de cada paquete físico, y es lo que se
+   consulta cuando el cliente reclama. */
+table.articulos tr.bultos-de > td { background: #fafaf9; padding: 0.5rem 0.75rem 0.9rem; }
+.bultos-titulo { font-size: 0.78rem; color: #57534e; margin-bottom: 0.4rem; }
+table.bultos { border-collapse: collapse; font-size: 0.8rem; }
+table.bultos th, table.bultos td {
+  text-align: left; padding: 0.25rem 1.25rem 0.25rem 0; white-space: nowrap;
+}
+table.bultos th { color: #78716c; font-weight: 600; border-bottom: 1px solid #e7e5e4; }
+
+.comprobante { border-top: 1px solid #eee; margin-top: 1.25rem; padding-top: 1rem; }
+.comprobante h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+/* Acotada: es una captura de celular y a tamaño completo empujaría el resto de
+   la pantalla fuera de la vista. */
+.comprobante-img {
+  max-width: min(420px, 100%); max-height: 520px; border: 1px solid #e7e5e4;
+  border-radius: 8px; display: block; margin: 0.5rem 0;
+}
+.comprobante-acciones { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+/* El input de archivo va oculto dentro de un label con pinta de botón: el
+   control nativo no se puede estilar y se ve fuera de lugar. */
+.comprobante label.btn { cursor: pointer; display: inline-block; }
+
+/* ---------------------------------------------------------------------------
+   Tablero del negocio
+   Pensado para MIRARSE: cada bloque abre con la cifra grande —lo único que
+   muchos van a leer— y debajo la gráfica y la tabla para quien quiera el
+   detalle.
+--------------------------------------------------------------------------- */
+.bloque { margin-bottom: 1.5rem; }
+.bloque-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.bloque-head h2 { margin: 0 0 0.2rem; font-size: 1.15rem; }
+.bloque-head p { margin: 0; font-size: 0.85rem; }
+.bloque .sub { margin: 1.5rem 0 0.6rem; font-size: 0.9rem; color: #57534e; font-weight: 600; }
+.bloque .filtro { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: #57534e; }
+.bloque .filtro input { padding: 0.35rem 0.5rem; border: 1px solid #d6d3d1; border-radius: 6px; font: inherit; width: 6rem; }
+
+/* Fila de cifras. La primera es la HERO: una sola por bloque. */
+.cifras { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 0.5rem; }
+.cifra { display: flex; flex-direction: column; gap: 0.15rem; }
+.cifra-label { font-size: 0.8rem; color: #57534e; }
+/* Tabular para que las cifras de una columna se alineen dígito a dígito. */
+.cifra-valor { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+/* La hero va grande y con cifras proporcionales: a este tamaño el tabular
+   deja huecos raros entre dígitos. */
+.cifra.hero .cifra-valor { font-size: 2.6rem; font-variant-numeric: proportional-nums; }
+.cifra-pie { font-size: 0.75rem; color: #78716c; }
+
+/* Píldora de estado: SIEMPRE icono + texto. El color acompaña, no informa —
+   los cuatro colores de semáforo no se distinguen bien entre sí y el
+   validador de la paleta lo confirmó. */
+.pastilla { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; border: 1px solid; }
+.pastilla-icono { font-weight: 700; }
+.pastilla.r-al-dia  { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.pastilla.r-aviso   { background: #fefce8; border-color: #fde68a; color: #854d0e; }
+.pastilla.r-serio   { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+.pastilla.r-critico { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+
+/* Cuando una cifra no es lo que parece, se dice aquí y no en letra chica. */
+.aviso-dato { background: #fffbeb; border: 1px solid #fde68a; color: #713f12; padding: 0.7rem 0.9rem; border-radius: 8px; font-size: 0.85rem; margin: 1rem 0 0; }
+
+/* Los números van a la derecha y tabulares: así se comparan de un vistazo. */
+table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.grid td.num { white-space: nowrap; }
+
+/* Segundo renglón de la etiqueta de una barra. */
+.viz-svg .viz-sub { font-size: 10px; fill: var(--viz-muted); }
+/* Texto dentro de un tramo de color: lo pinta el componente (blanco o tinta)
+   según qué tan oscuro sea el relleno. */
+.viz-svg .viz-en-tramo { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Campo de dinero con su unidad: "$ [____] por kilo". El símbolo y la unidad
+   pegados al campo dicen qué se teclea sin gastar una etiqueta en explicarlo. */
+.campo-moneda { display: flex; align-items: center; gap: 0.4rem; }
+.campo-moneda > span { color: #57534e; font-weight: 600; }
+.campo-moneda .unidad { font-weight: 400; font-size: 0.8rem; color: #78716c; white-space: nowrap; }
+.campo-moneda input { flex: 1; min-width: 5rem; }
+
+/* ---------------------------------------------------------------------------
+   Clientes: listado y expediente
+--------------------------------------------------------------------------- */
+/* Los filtros en UNA fila arriba de la tabla, como manda la guía: no en una
+   barra lateral ni desplegados por la pantalla. */
+.filtros-fila { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
+.filtros-fila .field { margin: 0; }
+.filtros-fila .field.check { flex-direction: row; align-items: center; gap: 0.4rem; }
+
+/* El nombre del cliente es el camino a su expediente: se ve que es un enlace
+   sin depender solo del color. */
+.enlace-fuerte { color: #7c2d12; font-weight: 600; text-decoration: none; }
+.enlace-fuerte:hover { text-decoration: underline; }
+
+/* Un cliente dado de baja sigue en la lista —su historial importa— pero se
+   distingue de un vistazo. */
+table.grid tr.fila-inactiva > td { opacity: 0.6; }
+
+/* La nota del cliente: lo que conviene recordar de él. Se separa de los datos
+   porque es texto libre, no un campo más. */
+.nota-cliente {
+  background: #fffbeb; border-left: 3px solid #fde68a; color: #713f12;
+  padding: 0.6rem 0.9rem; border-radius: 0 8px 8px 0; margin: 1rem 0 0; font-size: 0.9rem;
+}
+
+/* El asterisco de obligatorio. Va con el color de alerta y con el símbolo: el
+   color solo no lo comunicaría. */
+.field .req { color: #b91c1c; font-weight: 700; }
+
+/* El cliente elegido en el punto de venta: quién es y cuánto se le puede fiar,
+   a la vista antes de cobrar. */
+.cliente-elegido { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+/* Los resultados de la búsqueda: botones de fila completa, para tocar rápido. */
+.lista-clientes { list-style: none; margin: 0.5rem 0 0; padding: 0; border: 1px solid #e7e5e4; border-radius: 8px; overflow: hidden; }
+.lista-clientes li + li { border-top: 1px solid #f5f5f4; }
+.lista-clientes button {
+  display: block; width: 100%; text-align: left; background: #fff; border: none;
+  padding: 0.6rem 0.8rem; cursor: pointer; font: inherit;
+}
+.lista-clientes button:hover { background: #fff7ed; }
+.lista-clientes .muted { display: block; font-size: 0.78rem; }
+/* La captura del crédito, separada del cobro normal. */
+.bloque-fiar { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 0.8rem; margin-bottom: 0.75rem; }
+
+/* La captura del apartado en el punto de venta. Verde para distinguirla del
+   bloque de fiar (naranja): son dos operaciones opuestas y confundirlas sale
+   caro. */
+.bloque-apartar { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.8rem; margin-bottom: 0.75rem; }
+
+/* Barra de avance del apartado. El relleno y el número dicen lo mismo, así que
+   se entiende sin depender del color. Un solo tono (el de la paleta), porque
+   mide magnitud y no identidad. */
+.avance { width: 70px; height: 6px; background: var(--viz-grid); border-radius: 999px; overflow: hidden; margin-bottom: 0.2rem; }
+.avance-relleno { height: 100%; background: var(--viz-series-1); border-radius: 999px; }
+
+/* El bloque de apartados listos para entregar. Va en verde y arriba de todo:
+   es la acción más urgente —el cliente ya pagó y su mercancía sigue ocupando
+   bodega— y mezclarla con la cobranza la escondía. */
+.card.listos { border-color: #bbf7d0; background: #f0fdf4; }
+.card.listos h2 { margin: 0 0 0.2rem; font-size: 1.05rem; color: #166534; }
+
+/* Alta rápida del cliente desde la caja. Al cajero con gente esperando solo se
+   le piden nombre y teléfono; el expediente completo se llena después. */
+.alta-rapida { background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 8px; padding: 0.8rem; margin-top: 0.5rem; }
+.alta-rapida .field { margin-bottom: 0.6rem; }
+.alta-rapida .acciones { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+
+/* Un aviso de segundo nivel en la campana: el detalle bajo su encabezado (los
+   clientes concretos bajo "3 clientes deben $12,000"). Sangrado y más chico,
+   para que se lea como detalle y no como un pendiente aparte. */
+.aviso-item.sub { padding-left: 1.5rem; font-size: 0.82rem; }
+
+/* ---------------------------------------------------------------------------
+   El asistente
+--------------------------------------------------------------------------- */
+/* Preguntas de ejemplo: botones grandes, porque con un cuadro vacío nadie sabe
+   qué preguntar. */
+.ejemplos { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+.ejemplo {
+  background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+  padding: 0.45rem 0.8rem; border-radius: 999px; font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.ejemplo:hover { background: #ffedd5; }
+.lista-capacidades { margin: 0.75rem 0; padding-left: 1.2rem; font-size: 0.85rem; color: #57534e; }
+.lista-capacidades li { margin-bottom: 0.3rem; }
+.lista-capacidades b { font-weight: 400; }
+
+/* El hilo de la conversación. Alto acotado y con scroll propio: así el cuadro
+   de preguntar no se va de la pantalla al crecer la charla. */
+.chat { max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
+.turno { display: flex; flex-direction: column; align-items: flex-start; }
+.turno.mio { align-items: flex-end; }
+.burbuja {
+  max-width: min(46rem, 85%); padding: 0.7rem 1rem; border-radius: 12px;
+  background: #f5f5f4; white-space: pre-wrap; line-height: 1.55;
+}
+.turno.mio .burbuja { background: #7c2d12; color: #fff; }
+.burbuja.err { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+
+/* De dónde salió la cifra. Discreto pero siempre presente: sin esto no hay
+   forma de saber si el dato es real o inventado. */
+.de-donde { font-size: 0.72rem; color: #78716c; margin-top: 0.3rem; padding-left: 0.2rem; }
+.de-donde .fuente {
+  display: inline-block; background: #f5f5f4; border-radius: 4px;
+  padding: 0.05rem 0.35rem; margin-left: 0.25rem;
+}
+
+/* Los tres puntos de "pensando". */
+.burbuja.pensando { display: flex; gap: 0.3rem; align-items: center; padding: 0.9rem 1rem; }
+/* El aviso de que se está tardando: aparece a los 6 s junto a los puntitos.
+   La capa gratuita de Gemini tarda ~30 s en una respuesta con datos. */
+.burbuja.pensando .tardanza { margin-left: 0.5rem; font-size: 0.8rem; color: #78716c; }
+.punto { width: 6px; height: 6px; border-radius: 50%; background: #a8a29e; animation: latir 1.2s infinite; }
+.punto:nth-child(2) { animation-delay: 0.2s; }
+.punto:nth-child(3) { animation-delay: 0.4s; }
+@keyframes latir { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+/* Respeta a quien pidió menos movimiento en su sistema. */
+@media (prefers-reduced-motion: reduce) { .punto { animation: none; opacity: 0.6; } }
+
+.preguntar { display: flex; gap: 0.75rem; align-items: flex-end; margin-top: 1rem; }
+.preguntar textarea {
+  flex: 1; padding: 0.6rem 0.8rem; border: 1px solid #d6d3d1; border-radius: 8px;
+  font: inherit; resize: vertical;
+}

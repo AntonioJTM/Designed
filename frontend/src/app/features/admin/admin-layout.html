@@ -2,6 +2,8 @@
   <aside class="side">
     <div class="brand">🧵 Tienda de hilos</div>
     <nav>
+      <!-- Arriba de todo: es la puerta más rápida a cualquier dato. -->
+      <a routerLink="/admin/asistente" routerLinkActive="on">Pregúntame</a>
       <a routerLink="/admin/categorias" routerLinkActive="on">Materiales</a>
       <a routerLink="/admin/productos" routerLinkActive="on">Productos</a>
       <a routerLink="/admin/inventario" routerLinkActive="on">Inventario</a>
@@ -10,11 +12,19 @@
       <a routerLink="/admin/kardex" routerLinkActive="on">Kardex</a>
       <a routerLink="/admin/pos" routerLinkActive="on">Punto de venta</a>
       <a routerLink="/admin/pedidos" routerLinkActive="on">Pedidos</a>
+      <a routerLink="/admin/clientes" routerLinkActive="on">Clientes</a>
+      <a routerLink="/admin/apartados" routerLinkActive="on">Apartados</a>
       <a routerLink="/admin/reportes" routerLinkActive="on">Reportes</a>
       @if (esAdmin()) {
+        <!-- Muestra costos y márgenes: solo administradores. -->
+        <a routerLink="/admin/tablero" routerLinkActive="on">Cómo va el negocio</a>
+      }
+      @if (esAdmin()) {
         <a routerLink="/admin/almacenes" routerLinkActive="on">Almacenes</a>
+        <a routerLink="/admin/tipos-cliente" routerLinkActive="on">Listas de precio</a>
         <a routerLink="/admin/usuarios" routerLinkActive="on">Personal</a>
         <a routerLink="/admin/nomina" routerLinkActive="on">Nómina</a>
+        <a routerLink="/admin/configuracion" routerLinkActive="on">Configuración</a>
       }
     </nav>
     <div class="user">
@@ -77,6 +87,63 @@
                 {{ p.alertas_stock }}
                 {{ p.alertas_stock === 1 ? 'presentación' : 'presentaciones' }} bajo su mínimo
                 <span class="cuando">Revisar existencias</span>
+              </button>
+            }
+
+            @if (p.cobranza && p.cobranza.num_clientes > 0) {
+              <h4>Por cobrar</h4>
+              <button type="button" class="aviso-item" (click)="irA('/admin/tablero')">
+                <b>{{ p.cobranza.num_clientes }}</b>
+                {{ p.cobranza.num_clientes === 1 ? 'cliente debe' : 'clientes deben' }}
+                {{ dinero(p.cobranza.monto) }}
+                <span class="cuando">
+                  sin abonar en {{ p.cobranza.dias }} días o más
+                </span>
+              </button>
+              @for (c of p.cobranza.clientes; track c.cliente_id) {
+                <button type="button" class="aviso-item sub"
+                        (click)="irA('/admin/clientes/' + c.cliente_id)">
+                  <b>{{ c.nombre_comercial || c.nombre }}</b> debe {{ dinero(c.saldo) }}
+                  <span class="cuando">
+                    {{ c.dias_sin_abonar }} días sin abonar{{ c.telefono ? ' · ' + c.telefono : '' }}
+                  </span>
+                </button>
+              }
+            }
+
+            @if (p.nuevos_sin_credito && p.nuevos_sin_credito.num_clientes > 0) {
+              <!--
+                Un cliente nuevo nace sin crédito y se le cobra completo, que es
+                lo correcto: todavía no se sabe si paga. El aviso existe para
+                que alguien DECIDA — o le autoriza un límite, o lo deja así a
+                propósito. Sin el aviso la decisión no se toma nunca y el cajero
+                se topa con un "no tiene crédito" sin saber a quién pedírselo.
+              -->
+              <h4>Clientes nuevos</h4>
+              @for (c of p.nuevos_sin_credito.clientes; track c.cliente_id) {
+                <button type="button" class="aviso-item"
+                        (click)="irA('/admin/clientes/' + c.cliente_id)">
+                  <b>{{ c.nombre_comercial || c.nombre }}</b> sin crédito autorizado
+                  <span class="cuando">
+                    capturado hace {{ c.dias }} {{ c.dias === 1 ? 'día' : 'días' }}
+                    @if (+c.compras > 0) {
+                      · ya te compró {{ c.compras }}
+                      {{ +c.compras === 1 ? 'vez' : 'veces' }}
+                    }
+                  </span>
+                </button>
+              }
+            }
+
+            @if (p.enfriados && p.enfriados.num_clientes > 0) {
+              <h4>Dejaron de venir</h4>
+              <button type="button" class="aviso-item" (click)="irA('/admin/tablero')">
+                <b>{{ p.enfriados.num_clientes }}</b>
+                {{ p.enfriados.num_clientes === 1 ? 'cliente' : 'clientes' }}
+                sin aparecer
+                <span class="cuando">
+                  {{ p.enfriados.dias }} días o más · vale la pena llamarles
+                </span>
               </button>
             }
           } @else {

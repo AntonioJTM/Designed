@@ -19,7 +19,7 @@ const path = require('node:path');
 const MODULOS = [
   {
     titulo: 'MÓDULO 1 · SEGURIDAD Y ADMINISTRACIÓN',
-    tablas: ['roles', 'permisos', 'rol_permisos', 'usuarios', 'auditoria'],
+    tablas: ['roles', 'permisos', 'rol_permisos', 'usuarios', 'auditoria', 'configuracion'],
   },
   {
     titulo: 'MÓDULO 2 · CATÁLOGO DE PRODUCTOS (HILOS)',
@@ -43,8 +43,7 @@ const MODULOS = [
     titulo: 'MÓDULO 5 · CLIENTES Y TIENDA EN LÍNEA',
     tablas: [
       'tipos_cliente', 'clientes', 'direcciones', 'carritos',
-      'carrito_items', 'listas_deseos', 'resenas', 'cupones',
-    ],
+      'carrito_items', 'listas_deseos', 'resenas', 'cupones', 'credito_movimientos'],
   },
   {
     titulo: 'MÓDULO 6 · CAJA Y PUNTO DE VENTA',

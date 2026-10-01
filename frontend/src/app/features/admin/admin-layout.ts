@@ -47,6 +47,15 @@ export class AdminLayout {
   }
 
   /** Al tocar un pendiente se va a su pantalla y se cierra el panel. */
+  /** Dinero para los avisos de la campana. */
+  dinero(v: unknown): string {
+    return Number(v ?? 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+      maximumFractionDigits: 0,
+    });
+  }
+
   irA(ruta: string): void {
     this.abierto.set(false);
     this.router.navigateByUrl(ruta);

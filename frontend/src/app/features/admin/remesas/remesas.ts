@@ -42,6 +42,12 @@ export class Remesas {
   varianteSel: number | '' = '';
   almacenSel: number | '' = '';
   notas = '';
+  /**
+   * A cómo salió el kilo en esta compra. Vacío = no se captura y el costo del
+   * hilo se queda como estaba: es opcional a propósito, para no frenar una
+   * entrada de mercancía por no tener la factura a mano.
+   */
+  costoKg: number | null = null;
   archivo: File | null = null;
 
   /** Los avisos que impiden cargar (códigos ya registrados). */
@@ -191,17 +197,22 @@ export class Remesas {
         almacen_id: Number(this.almacenSel),
         archivo: p.archivo,
         notas: this.notas.trim() || undefined,
+        costo_kg: this.costoKg != null && this.costoKg > 0 ? Number(this.costoKg) : null,
         bultos: p.bultos,
       })
       .subscribe({
         next: (r) => {
           this.ultima.set(r);
           this.mensaje.set(
-            `Remesa ${r.folio} recibida: ${r.num_bultos} bultos, ${r.kg_total} kg.`
+            `Remesa ${r.folio} recibida: ${r.num_bultos} bultos, ${r.kg_total} kg.` +
+              (r.costo_promedio != null
+                ? ` El costo del hilo quedó en $${Number(r.costo_promedio).toFixed(2)} por kilo.`
+                : '')
           );
           this.previa.set(null);
           this.archivo = null;
           this.notas = '';
+          this.costoKg = null;
           this.enviando.set(false);
           this.cargarHistorial();
         },
