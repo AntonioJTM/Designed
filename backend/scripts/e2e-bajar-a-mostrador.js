@@ -15,6 +15,8 @@
 const path = require('node:path');
 const fs = require('node:fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Se niega a correr contra la base del servidor. Ver el módulo.
+require('./_no-en-produccion');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 

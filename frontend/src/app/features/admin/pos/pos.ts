@@ -1,5 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
 import { CodigoResuelto, InventarioService } from '../../../core/services/inventario.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -7,11 +8,14 @@ import { Almacen } from '../../../core/models/inventario.models';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { TipoCliente } from '../../../core/models/catalogo.models';
 import { Caja, ItemCarrito, MetodoPago, Pedido, SesionCaja } from '../../../core/models/ventas.models';
+import { ClientesService } from '../../../core/services/clientes.service';
+import { ClienteParaVenta } from '../../../core/models/clientes.models';
+import { TiendaService } from '../../../core/services/tienda.service';
 import { ApiError } from '../../../core/models/auth.models';
 
 @Component({
   selector: 'app-pos',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './pos.html',
 })
 export class Pos {
@@ -19,10 +23,46 @@ export class Pos {
   private readonly inv = inject(InventarioService);
   private readonly auth = inject(AuthService);
   private readonly catalogo = inject(CatalogoService);
+  private readonly clientesSvc = inject(ClientesService);
+  private readonly tienda = inject(TiendaService);
 
   /** Listas de precio. Se cobra la elegida; por omisión, la del público. */
   readonly tiposCliente = signal<TipoCliente[]>([]);
   tipoClienteSel: number | '' = '';
+
+  // ---- El cliente de la venta ----
+  //
+  // Es OPCIONAL: la mayoría de las ventas de mostrador son a quien pasa, y
+  // exigir un nombre frenaría la caja. Pero si se identifica, la venta queda en
+  // su historial —qué colores se lleva, cuánto compra— y se le puede fiar.
+  readonly clienteSel = signal<ClienteParaVenta | null>(null);
+  readonly resultadosCliente = signal<ClienteParaVenta[]>([]);
+  readonly buscandoCliente = signal(false);
+  qCliente = '';
+  /**
+   * Alta rápida del cliente DESDE LA CAJA. Solo nombre y teléfono: al cajero
+   * con gente esperando no se le puede pedir RFC ni dirección, y el expediente
+   * completo se llena después en Admin → Clientes.
+   *
+   * Nace SIN crédito (límite en cero), así que el cobro es completo: todavía no
+   * se sabe si paga. El administrador recibe el aviso en la campana para
+   * decidir si le autoriza.
+   */
+  readonly creandoCliente = signal(false);
+  readonly guardandoCliente = signal(false);
+  nuevoCliente = { nombre: '', telefono: '', nombre_comercial: '' };
+  /** Cuánto de esta venta se va a crédito. */
+  aCredito: number | null = null;
+  readonly fiando = signal(false);
+
+  /**
+   * APARTAR: el cliente deja un anticipo y la mercancía se le guarda sin
+   * descontarse del inventario. Es lo contrario de fiar —fiar es entregar sin
+   * cobrar, apartar es cobrar sin entregar— así que los dos no pueden estar
+   * activos a la vez.
+   */
+  readonly apartando = signal(false);
+  anticipo: number | null = null;
 
   /** Dar de alta o editar cajas es configuración: solo administradores. */
   readonly esAdmin = computed(() => this.auth.sesion()?.rol === 'administrador');
@@ -63,11 +103,59 @@ export class Pos {
     this.carrito().reduce((s, i) => s + i.precio * i.cantidad, 0)
   );
 
+  /**
+   * El TOTAL de verdad, con IVA, calculado por el servidor.
+   *
+   * Hace falta para poder fiar: sin él, el cajero tendría que adivinar cuánto
+   * es el total con impuestos y "fiar todo" dejaría siempre un pedazo sin
+   * cubrir. Se pide con `POST /pedidos/cotizacion`, que corre la MISMA función
+   * que la venta, así que el número es el que se va a cobrar.
+   */
+  readonly totalReal = signal<number | null>(null);
+  readonly cotizando = signal(false);
+
+  /** El total que se usa para todo: el del servidor, o el estimado mientras llega. */
+  readonly total = computed(() => this.totalReal() ?? this.subtotalEstimado());
+
   // Cobro
   metodoSel: number | '' = '';
   montoPago: number | null = null;
 
   constructor() {
+    // Cada vez que cambia el carrito (o la lista de precios) se pide el total
+    // real. Va en un `effect` y no en cada punto donde se toca el carrito:
+    // son cinco sitios distintos y era cuestión de tiempo que alguno se
+    // olvidara.
+    effect(() => {
+      const items = this.carrito();
+      const tipo = this.tipoClienteSel;
+      const s = this.sesion();
+      if (items.length === 0 || !s) {
+        this.totalReal.set(null);
+        return;
+      }
+      this.cotizando.set(true);
+      this.tienda
+        .cotizar({
+          canal: 'punto_venta',
+          sesion_caja_id: s.id,
+          tipo_cliente_id: tipo ? Number(tipo) : undefined,
+          items: items.map((i) => ({ variante_id: i.variante_id, cantidad: i.cantidad })),
+        })
+        .subscribe({
+          next: (c) => {
+            this.totalReal.set(c.total);
+            this.cotizando.set(false);
+          },
+          // Si la cotización falla se sigue con el estimado: no vale la pena
+          // frenar la caja por no poder mostrar el IVA.
+          error: () => {
+            this.totalReal.set(null);
+            this.cotizando.set(false);
+          },
+        });
+    });
+
     // La sesión puede venir vacía al recargar directo en /admin/pos.
     if (!this.auth.sesion()) {
       this.auth.cargarPerfil().subscribe({ next: () => {}, error: () => {} });
@@ -369,10 +457,218 @@ export class Pos {
     this.carrito.update((arr) => arr.filter((i) => i.variante_id !== item.variante_id));
   }
 
+  /** `Number()` no existe en las plantillas y los DECIMAL llegan como string. */
+  num(v: unknown): number {
+    return Number(v ?? 0);
+  }
+
+  dinero(v: unknown): string {
+    return this.num(v).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+      maximumFractionDigits: 2,
+    });
+  }
+
+  // ---------------------------------------------------------------- cliente
+
+  /**
+   * Busca al cliente por nombre, apodo, teléfono o código. Se pide al servidor
+   * a partir de dos letras: con una devolvería media tienda.
+   */
+  buscarCliente(): void {
+    const q = this.qCliente.trim();
+    if (q.length < 2) {
+      this.resultadosCliente.set([]);
+      return;
+    }
+    this.buscandoCliente.set(true);
+    this.clientesSvc.buscar(q).subscribe({
+      next: (r) => {
+        this.resultadosCliente.set(r);
+        this.buscandoCliente.set(false);
+      },
+      error: () => {
+        this.resultadosCliente.set([]);
+        this.buscandoCliente.set(false);
+      },
+    });
+  }
+
+  /**
+   * Al elegirlo se aplica SU lista de precios, si tiene una. Así nadie le cobra
+   * precio público a un cliente de mayoreo por descuido, que es justo el error
+   * que un selector aparte deja pasar.
+   */
+  elegirCliente(c: ClienteParaVenta): void {
+    this.clienteSel.set(c);
+    this.resultadosCliente.set([]);
+    this.qCliente = '';
+    if (c.tipo_cliente_id) this.tipoClienteSel = c.tipo_cliente_id;
+    this.error.set(null);
+  }
+
+  /** Abre el alta rápida, con lo que ya se hubiera teclesado en el buscador. */
+  abrirAltaCliente(): void {
+    // Lo que escribió buscando probablemente es el nombre: se aprovecha en vez
+    // de hacerle teclearlo otra vez.
+    const q = this.qCliente.trim();
+    const esTelefono = /^[\d\s()+-]{7,}$/.test(q);
+    this.nuevoCliente = {
+      nombre: esTelefono ? '' : q,
+      telefono: esTelefono ? q : '',
+      nombre_comercial: '',
+    };
+    this.resultadosCliente.set([]);
+    this.error.set(null);
+    this.creandoCliente.set(true);
+  }
+
+  cerrarAltaCliente(): void {
+    this.creandoCliente.set(false);
+  }
+
+  guardarNuevoCliente(): void {
+    const nombre = this.nuevoCliente.nombre.trim();
+    if (!nombre) {
+      this.error.set('Ponle al menos un nombre al cliente.');
+      return;
+    }
+    this.guardandoCliente.set(true);
+    this.error.set(null);
+    this.clientesSvc
+      .crear({
+        nombre,
+        telefono: this.nuevoCliente.telefono.trim() || null,
+        nombre_comercial: this.nuevoCliente.nombre_comercial.trim() || null,
+      })
+      .subscribe({
+        next: (c) => {
+          this.guardandoCliente.set(false);
+          this.creandoCliente.set(false);
+          this.qCliente = '';
+          // Queda elegido para la venta que se está cobrando. Sin crédito, así
+          // que el bloque de fiar no va a aparecer: es lo correcto para alguien
+          // de quien todavía no se sabe si paga.
+          this.clienteSel.set({
+            id: c.id,
+            codigo: c.codigo ?? null,
+            nombre: c.nombre,
+            nombre_comercial: c.nombre_comercial ?? null,
+            telefono: c.telefono ?? null,
+            tipo_cliente_id: c.tipo_cliente_id ?? null,
+            tipo_cliente: c.tipo_cliente ?? null,
+            limite_credito: 0,
+            saldo: 0,
+            credito_disponible: 0,
+          });
+          this.mensaje.set(
+            `${c.nombre_comercial || c.nombre} quedó registrado. Todavía sin crédito: ` +
+              'el cobro es completo hasta que un administrador le autorice un límite.'
+          );
+        },
+        error: (e) => {
+          this.error.set(this.msg(e));
+          this.guardandoCliente.set(false);
+        },
+      });
+  }
+
+  quitarCliente(): void {
+    this.clienteSel.set(null);
+    this.aCredito = null;
+    this.fiando.set(false);
+  }
+
+  /** Cuánto se le puede fiar ahora mismo. */
+  readonly creditoDisponible = computed(() => Number(this.clienteSel()?.credito_disponible ?? 0));
+
+  /** Abre la captura del crédito, ya con el total propuesto. */
+  abrirCredito(): void {
+    if (!this.clienteSel()) return;
+    this.apartando.set(false);
+    this.anticipo = null;
+    this.aCredito = Math.min(this.total(), this.creditoDisponible());
+    this.fiando.set(true);
+  }
+
+  /**
+   * Abre la captura del apartado. Sin propuesta de anticipo: lo que deje es
+   * decisión del cliente, y poner una cifra por omisión invitaría a cobrarle
+   * eso sin preguntarle.
+   */
+  abrirApartado(): void {
+    if (!this.clienteSel()) return;
+    this.cerrarCredito();
+    this.anticipo = null;
+    this.apartando.set(true);
+  }
+
+  cerrarApartado(): void {
+    this.apartando.set(false);
+    this.anticipo = null;
+  }
+
+  /** Lo que le falta por pagar del apartado, para mostrarlo al capturar. */
+  readonly pendienteApartado = computed(() => {
+    const a = Number(this.anticipo ?? 0);
+    return Math.max(0, Math.round((this.total() - a) * 100) / 100);
+  });
+
+  cerrarCredito(): void {
+    this.fiando.set(false);
+    this.aCredito = null;
+  }
+
+  /** Lo que el cliente tiene que poner hoy: el total menos lo que se le fía. */
+  readonly aPagarHoy = computed(() => {
+    const fiado = this.fiando() ? Number(this.aCredito ?? 0) : 0;
+    return Math.max(0, Math.round((this.total() - fiado) * 100) / 100);
+  });
+
   cobrar(): void {
     const s = this.sesion();
-    if (!s || this.carrito().length === 0 || !this.metodoSel) {
-      this.error.set('Agrega productos y elige método de pago.');
+    if (!s || this.carrito().length === 0) {
+      this.error.set('Agrega productos para poder cobrar.');
+      return;
+    }
+    // --- Apartado: se guarda la mercancía y solo entra el anticipo ---
+    if (this.apartando()) {
+      if (!this.clienteSel()) {
+        this.error.set('Para apartar hay que decir a quién se le guarda: busca al cliente arriba.');
+        return;
+      }
+      const anticipo = Number(this.anticipo ?? 0);
+      if (anticipo > this.total() + 0.001) {
+        this.error.set(
+          `El anticipo (${this.dinero(anticipo)}) es mayor que el apartado (${this.dinero(this.total())}).`
+        );
+        return;
+      }
+      if (anticipo > 0 && !this.metodoSel) {
+        this.error.set('Elige con qué está dejando el anticipo.');
+        return;
+      }
+      this.error.set(null);
+      this.apartar(s, anticipo);
+      return;
+    }
+
+    const fiado = this.fiando() ? Number(this.aCredito ?? 0) : 0;
+    if (fiado > 0 && !this.clienteSel()) {
+      this.error.set('Para fiar hay que decir a quién: busca al cliente arriba.');
+      return;
+    }
+    if (fiado > this.creditoDisponible() + 0.001) {
+      this.error.set(
+        `Solo le quedan $${this.creditoDisponible().toFixed(2)} de crédito.`
+      );
+      return;
+    }
+    // Con la venta completa a crédito no hace falta método de pago: no entra
+    // dinero. Si paga algo hoy, sí.
+    if (this.aPagarHoy() > 0 && !this.metodoSel) {
+      this.error.set('Elige con qué está pagando lo de hoy.');
       return;
     }
     this.error.set(null);
@@ -383,13 +679,20 @@ export class Pos {
         canal: 'punto_venta',
         sesion_caja_id: s.id,
         tipo_cliente_id: this.tipoClienteSel ? Number(this.tipoClienteSel) : undefined,
+        // Si se identificó al cliente, la venta queda en su historial.
+        cliente_id: this.clienteSel()?.id,
+        a_credito: fiado > 0 ? fiado : undefined,
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
           cantidad: i.cantidad,
           // Va el rastro de los bultos escaneados, si hubo.
           bultos: i.bultos?.length ? i.bultos : undefined,
         })),
-        pagos: [{ metodo_pago_id: Number(this.metodoSel), monto }],
+        // Sin nada que pagar hoy (todo a crédito) no se manda pago alguno.
+        pagos:
+          this.aPagarHoy() > 0
+            ? [{ metodo_pago_id: Number(this.metodoSel), monto }]
+            : undefined,
       })
       .subscribe({
         next: (pedido) => {
@@ -398,6 +701,8 @@ export class Pos {
           this.carrito.set([]);
           this.montoPago = null;
           this.qVar = '';
+          this.cerrarApartado();
+          this.quitarCliente();
           this.resultados.set([]);
           // Refresca la sesión para ver el efectivo esperado actualizado.
           this.ventas.obtenerSesion(s.id).subscribe({ next: (fresh) => this.sesion.set(fresh) });
@@ -428,6 +733,48 @@ export class Pos {
   /** Nombre del tipo elegido, para rotular el carrito. */
   nombreTipoCliente(): string {
     return this.tiposCliente().find((t) => t.id === Number(this.tipoClienteSel))?.nombre ?? '';
+  }
+
+  /**
+   * Crea el apartado. Va aparte de `cobrar()` porque no es un cobro: la
+   * mercancía no sale del inventario, el anticipo puede ser cero, y el ticket
+   * dice otra cosa.
+   *
+   * Tampoco manda los bultos escaneados: el bulto se consume cuando la
+   * mercancía SALE, y aquí todavía no sale. Marcarlo ahora lo dejaría como
+   * vendido estando en la bodega.
+   */
+  private apartar(s: SesionCaja, anticipo: number): void {
+    this.ventas
+      .crearPedido({
+        canal: 'punto_venta',
+        sesion_caja_id: s.id,
+        cliente_id: this.clienteSel()!.id,
+        tipo_cliente_id: this.tipoClienteSel ? Number(this.tipoClienteSel) : undefined,
+        apartado: true,
+        items: this.carrito().map((i) => ({
+          variante_id: i.variante_id,
+          cantidad: i.cantidad,
+        })),
+        // Sin anticipo no se manda pago: hay clientes que apartan y vuelven a
+        // pagar, y un pago de cero no significa nada.
+        pagos:
+          anticipo > 0
+            ? [{ metodo_pago_id: Number(this.metodoSel), monto: anticipo }]
+            : undefined,
+      })
+      .subscribe({
+        next: (pedido) => {
+          // El "cambio" de un apartado es cero: el anticipo se queda tal cual.
+          this.ticket.set({ pedido, cambio: 0 });
+          this.carrito.set([]);
+          this.montoPago = null;
+          this.qVar = '';
+          this.cerrarApartado();
+          this.quitarCliente();
+        },
+        error: (e) => this.error.set(this.msg(e)),
+      });
   }
 
   private msg(e: unknown): string {

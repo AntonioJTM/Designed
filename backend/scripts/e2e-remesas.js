@@ -17,11 +17,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// Se niega a correr contra la base del servidor. Ver el módulo.
+require('./_no-en-produccion');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 
 const BASE = process.env.BASE ?? 'http://localhost:3210/api/v1';
-const ARCHIVO = path.join(__dirname, '..', '..', 'MARINO OSCURO 2-30.xlsx');
+const ARCHIVO = path.join(__dirname, '..', '..', 'muestras', 'MARINO OSCURO 2-30.xlsx');
 
 const token = jwt.sign(
   { sub: 1, tipo: 'usuario', rol_id: 1, rol: 'administrador' },

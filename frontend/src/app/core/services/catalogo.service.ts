@@ -135,9 +135,23 @@ export class CatalogoService {
       .get<ApiResponse<TipoCliente[]>>(`${environment.apiUrl}/tipos-cliente`)
       .pipe(map(data));
   }
-  crearTipoCliente(body: { nombre: string; orden?: number }): Observable<TipoCliente> {
+  crearTipoCliente(body: { nombre: string; orden?: number; activo?: boolean }): Observable<TipoCliente> {
     return this.http
       .post<ApiResponse<TipoCliente>>(`${environment.apiUrl}/tipos-cliente`, body)
+      .pipe(map(data));
+  }
+  actualizarTipoCliente(
+    id: number,
+    body: { nombre?: string; orden?: number; activo?: boolean }
+  ): Observable<TipoCliente> {
+    return this.http
+      .put<ApiResponse<TipoCliente>>(`${environment.apiUrl}/tipos-cliente/${id}`, body)
+      .pipe(map(data));
+  }
+  /** Solo si no tiene precios capturados ni pedidos vendidos con él. */
+  eliminarTipoCliente(id: number): Observable<unknown> {
+    return this.http
+      .delete<ApiResponse<unknown>>(`${environment.apiUrl}/tipos-cliente/${id}`)
       .pipe(map(data));
   }
   /** Precio de una presentación para un tipo de cliente. `null` lo borra. */

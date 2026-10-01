@@ -3,6 +3,7 @@
 const { Router } = require('express');
 const usuariosRoutes = require('./modules/usuarios/routes');
 const clientesRoutes = require('./modules/clientes/routes');
+const direccionesRoutes = require('./modules/direcciones/routes');
 const tiposClienteRoutes = require('./modules/tipos-cliente/routes');
 const categoriasRoutes = require('./modules/categorias/routes');
 const productosRoutes = require('./modules/productos/routes');
@@ -16,7 +17,10 @@ const cajaRoutes = require('./modules/caja/routes');
 const pedidosRoutes = require('./modules/pedidos/routes');
 const nominaRoutes = require('./modules/nomina/routes');
 const reportesRoutes = require('./modules/reportes/routes');
+const analisisRoutes = require('./modules/analisis/routes');
+const asistenteRoutes = require('./modules/asistente/routes');
 const notificacionesRoutes = require('./modules/notificaciones/routes');
+const configuracionRoutes = require('./modules/configuracion/routes');
 
 // Enrutador raíz de la API v1. Aquí se montan los módulos por dominio.
 const router = Router();
@@ -28,7 +32,11 @@ router.get('/', (req, res) => {
 // Seguridad / cuentas
 router.use('/usuarios', usuariosRoutes);
 router.use('/clientes', clientesRoutes);
+router.use('/direcciones', direccionesRoutes);
 router.use('/tipos-cliente', tiposClienteRoutes);
+
+// Configuración de la tienda (tarifa de envío, datos para depositar).
+router.use('/configuracion', configuracionRoutes);
 
 // Catálogo
 router.use('/categorias', categoriasRoutes);
@@ -53,5 +61,11 @@ router.use('/nomina', nominaRoutes);
 
 // Reportes
 router.use('/reportes', reportesRoutes);
+// El tablero del negocio: cobranza, clientes que no vuelven, hilo parado y margen.
+router.use('/analisis', analisisRoutes);
+
+// El asistente: se le pregunta en palabras normales y contesta con los datos de
+// la tienda. La IA elige entre consultas ya programadas; nunca escribe SQL.
+router.use('/asistente', asistenteRoutes);
 
 module.exports = router;

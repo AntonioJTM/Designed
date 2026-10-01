@@ -41,9 +41,10 @@ async function crearRemesa(datos, usuarioId) {
     const folio = `REM-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
     const [r] = await conn.query(
       `INSERT INTO remesas
-         (folio, variante_id, almacen_id, usuario_id, num_bultos, kg_total, lotes, archivo, notas)
+         (folio, variante_id, almacen_id, usuario_id, num_bultos, kg_total, costo_kg,
+          lotes, archivo, notas)
        VALUES (:folio, :variante_id, :almacen_id, :usuario_id, :num_bultos, :kg_total,
-               :lotes, :archivo, :notas)`,
+               :costo_kg, :lotes, :archivo, :notas)`,
       {
         folio,
         variante_id,
@@ -51,6 +52,10 @@ async function crearRemesa(datos, usuarioId) {
         usuario_id: usuarioId ?? null,
         num_bultos: bultos.length,
         kg_total: kgTotal,
+        // A cómo salió el kilo en esta compra. Opcional: si no se captura, el
+        // costo del hilo se queda como estaba y el margen de lo que se venda
+        // de aquí en adelante lo dirá.
+        costo_kg: datos.costo_kg ?? null,
         lotes: lotes.join(', ') || null,
         archivo: datos.archivo ?? null,
         notas: datos.notas ?? null,
@@ -98,6 +103,44 @@ async function crearRemesa(datos, usuarioId) {
       }
     );
 
+    // El COSTO del hilo, por promedio ponderado móvil. Se mezcla lo que ya
+    // había con lo que entra:
+    //
+    //   costo_nuevo = (kg_previos × costo_previo + kg_remesa × costo_remesa)
+    //                 ÷ (kg_previos + kg_remesa)
+    //
+    // Los "kg previos" son los de TODOS los almacenes, no solo el que recibe:
+    // el costo es del hilo, no del sitio donde está guardado.
+    let costoNuevo = null;
+    if (datos.costo_kg != null) {
+      const [crows] = await conn.query(
+        `SELECT pv.costo,
+                COALESCE((SELECT SUM(i.cantidad) FROM inventario i
+                           WHERE i.variante_id = pv.id), 0) AS kg_totales
+           FROM producto_variantes pv WHERE pv.id = :v FOR UPDATE`,
+        { v: variante_id }
+      );
+      const costoPrevio = crows[0]?.costo != null ? Number(crows[0].costo) : null;
+      // Los kilos de antes: el saldo ya incluye esta remesa, así que se resta.
+      const kgPrevios = Math.max(0, round3(Number(crows[0]?.kg_totales ?? 0) - kgTotal));
+      const costoRemesa = Number(datos.costo_kg);
+
+      costoNuevo =
+        costoPrevio == null || kgPrevios <= 0
+          // Primera compra con costo, o no quedaba nada: el costo es el de esta.
+          ? costoRemesa
+          : Math.round(
+              ((kgPrevios * costoPrevio + kgTotal * costoRemesa) / (kgPrevios + kgTotal)) * 100
+            ) / 100;
+
+      await conn.query(
+        `UPDATE producto_variantes
+            SET costo = :costo, costo_actualizado_en = NOW()
+          WHERE id = :v`,
+        { costo: costoNuevo, v: variante_id }
+      );
+    }
+
     return {
       id: remesaId,
       folio,
@@ -106,12 +149,16 @@ async function crearRemesa(datos, usuarioId) {
       lotes,
       saldo_anterior: saldoAnterior,
       saldo_nuevo: saldoNuevo,
+      costo_kg: datos.costo_kg ?? null,
+      // Cuál quedó como costo del hilo después de mezclar. La pantalla lo
+      // muestra para que se vea el efecto de la compra.
+      costo_promedio: costoNuevo,
     };
   });
 }
 
 const SELECT_REMESA = `
-  SELECT r.id, r.folio, r.num_bultos, r.kg_total, r.lotes, r.archivo, r.notas, r.creado_en,
+  SELECT r.id, r.folio, r.num_bultos, r.kg_total, r.costo_kg, r.lotes, r.archivo, r.notas, r.creado_en,
          r.variante_id, pv.sku, prod.nombre AS producto,
          -- El calibre viaja para poder cotejarlo con el nombre del archivo: el
          -- del proveedor se llama "COLOR CALIBRE.xlsx" y así el historial marca

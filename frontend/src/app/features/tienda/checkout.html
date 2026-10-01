@@ -1,10 +1,52 @@
 <h1>Finalizar compra</h1>
 
 @if (pedido(); as p) {
+  <!-- Confirmación. Lo que el cliente necesita saber para completar el pago,
+       porque no se cobró en línea. -->
   <div class="exito">
-    <h2 style="margin-top:0">¡Gracias por tu compra! 🎉</h2>
-    <p>Tu pedido <b>{{ p.numero_pedido }}</b> quedó registrado con estado <b>{{ p.estado }}</b>.</p>
-    <p>Total: <b>${{ p.total }}</b></p>
+    <h2 style="margin-top: 0">¡Gracias por tu compra! 🎉</h2>
+    <p>
+      Tu pedido <b>{{ p.numero_pedido }}</b> quedó registrado por
+      <b>${{ p.total }}</b>.
+    </p>
+
+    @if (pagaPorTransferencia()) {
+      <p>Para completarlo, deposita el total a esta cuenta:</p>
+      <div class="datos-pago">
+        @if (config().transferencia_banco) {
+          <div><span>Banco</span><b>{{ config().transferencia_banco }}</b></div>
+        }
+        @if (config().transferencia_titular) {
+          <div><span>A nombre de</span><b>{{ config().transferencia_titular }}</b></div>
+        }
+        @if (config().transferencia_clabe) {
+          <div><span>CLABE</span><b>{{ config().transferencia_clabe }}</b></div>
+        }
+        <div><span>Referencia</span><b>{{ p.numero_pedido }}</b></div>
+      </div>
+      @if (!config().transferencia_clabe) {
+        <p class="muted">
+          Comunícate con la tienda para que te den los datos de depósito.
+          @if (config().tienda_telefono) { Tel. {{ config().tienda_telefono }} }
+        </p>
+      }
+    } @else {
+      <p>Pagas en efectivo cuando pases por tu pedido.</p>
+    }
+
+    @if (p.metodo_entrega === 'recoger') {
+      <p>
+        <b>Recoges en la tienda.</b>
+        @if (config().tienda_direccion) { {{ config().tienda_direccion }} }
+        @if (config().tienda_telefono) { · Tel. {{ config().tienda_telefono }} }
+      </p>
+    } @else {
+      <p><b>Te lo enviamos</b> a la dirección que elegiste.</p>
+    }
+
+    <p class="muted">
+      Te avisamos en cuanto confirmemos tu pago. Puedes seguirlo en Mis pedidos.
+    </p>
     <a class="btn-tienda" routerLink="/tienda/mis-pedidos">Ver mis pedidos</a>
     <a class="btn-tienda ghost" routerLink="/tienda">Seguir comprando</a>
   </div>
@@ -22,20 +64,238 @@
 
   @if (error()) { <p class="err">{{ error() }}</p> }
 
-  <div class="resumen" style="max-width:480px">
-    @for (i of cart.items(); track i.variante_id) {
-      <div class="fila">
-        <span>
-          {{ i.cantidad }} {{ i.unidad || 'kg' }} × {{ i.producto }}
-          <span class="muted">({{ i.presentacion || i.sku }})</span>
-        </span>
-        <span>${{ (i.precio * i.cantidad).toFixed(2) }}</span>
-      </div>
-    }
-    <div class="fila total"><span>Subtotal (sin IVA)</span><span>${{ cart.subtotal().toFixed(2) }}</span></div>
-    <p class="muted" style="font-size:0.8rem">El total con impuestos lo calcula el servidor.</p>
-    <button class="btn-tienda" style="width:100%; margin-top:0.5rem" (click)="confirmar()" [disabled]="procesando()">
-      {{ procesando() ? 'Procesando…' : 'Confirmar pedido' }}
-    </button>
+  <div class="checkout">
+    <!-- ============================ decisiones ============================ -->
+    <div class="checkout-pasos">
+      <!-- 1. Entrega -->
+      <section class="paso">
+        <h2>¿Cómo lo quieres recibir?</h2>
+        <div class="opciones">
+          <button
+            type="button"
+            class="opcion"
+            [class.elegida]="entrega() === 'recoger'"
+            (click)="elegirEntrega('recoger')"
+          >
+            <b>Recoger en tienda</b>
+            <span class="muted">Sin costo de envío</span>
+            @if (config().tienda_direccion) {
+              <span class="muted">{{ config().tienda_direccion }}</span>
+            }
+          </button>
+          <button
+            type="button"
+            class="opcion"
+            [class.elegida]="entrega() === 'envio'"
+            (click)="elegirEntrega('envio')"
+          >
+            <b>Enviar a domicilio</b>
+            @if (config().envio_costo_fijo) {
+              <span class="muted">${{ config().envio_costo_fijo }} de envío</span>
+            }
+          </button>
+        </div>
+
+        @if (entrega() === 'envio') {
+          <div class="direcciones">
+            @for (d of direcciones(); track d.id) {
+              <label class="direccion" [class.elegida]="direccionId() === d.id">
+                <input
+                  type="radio"
+                  name="direccion"
+                  [value]="d.id"
+                  [checked]="direccionId() === d.id"
+                  (change)="elegirDireccion(d.id)"
+                />
+                <span>
+                  @if (d.nombre_receptor) { <b>{{ d.nombre_receptor }}</b><br /> }
+                  {{ resumirDireccion(d) }}
+                  @if (d.telefono) { <br /><span class="muted">Tel. {{ d.telefono }}</span> }
+                </span>
+              </label>
+            } @empty {
+              @if (!capturandoDireccion()) {
+                <p class="muted">Todavía no tienes ninguna dirección guardada.</p>
+              }
+            }
+
+            @if (capturandoDireccion()) {
+              <div class="form-direccion">
+                @if (errorDireccion()) { <p class="err">{{ errorDireccion() }}</p> }
+                <div class="campos">
+                  <label class="ancho">
+                    Calle *
+                    <input type="text" [(ngModel)]="nueva.calle" name="calle" maxlength="160" />
+                  </label>
+                  <label>
+                    Número
+                    <input type="text" [(ngModel)]="nueva.numero_ext" name="numext" maxlength="20" />
+                  </label>
+                  <label>
+                    Interior
+                    <input type="text" [(ngModel)]="nueva.numero_int" name="numint" maxlength="20" />
+                  </label>
+                  <label class="ancho">
+                    Colonia
+                    <input type="text" [(ngModel)]="nueva.colonia" name="colonia" maxlength="100" />
+                  </label>
+                  <label>
+                    Ciudad *
+                    <input type="text" [(ngModel)]="nueva.ciudad" name="ciudad" maxlength="100" />
+                  </label>
+                  <label>
+                    Estado *
+                    <input type="text" [(ngModel)]="nueva.estado" name="estado" maxlength="100" />
+                  </label>
+                  <label>
+                    C.P. *
+                    <input type="text" [(ngModel)]="nueva.codigo_postal" name="cp" maxlength="15" />
+                  </label>
+                  <label>
+                    Teléfono
+                    <input type="tel" [(ngModel)]="nueva.telefono" name="tel" maxlength="20" />
+                  </label>
+                  <label class="ancho">
+                    Quién recibe
+                    <input
+                      type="text"
+                      [(ngModel)]="nueva.nombre_receptor"
+                      name="receptor"
+                      maxlength="120"
+                    />
+                  </label>
+                  <label class="ancho">
+                    Referencias para encontrarla
+                    <input
+                      type="text"
+                      [(ngModel)]="nueva.referencias"
+                      name="ref"
+                      maxlength="255"
+                      placeholder="Entre qué calles, color de la casa…"
+                    />
+                  </label>
+                </div>
+                <div class="acciones">
+                  <button
+                    class="btn-tienda"
+                    (click)="guardarDireccion()"
+                    [disabled]="guardandoDireccion()"
+                  >
+                    {{ guardandoDireccion() ? 'Guardando…' : 'Guardar dirección' }}
+                  </button>
+                  @if (direcciones().length) {
+                    <button class="btn-tienda ghost" (click)="cancelarCaptura()">Cancelar</button>
+                  }
+                </div>
+              </div>
+            } @else {
+              <button class="btn-tienda ghost" (click)="abrirCaptura()">
+                + Agregar otra dirección
+              </button>
+            }
+          </div>
+        }
+      </section>
+
+      <!-- 2. Pago -->
+      <section class="paso">
+        <h2>¿Cómo vas a pagar?</h2>
+        <p class="muted">
+          No se cobra en línea: registramos tu pedido y lo confirmamos al recibir tu pago.
+        </p>
+        <div class="opciones">
+          @for (m of metodosOfrecidos(); track m.id) {
+            <button
+              type="button"
+              class="opcion"
+              [class.elegida]="metodoPagoId() === m.id"
+              (click)="metodoPagoId.set(m.id)"
+            >
+              <b>{{ m.nombre }}</b>
+              @if (m.nombre.toLowerCase().includes('transferencia')) {
+                <span class="muted">Te damos los datos al confirmar</span>
+              } @else {
+                <span class="muted">Pagas al pasar por tu pedido</span>
+              }
+            </button>
+          } @empty {
+            <p class="muted">No hay formas de pago disponibles. Comunícate con la tienda.</p>
+          }
+        </div>
+      </section>
+
+      <!-- 3. Cupón -->
+      <section class="paso">
+        <h2>¿Tienes un cupón?</h2>
+        @if (cuponAplicado(); as c) {
+          <p>
+            Cupón <b>{{ c }}</b> aplicado.
+            <button class="enlace" (click)="quitarCupon()">Quitar</button>
+          </p>
+        } @else {
+          <div class="cupon">
+            <input
+              type="text"
+              [(ngModel)]="cuponTecleado"
+              name="cupon"
+              maxlength="40"
+              placeholder="Código del cupón"
+              (keyup.enter)="aplicarCupon()"
+            />
+            <button class="btn-tienda ghost" (click)="aplicarCupon()">Aplicar</button>
+          </div>
+        }
+        @if (errorCupon()) { <p class="err">{{ errorCupon() }}</p> }
+      </section>
+    </div>
+
+    <!-- ============================= resumen ============================= -->
+    <div class="resumen checkout-resumen">
+      <h2 style="margin-top: 0">Tu pedido</h2>
+
+      @for (i of cart.items(); track i.variante_id) {
+        <div class="fila">
+          <span>
+            {{ i.cantidad | cantidad: i.unidad || 'kg' }} × {{ i.producto }}
+            <span class="muted">({{ i.presentacion || i.sku }})</span>
+          </span>
+          <span>${{ (i.precio * i.cantidad).toFixed(2) }}</span>
+        </div>
+      }
+
+      @if (cotizacion(); as c) {
+        <div class="fila"><span>Subtotal</span><span>${{ c.subtotal.toFixed(2) }}</span></div>
+        @if (c.descuento > 0) {
+          <div class="fila descuento">
+            <span>Descuento</span><span>−${{ c.descuento.toFixed(2) }}</span>
+          </div>
+        }
+        @if (c.impuestos > 0) {
+          <div class="fila"><span>IVA</span><span>${{ c.impuestos.toFixed(2) }}</span></div>
+        }
+        <div class="fila">
+          <span>Envío</span>
+          <span>
+            @if (c.costo_envio > 0) { ${{ c.costo_envio.toFixed(2) }} } @else { Sin costo }
+          </span>
+        </div>
+        <div class="fila total"><span>Total</span><span>${{ c.total.toFixed(2) }}</span></div>
+      } @else if (cargando()) {
+        <p class="muted">Calculando…</p>
+      }
+
+      @if (falta(); as f) {
+        <p class="muted">{{ f }}</p>
+      }
+
+      <button
+        class="btn-tienda"
+        style="width: 100%; margin-top: 0.5rem"
+        (click)="confirmar()"
+        [disabled]="!!falta() || procesando()"
+      >
+        {{ procesando() ? 'Procesando…' : 'Confirmar pedido' }}
+      </button>
+    </div>
   </div>
 }

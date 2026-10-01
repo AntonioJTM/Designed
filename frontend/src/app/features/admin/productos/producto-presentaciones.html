@@ -49,6 +49,18 @@
           }
         </select>
       </label>
+      <label class="field">
+        Precio de compra <span class="muted">(opcional)</span>
+        <div class="campo-moneda">
+          <span>$</span>
+          <input type="number" min="0" step="0.01" [(ngModel)]="costoKg"
+                 placeholder="0.00" name="costokg" />
+          <span class="unidad">por kilo</span>
+        </div>
+        <span class="muted" style="font-size: 0.72rem">
+          A cómo te salió el kilo. Con esto se calcula cuánto te deja este hilo.
+        </span>
+      </label>
     </div>
 
     @if (leyendo()) { <p class="muted">Leyendo el archivo…</p> }

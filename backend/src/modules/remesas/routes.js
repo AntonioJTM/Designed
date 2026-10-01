@@ -29,6 +29,10 @@ const confirmarSchema = z
     variante_id: z.coerce.number().int().positive().optional(),
     almacen_id: z.coerce.number().int().positive(),
     archivo: z.string().trim().max(255).nullable().optional(),
+    // A cómo salió el KILO en esta compra. Con esto se recalcula el costo
+    // promedio del hilo y se puede ver el margen. Opcional: sin él la remesa
+    // entra igual, solo que ese margen no se podrá calcular.
+    costo_kg: z.coerce.number().nonnegative().max(9999999).nullable().optional(),
     notas: z.string().trim().max(1000).optional(),
     bultos: z.array(bultoSchema).min(1).max(5000),
   })

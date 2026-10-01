@@ -4,6 +4,14 @@ const service = require('./service');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 
+async function cotizar(req, res, next) {
+  try {
+    if (req.auth?.tipo === 'cliente') req.body.cliente_id = req.auth.sub;
+    const data = await service.cotizar(req.body, { esCliente: req.auth?.tipo === 'cliente' });
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
 async function crear(req, res, next) {
   try {
     // Una venta POS solo la registra el personal (staff).
@@ -16,7 +24,10 @@ async function crear(req, res, next) {
     }
     // usuario_id solo si el que crea es staff (POS/admin); en online el cliente no lo lleva.
     const usuarioId = req.auth?.tipo === 'usuario' ? req.auth.sub : null;
-    const data = await service.crear(req.body, usuarioId);
+    // El cliente no fija el costo de envío ni se declara pagado; lo resuelve
+    // el backend. Ver `_cotizar` en el modelo.
+    const esCliente = req.auth?.tipo === 'cliente';
+    const data = await service.crear(req.body, usuarioId, { esCliente });
     res.status(201).json({ data, error: null });
   } catch (err) { next(err); }
 }
@@ -66,4 +77,69 @@ async function cambiarEstado(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { crear, obtener, listar, misPedidos, cambiarEstado };
+/**
+ * Sube la captura. El cuerpo llega en CRUDO (express.raw), igual que la lista
+ * de empaque de las remesas: el navegador manda el File tal cual y el nombre
+ * viaja en una cabecera. Así no hace falta multipart ni una dependencia nueva.
+ */
+async function subirComprobante(req, res, next) {
+  try {
+    const nombre = decodeURIComponent(req.get('X-Nombre-Archivo') || '') || 'comprobante';
+    const data = await service.guardarComprobante(
+      Number(req.params.id), req.body, nombre, req.auth?.sub
+    );
+    res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/**
+ * Devuelve el archivo. Va por endpoint AUTENTICADO y no por express.static a
+ * propósito: un comprobante bancario no puede quedar accesible con solo
+ * adivinar la URL.
+ */
+async function verComprobante(req, res, next) {
+  try {
+    const c = await service.leerComprobante(Number(req.params.id));
+    res.setHeader('Content-Type', c.tipo || 'application/octet-stream');
+    // `inline`: se ve en la pantalla. El nombre es el que traía cuando lo mandó
+    // el cliente, por si lo guardan.
+    res.setHeader('Content-Disposition',
+      `inline; filename="${encodeURIComponent(c.nombre || 'comprobante')}"`);
+    res.send(c.buf);
+  } catch (err) { next(err); }
+}
+
+async function eliminarComprobante(req, res, next) {
+  try {
+    const data = await service.borrarComprobante(Number(req.params.id));
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+// --- Apartados ---
+
+async function apartados(req, res, next) {
+  try {
+    res.json({ data: await service.apartados(req.query), error: null });
+  } catch (err) { next(err); }
+}
+
+async function abonarApartado(req, res, next) {
+  try {
+    const data = await service.abonarApartado(Number(req.params.id), req.body, req.auth?.sub);
+    res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+async function entregarApartado(req, res, next) {
+  try {
+    const data = await service.entregarApartado(Number(req.params.id), req.auth?.sub);
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+module.exports = {
+  crear, obtener, listar, misPedidos, cambiarEstado, cotizar,
+  subirComprobante, verComprobante, eliminarComprobante,
+  apartados, abonarApartado, entregarApartado,
+};

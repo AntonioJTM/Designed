@@ -156,8 +156,11 @@ if [ -f backend.tar.gz ]; then
   [ -f "$REMOTE_DIR/backend/package-lock.json" ] && \
     LOCK_ANTES=$(md5sum < "$REMOTE_DIR/backend/package-lock.json")
 
-  # .env y node_modules se quedan como están; el resto se espeja tal cual.
-  rsync -a --delete --exclude='.env' --exclude='node_modules/' \
+  # .env, node_modules y uploads/ se quedan como están; el resto se espeja tal
+  # cual. uploads/ guarda las capturas de los comprobantes de pago, que solo
+  # existen en el servidor: sin esta exclusión, --delete las borraría en CADA
+  # despliegue.
+  rsync -a --delete --exclude='.env' --exclude='node_modules/' --exclude='uploads/' \
         be/ "$REMOTE_DIR/backend/"
 
   LOCK_AHORA=$(md5sum < "$REMOTE_DIR/backend/package-lock.json")
@@ -182,7 +185,7 @@ if [ -f backend.tar.gz ]; then
 
   if [ "$OK" != si ]; then
     echo "  ✗ /health no respondió. Haciendo ROLLBACK…"
-    rsync -a --delete --exclude='.env' --exclude='node_modules/' \
+    rsync -a --delete --exclude='.env' --exclude='node_modules/' --exclude='uploads/' \
           "$REMOTE_DIR/backend.prev/" "$REMOTE_DIR/backend/"
     systemctl restart "$SERVICE"
     sleep 5

@@ -80,9 +80,25 @@
 <!-- Ticket de venta recién cobrada -->
 @if (ticket(); as t) {
   <div class="card" style="border-color:#bbf7d0; background:#f0fdf4">
-    <h3 style="margin-top:0">✅ Venta {{ t.pedido.numero_pedido }}</h3>
-    <p>Total: <b>${{ t.pedido.total }}</b> · Cambio: <b>${{ t.cambio.toFixed(2) }}</b></p>
-    <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+    <!-- Un apartado no es una venta cobrada y no tiene cambio: decir "Venta" y
+         "Cambio $0.00" sería mentir sobre lo que acaba de pasar. -->
+    @if (t.pedido.estado === 'apartado') {
+      <h3 style="margin-top:0">✅ Apartado {{ t.pedido.numero_pedido }}</h3>
+      <p>
+        Apartado de <b>${{ t.pedido.total }}</b>.
+        La mercancía queda guardada; se entrega cuando la liquide.
+      </p>
+      <a class="btn btn-ghost" routerLink="/admin/apartados">Ver apartados</a>
+      <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+    } @else if (num(t.pedido.total) > 0 && t.pedido.estado === 'pendiente') {
+      <h3 style="margin-top:0">✅ Entregado a crédito · {{ t.pedido.numero_pedido }}</h3>
+      <p>Total: <b>${{ t.pedido.total }}</b>. Quedó cargado a su cuenta.</p>
+      <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+    } @else {
+      <h3 style="margin-top:0">✅ Venta {{ t.pedido.numero_pedido }}</h3>
+      <p>Total: <b>${{ t.pedido.total }}</b> · Cambio: <b>${{ t.cambio.toFixed(2) }}</b></p>
+      <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+    }
   </div>
 }
 
@@ -122,6 +138,108 @@
   <div class="form-grid" style="align-items:start">
     <!-- Columna izquierda: búsqueda + carrito -->
     <div>
+      <!--
+        Quién compra. Es OPCIONAL: la mayoría de las ventas de mostrador son a
+        quien pasa. Pero si se identifica, la venta queda en su historial y se
+        le puede fiar.
+      -->
+      <div class="card">
+        @if (clienteSel(); as c) {
+          <div class="cliente-elegido">
+            <div>
+              <b>{{ c.nombre_comercial || c.nombre }}</b>
+              @if (c.nombre_comercial) { <span class="muted"> · {{ c.nombre }}</span> }
+              <br />
+              <span class="muted">
+                {{ c.telefono || 'sin teléfono' }}
+                @if (c.tipo_cliente) { · precios de {{ c.tipo_cliente }} }
+              </span>
+              @if (num(c.limite_credito) > 0) {
+                <br />
+                <span [class]="num(c.saldo) > 0 ? 'muted' : 'muted'">
+                  Debe {{ dinero(c.saldo) }} · le quedan
+                  <b>{{ dinero(c.credito_disponible) }}</b> de crédito
+                </span>
+              } @else {
+                <br /><span class="muted">Sin crédito autorizado</span>
+              }
+            </div>
+            <button class="btn btn-ghost btn-sm" (click)="quitarCliente()">Quitar</button>
+          </div>
+        } @else {
+          <label class="field" style="margin:0">
+            Cliente <span class="muted">(opcional)</span>
+            <div style="display:flex; gap:0.5rem">
+              <input type="text" [(ngModel)]="qCliente" name="qcli"
+                     (keyup)="buscarCliente()"
+                     placeholder="Nombre, apodo o teléfono" />
+            </div>
+            <span class="muted" style="font-size:0.75rem">
+              Si lo identificas, la venta queda en su historial y se le puede fiar.
+            </span>
+          </label>
+          @if (buscandoCliente()) { <p class="muted">Buscando…</p> }
+          @if (resultadosCliente().length > 0) {
+            <ul class="lista-clientes">
+              @for (c of resultadosCliente(); track c.id) {
+                <li>
+                  <button type="button" (click)="elegirCliente(c)">
+                    <b>{{ c.nombre_comercial || c.nombre }}</b>
+                    <span class="muted">
+                      {{ c.telefono || '' }}
+                      @if (num(c.limite_credito) > 0) {
+                        · le quedan {{ dinero(c.credito_disponible) }} de crédito
+                      }
+                    </span>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+
+          <!-- Alta rápida sin salir de la caja. Aparece siempre, no solo
+               cuando la búsqueda no encuentra nada: el cliente nuevo no se
+               busca primero, se registra. -->
+          @if (!creandoCliente()) {
+            <button class="btn btn-ghost btn-sm" style="margin-top:0.5rem"
+                    (click)="abrirAltaCliente()">
+              + Registrar cliente nuevo
+            </button>
+          } @else {
+            <div class="alta-rapida">
+              <p class="muted" style="margin:0 0 0.6rem">
+                Solo el nombre y el teléfono. El resto se llena después en Clientes.
+              </p>
+              <label class="field">
+                Nombre
+                <input type="text" [(ngModel)]="nuevoCliente.nombre" name="ncn"
+                       placeholder="Mercería La Esperanza" />
+              </label>
+              <label class="field">
+                Como le dicen <span class="muted">(opcional)</span>
+                <input type="text" [(ngModel)]="nuevoCliente.nombre_comercial" name="ncc"
+                       placeholder="Doña Chela" />
+              </label>
+              <label class="field">
+                Teléfono <span class="muted">(opcional)</span>
+                <input type="tel" [(ngModel)]="nuevoCliente.telefono" name="nct" maxlength="20" />
+              </label>
+              <p class="muted" style="font-size:0.75rem">
+                Nace <b>sin crédito</b>: el cobro es completo. El administrador
+                recibe el aviso para decidir si le autoriza fiarle.
+              </p>
+              <div class="acciones">
+                <button class="btn btn-primary btn-sm" (click)="guardarNuevoCliente()"
+                        [disabled]="guardandoCliente()">
+                  {{ guardandoCliente() ? 'Guardando…' : 'Registrar y usar' }}
+                </button>
+                <button class="btn btn-ghost btn-sm" (click)="cerrarAltaCliente()">Cancelar</button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+
       @if (tiposCliente().length > 1) {
         <div class="card">
           <label class="field" style="margin:0">
@@ -132,7 +250,7 @@
               }
             </select>
             <span class="muted" style="font-size:0.75rem">
-              Define con qué precios se cobra. Cámbialo antes de agregar productos.
+              Define con qué precios se cobra. Al elegir un cliente se pone la suya sola.
             </span>
           </label>
         </div>
@@ -231,18 +349,124 @@
 
       <div class="card">
         <h3 style="margin-top:0">Cobrar</h3>
-        <label class="field">
-          Método de pago
-          <select [(ngModel)]="metodoSel">
-            @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
-          </select>
-        </label>
-        <label class="field">
-          Monto recibido
-          <input type="number" step="0.01" [(ngModel)]="montoPago" />
-        </label>
+
+        <!-- El TOTAL con IVA, calculado por el servidor. Es el número que se
+             cobra, así que va grande y arriba de todo. -->
+        <div class="cifra" style="margin-bottom: 1rem">
+          <span class="cifra-label">
+            Total a cobrar
+            @if (cotizando()) { <span class="muted">· calculando…</span> }
+          </span>
+          <span class="cifra-valor" style="font-size: 2rem">{{ dinero(total()) }}</span>
+          @if (totalReal() === null && carrito().length > 0) {
+            <span class="cifra-pie">estimado sin IVA; el servidor lo calcula al cobrar</span>
+          }
+        </div>
+
+        <!-- Apartar y fiar. Los dos exigen cliente identificado: sin saber a
+             quién, ni se le guarda mercancía ni se le fía. Son excluyentes —
+             fiar es entregar sin cobrar, apartar es cobrar sin entregar— así
+             que activar uno cierra el otro. -->
+        @if (clienteSel(); as c) {
+          @if (!fiando() && !apartando()) {
+            <button class="btn btn-ghost" style="width:100%; margin-bottom:0.5rem"
+                    (click)="abrirApartado()" [disabled]="carrito().length === 0">
+              Apartar (se le guarda hasta que la pague)
+            </button>
+          }
+          @if (apartando()) {
+            <div class="bloque-apartar">
+              <label class="field" style="margin:0">
+                Cuánto deja de anticipo
+                <div class="campo-moneda">
+                  <span>$</span>
+                  <input type="number" min="0" step="0.01" [(ngModel)]="anticipo" name="antic" />
+                </div>
+                <span class="muted" style="font-size:0.72rem">
+                  Puede dejar lo que quiera, o nada y volver a pagar después.
+                </span>
+              </label>
+              <p class="muted" style="margin:0.5rem 0 0">
+                Apartado de <b>{{ dinero(total()) }}</b> ·
+                le quedaría por pagar <b>{{ dinero(pendienteApartado()) }}</b><br />
+                La mercancía se guarda: <b>no sale del inventario</b> hasta que la
+                recoja.
+              </p>
+              <button class="btn btn-ghost btn-sm" style="margin-top:0.5rem"
+                      (click)="cerrarApartado()">No apartar</button>
+            </div>
+          }
+
+          @if (num(c.credito_disponible) > 0 && !apartando()) {
+            @if (!fiando()) {
+              <button class="btn btn-ghost" style="width:100%; margin-bottom:0.75rem"
+                      (click)="abrirCredito()" [disabled]="carrito().length === 0">
+                Fiar (le quedan {{ dinero(c.credito_disponible) }})
+              </button>
+            } @else {
+              <div class="bloque-fiar">
+                <label class="field" style="margin:0">
+                  Cuánto se le fía
+                  <div class="campo-moneda">
+                    <span>$</span>
+                    <input type="number" min="0" step="0.01" [(ngModel)]="aCredito" name="acred" />
+                  </div>
+                </label>
+                <p class="muted" style="margin:0.5rem 0 0">
+                  Le quedan {{ dinero(c.credito_disponible) }} de crédito.<br />
+                  <b>Paga hoy: {{ dinero(aPagarHoy()) }}</b>
+                </p>
+                <button class="btn btn-ghost btn-sm" style="margin-top:0.5rem"
+                        (click)="cerrarCredito()">No fiar</button>
+              </div>
+            }
+          } @else if (num(c.limite_credito) > 0) {
+            <p class="aviso-dato" style="margin:0 0 0.75rem">
+              Ya llegó a su límite de crédito ({{ dinero(c.limite_credito) }}).
+              Tiene que abonar antes de que se le pueda fiar más.
+            </p>
+          }
+        }
+
+        <!-- Con todo fiado no hay nada que cobrar hoy: el método de pago
+             estorba y se esconde. -->
+        @if (apartando()) {
+          <!-- En un apartado solo hace falta el método si deja algo. -->
+          @if (num(anticipo) > 0) {
+            <label class="field">
+              Con qué deja el anticipo
+              <select [(ngModel)]="metodoSel">
+                @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+              </select>
+            </label>
+          } @else {
+            <p class="muted">Sin anticipo: se aparta y paga después.</p>
+          }
+        } @else if (aPagarHoy() > 0) {
+          <label class="field">
+            Método de pago
+            <select [(ngModel)]="metodoSel">
+              @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+            </select>
+          </label>
+          <label class="field">
+            Monto recibido
+            <input type="number" step="0.01" [(ngModel)]="montoPago" />
+          </label>
+        } @else if (fiando()) {
+          <p class="muted">Se lleva todo a crédito: hoy no paga nada.</p>
+        }
+
         <button class="btn btn-primary" style="margin-top:0.75rem; width:100%" (click)="cobrar()"
-                [disabled]="carrito().length === 0">Cobrar</button>
+                [disabled]="carrito().length === 0">
+          @if (apartando()) {
+            Apartar
+          } @else if (fiando() && aPagarHoy() === 0) {
+            Entregar a crédito
+          } @else {
+            Cobrar
+          }
+        </button>
       </div>
 
       <div class="card">

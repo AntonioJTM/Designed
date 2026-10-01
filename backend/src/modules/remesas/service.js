@@ -247,6 +247,9 @@ async function confirmar(datos, usuarioId) {
       almacen_id: datos.almacen_id,
       archivo: datos.archivo ?? null,
       notas: datos.notas ?? null,
+      // A cómo salió el kilo. Con esto el modelo recalcula el costo promedio
+      // del hilo, que es lo que permite ver el margen.
+      costo_kg: datos.costo_kg ?? null,
       bultos: datos.bultos.map((b) => ({
         codigo: String(b.codigo).trim(),
         peso_kg: round3(b.peso_kg),

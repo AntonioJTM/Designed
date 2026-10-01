@@ -159,6 +159,13 @@ export interface ResultadoRemesa {
   lotes: string[];
   saldo_anterior: number;
   saldo_nuevo: number;
+  /** A cómo se capturó el kilo en esta compra. */
+  costo_kg?: string | number | null;
+  /**
+   * El costo del hilo DESPUÉS de mezclar esta compra con lo que ya había
+   * (promedio ponderado). Se muestra para que se vea el efecto de la compra.
+   */
+  costo_promedio?: string | number | null;
 }
 
 /**
@@ -366,6 +373,12 @@ export class InventarioService {
     almacen_id: number;
     archivo?: string | null;
     notas?: string;
+    /**
+     * A cómo salió el KILO en esta compra. Con esto se recalcula el costo
+     * promedio del hilo y se puede ver el margen. Opcional: sin él la remesa
+     * entra igual, pero ese margen no se podrá calcular.
+     */
+    costo_kg?: number | null;
     bultos: BultoRemesa[];
   }): Observable<ResultadoRemesa> {
     return this.http

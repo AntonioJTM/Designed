@@ -1,10 +1,11 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnDestroy, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
 import {
   DevolucionLinea,
   EstadoPedido,
+  PagoLinea,
   Pedido,
   PedidoLinea,
 } from '../../../core/models/ventas.models';
@@ -17,7 +18,7 @@ import { ApiError } from '../../../core/models/auth.models';
   imports: [FormsModule, RouterLink, FechaPipe, CantidadPipe],
   templateUrl: './pedido-detalle.html',
 })
-export class PedidoDetalle {
+export class PedidoDetalle implements OnDestroy {
   private readonly ventas = inject(VentasService);
   private readonly route = inject(ActivatedRoute);
 
@@ -167,6 +168,141 @@ export class PedidoDetalle {
         this.error.set(this.msg(e));
       },
     });
+  }
+
+  // ---- Comprobante de pago ----
+  //
+  // La captura que el cliente manda al depositar. La sube SOLO el personal —el
+  // cliente se la manda por WhatsApp o correo— y subirla da el pedido por
+  // pagado en un paso, que es como lo pidió el usuario el 2026-09-05.
+
+  readonly subiendoComprobante = signal(false);
+  readonly errorComprobante = signal<string | null>(null);
+  /** URL local del archivo bajado, para pintarlo. Se libera al salir. */
+  readonly comprobanteUrl = signal<string | null>(null);
+  readonly cargandoComprobante = signal(false);
+
+  /** El pago que trae la captura, si alguno la tiene. */
+  pagoConComprobante(): PagoLinea | null {
+    return (this.pedido()?.pagos ?? []).find((g) => g.tiene_comprobante) ?? null;
+  }
+
+  /** Un PDF no se puede pintar con `<img>`: se ofrece abrirlo aparte. */
+  comprobanteEsPdf(): boolean {
+    return this.pagoConComprobante()?.comprobante_tipo === 'application/pdf';
+  }
+
+  /**
+   * Baja el archivo y lo deja listo para mostrar. Va por HttpClient porque el
+   * endpoint exige sesión y un `<img src>` no manda el token.
+   */
+  verComprobante(): void {
+    const p = this.pedido();
+    if (!p || this.cargandoComprobante() || this.comprobanteUrl()) return;
+    this.cargandoComprobante.set(true);
+    this.errorComprobante.set(null);
+    this.ventas.comprobante(p.id).subscribe({
+      next: (blob) => {
+        this.liberarComprobante();
+        this.comprobanteUrl.set(URL.createObjectURL(blob));
+        this.cargandoComprobante.set(false);
+      },
+      error: (e) => {
+        this.errorComprobante.set(this.msg(e));
+        this.cargandoComprobante.set(false);
+      },
+    });
+  }
+
+  /** Abre el archivo en otra pestaña. Es la única forma de leer un PDF aquí. */
+  abrirComprobante(): void {
+    const url = this.comprobanteUrl();
+    if (url) window.open(url, '_blank');
+  }
+
+  elegirArchivo(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const archivo = input.files?.[0];
+    // El input se limpia siempre: si no, volver a elegir el MISMO archivo no
+    // dispara el evento y parecería que el botón dejó de funcionar.
+    input.value = '';
+    if (archivo) this.subirComprobante(archivo);
+  }
+
+  private subirComprobante(archivo: File): void {
+    const p = this.pedido();
+    if (!p) return;
+    this.subiendoComprobante.set(true);
+    this.errorComprobante.set(null);
+    this.mensaje.set(null);
+
+    this.ventas.subirComprobante(p.id, archivo).subscribe({
+      next: (actualizado) => {
+        this.pedido.set(actualizado);
+        this.nuevoEstado = actualizado.estado;
+        this.subiendoComprobante.set(false);
+        // La captura anterior ya no vale: se descarta para que el siguiente
+        // "Ver" baje la nueva.
+        this.liberarComprobante();
+        this.mensaje.set(
+          actualizado.estado === 'pagado'
+            ? 'Comprobante guardado. El pedido quedó PAGADO.'
+            : 'Comprobante guardado.'
+        );
+      },
+      error: (e) => {
+        this.errorComprobante.set(this.msg(e));
+        this.subiendoComprobante.set(false);
+      },
+    });
+  }
+
+  quitarComprobante(): void {
+    const p = this.pedido();
+    if (!p) return;
+    if (!confirm('¿Quitar la captura? El pedido seguirá marcado como pagado.')) return;
+
+    this.errorComprobante.set(null);
+    this.ventas.eliminarComprobante(p.id).subscribe({
+      next: (actualizado) => {
+        this.pedido.set(actualizado);
+        this.liberarComprobante();
+        this.mensaje.set('Se quitó la captura.');
+      },
+      error: (e) => this.errorComprobante.set(this.msg(e)),
+    });
+  }
+
+  /** Un object URL que no se revoca deja el archivo en memoria del navegador. */
+  private liberarComprobante(): void {
+    const url = this.comprobanteUrl();
+    if (url) URL.revokeObjectURL(url);
+    this.comprobanteUrl.set(null);
+  }
+
+  ngOnDestroy(): void {
+    this.liberarComprobante();
+  }
+
+  // ---- Artículos ----
+
+  /**
+   * Qué hilo es, en una línea: "2/30 · ACRILAN · Turco". Se arma aquí y no en
+   * la plantilla para no repetir tres veces la lógica de los guiones cuando
+   * alguno de los tres falta.
+   */
+  fichaDelHilo(d: PedidoLinea): string {
+    return [d.calibre, d.material, d.linea].filter(Boolean).join(' · ');
+  }
+
+  /**
+   * Por qué una línea no muestra bultos. Un pedido en línea no escanea nada, y
+   * decirlo evita que se lea como un dato perdido.
+   */
+  porQueSinBultos(): string {
+    return this.pedido()?.canal === 'tienda_linea'
+      ? 'Venta en línea: no se escanearon bultos.'
+      : 'No se escanearon bultos en esta línea.';
   }
 
   private msg(e: unknown): string {

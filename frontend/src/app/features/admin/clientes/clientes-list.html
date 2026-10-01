@@ -1,0 +1,122 @@
+<div class="page-head">
+  <h1>Clientes</h1>
+  <button class="btn btn-primary" (click)="abrirNuevo()">+ Nuevo cliente</button>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+<!--
+  Los filtros en UNA fila arriba de la tabla. El selector de orden está redactado
+  como la pregunta que contesta ("quién me debe más") y no como el nombre del
+  campo: es lo que la tienda se pregunta de verdad.
+-->
+<div class="card filtros-fila">
+  <label class="field">
+    Buscar
+    <input type="text" [(ngModel)]="q" name="q" (keyup.enter)="cargar()"
+           placeholder="Nombre, apodo, teléfono o código" />
+  </label>
+  <label class="field">
+    Ordenar
+    <select [(ngModel)]="orden" name="orden" (change)="cargar()">
+      @for (o of ordenes; track o.valor) {
+        <option [ngValue]="o.valor">{{ o.etiqueta }}</option>
+      }
+    </select>
+  </label>
+  <label class="field check">
+    <input type="checkbox" [(ngModel)]="conSaldo" name="cs" (change)="cargar()" />
+    Solo los que me deben
+  </label>
+  <button class="btn btn-ghost" (click)="cargar()">Buscar</button>
+</div>
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (items().length === 0) {
+  <p class="empty">
+    @if (q || conSaldo) {
+      No hay clientes con eso.
+    } @else {
+      Todavía no hay clientes capturados. Empieza con el botón de arriba.
+    }
+  </p>
+} @else {
+  <p class="muted">{{ total() }} {{ total() === 1 ? 'cliente' : 'clientes' }}</p>
+  <table class="grid">
+    <thead>
+      <tr>
+        <th>Cliente</th><th>Teléfono</th><th>Lista</th>
+        <th class="num">Compras</th><th class="num">Ha comprado</th>
+        <th>Última vez</th><th class="num">Debe</th><th>Cliente desde</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (c of items(); track c.id) {
+        <tr [class.fila-inactiva]="!c.activo">
+          <td>
+            <a [routerLink]="['/admin/clientes', c.id]" class="enlace-fuerte">
+              {{ c.nombre_comercial || c.nombre }}
+            </a>
+            @if (c.nombre_comercial) { <br /><span class="muted">{{ c.nombre }}</span> }
+            @if (c.codigo) { <br /><span class="muted mono">{{ c.codigo }}</span> }
+            @if (!c.activo) { <br /><span class="pill off">Inactivo</span> }
+          </td>
+          <td class="muted">{{ c.telefono || '—' }}</td>
+          <td class="muted">{{ c.tipo_cliente || 'Público' }}</td>
+          <td class="num">{{ c.num_pedidos || 0 }}</td>
+          <td class="num">{{ dinero(c.total_comprado) }}</td>
+          <td>
+            @if (c.ultima_compra) {
+              {{ c.ultima_compra | fecha }}
+              <!-- Cuánto lleva sin venir: es la señal que interesa. -->
+              @if (diasSinVenir(c); as d) {
+                @if (d >= 60) {
+                  <br /><span class="pastilla r-serio">
+                    <span class="pastilla-icono" aria-hidden="true">!!</span>
+                    {{ d }} días
+                  </span>
+                } @else {
+                  <br /><span class="muted">hace {{ d }} días</span>
+                }
+              }
+            } @else {
+              <span class="muted">Nunca ha comprado</span>
+            }
+          </td>
+          <td class="num">
+            @if (num(c.saldo) > 0) {
+              <b>{{ dinero(c.saldo) }}</b>
+              @if (num(c.limite_credito) > 0) {
+                <!-- "de $20,000" solo se leía como "debía 20,000 y ya pagó
+                     algo". Es su LÍMITE, y hay que decirlo. -->
+                <br /><span class="muted">límite {{ dinero(c.limite_credito) }}</span>
+              }
+            } @else if (num(c.limite_credito) > 0) {
+              <!-- "al día" sugiere que debió algo y lo pagó. Para quien nunca
+                   ha debido nada, "sin deuda" es lo que de verdad pasa. -->
+              <span class="muted">sin deuda</span>
+            } @else {
+              <span class="muted">—</span>
+            }
+          </td>
+          <td class="muted">{{ c.cliente_desde || '—' }}</td>
+          <td class="acciones">
+            <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.id]">Ver</a>
+            <button class="btn btn-ghost btn-sm" (click)="abrirEdicion(c)">Editar</button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}
+
+<!-- Se crea al abrirlo y se destruye al cerrarlo: arranca limpio cada vez. -->
+@if (modal() !== null) {
+  <app-cliente-form-modal
+    [cliente]="clienteModal()"
+    (cerrado)="cerrarModal()"
+    (guardado)="guardado($event)"
+  />
+}

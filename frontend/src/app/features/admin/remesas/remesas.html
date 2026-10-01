@@ -64,6 +64,19 @@
           }
         </select>
       </label>
+      <label class="field">
+        Precio de compra <span class="muted">(opcional)</span>
+        <div class="campo-moneda">
+          <span>$</span>
+          <input type="number" min="0" step="0.01" [(ngModel)]="costoKg"
+                 placeholder="0.00" name="costokg" />
+          <span class="unidad">por kilo</span>
+        </div>
+        <span class="muted" style="font-size: 0.72rem">
+          A cómo te salió el kilo en esta compra. Con esto se calcula cuánto te
+          deja cada hilo. Si lo dejas vacío, la remesa entra igual.
+        </span>
+      </label>
       <label class="field full">
         Notas <span class="muted">(opcional)</span>
         <input type="text" [(ngModel)]="notas" placeholder="Ej. Factura 4821, llegó el martes" />

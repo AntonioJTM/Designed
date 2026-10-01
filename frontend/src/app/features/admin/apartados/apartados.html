@@ -1,0 +1,230 @@
+<div class="page-head">
+  <h1>Apartados</h1>
+  <a class="btn btn-ghost" routerLink="/admin/pos">Ir al punto de venta</a>
+</div>
+
+<p class="muted">
+  Mercancía guardada que todavía no se entrega. Está reservada, así que no se le
+  puede vender a nadie más.
+</p>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (datos(); as d) {
+  @if (d.num_apartados === 0) {
+    <p class="empty">
+      No hay nada apartado ahora mismo. Los apartados se hacen desde el punto de
+      venta, eligiendo al cliente.
+    </p>
+  } @else {
+    <!--
+      Los que ya liquidaron van PRIMERO y aparte: no hay que cobrarles, hay que
+      entregarles. Es la acción más urgente de la pantalla —el cliente ya pagó y
+      su mercancía sigue ocupando bodega— y mezclarla con la cobranza la
+      escondía.
+    -->
+    @if (listosParaEntregar().length > 0) {
+      <section class="card bloque listos">
+        <h2>
+          {{ listosParaEntregar().length }}
+          {{ listosParaEntregar().length === 1 ? 'apartado listo' : 'apartados listos' }}
+          para entregar
+        </h2>
+        <p class="muted">Ya lo pagaron todo. Al entregar, la mercancía sale del inventario.</p>
+        <table class="grid">
+          <thead>
+            <tr><th>Cliente</th><th>Apartado</th><th class="num">Pagó</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (a of listosParaEntregar(); track a.pedido_id) {
+              <tr>
+                <td>
+                  @if (a.cliente_id) {
+                    <a [routerLink]="['/admin/clientes', a.cliente_id]" class="enlace-fuerte">
+                      {{ a.nombre_comercial || a.cliente }}
+                    </a>
+                  } @else {
+                    <b>{{ a.nombre_comercial || a.cliente || 'Sin cliente' }}</b>
+                  }
+                  @if (a.telefono) { <br /><span class="muted">{{ a.telefono }}</span> }
+                </td>
+                <td>
+                  <span class="mono">{{ a.numero_pedido }}</span><br />
+                  <span class="muted">
+                    apartado hace {{ a.dias_apartado }}
+                    {{ a.dias_apartado === 1 ? 'día' : 'días' }}
+                  </span>
+                </td>
+                <td class="num">{{ dinero(a.total) }}</td>
+                <td class="acciones">
+                  <button class="btn btn-primary btn-sm" (click)="entregar(a)"
+                          [disabled]="entregando()">
+                    Entregar
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    }
+
+    <section class="card bloque">
+      <div class="cifras">
+        <div class="cifra hero">
+          <span class="cifra-label">Mercancía guardada</span>
+          <span class="cifra-valor">{{ dinero(d.total_apartado) }}</span>
+          <span class="cifra-pie">
+            en {{ d.num_apartados }}
+            {{ d.num_apartados === 1 ? 'apartado' : 'apartados' }}
+          </span>
+        </div>
+        <div class="cifra">
+          <span class="cifra-label">Ya te dejaron</span>
+          <span class="cifra-valor">{{ dinero(d.total_abonado) }}</span>
+          <span class="cifra-pie">de anticipos</span>
+        </div>
+        <div class="cifra">
+          <span class="cifra-label">Falta por cobrar</span>
+          <span class="cifra-valor">{{ dinero(d.total_apartado - d.total_abonado) }}</span>
+        </div>
+        <label class="filtro">
+          Ordenar
+          <select [(ngModel)]="orden" name="orden" (change)="cargar()">
+            @for (o of ordenes; track o.valor) {
+              <option [ngValue]="o.valor">{{ o.etiqueta }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      @if (pendientes().length > 0) {
+        <h3 class="sub">Cuánto falta por cobrar de cada uno</h3>
+        <div class="chart-box">
+          <app-barras [data]="barrasApartados()" prefijo="$" [gutter]="200" [decimals]="0" />
+        </div>
+      }
+
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Cliente</th><th>Apartado</th><th class="num">Total</th>
+            <th class="num">Ya dejó</th><th class="num">Falta</th>
+            <th>Avance</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Solo los que deben algo: los liquidados ya están arriba. -->
+          @for (a of pendientes(); track a.pedido_id) {
+            <tr>
+              <td>
+                @if (a.cliente_id) {
+                  <a [routerLink]="['/admin/clientes', a.cliente_id]" class="enlace-fuerte">
+                    {{ a.nombre_comercial || a.cliente }}
+                  </a>
+                } @else {
+                  <b>{{ a.nombre_comercial || a.cliente || 'Sin cliente' }}</b>
+                }
+                @if (a.telefono) { <br /><span class="muted">{{ a.telefono }}</span> }
+              </td>
+              <td>
+                <span class="mono">{{ a.numero_pedido }}</span><br />
+                <span class="muted">
+                  {{ a.creado_en | fecha }} · hace {{ a.dias_apartado }}
+                  {{ a.dias_apartado === 1 ? 'día' : 'días' }}
+                </span>
+              </td>
+              <td class="num">{{ dinero(a.total) }}</td>
+              <td class="num">{{ dinero(a.abonado) }}</td>
+              <td class="num"><b>{{ dinero(a.pendiente) }}</b></td>
+              <td>
+                <!-- Barra de avance: el relleno y el número dicen lo mismo, así
+                     que se entiende sin depender del color. -->
+                <div class="avance" [attr.title]="num(a.pct_pagado) + '% pagado'">
+                  <div class="avance-relleno" [style.width.%]="num(a.pct_pagado)"></div>
+                </div>
+                <span class="muted">{{ num(a.pct_pagado).toFixed(0) }}%</span>
+              </td>
+              <td class="acciones">
+                <button class="btn btn-ghost btn-sm" (click)="abrirAbono(a)">Abonar</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      @if (pendientes().length === 0) {
+        <p class="empty">Todos los apartados están liquidados y listos para entregar.</p>
+      }
+    </section>
+  }
+}
+
+<!--
+  Registrar un abono. No cierra al hacer clic en el fondo: sale con la ✕, con
+  "Cancelar" o con Escape.
+-->
+@if (abonando(); as a) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2>Abono a {{ a.nombre_comercial || a.cliente }}</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarAbono()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        @if (error()) { <p class="alert" style="margin-top: 0">{{ error() }}</p> }
+
+        <p class="muted" style="margin-top: 0">
+          Apartado <span class="mono">{{ a.numero_pedido }}</span> de
+          <b>{{ dinero(a.total) }}</b>. Ya dejó {{ dinero(a.abonado) }} y le faltan
+          <b>{{ dinero(a.pendiente) }}</b>.
+        </p>
+
+        <div class="form-grid">
+          <label class="field">
+            Cuánto abona
+            <div class="campo-moneda">
+              <span>$</span>
+              <input type="number" min="0.01" step="0.01" [(ngModel)]="montoAbono" name="ma" />
+            </div>
+          </label>
+          <label class="field">
+            Con qué paga
+            <select [(ngModel)]="metodoAbono" name="mp">
+              <option value="">Elige…</option>
+              @for (m of metodos(); track m.id) {
+                <option [ngValue]="m.id">{{ m.nombre }}</option>
+              }
+            </select>
+          </label>
+          <label class="field full">
+            Referencia <span class="muted">(opcional)</span>
+            <input type="text" [(ngModel)]="referenciaAbono" name="ref"
+                   placeholder="Folio del depósito, por ejemplo" />
+          </label>
+        </div>
+
+        @if (abonoEsEfectivo()) {
+          @if (sesion(); as s) {
+            <p class="muted">El efectivo entra al turno de <b>{{ s.caja }}</b>.</p>
+          } @else {
+            <p class="alert" style="margin-bottom: 0">
+              No hay ningún turno de caja abierto. Un abono en efectivo tiene que entrar
+              a un turno o el corte no va a cuadrar: abre el turno en Punto de venta, o
+              registra el abono con otro método.
+            </p>
+          }
+        }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrarAbono()">Cancelar</button>
+        <button type="button" class="btn btn-primary" (click)="registrarAbono()"
+                [disabled]="registrando()">
+          {{ registrando() ? 'Registrando…' : 'Registrar el abono' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

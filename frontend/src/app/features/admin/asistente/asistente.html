@@ -1,0 +1,111 @@
+<div class="page-head">
+  <h1>Pregúntame</h1>
+  @if (empezado()) {
+    <button class="btn btn-ghost" (click)="limpiar()">Empezar de nuevo</button>
+  }
+</div>
+
+@if (capacidades(); as cap) {
+  @if (!cap.configurado) {
+    <!-- Sin llave el asistente no puede contestar nada. Se dice de una vez, en
+         vez de dejar que lo intente y falle en la primera pregunta. -->
+    <p class="alert">
+      El asistente no está configurado: falta la llave de la IA. Se pone en el
+      archivo <span class="mono">.env</span> del servidor, en
+      <span class="mono">IA_API_KEY</span>.
+    </p>
+  }
+}
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+
+@if (!empezado()) {
+  <!-- Con un cuadro de texto vacío nadie sabe qué preguntar: se ofrecen las
+       preguntas de siempre, en las palabras de la tienda. -->
+  <div class="card">
+    <p class="muted" style="margin-top: 0">
+      Pregúntame lo que quieras del negocio, como se lo preguntarías a alguien.
+      Contesto con los datos de tu sistema.
+    </p>
+    @if (capacidades(); as cap) {
+      <div class="ejemplos">
+        @for (e of cap.ejemplos; track e) {
+          <button class="ejemplo" (click)="usarEjemplo(e)">{{ e }}</button>
+        }
+      </div>
+
+      <button class="enlace" (click)="verQuePuede.set(!verQuePuede())">
+        {{ verQuePuede() ? 'Ocultar' : 'Ver' }} todo lo que puedo consultar
+        ({{ cap.herramientas.length }})
+      </button>
+      @if (verQuePuede()) {
+        <ul class="lista-capacidades">
+          @for (h of cap.herramientas; track h.nombre) {
+            <li><b>{{ h.descripcion }}</b></li>
+          }
+        </ul>
+        <p class="muted" style="font-size: 0.78rem">
+          Solo consulto: no puedo registrar ventas, mover inventario ni cambiar
+          nada. Y las cifras salen de las mismas consultas que usan las
+          pantallas, así que no se contradicen.
+        </p>
+      }
+    }
+  </div>
+}
+
+@if (empezado()) {
+  <div class="card chat" #hilo>
+    @for (m of mensajes(); track $index) {
+      <div class="turno" [class.mio]="m.quien === 'yo'">
+        <div class="burbuja" [class.err]="m.error">
+          {{ m.texto }}
+        </div>
+
+        <!-- DE DÓNDE SALIÓ. Es lo que hace que se pueda confiar en la cifra:
+             si dice "vendiste $12,400", aquí se ve que lo consultó y no que se
+             lo inventó. -->
+        @if (m.consultado && m.consultado.length > 0) {
+          <div class="de-donde">
+            Consulté:
+            @for (c of m.consultado; track $index) {
+              <span class="fuente">{{ nombreConsulta(c) }}</span>
+            }
+          </div>
+        }
+        @if (m.incompleto) {
+          <div class="de-donde">No pude terminar de resolverlo.</div>
+        }
+      </div>
+    }
+
+    @if (pensando()) {
+      <div class="turno">
+        <div class="burbuja pensando">
+          <span class="punto"></span><span class="punto"></span><span class="punto"></span>
+          @if (tardando()) {
+            <span class="tardanza">Consultando tus datos… suele tardar medio minuto.</span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}
+
+<div class="card preguntar">
+  <textarea
+    [(ngModel)]="pregunta"
+    name="pregunta"
+    rows="2"
+    placeholder="¿Cuánto vendí hoy?"
+    (keydown.enter)="$event.preventDefault(); enviar()"
+    [disabled]="pensando()"
+  ></textarea>
+  <button class="btn btn-primary" (click)="enviar()" [disabled]="pensando() || !pregunta.trim()">
+    {{ pensando() ? 'Pensando…' : 'Preguntar' }}
+  </button>
+</div>
+<p class="muted" style="font-size: 0.75rem">
+  Enter para enviar. Puedo equivocarme al interpretar la pregunta, así que revisa
+  de dónde saqué cada cifra.
+</p>

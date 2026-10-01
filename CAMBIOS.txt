@@ -9,11 +9,73 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-07-28
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-09-10
 ===============================================================================
 
 LO ÚLTIMO QUE SE TERMINÓ
-  EL TRASPASO SE PIDE EN KILOS (no en paquetes: así pide la sucursal y así se manda,
+  EL ASISTENTE YA CONTESTA DE VERDAD: Admin → Asistente. Se le pregunta en
+  palabras normales ("¿cuánto vendí hoy?", "¿quién me debe más?") y responde con
+  los datos reales de la tienda, diciendo debajo QUÉ consultó.
+  Se pasó de DeepSeek a **GOOGLE GEMINI**, que tiene capa GRATUITA: ya no hay que
+  recargar nada. Probado contra la IA real y contra la base: contestó "No hay
+  ventas registradas hoy" (correcto, la base está vacía) y a un CAJERO le negó
+  el margen sin dar una sola cifra.
+  ⚠ TARDA. Con la capa gratuita, una respuesta que consulta datos toma unos 30
+  segundos (picos de 50). Está medido, no es una impresión. Por eso la pantalla
+  avisa "Consultando tus datos… suele tardar medio minuto" a los 6 segundos: con
+  tres puntitos nada más, medio minuto se lee como que se trabó.
+  La IA NO toca la base: elige de una lista de 14 consultas ya programadas, todas
+  de solo lectura.
+  De paso: el cliente ya se puede REGISTRAR DESDE LA CAJA sin salir de la venta,
+  y la campana avisa cuando un cliente nuevo lleva 15 días comprando sin límite
+  de crédito capturado (para decidir si se le fía o se le sigue cobrando todo).
+  Antes: LOS APARTADOS, COMPLETOS: se aparta desde el punto de venta y la pantalla
+  Admin → Apartados separa los LISTOS PARA ENTREGAR de los que aún deben, con
+  abonar y entregar desde ahí. Con esto se cerró toda la lista de mejoras que
+  pidió el usuario el 2026-09-10.
+  Antes: LOS APARTADOS, en el BACKEND (33 comprobaciones): el cliente deja un anticipo,
+  la mercancía se RESERVA sin descontar del inventario, abona hasta liquidar y al
+  entregar se descuenta de verdad. Cancelar libera la reserva sin inventar
+  existencias. Falta el frontend.
+  Antes: YA SE PUEDE CAPTURAR Y COBRAR A CLIENTES: pantalla de Clientes con su
+  EXPEDIENTE (cuánto compra, su cuenta, qué colores se lleva), el POS identifica
+  al cliente y aplica SU lista de precios sola, se puede FIAR (incluso mixto) y
+  registrar abonos. Y el campo de precio de compra ya está en los dos cargadores
+  de remesa, que es lo que desbloquea el margen.
+  Antes: EL TABLERO VISUAL ya se puede abrir: Admin → "Cómo va el negocio". Cada bloque
+  abre con la cifra grande, luego la gráfica y luego la tabla. Se revisó MIRÁNDOLO
+  (captura con Chrome headless), no solo compilando, y así salieron tres fallas
+  de presentación que ninguna prueba detecta. FALTAN las pantallas de clientes,
+  el POS con captura de cliente, la cobranza y el costo en la remesa.
+  Antes: EL TABLERO DEL NEGOCIO, en el BACKEND: cobranza por antigüedad, clientes que
+  dejaron de venir, hilo parado (con el dinero que hay ahí) y margen por hilo.
+  Más el COSTO: se captura al recibir la remesa, se promedia ponderado y se
+  congela en la venta. Y la campana ya avisa de cobranza atrasada y de clientes
+  enfriados. FALTA TODO EL FRONTEND, y el usuario lo quiere MUY VISUAL.
+  Antes: EL EXPEDIENTE DEL CLIENTE Y SU CRÉDITO, en el BACKEND (36 comprobaciones). Ya se
+  puede saber qué le vendes a quién: alta sin cuenta, búsqueda por apodo o
+  teléfono, historial de compras, qué colores compra más, límite de crédito,
+  venta a crédito (incluso mixta: paga algo y debe el resto), abonos que entran
+  a la caja y lista de quién debe. FALTAN LAS PANTALLAS.
+  Y OJO: desde el 2026-09-05 el `.env` apunta a la base del SERVIDOR, no a una
+  local. Las suites E2E se niegan a correr ahí (ver `_no-en-produccion.js`);
+  para probarlas hay una base local en `.env.local.respaldo`.
+  Antes: EL PEDIDO YA SE ENTIENDE Y YA SE PUEDE COBRAR. El detalle dice QUÉ hilo es
+  —calibre, material y línea, no solo "BLANCO"— y lista los paquetes que se
+  entregaron con su código de barras, su peso real y su lote, en su propia
+  tabla. Y en Pagos hay dónde subir la CAPTURA del depósito que manda el
+  cliente: subirla deja el pedido pagado, en un paso.
+  Antes: EL CHECKOUT DE LA TIENDA EN LÍNEA, que era el hueco más viejo del proyecto. Ya
+  captura cómo se entrega (recoger en tienda o envío con tarifa fija), a qué
+  dirección, con qué cupón y cómo se paga (transferencia o efectivo en tienda).
+  El total lo calcula el BACKEND con la misma lógica que la venta, así que lo que
+  el cliente ve antes de confirmar es lo que se le cobra. De paso se cerraron dos
+  huecos de seguridad que el endpoint traía abiertos: el cliente podía ponerse el
+  envío en CERO y podía declararse PAGADO sin haber depositado un peso.
+  También: pantalla de LISTAS DE PRECIO (tipos de cliente) y de CONFIGURACIÓN DE
+  LA TIENDA en el panel, y se arregló el 500 de la campana y de Surtir sucursal
+  —una migración que nunca se había aplicado—. Ver la primera entrada fechada.
+  Antes: EL TRASPASO SE PIDE EN KILOS (no en paquetes: así pide la sucursal y así se manda,
   sin escanear nada) y hay CAMPANA DE PENDIENTES junto al nombre del usuario: avisa
   cuando una sucursal pide mercancía, cuando algo va en camino sin acuse y cuando
   hay existencias bajo su mínimo. Ver la primera entrada fechada.
@@ -115,38 +177,92 @@ LO ÚLTIMO QUE SE TERMINÓ
   primero que hay que hacer.
 
 LO QUE ESTÁ ABIERTO  ← EMPIEZA POR AQUÍ
-  PROBARLO EN EL NAVEGADOR. Es la única deuda grande que queda: todo el trabajo
-  del 2026-07-26 pasa contra los endpoints y compila, pero NADIE ha abierto la
-  interfaz. Falta ver con la pistola física el escaneo del POS y del desarme, y
-  a mano el panel de cancelación, la pantalla de presentaciones y la carga
-  masiva del Excel.
+  CAMBIAR DOS CONTRASEÑAS. Las dos se escribieron en el chat del asistente de
+  código, así que quedaron en un historial de conversación:
+    · la contraseña de root de MySQL del servidor (2026-09-05);
+    · la llave de la API de GOOGLE GEMINI (2026-09-10). La de DeepSeek ya no se
+      usa, pero conviene borrarla en su consola para que no quede viva.
+  Al cambiarlas hay que actualizar `backend/.env` y `backend/.env.produccion`
+  (y el `.env` del servidor, en /var/www/tienda-hilos/backend/.env).
+  La llave de Gemini se saca en aistudio.google.com/apikey.
 
-  (El "vaciado masivo" ya quedó resuelto: es la lista de empaque, cargada desde
-  la pantalla de presentaciones del producto. Ver la primera entrada fechada.)
+  SI EL ASISTENTE SE VUELVE LENTO O DEJA DE CONTESTAR, mira el mensaje: cada
+  falla dice qué hacer.
+    · "Se agotó por ahora la cuota gratuita" → es el límite de la capa gratis.
+      Se repone solo; si pasa seguido, hay que subir el límite en la consola de
+      Google (o activar facturación, que para este uso cuesta centavos).
+    · "La IA está saturada" → el 503 pasajero de Google. Ya se reintenta solo
+      una vez; si insiste, es de su lado.
+    · "El modelo configurado no existe" → Google retiró ese modelo. Hay que
+      cambiar `IA_MODELO` en el `.env`.
+
+  CERRAR EL PUERTO 3306 DEL SERVIDOR. Hoy la base de datos acepta conexiones
+  desde cualquier parte de internet: lo único que la protege es la contraseña, y
+  adentro hay correos de clientes y hashes de contraseñas. Debería aceptar solo
+  desde el propio servidor y llegarle por un túnel SSH. No se hizo porque en
+  esta máquina no hay llave SSH configurada (~/.ssh está vacío).
+
+  PROBARLO EN EL NAVEGADOR. Es la deuda grande que queda: todo pasa contra los
+  endpoints y compila, pero casi nada se ha abierto en la interfaz. Falta ver con
+  la pistola física el escaneo del POS y del desarme, y a mano el panel de
+  cancelación, la pantalla de presentaciones, la carga masiva del Excel y ahora
+  también el CHECKOUT nuevo.
+
+  CAPTURAR LA CONFIGURACIÓN DE LA TIENDA. El checkout ya funciona, pero abre con
+  el envío en $0.00 y sin datos de depósito, porque nadie los ha llenado. Va en
+  Admin → Configuración: cuánto se cobra por enviar, el banco / titular / CLABE
+  para las transferencias, y la dirección y el teléfono de la tienda.
 
 CÓMO PROBAR QUE SIGUE FUNCIONANDO
+  OJO: el `.env` apunta al SERVIDOR. Las suites se niegan a correr contra una
+  base remota (crean y borran productos y pedidos). Para correrlas, usa la base
+  local, que está al día:
+      PORT=3223 node --env-file=.env.local.respaldo src/server.js &
+      BASE=http://localhost:3223/api/v1 node --env-file=.env.local.respaldo scripts/<suite>.js
+  Y para ver qué le falta a cualquier base:
+      node scripts/estado-migraciones.js                        (la del .env)
+      node --env-file=.env.local.respaldo scripts/estado-migraciones.js
+
   cd backend
   node scripts/e2e-traspaso-estados.js     36 comprobaciones, se limpia solo
-  cd ../frontend && npx ng test --watch=false --browsers=ChromeHeadless   (55)
-  PORT=3210 node src/server.js &            (usa la base "desarrollo")
+    PORT=3210 node src/server.js &            (usa la base "desarrollo")
   node scripts/e2e-remesas.js               26 comprobaciones, se limpia solo
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-checkout-online.js (31)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-comprobante-pago.js (33)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-clientes-credito.js (36)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-costo-margen.js (18)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-apartados.js (33)
+  node --env-file=.env.local.respaldo scripts/e2e-asistente.js (46)
+    ↑ el asistente. NO gasta cuota de la IA: sustituye el proveedor por un
+      doble, y los errores del proveedor los prueba contra un servidor de
+      mentiras en el puerto 4322. Tampoco necesita el servidor levantado.
+  cd ../frontend && npx ng test --watch=false --browsers=ChromeHeadless   (91)
   BASE=http://localhost:3210/api/v1 node scripts/e2e-trazabilidad.js    (14)
   BASE=http://localhost:3210/api/v1 node scripts/e2e-bultos-estado.js   (21)
   BASE=http://localhost:3210/api/v1 node scripts/e2e-cancelacion.js     (16)
   BASE=http://localhost:3210/api/v1 node scripts/e2e-cancelacion-caja.js (18)
   BASE=http://localhost:3210/api/v1 node scripts/e2e-devolucion-presentacion.js (16)
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-traspaso-paquetes.js
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-carga-por-producto.js
+  BASE=http://localhost:3210/api/v1 node scripts/e2e-bajar-a-mostrador.js
+
+  OJO: los .xlsx de prueba están en muestras/, no en la raíz. Cinco suites los
+  buscaban en la raíz y tronaban al arrancar; se corrigió el 2026-09-05.
 
 SIGUIENTE PASO NATURAL
-  1. CAPTURAR DE VERDAD en el navegador: producto → Presentaciones → subir el
-     Excel. Es la prueba que falta y ahora la base está limpia para hacerla.
-     Con el lector físico donde aplique (POS y desarme).
-  2. Checkout de la tienda en línea, el hueco más viejo del proyecto.
-  3. Probar TODO en el navegador. Es lo que más falta: el escaneo con la pistola
-     (POS y desarme) y el panel de cancelación con cambio de presentación solo se
-     han probado contra los endpoints, nunca con la interfaz en la mano.
-  4. Checkout de la tienda en línea: sigue sin dirección de envío, cupón ni
-     pago, así que el pedido se queda en "pendiente". Es el hueco más viejo
-     del proyecto.
+  0. CAMBIAR LAS DOS CONTRASEÑAS (arriba). Es lo único que no se puede hacer
+     desde el código.
+  1. LLENAR Admin → Configuración: el costo de envío y los datos de depósito.
+     Sin eso el checkout funciona pero promete envío gratis.
+  2. PROBAR EL CHECKOUT EN EL NAVEGADOR de punta a punta: registrarse como
+     cliente, agregar al carrito, capturar una dirección y confirmar. Verificar
+     que el pedido aparece en Admin → Pedidos con su dirección y su pago
+     pendiente, y que al marcarlo 'pagado' todo cuadra.
+  3. CAPTURAR DE VERDAD en el navegador: producto → Presentaciones → subir el
+     Excel, con el lector físico donde aplique (POS y desarme).
+  4. Definir las LISTAS DE PRECIO reales (medio mayoreo, mayoreo, especial) en
+     Admin → Listas de precio, y capturarles precio en las presentaciones. Hoy
+     solo hay "Público" y dos DEMO.
 
 DEUDAS CONOCIDAS QUE NO SON DE ESTE CAMBIO
   · backend/.env.example está borrado del repo aunque backend/README.md lo
@@ -160,6 +276,1245 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-10 (7) · El asistente cambia de DeepSeek a GOOGLE GEMINI
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "mejor vamos a utilizar la ia de google gemini creo que para probar hay no
+   ocupo recagar esta es la apikey [...]"
+
+  Tenía razón en las dos cosas: Gemini tiene capa GRATUITA, así que se acabó el
+  bloqueo de "recarga la cuenta" con el que quedó la entrega anterior.
+
+QUÉ CAMBIÓ, Y QUÉ NO
+  NO se tocó el bucle de herramientas. Ni una línea. Esto es lo que valida la
+  decisión de aislar el proveedor en su propio archivo: el asistente no sabe con
+  qué IA está hablando. Cambió `proveedor.js`, el `.env` y la configuración.
+  Se le habla a Gemini por su endpoint COMPATIBLE CON OPENAI
+  (`/v1beta/openai/chat/completions`), que acepta el mismo `messages` + `tools` +
+  `tool_calls` que hablaba DeepSeek. Se verificó el ciclo completo —pedir
+  herramienta, devolverle el resultado, contestar— antes de cambiar nada.
+
+QUÉ MODELO, Y POR QUÉ ESE
+  `gemini-flash-lite-latest`. Se midieron tres candidatos con el flujo REAL de
+  dos vueltas, 3 corridas cada uno:
+      gemini-flash-lite-latest        prom 29.9s  peor 48.4s  0 fallos de 3
+      gemini-3.5-flash-lite           prom 44.7s  peor 52.5s  0 fallos de 3
+      gemini-flash-latest [sin razonar] prom 21.9s  peor 21.9s  2 FALLOS de 3
+  El último parecía el más rápido pero falló dos de tres veces: promediar solo
+  lo que funcionó habría llevado a elegir el peor. Se eligió el más rápido de
+  los ESTABLES.
+  Se usa el ALIAS `-latest` a propósito: los nombres fijos se retiran. Durante
+  estas pruebas `gemini-2.5-flash-lite` ya contestaba 404 "no longer available
+  to new projects" — con un nombre fijo, el asistente habría dejado de
+  funcionar un día sin que nadie tocara nada.
+
+LA MALA NOTICIA: TARDA, Y DE FORMA MUY IRREGULAR
+  Una respuesta que consulta datos toma unos 30 segundos de promedio, pero lo
+  que hay que saber es la VARIACIÓN: la MISMA pregunta («¿cuánto vendí hoy?»)
+  contestó en 6.2 s en una corrida y en otra tardó 60.5 s. No es el modelo ni la
+  pregunta: es la capa gratuita, que a veces va suelta y a veces no. Los tres
+  modelos medidos tardaron parecido, y una pregunta que NO consulta datos
+  ("gracias") contesta en 3 segundos. O sea: la red y el modelo responden; lo
+  que cuesta son las dos vueltas de herramientas cuando la cola está cargada.
+  Por eso el aviso de la pantalla dice "suele tardar" y no un número: prometer
+  "20 segundos" sería mentir la mitad de las veces.
+  Dos consecuencias, las dos atendidas:
+    · El tope por llamada subió de 45 s a 60 s. Con 45 s se abortaba una
+      respuesta que iba a llegar y el usuario leía "la IA tardó demasiado" por
+      nada.
+    · La pantalla AVISA. A los 6 segundos aparece "Consultando tus datos… suele
+      tardar medio minuto" junto a los puntitos. Medio minuto de tres puntos
+      parpadeando se lee como que se trabó, y la gente vuelve a preguntar o
+      cierra. Es el mismo criterio de siempre: la pantalla no puede mentir
+      sobre lo que está pasando.
+
+DOS COSAS QUE GEMINI HACE DISTINTO Y QUE HABÍA QUE ATENDER
+  1. EL ERROR VIENE DENTRO DE UN ARREGLO: `[{ error: {...} }]`, no como objeto
+     suelto. El código leía `cuerpo.error.message`, que con eso daba `undefined`
+     y TODOS los fallos se veían igual: "La IA devolvió un error: HTTP 429", sin
+     decir que era la cuota. Se normalizan las dos formas en `leerError`.
+     Se descubrió en la primera llamada de prueba, no razonándolo.
+  2. LA CUOTA NO ES EL SALDO. `IA_SIN_CUOTA` (429 / RESOURCE_EXHAUSTED) se
+     repone SOLA, así que el mensaje dice "vuelve a intentarlo en unos minutos";
+     `IA_SIN_SALDO` sigue existiendo para un proveedor de paga y dice "recarga".
+     Mandar a recargar a quien está en la capa gratuita lo haría pagar algo que
+     no necesita.
+  Además, Gemini contesta 503 "high demand" de cuando en cuando —pasó en la
+  PRIMERA llamada que se le hizo—. Es pasajero, así que se reintenta UNA vez:
+  dejar que ese 503 llegue al mostrador sería fallar por algo que se arregla
+  solo. Solo se reintenta lo pasajero: una llave mala o la cuota agotada no se
+  arreglan insistiendo, y reintentarlas solo tardaría el doble en dar la misma
+  respuesta.
+
+BACKEND
+  MODIF   backend/src/modules/asistente/proveedor.js
+          `leerError` (normaliza objeto/arreglo), `traducirError` (siete casos
+          con nombre), `_intentar` (una llamada con su reloj) y el reintento del
+          fallo pasajero. Nuevos códigos: IA_SIN_CUOTA, IA_OCUPADA,
+          IA_MODELO_NO_EXISTE.
+  MODIF   backend/src/config/env.js
+          baseUrl y modelo por omisión de Gemini, tope de 60 s, y
+          `esperaReintentoMs` (nuevo, `IA_ESPERA_REINTENTO_MS`).
+  MODIF   backend/.env, .env.local.respaldo, .env.produccion   (los tres,
+          gitignored) la llave, la URL y el modelo nuevos.
+  MODIF   backend/.env.produccion.ejemplo   documenta cómo volver a DeepSeek.
+
+FRONTEND
+  MODIF   frontend/src/app/features/admin/asistente/asistente.ts + .html
+          señal `tardando`, con su reloj de 6 s y su limpieza al contestar o al
+          fallar (si no, el aviso saltaba después de una respuesta ya recibida).
+  MODIF   frontend/src/styles.scss   `.burbuja.pensando .tardanza`
+  NO se tocó el manejo de errores de la pantalla: ya mostraba el `message` que
+  manda el backend, así que los mensajes nuevos entraron solos. Se revisó antes
+  de escribir nada, para no duplicar textos.
+
+PRUEBAS
+  MODIF   backend/scripts/e2e-asistente.js   de 33 a 46 comprobaciones, TODO OK.
+          La sección 7 es nueva y prueba el proveedor DE VERDAD contra un
+          servidor de mentiras (puerto 4322), porque ahí es donde vive lo único
+          que sabe de Gemini:
+            · la cuota agotada con el error EN ARREGLO se reconoce;
+            · su mensaje dice que se repone, no que hay que pagar;
+            · y NO se reintenta (se comprueba que llegó 1 sola petición);
+            · el "Insufficient Balance" de un proveedor de paga sigue sirviendo;
+            · un 503 se reintenta UNA vez (se cuentan 2 peticiones);
+            · y un 503 pasajero seguido de un 200 SALE ADELANTE — que es el
+              punto del reintento, no el mensaje de error;
+            · un modelo retirado se distingue y dice qué variable cambiar;
+            · una llave inválida se reconoce aunque venga como 400;
+            · una respuesta con forma rara no truena feo.
+  Contra la IA REAL y la base real, por el endpoint del servidor:
+      «¿Cuánto vendí hoy?»            → "No hay ventas registradas hoy." (19.9s)
+      «¿Cuántos kilos en cada almacén?» → los tres almacenes con sus kilos (15.4s)
+      «Gracias, nada más»              → contesta sin consultar nada (3.1s)
+      «¿Quién me debe más?»            → "Nadie te debe, el saldo es $0.00" (22.8s)
+      «¿Qué colores me dejan más margen?» COMO CAJERO → se lo NIEGA, sin dar
+        una sola cifra. El filtro por rol aguanta contra el modelo real, que es
+        donde importa: en las pruebas el doble hace lo que se le dice.
+        (De aquí salió el fallo de la pantalla inventada — ver abajo.)
+  Y las suites de al lado, para descartar que el cambio de `env.js` rompiera
+  algo: e2e-clientes-credito, e2e-apartados y e2e-costo-margen en verde, más las
+  91 pruebas de Angular.
+
+UN FALLO QUE SOLO APARECIÓ PREGUNTÁNDOLE DE VERDAD
+  Al negarle el margen a un cajero, el modelo contestó bien —sin dar una sola
+  cifra— pero remató con "puedes revisar el reporte de utilidades en la pantalla
+  de FINANZAS del sistema". Esa pantalla NO EXISTE. Y la culpa era de las
+  instrucciones: decían "sugiere en qué pantalla del sistema está" sin decir
+  cuáles hay, o sea invitando a inventarla.
+  Se arregló listando las 17 pantallas reales en el prompt y prohibiendo
+  explícitamente inventar pantallas, junto a lo de no inventar clientes, colores
+  ni folios. Mandar a alguien a una pantalla que no existe lo hace buscar algo
+  que no está: es el mismo criterio de "la pantalla no promete lo que no hay",
+  pero aplicado a lo que dice la IA.
+  Ninguna prueba con un doble podía cachar esto: el doble contesta lo que se le
+  programa. Salió en la primera pregunta real.
+
+PENDIENTE / NOTAS
+  · La llave de Gemini quedó en el historial del chat: hay que cambiarla, igual
+    que la de MySQL. Y conviene borrar la de DeepSeek en su consola, que ya no
+    se usa pero sigue viva.
+  · Si la capa gratuita se queda corta, activar facturación en Google sube los
+    límites; para este uso cuesta centavos. No hace falta cambiar código.
+  · Sigue sin abrirse en un navegador de verdad. El aviso de "suele tardar medio
+    minuto" es justamente de lo que hay que ver ahí, porque con 30 segundos de
+    espera la pantalla es la mitad del asunto.
+
+-------------------------------------------------------------------------------
+ 2026-09-10 (6) · El asistente con IA (DeepSeek), alta de cliente en caja
+                  y aviso de cliente nuevo sin crédito
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "sigue con el asistente pero asistente va a utilizar ia va a utilizar deepseek
+   te paso la api key [...] y como dato cuando registre un cliente que se pueda
+   hacer desde caja y ahora otro detalle cuando ese cliente vaya puede dejarme
+   algo de dinero y lo demos que se vaya a credito y cuando es cliente nuevo si
+   que sea el cobro completo que avise por hay po medio de una notificacion"
+
+  Tres cosas, y la primera CAMBIA una decisión anterior: el 2026-09-10 se había
+  resuelto hacer el asistente SIN IA (con reglas y palabras clave). El usuario
+  pidió IA, así que se rehízo con DeepSeek.
+  El pago mixto —"deja algo de dinero y lo demás a crédito"— YA ESTABA hecho en
+  la entrega de clientes/crédito de este mismo día; no se volvió a tocar.
+
+QUÉ SE PUEDE HACER YA
+  · Admin → Asistente: preguntarle en español lo que sea del negocio y que
+    contesta con datos reales. Debajo de cada respuesta dice qué consultó.
+  · Punto de venta: registrar un cliente nuevo en el momento, sin salir de la
+    venta, con solo nombre / apodo / teléfono.
+  · La campana avisa de los clientes nuevos (menos de 15 días) que compran sin
+    tener límite de crédito capturado.
+
+CÓMO ESTÁ HECHO EL ASISTENTE, Y POR QUÉ ASÍ
+  LA IA NO VE LA BASE Y NO ESCRIBE SQL. Recibe un catálogo de 14 consultas ya
+  programadas, elige cuál necesita, el servidor la ejecuta y le devuelve solo el
+  resultado; la IA únicamente redacta la respuesta. Se descartó dejarla generar
+  consultas por tres razones concretas:
+    · una consulta generada puede leer lo que no debe (sueldos, hashes de
+      contraseñas) o bloquear tablas en plena venta;
+    · un modelo se equivoca en un JOIN y devuelve una cifra que PARECE buena;
+    · así el asistente y las pantallas salen de las MISMAS funciones, y nunca
+      se contradicen entre sí.
+  TODAS son de solo lectura: el asistente no registra ventas, no mueve
+  inventario y no perdona deudas. No hay forma de pedirle que lo haga.
+
+  Las herramientas llaman a los SERVICES, no a los modelos. Los services ya
+  normalizan los rangos de fecha (`hastaExcl` es exclusivo y hay que sumarle un
+  día, error fácil), y son los mismos que alimentan los reportes.
+
+  EL ROL SALE DEL TOKEN, no de la petición. Las cinco herramientas que exponen
+  costo o margen están marcadas `soloJefes`: a un cajero ni se le ofrecen en el
+  catálogo y, si el modelo insistiera en pedirlas, la ejecución las niega con un
+  motivo. Se prueba en las dos capas.
+
+  El bucle tiene TOPE (`IA_MAX_VUELTAS`, 4). Un modelo que se enrede pidiendo
+  datos sin parar se corta y contesta "prueba a preguntarlo más concreto", que
+  es mejor que devolver media respuesta como si fuera completa.
+
+  Se le manda la FECHA DE HOY en las instrucciones: el modelo no la sabe y sin
+  ella "¿cuánto vendí hoy?" lo llevaría a inventar una fecha.
+
+  El historial se recorta a los últimos 6 turnos. Alcanza para preguntar "¿y del
+  mes pasado?" sin arrastrar —y pagar— toda la conversación en cada pregunta.
+
+  El proveedor está en UN archivo aparte (`proveedor.js`) por dos razones:
+  cambiar de DeepSeek a otro es cambiar `IA_BASE_URL` y `IA_MODELO`, y las
+  pruebas lo sustituyen por un doble y verifican el bucle sin gastar saldo.
+
+BACKEND
+  NUEVO   backend/src/modules/asistente/herramientas.js
+          Las 14 consultas que puede pedir, con su descripción para el modelo:
+            ventas_del_dia, ventas_por_rango, mas_vendidos, existencias,
+            resumen_almacenes, por_reabastecer, quien_me_debe,
+            clientes_que_no_vuelven, buscar_cliente, expediente_cliente,
+            apartados  ← todos los roles
+            hilo_parado, margen_por_hilo, cortes_de_caja  ← solo jefes
+  NUEVO   backend/src/modules/asistente/proveedor.js
+          La llamada a DeepSeek, con AbortController y errores con nombre:
+          IA_SIN_SALDO (el más probable en la práctica), IA_LLAVE_INVALIDA,
+          IA_SIN_RESPUESTA, IA_INALCANZABLE, ASISTENTE_SIN_CONFIGURAR.
+  NUEVO   backend/src/modules/asistente/service.js
+          El bucle, las instrucciones (con la fecha y el vocabulario de la
+          tienda: hilo, paquete, cono, bulto, fiar, apartar) y `capacidades`.
+  NUEVO   backend/src/modules/asistente/controller.js + routes.js
+  MODIF   backend/src/routes.js        monta /api/v1/asistente
+  MODIF   backend/src/config/env.js    env.ia { apiKey, baseUrl, modelo,
+                                       maxVueltas, timeoutMs }
+  MODIF   backend/src/modules/notificaciones/model.js
+          aviso `nuevos_sin_credito`: clientes de menos de DIAS_CLIENTE_NUEVO
+          (15) que ya compraron y no tienen límite de crédito.
+
+          Endpoints:
+            GET  /api/v1/asistente/capacidades   qué puede contestar este rol
+            POST /api/v1/asistente/preguntar     { pregunta, historial }
+
+FRONTEND
+  NUEVO   frontend/src/app/features/admin/asistente/asistente.ts + .html
+          Chat con preguntas de ejemplo como botones —un cuadro vacío no dice
+          qué preguntar— y debajo de cada respuesta "Consulté: …" con las
+          herramientas que se usaron, para que se vea de dónde salió la cifra.
+  MODIF   frontend/src/app/features/admin/pos/pos.ts + .html
+          alta rápida de cliente (nombre, apodo, teléfono). Nace con
+          limite_credito = 0 a propósito: así el cobro sale completo, que es
+          justo lo que pidió el usuario para un cliente nuevo.
+  MODIF   frontend/src/app/features/admin/admin-layout.ts + .html
+          los tres avisos nuevos en la campana y el helper dinero()
+
+CONFIGURACIÓN
+  MODIF   .gitignore                  `backend/.env.*` con excepción para
+                                      `.env.produccion.ejemplo`. El respaldo
+                                      `.env.local.respaldo` aparecía suelto en
+                                      `git status` y ya lleva la llave de la IA
+                                      y la contraseña de MySQL: un `git add .`
+                                      lo habría subido.
+  MODIF   backend/.env.produccion.ejemplo   documenta las tres claves IA_*
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-asistente.js   33 comprobaciones, TODO OK.
+          NO gasta saldo: el proveedor se sustituye por un doble que simula lo
+          que haría el modelo. Cubre lo que de verdad puede fallar:
+            · el bucle ejecuta la herramienta pedida y le devuelve el dato;
+            · una pregunta que no necesita datos no gasta una consulta;
+            · el cajero se queda sin margen (en el catálogo Y en la ejecución);
+            · una herramienta inventada se rechaza sin tumbar la conversación;
+            · LAS 14 CORREN DE VERDAD contra la base sin tronar;
+            · el tope de vueltas corta un modelo que no para de pedir;
+            · sin llave configurada, lo dice en vez de fallar raro.
+  Además se verificó el camino COMPLETO —con red, con HTTP, con el formato real
+  de DeepSeek— contra un servidor de mentiras en el puerto 4321: pidió
+  ventas_del_dia, recibió el dato y contestó "Hoy vendiste $0.00 en 0 tickets"
+  en 2 vueltas. Lo único que no se ha visto es la respuesta del modelo real,
+  porque la cuenta no tiene saldo.
+  16 suites del backend en verde y 91 pruebas de Angular; build de producción
+  limpio (310.54 kB).
+
+UN ERROR QUE VALE LA PENA RECORDAR
+  Las herramientas se escribieron llamando a cuatro funciones que NO EXISTEN
+  (`reportes.ventasDelDia`, `reportes.cortesDeCaja`, `inventario.listar`,
+  `inventario.resumen`). Ninguna prueba lo habría cachado si la suite no
+  ejecutara las 14 herramientas de verdad: el error solo aparece cuando el
+  modelo pide esa herramienta, o sea en producción. Por eso la suite las corre
+  TODAS, aunque devuelvan vacío.
+  También se había escrito un `LEFT JOIN usuarios u ON u.id = NULL` en el aviso
+  de cliente nuevo, para mostrar quién lo capturó: la tabla `clientes` no guarda
+  ese dato. Se quitó la columna en vez de dejarla siempre en nulo.
+
+PENDIENTE / NOTAS
+  · LA CUENTA DE DEEPSEEK NO TIENE SALDO. La llave autentica bien, pero la API
+    contesta "Insufficient Balance", así que el asistente todavía no responde
+    preguntas reales. Se recarga en platform.deepseek.com.
+  · La llave de DeepSeek y la contraseña de MySQL quedaron escritas en el
+    historial del chat: hay que cambiarlas las dos.
+  · Ninguna de estas pantallas se ha abierto en un navegador de verdad.
+
+-------------------------------------------------------------------------------
+ 2026-09-10 (5) · Apartados, la parte visible
+-------------------------------------------------------------------------------
+
+QUÉ SE PUEDE HACER YA
+  · Punto de venta: botón "Apartar", con el anticipo que el cliente quiera
+    dejar (o nada). Exige cliente identificado.
+  · Admin → Apartados: lo guardado, lo que ya dejaron, lo que falta, y las dos
+    acciones separadas.
+
+LA DECISIÓN QUE SALIÓ DE MIRAR LA PANTALLA
+  El orden por omisión era "a quién llamar (ya casi liquida)" y ponía PRIMERO a
+  quien ya había pagado el 100%. Al verlo en la captura quedó claro el error: a
+  esa persona no hay que LLAMARLE para cobrar, hay que ENTREGARLE. Y su barra de
+  $0 era ruido en una gráfica titulada "cuánto falta por cobrar".
+  Son dos acciones distintas, así que la pantalla las separa:
+   · Arriba, en verde: "N apartados listos para entregar", con su botón.
+     Es lo más urgente —el cliente ya pagó y su mercancía sigue ocupando
+     bodega— y mezclarla con la cobranza la escondía.
+   · Abajo: los que todavía deben, con la gráfica de lo que falta y el botón de
+     abonar. Los liquidados NO entran en esa gráfica.
+  El orden se renombró a "Los que ya casi liquidan", que es lo que de verdad
+  hace.
+
+UNA REGLA QUE FALTABA EN EL BACKEND
+  No se puede apartar SIN CLIENTE (422 APARTADO_SIN_CLIENTE). Se añadió al
+  escribir la pantalla: si no se sabe a quién se le guarda la mercancía, dentro
+  de un mes nadie podrá reclamarla ni identificarla. Un apartado anónimo es
+  mercancía perdida en la bodega. Tiene su comprobación en el E2E.
+
+EL TICKET DEL POS AHORA DICE LA VERDAD
+  Decía "✅ Venta" y "Cambio: $0.00" para cualquier operación. En un apartado
+  eso miente dos veces: no es una venta cobrada y no hay cambio. Ahora distingue
+  los tres casos: venta, apartado (con enlace a la pantalla de apartados) y
+  entrega a crédito.
+
+DETALLES DE LA CAPTURA DEL APARTADO EN EL POS
+  · Apartar y fiar son EXCLUYENTES y activar uno cierra el otro: fiar es
+    entregar sin cobrar, apartar es cobrar sin entregar. El backend además lo
+    rechaza.
+  · El anticipo NO trae cifra propuesta: lo que deje es decisión del cliente, y
+    proponer un número invitaría a cobrarle eso sin preguntarle. (El crédito sí
+    propone: ahí el importe es el total, que no es opinable.)
+  · Sin anticipo no se pide método de pago: no entra dinero.
+  · Al capturar dice, en palabras: "la mercancía se guarda, NO sale del
+    inventario hasta que la recoja".
+  · El bloque va en VERDE y el de fiar en NARANJA: son operaciones opuestas y
+    confundirlas sale caro.
+  · Los bultos escaneados NO se mandan en un apartado: el bulto se consume
+    cuando la mercancía SALE, y marcarlo ahora lo dejaría como vendido estando
+    en la bodega.
+
+FRONTEND
+  NUEVO   features/admin/apartados/apartados.ts + .html
+  MODIF   features/admin/pos/pos.ts + .html      apartar y el ticket
+  MODIF   core/models/ventas.models.ts           Apartado, Apartados,
+                                                 ResultadoAbono, estado
+                                                 'apartado'
+  MODIF   core/services/ventas.service.ts        apartados, abonarApartado,
+                                                 entregarApartado
+  MODIF   features/admin/admin.routes.ts         /admin/apartados
+  MODIF   features/admin/admin-layout.html       "Apartados" en el menú
+  MODIF   styles.scss                            bloque de apartar, listos,
+                                                 barra de avance
+
+BACKEND
+  MODIF   src/modules/pedidos/model.js   exige cliente al apartar
+  MODIF   scripts/e2e-apartados.js       la comprobación de esa regla
+
+PRUEBAS
+  Las 15 suites del backend y 91 pruebas de Angular en verde. Build de
+  producción limpio.
+  La pantalla se revisó MIRÁNDOLA con datos reales; los apartados de prueba se
+  sembraron y se borraron de la base LOCAL —incluida la reserva de inventario
+  que dejaron— y producción no se tocó.
+
+PENDIENTE / NOTAS
+  · Con esto se cerró la lista de mejoras del 2026-09-10 (cobranza en la
+    campana, clientes que no vuelven, hilo muerto, margen y apartados).
+  · Nada se ha probado en el NAVEGADOR con la interfaz real, ni con la pistola
+    física. Es la deuda más vieja del proyecto y ya son muchas pantallas.
+  · Falta el asistente de preguntas predefinidas (sin IA), que el usuario pidió
+    el 2026-09-09 y sigue sin hacerse.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-10 (4) · Apartados (backend)
+-------------------------------------------------------------------------------
+
+LA IDEA
+  El cliente deja un anticipo, la mercancía se le guarda, y va abonando hasta
+  liquidarla. Anticipo LIBRE y SIN fecha límite, como el crédito (decisión del
+  usuario el 2026-09-10).
+
+LA DECISIÓN DE FONDO: NO ES UNA TABLA APARTE
+  Un apartado es una venta que todavía no se entrega: mismo cliente, mismo
+  detalle, mismos pagos, mismos precios congelados. Una tabla `apartados`
+  duplicaría todo eso y habría que mantener las dos en paralelo — el mismo
+  razonamiento por el que este proyecto no separó la tienda en línea del
+  mostrador y usa `pedidos.canal`.
+  Es un `pedidos` con estado 'apartado'.
+
+LO QUE HACE DISTINTO A UN APARTADO
+  · RESERVA en vez de descontar: la mercancía sigue en la bodega, pero sale de
+    lo DISPONIBLE (`cantidad_reservada`), así el mostrador no se la vende a
+    otro.
+  · NO TOCA EL KARDEX. Apuntar una salida que no ocurrió descuadraría el
+    inventario contra el conteo físico. El movimiento se asienta al entregar.
+  · AL CAJÓN ENTRA SOLO EL ANTICIPO, no el total: el resto no lo ha pagado
+    nadie todavía. Sin esto, el corte esperaría un dinero que no está.
+
+`pedidos.inventario_descontado`: POR QUÉ HACÍA FALTA
+  Sin ese dato, cancelar un apartado habría repuesto al inventario mercancía
+  que NUNCA salió, y la tienda acabaría con existencias fantasma. Ahora
+  `cambiarEstado` bifurca:
+   · apartado → cancelado: LIBERA la reserva, no repone nada.
+   · cancelado → apartado: vuelve a apartar, y EXIGE que siga disponible.
+   · el resto: la reposición normal, solo si `inventario_descontado`.
+  Los pedidos que ya existían descontaron, así que el DEFAULT es 1 y la
+  migración no tuvo que tocarlos.
+
+ENTREGAR ES DONDE SE DESCUENTA
+  `POST /pedidos/:id/entregar` exige estar LIQUIDADO (409). Entregar a medio
+  pagar sería regalar mercancía; si la tienda quiere hacerlo, lo que corresponde
+  es FIAR el resto, que sí deja constancia de la deuda. Y exige existencias:
+  entre que se apartó y hoy pudo haber una merma o un traspaso que se llevó lo
+  apartado.
+  Los abonos entran a la caja como 'ingreso' y NO como 'venta': la venta ya se
+  contó el día que se apartó, y contarla otra vez duplicaría las ventas del día.
+
+DOS COMBINACIONES QUE SE RECHAZAN
+  · Apartar Y fiar a la vez (422 APARTADO_A_CREDITO): fiar es entregar sin
+    cobrar, apartar es cobrar sin entregar. Juntas no significan nada.
+  · Apartar desde la tienda en línea (422 APARTADO_SOLO_MOSTRADOR).
+
+UN ERROR QUE SE EVITÓ POR COMPROBARLO ANTES
+  La migración tenía que tirar y recrear el CHECK del estado. Estaba escrita
+  contra `pedidos_chk_1`… que es el CHECK del CANAL. Se consultó
+  information_schema antes de aplicarla: el del estado es `pedidos_chk_2`.
+  Tirar el equivocado habría quitado la validación del canal y dejado la del
+  estado intacta, sin que nada avisara.
+
+OTRO DETALLE DE RUTAS
+  `GET /pedidos/apartados` se colocó primero después de `/:id` y Express lo
+  tomaba por un id. Se movió arriba, junto a '/mis' y '/cotizacion'. Es el
+  mismo tropiezo que ya documentaba el módulo de clientes.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-09_apartados.sql  (SERVIDOR y local)
+            - pedidos.estado admite 'apartado' (CHECK recreado)
+            - pedidos.inventario_descontado, pedidos.entregado_en
+            - v_apartados: vigentes con abonado, pendiente y pct_pagado
+  MODIF   db/schema_mysql.sql   regenerado (48 tablas, 7 vistas)
+
+BACKEND
+  MODIF   src/modules/pedidos/model.js
+            crearPedido con `apartado`, abonarApartado, entregarApartado,
+            listarApartados, y la bifurcación de cambiarEstado.
+  MODIF   src/modules/pedidos/{service,controller,routes}.js
+            GET  /api/v1/pedidos/apartados       (?orden=por_liquidar|antiguos|monto)
+            POST /api/v1/pedidos/:id/abonos
+            POST /api/v1/pedidos/:id/entregar
+  MODIF   scripts/estado-migraciones.js
+
+UN FALLO DE LA PRUEBA, NO DEL CÓDIGO
+  La suite afirmaba "el total lleva IVA" pero creaba el producto SIN impuesto,
+  así que el total salía en $2,000 exactos. Se le puso el IVA —que es el caso
+  real de esta tienda— y así además cubre que el pendiente del apartado se
+  calcula sobre el total CON impuesto, que es donde estaría el error fácil.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-apartados.js   33 comprobaciones, se limpia solo.
+  Todo en verde: las 15 suites del backend.
+
+PENDIENTE / NOTAS
+  · Falta el FRONTEND: apartar desde el POS y la pantalla de apartados vigentes
+    ("a quién llamo porque ya casi liquida" — v_apartados ya da el pct_pagado
+    ordenable para eso).
+  · Al cancelar, el anticipo se le DEVUELVE. Si la tienda quisiera RETENERLO
+    como penalización, eso es una decisión de negocio distinta y habría que
+    capturarla aparte; no se asumió.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-10 (3) · Clientes, el POS con cliente, y el costo en la remesa
+-------------------------------------------------------------------------------
+
+QUÉ SE PUEDE HACER YA
+  · Admin → Clientes: listado, alta/edición en modal, y el EXPEDIENTE completo.
+  · Punto de venta: identificar al cliente, ver su crédito y FIARLE.
+  · Recibir remesa (y la pantalla de presentaciones): capturar el precio de
+    compra por kilo.
+
+DECISIONES QUE VALE LA PENA CONOCER
+  · EL ÚNICO CAMPO OBLIGATORIO DEL CLIENTE ES EL NOMBRE. El usuario dijo que va
+    a capturar sus clientes de años uno por uno; exigirle correo o dirección a
+    alguien que solo sabe "Doña Chela, la del teléfono tal" haría que no los
+    capturara. Lo demás se completa cuando se sepa.
+  · EL ORDEN DEL LISTADO está redactado como la PREGUNTA que contesta ("quién me
+    debe más", "quién compra más", "quién vino más reciente") y no como el nombre
+    del campo: es lo que la tienda se pregunta de verdad.
+  · AL ELEGIR AL CLIENTE EN EL POS SE APLICA SU LISTA DE PRECIOS SOLA. Con un
+    selector aparte, tarde o temprano alguien le cobra precio público a un
+    cliente de mayoreo.
+  · EL CLIENTE EN EL POS ES OPCIONAL. La mayoría de las ventas de mostrador son
+    a quien pasa, y exigir un nombre frenaría la caja.
+  · FIAR solo aparece con cliente identificado Y crédito disponible. Ofrecerlo
+    sin eso sería prometer algo que va a fallar al confirmar. Si ya llegó a su
+    límite, se dice por qué no se puede.
+  · Con la venta ENTERA a crédito, el método de pago se esconde y el botón dice
+    "Entregar a crédito": no entra dinero, así que pedirlo sería ruido.
+
+EL TOTAL REAL EN EL POS
+  El POS solo mostraba "subtotal estimado (sin IVA)", que no sirve para fiar: si
+  el cajero fía "todo" sobre el subtotal, siempre queda un pedazo del IVA sin
+  cubrir y el backend rechaza la venta. Ahora se pide el total de verdad a
+  POST /pedidos/cotizacion —la MISMA función que la venta— cada vez que cambia
+  el carrito o la lista de precios.
+  Va en un `effect` y NO en cada punto donde se toca el carrito: son cinco
+  sitios distintos y era cuestión de tiempo que alguno se olvidara. Si la
+  cotización falla se sigue con el estimado: no vale la pena frenar la caja por
+  no poder mostrar el IVA.
+
+EL COSTO EN LA REMESA
+  Campo opcional "Precio de compra · por kilo" en los dos cargadores. Opcional a
+  propósito: no se frena una entrada de mercancía por no tener la factura a mano.
+  Al confirmar, el mensaje dice en cuánto quedó el costo del hilo después de
+  mezclar la compra con lo que ya había, para que se vea el efecto.
+
+FRONTEND
+  NUEVO   core/models/clientes.models.ts      expediente, crédito, búsqueda
+  NUEVO   core/services/clientes.service.ts
+  NUEVO   features/admin/clientes/clientes-list.ts + .html
+  NUEVO   features/admin/clientes/cliente-form-modal.ts + .html
+  NUEVO   features/admin/clientes/cliente-expediente.ts + .html
+  NUEVO   shared/charts/barras.spec.ts        7 pruebas
+  NUEVO   shared/charts/composicion.spec.ts   5 pruebas
+  MODIF   features/admin/pos/pos.ts + .html   cliente, crédito y total real
+  MODIF   features/admin/remesas/remesas.ts + .html          costo
+  MODIF   features/admin/productos/producto-presentaciones.ts + .html   costo
+  MODIF   core/services/{ventas,inventario}.service.ts  a_credito y costo_kg
+  MODIF   features/admin/admin.routes.ts      /admin/clientes y /clientes/:id
+  MODIF   features/admin/admin-layout.html    "Clientes" en el menú
+  MODIF   styles.scss                         filtros, lista de clientes, fiar
+
+DOS TEXTOS QUE MENTÍAN, VISTOS EN LA CAPTURA
+  1. En la columna "Debe" del listado, el segundo renglón decía "de $20,000" —y
+     se leía como "debía 20,000 y ya pagó algo", cuando es su LÍMITE—. Ahora
+     dice "límite $20,000".
+  2. Un cliente con crédito y sin deuda decía "al día", que sugiere que debió
+     algo y lo pagó. Para quien nunca ha debido nada, ahora dice "sin deuda".
+  Es el tipo de detalle que el usuario pidió cuidar explícitamente el
+  2026-07-26: textos que quedan mintiendo.
+
+PRUEBAS
+  91 pruebas de Angular (79 + 12 de las gráficas nuevas) y las 14 suites del
+  backend, todo en verde. Build de producción limpio.
+  Las pantallas se revisaron MIRÁNDOLAS con datos reales (captura con Chrome
+  headless), no solo compilando.
+  Los datos de vista se sembraron y se borraron de la base LOCAL; producción no
+  se tocó.
+
+PENDIENTE / NOTAS
+  · Falta la pantalla de COBRANZA como tal. Hoy los abonos se registran desde el
+    expediente del cliente, que cubre el caso: se busca al cliente y se abona
+    ahí. Una pantalla dedicada ("a quién le cobro hoy") tendría sentido cuando
+    haya volumen.
+  · Faltan los APARTADOS.
+  · Nada de esto se ha probado en el NAVEGADOR con la interfaz real, ni con la
+    pistola física.
+  · El abono en efectivo busca un turno de caja abierto recorriendo las cajas
+    una por una. Con muchas cajas convendría un endpoint que lo diga directo.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-10 (2) · El tablero, ya visible
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ EL USUARIO
+  "Vamos con las partes visuales. El Excel los voy a cargar uno por uno yo,
+  entonces no esperes el Excel."
+  → Se DESCARTA el cargador masivo de clientes.
+
+QUÉ SE PUEDE ABRIR YA
+  Admin → "Cómo va el negocio" (solo administradores: muestra costos y márgenes).
+  Cuatro bloques, cada uno con la misma estructura: la CIFRA GRANDE primero
+  —porque es lo único que muchos van a leer— luego la gráfica y luego la tabla
+  para quien quiera el detalle.
+
+COMPONENTES NUEVOS
+  NUEVO   frontend/src/app/shared/charts/barras.ts
+          Barras horizontales con EL CERO EN SU SITIO: con todo positivo es una
+          barra normal desde la izquierda; con negativos el cero se coloca donde
+          toca y las barras crecen a los dos lados, que es lo que hace falta para
+          leer un margen de un golpe.
+  NUEVO   frontend/src/app/shared/charts/composicion.ts
+          UNA barra partida en tramos, para la cartera por antigüedad. El
+          porcentaje se escribe dentro SOLO si cabe (más de 50 px), y se elige
+          blanco o tinta según lo oscuro del relleno.
+  Los dos miden su ancho con ResizeObserver en vez de usar un viewBox fijo, por
+  la razón que ya estaba documentada: un viewBox angosto dentro de una tarjeta
+  ancha estira el SVG y escala TODO el texto.
+
+TRES FALLAS QUE SOLO SE VIERON MIRÁNDOLO
+  El validador de la paleta revisa color, no geometría. Se generó el mismo SVG
+  en un HTML de prueba con datos reales y se capturó con Chrome headless — el
+  patrón que este proyecto ya usaba. Salieron tres cosas que ninguna prueba
+  detecta:
+  1. La gráfica de "quién debe más" venía ordenada por ANTIGÜEDAD (como la manda
+     el backend, que es el orden correcto para la tabla). En una gráfica de
+     barras el ojo lee la longitud y espera la más larga arriba: con la de
+     $22,000 en medio, la gráfica parecía desordenada. Ahora la GRÁFICA se
+     ordena por monto y la TABLA se queda por antigüedad, que es lo que sirve
+     para decidir a quién llamar.
+  2. El valor negativo salía como "$-3,200", que se lee como un error de
+     captura. Va "-$3,200": el signo antes del símbolo de moneda.
+  3. El carril gris de fondo se dibujaba de ancho completo también con
+     negativos, dejando gris vacío del lado contrario a la barra, que se leía
+     como si faltara dato. Con negativos ya no se dibuja: la línea del cero
+     ancla la lectura.
+
+CÓMO SE ELIGIERON LOS COLORES (ya estaba validado; aquí se aplicó)
+  · Antigüedad de la cartera: rampa ORDINAL de un solo tono azul, de claro a
+    oscuro. El orden se VE en el color y no hay que ir a la leyenda para saber
+    cuál tramo es peor.
+  · Margen: azul lo que gana, rojo lo que pierde, y la etiqueta dice "pierde".
+  · El riesgo de cobranza va en PÍLDORAS con icono y texto, nunca como color de
+    barra: los cuatro colores de semáforo no pasan como paleta de gráfica.
+
+FRONTEND
+  NUEVO   core/models/analisis.models.ts     los cuatro análisis
+  NUEVO   core/services/analisis.service.ts  con filtros
+  NUEVO   features/admin/tablero/tablero.ts + .html
+  MODIF   features/admin/admin.routes.ts     /admin/tablero
+  MODIF   features/admin/admin-layout.html   "Cómo va el negocio" (solo admin)
+  MODIF   styles.scss                        cifras, píldoras, avisos de dato
+
+UN DETALLE DE ANGULAR
+  `Number()` no existe en las plantillas: hay que exponerlo como método del
+  componente. Importa porque los DECIMAL de MySQL llegan como STRING, y
+  `'-250.00' < 0` es false en JavaScript (compara texto, no números).
+
+PRUEBAS
+  79 pruebas unitarias de Angular en verde, build de producción limpio.
+  Los datos de demostración que se usaron para mirar el tablero se sembraron y
+  se borraron de la base LOCAL; producción no se tocó.
+
+PENDIENTE / NOTAS
+  · Faltan las pantallas de clientes (listado y expediente), el POS con captura
+    de cliente, la cobranza y el campo de costo en la pantalla de remesa.
+  · El tablero saldrá casi vacío hasta que haya clientes y ventas capturadas:
+    producción tiene 0 clientes y 0 pedidos.
+  · El margen no dirá nada hasta que se capture costo en las remesas, y para eso
+    falta el campo en la pantalla.
+  · Faltan los APARTADOS.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-10 · El tablero del negocio y el costo del hilo (backend)
+-------------------------------------------------------------------------------
+
+QUÉ PIDIÓ EL USUARIO
+  De la lista de ideas eligió cinco: aviso de cobranza en la campana, clientes
+  que no han vuelto, hilo muerto, margen real por hilo y apartados. Y puso una
+  condición sobre todo lo demás:
+    "Solo que todo sea muy visual, muy gráfico, porque van a utilizar personas
+    que a lo mejor solo quieran saber datos, entonces entre más visual y más
+    información mejor."
+  Sobre el costo: "lo capturo al recibir cada remesa".
+  Sobre los apartados: anticipo libre, sin fecha límite.
+
+EL COSTO, Y POR QUÉ PROMEDIO PONDERADO
+  `remesas.costo_kg` guarda a cómo salió el kilo en cada compra y con eso se
+  recalcula el costo del hilo mezclando lo viejo con lo nuevo:
+     costo = (kg_previos × costo_previo + kg_remesa × costo_remesa)
+             ÷ (kg_previos + kg_remesa)
+  Es el estándar de costeo de inventarios y el que se porta bien con este
+  negocio: cuando el proveedor sube, el margen lo refleja poco a poco conforme
+  se vende el hilo caro mezclado con el barato, en vez de dar un salto el día
+  de la compra. Hay prueba de que pondera por KILOS y no por número de remesas.
+
+  SE REUTILIZÓ `producto_variantes.costo`, que YA EXISTÍA. El CRUD de variantes
+  ya la leía y escribía, solo que estaba toda en NULL y nada la consumía para
+  calcular nada. Crear un `costo_kg` al lado habría duplicado el dato — el
+  mismo error que este proyecto ya cometió con el peso del producto y tuvo que
+  deshacer. Solo se le añadió `costo_actualizado_en`, para saber de cuándo es.
+
+  Y EL COSTO SE CONGELA EN LA VENTA (`pedido_detalle.costo_unitario`), igual que
+  el precio. Sin congelarlo, el margen de una venta de enero cambiaría cada vez
+  que llega una remesa nueva, y un reporte histórico que se mueve no sirve para
+  decidir nada. NULL significa "no se sabía el costo", y el margen lo cuenta
+  APARTE en vez de suponer cero: un 100% de margen por un costo faltante
+  llevaría a decisiones equivocadas.
+
+LAS CUATRO PREGUNTAS DEL TABLERO
+  · COBRANZA: los días se miden desde el ÚLTIMO MOVIMIENTO de la cuenta, no
+    desde el cargo. Quien abonó la semana pasada está pagando, y tratarlo como
+    moroso llevaría a cobrarle a quien no toca.
+  · CLIENTES ENFRIADOS: exige 2 compras mínimo —quien vino UNA vez hace meses no
+    es un cliente perdido, es alguien que pasó— y compara los días sin venir
+    contra SU PROPIO ritmo. Si compraba cada 30 días y llevan 90, son tres veces
+    su costumbre; contra un número fijo, un cliente de temporada saldría como
+    perdido cada año.
+  · HILO MUERTO: se valora AL COSTO cuando se conoce y al precio de venta cuando
+    no, marcándolo con `valorado_a`. Un hilo que NUNCA se vendió cuenta desde
+    que entró: es el caso más importante —comprado y nunca movido— y filtrarlo
+    por "última venta" lo dejaría fuera justo por no tener ninguna.
+  · MARGEN: sobre la VENTA y no sobre el costo, que es como se lee un margen
+    comercial y permite comparar hilos entre sí.
+
+  `v_movimiento_hilo` mira SOLO las salidas por venta: un traspaso o un desarme
+  mueven la mercancía de sitio pero no la venden, y contarlos haría parecer vivo
+  un hilo que nadie compra.
+
+LA CAMPANA
+  Dos avisos nuevos: cobranza atrasada (30 días sin abonar) y clientes que
+  dejaron de venir (60 días). El GLOBO ROJO cuenta UN aviso por asunto, no uno
+  por cliente: los traspasos sí van uno por uno porque cada uno se atiende
+  aparte, pero "hay gente que te debe" es un solo aviso aunque dentro haya
+  veinte. Contar cada cliente inflaría el globo a decenas y dejaría de
+  significar nada. OJO: eso cambió también el conteo de las alertas de stock,
+  que antes sumaban una por fila.
+
+LA PALETA, VALIDADA ANTES DE DIBUJAR NADA
+  El usuario quiere todo gráfico, así que se corrió el validador de la guía
+  (`dataviz`) antes de escribir una línea de gráfica:
+  · Antigüedad de saldos es ORDINAL (buckets ordenados), no categórica: rampa
+    de UN tono azul en 4 pasos (#86b6ef → #3987e5 → #1c5cab → #0d366b).
+    PASA las cuatro puertas ordinales.
+  · Margen: azul para lo que gana, rojo para lo que pierde. PASA todo, con
+    ΔE 23.8 en protanopia y 31.6 en visión normal.
+  · Los CUATRO colores de semáforo FALLAN como paleta de gráfica (amarillo vs
+    naranja da ΔE 13.6, bajo el piso de 15). Por eso el riesgo de cobranza va
+    como PÍLDORA con icono y texto, nunca como color de barra. Lo dijo el
+    validador, no el ojo.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-09_costo_y_margen.sql  (aplicada en SERVIDOR y local)
+            - remesas.costo_kg
+            - producto_variantes.costo_actualizado_en (la columna `costo` ya
+              existía y se reutiliza)
+            - pedido_detalle.costo_unitario  (congelado)
+            - v_movimiento_hilo: última venta, última entrada y kilos vendidos
+  MODIF   db/schema_mysql.sql   regenerado (48 tablas, 6 vistas)
+
+BACKEND
+  NUEVO   src/modules/analisis/{model,service,controller,routes}.js
+            GET /api/v1/analisis/cobranza
+            GET /api/v1/analisis/clientes-enfriados
+            GET /api/v1/analisis/hilo-muerto        (admin/gerente)
+            GET /api/v1/analisis/margen             (admin/gerente)
+            GET /api/v1/analisis/tablero            (los cuatro, en paralelo)
+  MODIF   src/modules/remesas/{model,routes,service}.js
+          `costo_kg` en la carga y el recálculo del promedio ponderado.
+  MODIF   src/modules/pedidos/model.js
+          El costo se congela en el detalle y NO viaja en la cotización.
+  MODIF   src/modules/notificaciones/model.js
+          Los dos avisos nuevos, con sus umbrales con nombre (DIAS_SIN_ABONAR,
+          DIAS_SIN_VENIR) en vez de escondidos en una consulta.
+  MODIF   src/routes.js   monta /analisis
+  MODIF   scripts/estado-migraciones.js   las migraciones nuevas en el inventario
+
+UN BUG QUE ENCONTRÓ LA PRUEBA
+  El `costo_kg` llegaba al endpoint y se validaba bien, pero el service armaba
+  el objeto para el modelo campo por campo y NO lo incluía: la remesa entraba y
+  el costo se perdía sin avisar. Las 5 primeras comprobaciones del E2E salieron
+  en null y por eso se vio.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-costo-margen.js   18 comprobaciones, se limpia
+          solo. Cubre el promedio ponderado (que pondera por kilos, que una
+          remesa sin costo no lo toca), que el costo se congela y no se mueve al
+          llegar mercancía nueva, que un hilo sin costo no entra al margen y se
+          reporta aparte, y que el costo no se le filtra al cliente.
+  Todo en verde: las 13 suites del backend.
+
+PENDIENTE / NOTAS
+  · FALTA TODO EL FRONTEND, y es lo que el usuario quiere ver: el tablero
+    visual, las pantallas de clientes, el POS con captura de cliente, la
+    cobranza y el campo de costo en la pantalla de remesa.
+  · Faltan los APARTADOS. Es un cambio grande en la venta: hay que RESERVAR sin
+    descontar y liquidar después, y `pedidos.estado` necesita un estado nuevo.
+  · El margen no dirá nada hasta que se capture costo en las remesas. Hoy todo
+    el hilo muerto se valora a precio de VENTA (`valorado_a`), que infla la
+    cifra respecto al dinero realmente inmovilizado.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-09 · El expediente del cliente y su crédito (backend)
+-------------------------------------------------------------------------------
+
+QUÉ DIJO EL USUARIO
+  "Cada vez que se realiza una venta se pide el nombre del cliente y tengo
+  clientes que llevo trabajando mucho tiempo. Quiero una tabla para llevar el
+  registro de cada uno de mis clientes, sea nuevo o sea de años; quiero saber
+  todos los detalles sobre sus compras, sus créditos, sus pedidos, qué colores
+  compra más. Y además un asistente tipo chat bot."
+
+  Se le preguntó lo que cambiaba el trabajo y decidió:
+  · El asistente: SIN IA, solo preguntas predefinidas.
+  · El crédito: "fío y me abonan, sin plazo fijo" → límite, saldo, abonos y
+    estado de cuenta; sin vencimientos.
+  · Sus clientes de años están en un Excel → hará falta un cargador masivo.
+  · Orden: clientes primero.
+
+EL PROBLEMA QUE HABÍA
+  `clientes` existía pero era una CUENTA de la tienda en línea: nombre, correo,
+  teléfono y contraseña. No servía de expediente, y el POS no la usaba en
+  absoluto —solo elegía la lista de precios— así que TODAS las ventas de
+  mostrador quedaban anónimas (`cliente_id` en NULL). No había forma de saber
+  qué le vendes a quién. Y de crédito no había NADA.
+
+DECISIONES QUE VALE LA PENA CONOCER
+  · `cliente_desde` es distinto de `creado_en`. Los clientes de años se
+    capturan hoy pero compran desde antes. Sin esa distinción, el día que se
+    capturen todos parecería que la tienda estrenó clientela.
+  · Se busca por el APODO (`nombre_comercial`) y por el TELÉFONO, no por el
+    nombre completo: así lo busca el mostrador de verdad ("Doña Mari").
+  · EL SALDO NO SE GUARDA. Es la suma de `credito_movimientos`, como el kardex.
+    Un campo desnormalizado se descuadra en cuanto una transacción falla a
+    medias, y entonces el sistema dice que alguien debe algo que no debe.
+  · Lo CANCELADO y lo DEVUELTO no cuenta en el historial ni en los totales:
+    preguntar "cuánto me ha comprado" e incluir lo que devolvió sería mentir.
+    Se cuenta APARTE, que también dice algo del cliente.
+  · Los colores se agrupan por `producto_id` y NUNCA por nombre: el mismo color
+    en dos calibres son dos productos. Hay prueba que lo cubre.
+  · El cargo a crédito se inserta DENTRO de la transacción de la venta: si la
+    venta se revierte, la deuda no queda.
+  · LO FIADO NO ENTRA AL CAJÓN (`efectivo = total − noEfectivo − aCredito`).
+    Sin restarlo, el corte esperaría un dinero que el cliente no dejó.
+  · Un ABONO EN EFECTIVO sí entra, como `'ingreso'` y no como `'venta'`: cobrar
+    una deuda vieja no es vender hoy, y contarlo como venta inflaría los
+    reportes. Con el turno cerrado se rechaza ANTES de tocar el saldo.
+  · Cancelar una venta a crédito quita la deuda con un ajuste negativo, SIN
+    borrar el cargo: el libro no se borra, se corrige. Es idempotente, así que
+    cancelar dos veces no perdona la deuda dos veces.
+  · El límite se valida con `FOR UPDATE` sobre el cliente: dos cajas cobrando a
+    la vez no pueden pasarlo entre las dos.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-09_clientes_expediente_credito.sql
+          Aplicada en el SERVIDOR y en la base local.
+            - clientes: codigo (UNIQUE), nombre_comercial, rfc, tipo_cliente_id,
+              telefono_alt, direccion, ciudad, estado, como_llego,
+              fecha_nacimiento, cliente_desde, limite_credito, notas
+              + índices por telefono y nombre
+            - credito_movimientos: el libro de cargos y abonos
+            - v_clientes_saldo: saldo, cargos, abonos y disponible por cliente
+  MODIF   db/schema_mysql.sql          regenerado (48 tablas, 5 vistas)
+  MODIF   backend/scripts/dump-db.js   `credito_movimientos` classificada
+
+BACKEND
+  MODIF   src/modules/clientes/model.js
+          Se amplió de 3 funciones a 19: listar con búsqueda y orden (por saldo,
+          por quién compra más, por quién no ha vuelto), obtener, buscarParaVenta
+          (para el mostrador, con el crédito disponible A LA VISTA para saber si
+          se le puede fiar), crearDesdeStaff, actualizar, duplicado,
+          estadisticas, coloresMasComprados, pedidos, saldo, movimientosCredito,
+          agregarMovimiento, registrarAbono, cargarVentaACredito,
+          ajustarCreditoPorPedido, conSaldo.
+  MODIF   src/modules/clientes/{service,controller,routes}.js
+            GET    /api/v1/clientes                  listado, ?q= ?con_saldo= ?orden=
+            POST   /api/v1/clientes                  alta sin cuenta
+            GET    /api/v1/clientes/buscar?q=        búsqueda rápida del POS
+            GET    /api/v1/clientes/por-cobrar       quién me debe
+            GET    /api/v1/clientes/:id              EXPEDIENTE completo
+            PUT    /api/v1/clientes/:id
+            GET    /api/v1/clientes/:id/estado-cuenta
+            POST   /api/v1/clientes/:id/abonos
+            POST   /api/v1/clientes/:id/ajustes      (solo admin/gerente)
+          Los ajustes de saldo son dinero: un cajero puede COBRAR un abono pero
+          no perdonar una deuda.
+          OJO con el orden de las rutas: '/buscar' y '/por-cobrar' van ANTES de
+          '/:id', o Express las toma por un id.
+  MODIF   src/modules/pedidos/model.js
+          `a_credito` en la venta, con validación de límite, el cargo dentro de
+          la transacción, el efectivo del cajón corregido y la reversión de la
+          deuda al cancelar.
+  MODIF   src/modules/pedidos/routes.js   `a_credito` en el schema
+
+UN BUG QUE ENCONTRÓ LA PRUEBA
+  El filtro "solo los que deben" (`?con_saldo=true`) tronaba con "Unknown column
+  's.saldo' in 'having clause'": el saldo viene de un LEFT JOIN a la vista, así
+  que ya es un VALOR y no un agregado de esa consulta, y un HAVING no lo alcanza
+  si no está en el SELECT. Se movió al WHERE.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-clientes-credito.js   36 comprobaciones, se limpia
+          solo. Cubre el expediente (alta sin cuenta, antigüedad real, código
+          duplicado, búsqueda por apodo y teléfono), lo que ha comprado (kilos,
+          ticket promedio, que lo cancelado no cuente), los colores (que el mismo
+          color en dos calibres sean DOS renglones), el crédito (límite, venta
+          mixta, que lo fiado no entre al cajón, sin cliente no se fía), la
+          cancelación (quita la deuda, y dos veces no la quita dos veces) y los
+          abonos (efectivo al cajón como 'ingreso', sin turno se rechaza,
+          transferencia sin turno sí, no cobrar más de lo que se debe).
+  Todo en verde: las 10 suites del backend.
+
+PENDIENTE / NOTAS
+  · FALTAN LAS PANTALLAS. El backend está listo y probado, pero sin frontend no
+    se puede usar: capturar al cliente en el POS al vender, la pantalla de
+    clientes con su expediente, y la de cobranza.
+  · Falta el cargador masivo del Excel de clientes.
+  · Falta el asistente de preguntas predefinidas.
+  · La base de PRODUCCIÓN quedó con 0 clientes y 0 movimientos: las pruebas se
+    limpiaron. Las suites E2E corren contra la base LOCAL, que está al día.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-05 (2) · El pedido con detalle de verdad, y la captura del depósito
+-------------------------------------------------------------------------------
+
+QUÉ DIJO EL USUARIO
+  "Solo dice que es blanco y descripción, quiero saber más detalles como el lote
+  y los códigos de barras de cada paquete y además quiero saber qué calibre es y
+  qué tipo de material, eso en artículos. Y además en pagos igual requiero un
+  apartado para poner la captura que me mande el cliente para que pueda pasar a
+  validado y pagado."
+
+  Se le preguntaron las dos cosas que cambiaban el trabajo y contestó:
+  · La captura la sube SOLO él, desde el panel (el cliente se la manda por
+    fuera, típicamente WhatsApp).
+  · UN PASO: subir la captura marca el pago completado y el pedido pagado. Sin
+    estado intermedio "por validar".
+
+EL ARTÍCULO AHORA DICE QUÉ HILO ES
+  `pedido_detalle.descripcion` congela lo vendido, pero solo dice el color y la
+  presentación ("BLANCO · Paquete"). Con eso no se atiende una duda: el mismo
+  color en dos calibres son DOS productos distintos.
+  El GET del pedido trae ahora, leídos VIVOS del catálogo (no congelados):
+  calibre, material, línea, tipo de presentación, peso del paquete y el código
+  de barras de la presentación. El precio y la cantidad SÍ siguen congelados,
+  como siempre.
+  Se hizo así a propósito: si el producto se renombró después de la venta, la
+  pantalla muestra el nombre de hoy junto a la descripción de entonces, que es
+  lo útil para atender al cliente que llama.
+
+Y DE QUÉ PAQUETES SALIÓ
+  Los bultos ya se guardaban (`pedido_detalle_bultos`, desde el 2026-07-26) y ya
+  se mostraban, pero apretados en un párrafo de 0.74rem dentro de la celda de la
+  descripción, donde no se leían. Ahora van en su PROPIA TABLA bajo cada línea,
+  con tres columnas: código de barras, peso real y lote.
+  Cuando no hay bultos, se dice POR QUÉ ("Venta en línea: no se escanearon
+  bultos") en vez de dejar el hueco, que se leía como un dato perdido.
+
+LA CAPTURA DEL DEPÓSITO
+  · Se sube desde el detalle del pedido, en la tarjeta de Pagos.
+  · Subirla es UN PASO: el `pagos` queda 'completado' y el `pedidos` pasa a
+    'pagado', en la MISMA transacción. De 'pendiente' a 'pagado' no se mueve
+    inventario ni caja —los dos son estados activos y `cambiarEstado` solo actúa
+    al cruzar la frontera activo/inactivo— así que basta el UPDATE.
+  · Se puede REEMPLAZAR (borra la anterior del disco) y QUITAR. Quitarla NO
+    descobra el pedido: el dinero entró, y para deshacer el cobro está el cambio
+    de estado.
+  · Un pedido CANCELADO o DEVUELTO no se marca pagado por subirle una captura
+    (409 PEDIDO_INACTIVO): primero hay que reactivarlo.
+
+DÓNDE VIVE EL ARCHIVO, Y POR QUÉ
+  · En DISCO (`backend/uploads/comprobantes`), no en la base. Un dump de la base
+    pesa 90 KB y meterle imágenes lo volvería inmanejable, además de que los
+    respaldos se hacen con mysqldump.
+  · **El `rsync --delete` del despliegue LO BORRARÍA.** Se agregó
+    `--exclude='uploads/'` en deploy/deploy.sh, en el despliegue y en el
+    rollback. Si algún día se cambia la ruta, hay que revisar esa exclusión.
+    También entró en .gitignore: son documentos bancarios de clientes reales.
+  · Se sirve por endpoint AUTENTICADO (`GET /pedidos/:id/comprobante`), NUNCA
+    con express.static: un comprobante bancario no puede quedar accesible con
+    solo adivinar la URL. Por eso el frontend lo baja con HttpClient y lo pinta
+    con un object URL —un `<img src>` no manda el token— y lo libera al salir.
+  · El tipo se valida por los PRIMEROS BYTES (utils/archivos.js), no por la
+    extensión ni por el Content-Type: los dos los pone quien sube. Un .exe
+    renombrado a .jpg rebota (hay prueba). Se aceptan JPG, PNG, WEBP y PDF,
+    hasta 8 MB.
+  · El nombre en disco se GENERA (16 bytes hex + extensión). El original solo se
+    guarda para mostrarlo y para que la descarga conserve un nombre reconocible,
+    así un nombre con `../` no puede escribir fuera de la carpeta.
+  · No hace falta ninguna dependencia nueva: se reusó el patrón que ya usaban
+    las remesas para el .xlsx (`express.raw` + el File en crudo + el nombre en
+    la cabecera `X-Nombre-Archivo`).
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-09_comprobante_pago.sql   (aplicada en "desarrollo")
+            pagos.comprobante_archivo    nombre EN DISCO (generado)
+            pagos.comprobante_nombre     cómo se llamaba cuando lo mandó
+            pagos.comprobante_tipo       image/jpeg | image/png | image/webp | application/pdf
+            pagos.comprobante_subido_en
+            pagos.comprobante_subido_por FK usuarios
+  MODIF   db/schema_mysql.sql   regenerado
+  NUEVO   backend/src/config/env.js → `uploadsDir` (variable UPLOADS_DIR,
+          por omisión backend/uploads)
+
+BACKEND
+  NUEVO   src/utils/archivos.js   guardar / leer / borrar, y `reconocer()`, que
+          identifica el archivo por su firma de bytes.
+  MODIF   src/modules/pedidos/model.js
+            guardarComprobante / leerComprobante / borrarComprobante
+          El archivo se escribe en disco ANTES de abrir la transacción: si falla
+          el disco no se toca la base, y si falla la base queda un archivo
+          huérfano que no le estorba a nadie, en vez de una fila apuntando a un
+          archivo que no existe. Los tres caminos de error lo borran igual.
+          El detalle y los pagos del GET traen los campos nuevos.
+          `comprobante_archivo` NO se expone: es el nombre en disco y no le sirve
+          a nadie fuera del servidor.
+  MODIF   src/modules/pedidos/{service,controller,routes}.js
+            POST   /api/v1/pedidos/:id/comprobante   (staff, cuerpo en crudo)
+            GET    /api/v1/pedidos/:id/comprobante   (staff, devuelve el binario)
+            DELETE /api/v1/pedidos/:id/comprobante   (staff)
+
+FRONTEND
+  MODIF   core/models/ventas.models.ts   PedidoLinea con producto, calibre,
+          material, linea, tipo_presentacion, peso_kg y codigo_barras; PagoLinea
+          con los campos del comprobante.
+  MODIF   core/services/ventas.service.ts   subirComprobante / comprobante /
+          eliminarComprobante
+  MODIF   features/admin/pedidos/pedido-detalle.ts + .html
+          Tabla de artículos rehecha: columna "Hilo" con el nombre y la ficha
+          (calibre · material · línea), columna "Presentación" con el SKU y el
+          peso por paquete, y un renglón propio por línea con la tabla de bultos.
+          Tarjeta de Pagos con la subida, la vista previa y el reemplazo. El
+          input de archivo va oculto dentro de un label con pinta de botón, y se
+          LIMPIA siempre: si no, volver a elegir el MISMO archivo no dispara el
+          evento y parece que el botón dejó de funcionar.
+  NUEVO   features/admin/pedidos/pedido-detalle.spec.ts   12 pruebas
+  MODIF   styles.scss   ficha del hilo, tabla de bultos, comprobante
+
+DESPLIEGUE
+  MODIF   deploy/deploy.sh   --exclude='uploads/' en el rsync del backend y en
+                             el del rollback
+  MODIF   .gitignore         backend/uploads/
+
+UN BUG QUE ENCONTRÓ LA PRUEBA
+  Al REEMPLAZAR la captura se creaba un pago NUEVO en vez de actualizar el que
+  ya estaba: la consulta buscaba pagos en estado 'pendiente' o 'procesando', y
+  tras la primera subida el pago ya estaba 'completado'. El pedido acababa con
+  el doble de pagos registrados. Ahora la búsqueda prioriza el pago que YA tiene
+  comprobante.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-comprobante-pago.js   33 comprobaciones, se limpia
+          solo (base Y archivos). Cubre: el detalle con calibre/material/línea y
+          los bultos con su lote; que un ejecutable renombrado a .jpg rebote sin
+          escribir nada; que subir deje el pedido pagado en un paso; que se vea
+          el archivo y NO sin sesión; que reemplazar borre el anterior del disco;
+          que quitar no descobre; y que un pedido cancelado o inexistente no deje
+          archivos huérfanos.
+          La limpieza borra por PREFIJO y no solo por la foto de ids: si una
+          corrida anterior murió a medias, su basura sigue ahí y la foto de la
+          nueva ya la da por preexistente. Así la suite se puede repetir siempre.
+  Todo en verde:
+    12 suites E2E del backend
+    79 pruebas unitarias de Angular (67 de antes + 12 del detalle del pedido)
+
+PENDIENTE / NOTAS
+  · Aplicar db/migrations/2026-09_comprobante_pago.sql en ambientes distintos a
+    "desarrollo", y CREAR la carpeta uploads/ en el servidor (el servicio la crea
+    sola al subir la primera captura, pero el usuario del servicio necesita
+    permiso de escritura).
+  · Las capturas NO entran en el respaldo de la base. Si se quieren respaldar,
+    hay que copiar backend/uploads/ aparte.
+  · Nada de esto se ha probado en el NAVEGADOR: compila, pasa 12 pruebas
+    unitarias y 33 comprobaciones E2E.
+  · El comprobante se guarda en el PAGO, y hoy la pantalla muestra el del pedido
+    (el último que lo tenga). Si algún día un pedido lleva varios pagos con su
+    propia captura, hay que decidir cómo se listan.
+
+
+-------------------------------------------------------------------------------
+ 2026-09-05 · El checkout de la tienda en línea, y el 500 de la campana
+-------------------------------------------------------------------------------
+
+QUÉ DIJO EL USUARIO
+  "Inicia por los huecos abiertos que están y estos errores" (pegando los 500 de
+  /notificaciones y /inventario/traspasos).
+  Sobre cómo se cobra en línea: "solo es por medio de transferencia y en efectivo
+  en tienda". Sobre el envío: recoger en tienda o envío con costo fijo.
+
+EL 500: UNA MIGRACIÓN QUE NUNCA SE APLICÓ
+  `traspasos.estado` no existía en la base "desarrollo", así que tronaban la
+  campana de pendientes y el listado de Surtir sucursal. La bitácora daba
+  2026-07_traspasos_estados.sql por aplicada y no lo estaba.
+  Se auditaron LAS 22 MIGRACIONES una por una contra information_schema: era la
+  única que faltaba. Respaldo previo en
+  db/dump_desarrollo_2026-09-05_antes_traspasos_estados.sql y aplicada. Los 2
+  traspasos históricos quedaron 'recibido' con lo recibido = lo enviado, como
+  manda la migración.
+  LECCIÓN: "aplicada" en la bitácora no es prueba de que lo esté. El script de
+  auditoría es tres líneas de information_schema; vale la pena repetirlo cuando
+  algo dé ER_BAD_FIELD_ERROR.
+
+EL CHECKOUT · LAS REGLAS QUE SE ACORDARON
+  · NO SE COBRA EN LÍNEA. El cliente elige transferencia o efectivo en tienda, y
+    el pedido nace 'pendiente' con un `pagos` en estado 'pendiente' por el total
+    —la INTENCIÓN de pago—. Un administrador lo confirma al ver el depósito o al
+    cobrar en el mostrador. No hay pasarela ni se guardan datos de tarjeta.
+  · LA ENTREGA es 'recoger' (sin dirección, envío $0) o 'envio' (con dirección y
+    una tarifa FIJA que el administrador configura). Vive en la columna nueva
+    `pedidos.metodo_entrega`, no se deduce de si trae dirección: lo que se le
+    prometió al cliente tiene que quedar escrito.
+  · EL TOTAL LO CALCULA EL BACKEND, siempre. El checkout llama a
+    POST /pedidos/cotizacion cada vez que cambia algo que lo mueve (la entrega,
+    la dirección, el cupón) y pinta lo que le devuelvan. La cotización y la venta
+    corren la MISMA función (`_cotizar` en pedidos/model.js), así que lo que el
+    cliente ve antes de confirmar es lo que se le cobra.
+
+DOS HUECOS DE SEGURIDAD QUE ESTABAN ABIERTOS EN EL ENDPOINT
+  No los introdujo este cambio: POST /pedidos ya los tenía y el checkout viejo
+  simplemente no los usaba. Al ponerse a mandar estos campos, saltaron.
+  1. `costo_envio` venía del cliente. Un cliente podía mandar 0 y llevarse el
+     envío gratis. Ahora, si quien pide es un CLIENTE, la tarifa se lee de
+     `configuracion.envio_costo_fijo` y se ignora lo que mande. El STAFF sí puede
+     fijarla a mano, para un pedido capturado por teléfono.
+  2. `pagos` venía del cliente y el pedido se marcaba 'pagado' si los montos
+     cubrían el total. Un cliente podía mandar `[{monto: total}]` y quedar pagado
+     sin depositar un peso. Ahora sus `pagos` se DESCARTAN.
+  Además la dirección se valida SIEMPRE contra el cliente del pedido, no solo
+  cuando la manda un cliente: un id ajeno filtrado por el panel también mandaría
+  el paquete a la casa equivocada.
+
+BASE DE DATOS
+  NUEVO   db/migrations/2026-09_checkout_online.sql   (aplicada en "desarrollo")
+            - pedidos.metodo_entrega  'recoger' | 'envio', con su CHECK
+            - configuracion           clave/valor, con 6 claves sembradas:
+                envio_costo_fijo, transferencia_{banco,titular,clabe},
+                tienda_{telefono,direccion}
+          `publica` marca las claves que puede leer un visitante sin sesión. Hoy
+          todas lo son; la bandera existe para que una clave interna futura no se
+          filtre al catálogo por descuido.
+  MODIF   db/schema_mysql.sql   regenerado. De paso quedó LIMPIO: el archivo
+          arrastraba DDL viejo con referencias a `colores`, `materiales` y
+          `categorias.slug`, tablas y columnas eliminadas hace meses.
+  MODIF   backend/scripts/dump-db.js   `configuracion` clasificada en el MÓDULO 1
+          (antes caía en "SIN CLASIFICAR").
+
+BACKEND
+  NUEVO   src/modules/configuracion/{model,service,controller,routes}.js
+            GET /api/v1/configuracion            público (lo lee el checkout)
+            GET /api/v1/configuracion/completa   admin, con descripciones
+            PUT /api/v1/configuracion            admin
+          Solo escribe claves que YA existen: la lista la define la migración, así
+          que un typo en el panel no crea una clave fantasma que nadie lee.
+  NUEVO   src/modules/direcciones/{model,service,controller,routes}.js
+            GET/POST/PUT/DELETE /api/v1/direcciones   solo el cliente dueño
+          Una sola predeterminada por cliente; la primera se marca sola (si no,
+          el checkout abriría sin nada seleccionado); al borrar la predeterminada
+          asciende la más reciente. No se borra una que tenga pedidos encima
+          (409 DIRECCION_EN_USO). Una dirección ajena da 404, no 403: no debe ni
+          confirmarse que existe.
+  MODIF   src/modules/pedidos/model.js
+          Se extrajo `_cotizar(conn, datos, {bloquear, esCliente})` con TODO el
+          cálculo (almacén, entrega, dirección, lista de precios, detalle, cupón,
+          envío, total). `crearPedido` la llama con bloquear:true (FOR UPDATE
+          sobre inventario, bultos y cupón) y la cotización con false, que solo
+          consulta y no debe frenar a la caja.
+          `_resolverCupon` acepta el flag. El pedido guarda `metodo_entrega` y
+          devuelve la DIRECCIÓN COMPLETA, no solo su id: quien surte tiene que
+          leerla sin abrir otra pantalla.
+  MODIF   src/modules/pedidos/{service,controller,routes}.js
+            POST /api/v1/pedidos/cotizacion   el desglose sin crear nada
+          El controller pasa `esCliente` según el token.
+  MODIF   src/routes.js   monta /direcciones y /configuracion
+
+FRONTEND
+  NUEVO   core/models/tienda.models.ts      Direccion, ConfiguracionTienda,
+                                            Cotizacion, MetodoEntrega
+  NUEVO   core/services/tienda.service.ts   direcciones, configuración, cotizar
+  MODIF   core/models/ventas.models.ts      Pedido lleva metodo_entrega y
+                                            direccion_envio
+  MODIF   core/services/ventas.service.ts   CrearPedidoInput acepta
+                                            metodo_entrega, direccion_envio_id,
+                                            metodo_pago_id
+  MODIF   features/tienda/checkout.ts + .html    reescrito
+          Tres decisiones (entrega, pago, cupón) y un resumen pegajoso con el
+          total que devuelve el servidor. Elegir envío sin ninguna dirección
+          capturada abre el formulario SOLO: es lo único que el cliente puede
+          hacer a continuación. La confirmación muestra los datos de depósito si
+          eligió transferencia, o dónde recoger si eligió recoger.
+          Solo se ofrecen EFECTIVO y TRANSFERENCIA: la tabla `metodos_pago` trae
+          también tarjeta, PayPal y Mercado Pago, que no están integrados —
+          ofrecerlos sería prometer en pantalla algo que no existe.
+  NUEVO   features/tienda/checkout.spec.ts  12 pruebas
+  NUEVO   features/admin/tipos-cliente/tipos-cliente.ts + .html
+          + tipo-cliente-form-modal.ts + .html
+          LISTAS DE PRECIO. El POS ya ofrecía el selector pero no había dónde
+          darlas de alta: se creaban por API. El público no se puede eliminar ni
+          desactivar (es el precio base).
+  NUEVO   features/admin/configuracion/configuracion.ts + .html
+          Dibuja lo que devuelve el servidor, agrupado por prefijo de la clave.
+          Agregar una opción es una línea de SQL y aparece aquí sola; una que no
+          encaje en ningún grupo cae en "Otros" y se ve igual, en vez de
+          desaparecer. Solo manda las claves que CAMBIARON.
+  MODIF   features/admin/admin.routes.ts        /admin/tipos-cliente y
+                                                /admin/configuracion
+  MODIF   features/admin/admin-layout.html      "Listas de precio" y
+                                                "Configuración" (solo admin)
+  MODIF   features/admin/pedidos/pedido-detalle.html   la dirección completa
+  MODIF   features/admin/pedidos/pedidos-list.html     columna "Entrega"
+  MODIF   features/tienda/mis-pedidos.html             columna "Entrega"
+  MODIF   styles.scss                                  checkout, configuración y
+                                                       el bloque de dirección
+
+UN BUG QUE ENCONTRÓ LA PRUEBA
+  El aviso "ese cupón expiró" se borraba SOLO, en el mismo instante: al fallar el
+  cupón se recotizaba sin él, y el `next` de esa cotización limpiaba el error. El
+  cliente nunca alcanzaba a leer por qué no se le aplicó. Ahora el aviso se
+  limpia al APLICAR otro cupón o al quitarlo, no en cada cotización buena.
+
+DEUDA PREEXISTENTE QUE SE ARREGLÓ DE PASO
+  · Cinco suites E2E (cancelacion, bultos-estado, trazabilidad, remesas,
+    carga-por-producto) buscaban 'MARINO OSCURO 2-30.xlsx' en la RAÍZ del repo,
+    pero los .xlsx viven en muestras/. Tronaban con ENOENT al arrancar. Corregida
+    la ruta en las cinco.
+  · e2e-traspaso-paquetes.js había quedado obsoleta desde que el traspaso pasó a
+    tres pasos el 2026-07-28: esperaba que POST /inventario/traspasos moviera los
+    bultos, y ahora eso ocurre en /enviar. Adaptada a solicitar → enviar →
+    recibir, y de paso comprueba que en tránsito la mercancía NO está en el
+    destino.
+
+PRUEBAS
+  NUEVO   backend/scripts/e2e-checkout-online.js   31 comprobaciones, se limpia
+          solo. Cubre: direcciones (predeterminada automática, ajena da 404, no
+          se borra si tiene pedidos), cotización (recoger $0, envío con tarifa,
+          sin dirección 422, dirección ajena 422, no crea pedidos), el dinero (el
+          cliente no se pone el envío en cero ni se declara pagado, el pago queda
+          'pendiente' por el total), el pedido (guarda entrega y dirección, el
+          panel ve la dirección completa) y el cupón (descuenta, no gasta uso al
+          cotizar, sí al confirmar, y la venta cobra lo mismo que la cotización).
+  Todo en verde:
+    9 suites E2E del backend, incluidas las 36 de traspaso-estados
+    67 pruebas unitarias de Angular (55 de antes + 12 del checkout)
+
+PENDIENTE / NOTAS
+  · Aplicar db/migrations/2026-09_checkout_online.sql en ambientes distintos a
+    "desarrollo" — y COMPROBAR que 2026-07_traspasos_estados.sql también esté,
+    porque en "desarrollo" no lo estaba.
+  · Nada del checkout se ha probado EN EL NAVEGADOR: pasa contra los endpoints y
+    compila. Es lo primero que hay que hacer.
+  · La configuración de la tienda está VACÍA: el envío sale en $0.00 y no hay
+    datos de depósito. Hay que llenarla en Admin → Configuración.
+  · Los métodos de pago tarjeta, PayPal y Mercado Pago siguen en la tabla pero
+    la tienda en línea NO los ofrece. Si algún día se integra una pasarela, el
+    filtro está en `metodosOfrecidos` (checkout.ts).
+  · El carrito sigue sin revalidar existencias al abrir el checkout; el aviso
+    llega al confirmar. Viene de antes y no se tocó.
 
 
 -------------------------------------------------------------------------------

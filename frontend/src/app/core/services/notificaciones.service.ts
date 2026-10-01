@@ -18,10 +18,65 @@ export interface TraspasoPendiente {
   enviado_en?: string;
 }
 
+/** Un cliente que debe y lleva tiempo sin abonar. */
+export interface DeudorPendiente {
+  cliente_id: number;
+  nombre: string;
+  nombre_comercial?: string | null;
+  telefono?: string | null;
+  saldo: string | number;
+  dias_sin_abonar: number;
+}
+
+/** Un cliente que compraba y dejó de venir. */
+export interface EnfriadoPendiente {
+  cliente_id: number;
+  nombre: string;
+  nombre_comercial?: string | null;
+  telefono?: string | null;
+  num_compras: string | number;
+  total_comprado: string | number;
+  dias_sin_venir: number;
+}
+
+/** Un cliente recién capturado al que nadie le ha autorizado crédito. */
+export interface NuevoSinCredito {
+  cliente_id: number;
+  nombre: string;
+  nombre_comercial?: string | null;
+  telefono?: string | null;
+  capturado: string;
+  dias: number;
+  compras: string | number;
+}
+
 export interface Pendientes {
   traspasos_por_enviar: TraspasoPendiente[];
   traspasos_por_recibir: TraspasoPendiente[];
   alertas_stock: number;
+  /** Quién debe y lleva tiempo sin abonar. */
+  cobranza: {
+    clientes: DeudorPendiente[];
+    num_clientes: number;
+    monto: number;
+    dias: number;
+  };
+  /** Quién dejó de venir. */
+  enfriados: {
+    clientes: EnfriadoPendiente[];
+    num_clientes: number;
+    dias: number;
+  };
+  /** Clientes nuevos a los que hay que decidir si se les fía. */
+  nuevos_sin_credito: {
+    clientes: NuevoSinCredito[];
+    num_clientes: number;
+    dias: number;
+  };
+  /**
+   * El globo rojo. Cuenta UN aviso por asunto, no uno por cliente: con veinte
+   * deudores diría "23" y dejaría de significar algo.
+   */
   total: number;
 }
 

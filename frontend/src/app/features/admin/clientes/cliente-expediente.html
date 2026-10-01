@@ -1,0 +1,301 @@
+<div class="page-head">
+  <h1>{{ exp()?.nombre_comercial || exp()?.nombre || 'Cliente' }}</h1>
+  <a class="btn btn-ghost" routerLink="/admin/clientes">← Volver a clientes</a>
+</div>
+
+@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+@if (cargando()) {
+  <p class="muted">Cargando…</p>
+} @else if (exp(); as e) {
+  <!-- ============================================== QUIÉN ES, Y SI DEBE -->
+  <section class="card bloque">
+    <div class="form-grid">
+      <div>
+        <span class="muted">Nombre</span><br /><b>{{ e.nombre }}</b>
+        @if (e.nombre_comercial) { <br /><span class="muted">le dicen {{ e.nombre_comercial }}</span> }
+      </div>
+      <div>
+        <span class="muted">Teléfono</span><br />
+        {{ e.telefono || '—' }}
+        @if (e.telefono_alt) { <br /><span class="muted">{{ e.telefono_alt }}</span> }
+      </div>
+      <div>
+        <span class="muted">Lista de precios</span><br />{{ e.tipo_cliente || 'Público' }}
+      </div>
+      <div>
+        <span class="muted">Cliente desde</span><br />{{ e.cliente_desde || '—' }}
+      </div>
+      <div>
+        <span class="muted">Dónde</span><br />
+        {{ e.ciudad || '—' }}{{ e.estado ? ', ' + e.estado : '' }}
+        @if (e.direccion) { <br /><span class="muted">{{ e.direccion }}</span> }
+      </div>
+      <div>
+        <span class="muted">Cómo llegó</span><br />{{ e.como_llego || '—' }}
+      </div>
+      @if (e.codigo) {
+        <div><span class="muted">Número de cliente</span><br /><span class="mono">{{ e.codigo }}</span></div>
+      }
+      @if (e.fecha_nacimiento) {
+        <div><span class="muted">Cumpleaños</span><br />{{ e.fecha_nacimiento }}</div>
+      }
+    </div>
+
+    @if (e.notas) {
+      <p class="nota-cliente">{{ e.notas }}</p>
+    }
+  </section>
+
+  <!-- ===================================================== CUÁNTO COMPRA -->
+  <section class="card bloque">
+    <h2>Cuánto te compra</h2>
+    <div class="cifras">
+      <div class="cifra hero">
+        <span class="cifra-label">Te ha comprado</span>
+        <span class="cifra-valor">{{ dinero(e.estadisticas.total_comprado) }}</span>
+        <span class="cifra-pie">
+          en {{ e.estadisticas.num_pedidos }}
+          {{ num(e.estadisticas.num_pedidos) === 1 ? 'compra' : 'compras' }}
+        </span>
+      </div>
+      <div class="cifra">
+        <span class="cifra-label">Kilos que se ha llevado</span>
+        <span class="cifra-valor">{{ e.estadisticas.kilos | cantidad: 'kg' }}</span>
+      </div>
+      <div class="cifra">
+        <span class="cifra-label">Compra promedio</span>
+        <span class="cifra-valor">{{ dinero(e.estadisticas.ticket_promedio) }}</span>
+      </div>
+      <div class="cifra">
+        <span class="cifra-label">Última vez</span>
+        <span class="cifra-valor">
+          @if (e.estadisticas.ultima_compra) {
+            {{ e.estadisticas.ultima_compra | fecha }}
+          } @else { Nunca }
+        </span>
+        @if (diasSinVenir(); as d) {
+          <span class="cifra-pie">
+            @if (d >= 60) {
+              <span class="pastilla r-serio">
+                <span class="pastilla-icono" aria-hidden="true">!!</span>
+                hace {{ d }} días
+              </span>
+            } @else { hace {{ d }} días }
+          </span>
+        }
+      </div>
+    </div>
+
+    @if (num(e.estadisticas.num_devueltos) > 0) {
+      <p class="muted">
+        Además devolvió o canceló {{ e.estadisticas.num_devueltos }}
+        {{ num(e.estadisticas.num_devueltos) === 1 ? 'pedido' : 'pedidos' }}
+        por {{ dinero(e.estadisticas.total_devuelto) }}, que no cuenta arriba.
+      </p>
+    }
+  </section>
+
+  <!-- ======================================================== SU CRÉDITO -->
+  <section class="card bloque">
+    <div class="bloque-head">
+      <div>
+        <h2>Su cuenta</h2>
+        @if (num(e.limite_credito) > 0) {
+          <p class="muted">Se le fía hasta {{ dinero(e.limite_credito) }}.</p>
+        } @else {
+          <p class="muted">No tiene crédito autorizado. Se le captura en Editar.</p>
+        }
+      </div>
+      @if (num(e.saldo) > 0 && !abonando()) {
+        <button class="btn btn-primary" (click)="abrirAbono()">Registrar un abono</button>
+      }
+    </div>
+
+    @if (num(e.limite_credito) > 0 || num(e.saldo) > 0) {
+      <div class="cifras">
+        <div class="cifra hero">
+          <span class="cifra-label">Debe</span>
+          <span class="cifra-valor">{{ dinero(e.saldo) }}</span>
+          @if (num(e.saldo) === 0) { <span class="cifra-pie">está al día</span> }
+        </div>
+        <div class="cifra">
+          <span class="cifra-label">Le queda de crédito</span>
+          <span class="cifra-valor">{{ dinero(e.credito_disponible) }}</span>
+        </div>
+        @if (e.ultimo_abono) {
+          <div class="cifra">
+            <span class="cifra-label">Último abono</span>
+            <span class="cifra-valor">{{ e.ultimo_abono | fecha }}</span>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Registrar un abono. Avisa del turno ANTES de teclear el monto. -->
+    @if (abonando()) {
+      <div class="previa-calculo">
+        <h4 style="margin: 0 0 0.75rem">Registrar un abono</h4>
+        <div class="form-grid">
+          <label class="field">
+            Cuánto abona
+            <div class="campo-moneda">
+              <span>$</span>
+              <input type="number" min="0.01" step="0.01" [(ngModel)]="montoAbono" name="ma" />
+            </div>
+            <span class="muted" style="font-size: 0.72rem">
+              Debe {{ dinero(e.saldo) }}. No se puede abonar más que eso.
+            </span>
+          </label>
+          <label class="field">
+            Con qué paga
+            <select [(ngModel)]="metodoAbono" name="mp">
+              <option value="">Elige…</option>
+              @for (m of metodos(); track m.id) {
+                <option [ngValue]="m.id">{{ m.nombre }}</option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            Referencia <span class="muted">(opcional)</span>
+            <input type="text" [(ngModel)]="referenciaAbono" name="ref"
+                   placeholder="Folio del depósito, por ejemplo" />
+          </label>
+        </div>
+
+        @if (abonoEsEfectivo()) {
+          @if (sesion(); as s) {
+            <p class="muted">
+              El efectivo entra al turno de <b>{{ s.caja }}</b>, así el corte cuadra.
+            </p>
+          } @else {
+            <p class="alert" style="margin-bottom: 0">
+              No hay ningún turno de caja abierto. Un abono en efectivo tiene que entrar a
+              un turno o el corte no va a cuadrar: abre el turno en Punto de venta, o
+              registra el abono con otro método de pago.
+            </p>
+          }
+        }
+
+        <div class="acciones" style="margin-top: 1rem">
+          <button class="btn btn-primary" (click)="registrarAbono()" [disabled]="registrando()">
+            {{ registrando() ? 'Registrando…' : 'Registrar el abono' }}
+          </button>
+          <button class="btn btn-ghost" (click)="cerrarAbono()">Cancelar</button>
+        </div>
+      </div>
+    }
+
+    @if (e.credito_movimientos.length > 0) {
+      <h3 class="sub">Movimientos de su cuenta</h3>
+      <table class="grid">
+        <thead>
+          <tr><th>Fecha</th><th>Qué pasó</th><th class="num">Monto</th><th>Con qué</th><th>Quién</th></tr>
+        </thead>
+        <tbody>
+          @for (m of e.credito_movimientos; track m.id) {
+            <tr>
+              <td class="muted">{{ m.creado_en | fecha }}</td>
+              <td>
+                {{ etiquetaMovimiento(m.tipo) }}
+                @if (m.numero_pedido) { <br /><span class="muted mono">{{ m.numero_pedido }}</span> }
+                @if (m.notas) { <br /><span class="muted">{{ m.notas }}</span> }
+              </td>
+              <td class="num">
+                <!-- El signo dice de qué lado va: se lo lleva o lo paga. -->
+                {{ m.tipo === 'abono' ? '−' : '+' }}{{ dinero(m.monto) }}
+              </td>
+              <td class="muted">
+                {{ m.metodo_pago || '—' }}
+                @if (m.referencia) { <br /><span class="mono">{{ m.referencia }}</span> }
+              </td>
+              <td class="muted">{{ m.registro || '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else if (num(e.limite_credito) > 0) {
+      <p class="empty">Todavía no se le ha fiado nada.</p>
+    }
+  </section>
+
+  <!-- ==================================================== QUÉ SE LLEVA -->
+  @if (e.colores_mas_comprados.length > 0) {
+    <section class="card bloque">
+      <h2>Qué colores se lleva</h2>
+      <p class="muted">
+        Lo que más compra, en kilos. Sirve para saber qué ofrecerle y qué tenerle
+        apartado.
+      </p>
+      <div class="chart-box">
+        <app-barras [data]="barrasColores()" unidad="kg" [gutter]="190" [decimals]="1" />
+      </div>
+
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Hilo</th><th class="num">Kilos</th><th class="num">Importe</th>
+            <th class="num">Veces</th><th>Última vez</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of e.colores_mas_comprados; track c.producto_id) {
+            <tr>
+              <td>
+                <b>{{ c.color }}</b>
+                @if (c.calibre) { <span class="ficha-hilo"> {{ c.calibre }}</span> }
+                <br /><span class="muted">{{ c.material }}{{ c.linea ? ' · ' + c.linea : '' }}</span>
+              </td>
+              <td class="num">{{ c.kilos | cantidad: 'kg' }}</td>
+              <td class="num">{{ dinero(c.importe) }}</td>
+              <td class="num">{{ c.veces }}</td>
+              <td class="muted">{{ c.ultima_vez | fecha }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  }
+
+  <!-- ====================================================== SUS PEDIDOS -->
+  <section class="card bloque">
+    <h2>Sus compras</h2>
+    @if (e.pedidos.length === 0) {
+      <p class="empty">Todavía no te ha comprado nada.</p>
+    } @else {
+      @if (e.total_pedidos > e.pedidos.length) {
+        <p class="muted">
+          Las {{ e.pedidos.length }} más recientes de {{ e.total_pedidos }}.
+        </p>
+      }
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Pedido</th><th>Fecha</th><th>Dónde</th><th>Estado</th>
+            <th class="num">Total</th><th>Atendió</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of e.pedidos; track p.id) {
+            <tr>
+              <td class="mono">{{ p.numero_pedido }}</td>
+              <td class="muted">{{ p.creado_en | fecha }}</td>
+              <td class="muted">{{ p.canal === 'punto_venta' ? 'Mostrador' : 'En línea' }}</td>
+              <td>
+                <span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">
+                  {{ p.estado }}
+                </span>
+              </td>
+              <td class="num">{{ dinero(p.total) }}</td>
+              <td class="muted">{{ p.atendio || '—' }}</td>
+              <td>
+                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/pedidos', p.id]">Ver</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+}
