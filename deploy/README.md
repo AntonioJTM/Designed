@@ -7,7 +7,31 @@ npm run deploy            # Angular + Express
 npm run deploy:frontend   # solo Angular
 npm run deploy:backend    # solo Express
 npm run deploy:logs       # ver los logs del API
-npm run deploy:logs -- -f # seguirlos en vivo
+```
+
+## Logs
+
+`deploy/logs.sh` **solo LEE** el journal del servicio en el servidor; no arranca,
+reinicia ni despliega nada. Sirve para ver por qué falla algo sin entrar por SSH.
+
+```bash
+bash deploy/logs.sh          # últimas 60 líneas
+bash deploy/logs.sh 200      # últimas 200 líneas
+bash deploy/logs.sh -e       # solo errores y arranques, sin el ruido de accesos HTTP
+bash deploy/logs.sh -f       # seguir en vivo (Ctrl-C para salir)
+```
+
+Para `-f` conviene invocarlo **directo con `bash`**, no por `npm run`: npm añade
+una capa de proceso que hace que `Ctrl-C` no siempre cierre la conexión. El modo
+`-f` usa `ssh -tt` para forzar la pseudo-terminal; sin eso, al canalizar la
+salida ssh se queda colgado y no lo cierra ni un timeout.
+
+El servicio arranca solo con systemd (`enabled`), así que sobrevive reinicios.
+Para operarlo a mano:
+
+```bash
+ssh -i ~/.ssh/hostinger_vps root@72.60.112.92 'systemctl status tienda-hilos-api'
+ssh -i ~/.ssh/hostinger_vps root@72.60.112.92 'systemctl restart tienda-hilos-api'
 ```
 
 Destino: **https://devtristan.cloud** (`72.60.112.92`).

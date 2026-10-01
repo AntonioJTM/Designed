@@ -770,6 +770,13 @@ tienda-hilos/
       dos acciones distintas y mezclarlas escondía la urgente—. Abonar y entregar desde ahí.
 
 ## Pendientes concretos para el usuario
+- **La base de producción tiene una MUESTRA sembrada (2026-10-01):** 18 hilos, 40 clientes y
+  tres meses de ventas INVENTADOS, mezclados con lo real, para enseñarle el sistema a un
+  cliente. No los tomes por datos del negocio. Todo está anotado en `_demo_registros`. Se borra
+  con `node scripts/demo/limpiar.js --base desarrollo --confirmar` (desde `backend/`), que
+  además regresa la configuración, vuelve a desactivar "tienda moroleon" y recalcula la nómina
+  real que tocó. Las ventas de la muestra solo usan hilos de la muestra: nunca le cargues una
+  venta de muestra a un hilo real, o la limpieza ya no podrá separar lo uno de lo otro.
 - La base se limpió el 2026-07-26 para empezar a capturar en serio: NO hay productos, ni
   inventario, ni pedidos. Se conservó el personal y la configuración (almacenes, cajas,
   materiales, líneas, unidades, métodos de pago, tipo de cliente). Respaldo del estado
