@@ -9,11 +9,18 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-09-10
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-01
 ===============================================================================
 
+⚠ LA BASE DE PRODUCCIÓN TIENE UNA MUESTRA SEMBRADA (2026-10-01)
+  18 hilos, 40 clientes y tres meses de operación INVENTADOS, para enseñarle el
+  sistema a un cliente. Están mezclados con lo real. NO los tomes por datos del
+  negocio. Se borran con:
+      cd backend && node scripts/demo/limpiar.js --base desarrollo --confirmar
+  Ver la entrada "2026-10-01 · Muestra para enseñar el sistema".
+
 LO ÚLTIMO QUE SE TERMINÓ
-  EL ASISTENTE YA CONTESTA DE VERDAD: Admin → Asistente. Se le pregunta en
+  Antes: EL ASISTENTE YA CONTESTA DE VERDAD: Admin → Asistente. Se le pregunta en
   palabras normales ("¿cuánto vendí hoy?", "¿quién me debe más?") y responde con
   los datos reales de la tienda, diciendo debajo QUÉ consultó.
   Se pasó de DeepSeek a **GOOGLE GEMINI**, que tiene capa GRATUITA: ya no hay que
@@ -276,6 +283,92 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-01 · Muestra para enseñar el sistema (datos de prueba en producción)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "necesito que me generes datos de pruebas de todo para una muestra a un
+   cliente". Eligió: EN LA BASE REAL, BORRABLE, con unos 3 meses de movimiento.
+
+QUÉ SE HIZO
+  backend/scripts/demo/  (nuevo)
+    sembrar.js   siembra del 2026-07-01 a hoy con los MISMOS services de la API,
+                 no con SQL a mano: así el kardex, los cortes, el crédito y los
+                 bultos cuadran igual que en la operación real. La fecha de cada
+                 operación la pone un reloj simulado (_reloj.js: SET timestamp en
+                 cada conexión + Date de Node). Azar con semilla: reproducible.
+                 `--dia AAAA-MM-DD` agrega un día más de mostrador a la muestra.
+    limpiar.js   la borra. Sin --confirmar solo dice qué borraría.
+    catalogo.js  los hilos, clientes, apartados y cupones inventados.
+    _pdf.js      comprobantes de transferencia en PDF, rotulados DEMOSTRACIÓN.
+    generar-imagenes.js  fotos de catálogo (conos dibujados en SVG → PNG con
+                 Chrome headless) en frontend/public/demo/hilos/.
+  Todo lo sembrado queda anotado en las tablas _demo_registros y _demo_estado.
+
+  Lo que quedó en la base: 18 hilos (ninguno repite nombre real), 1,443 bultos
+  en 42 remesas, 40 clientes (6 con cuenta en línea, contraseña Demo2026!),
+  328 ventas de mostrador (75 fiadas), 30 pedidos en línea con 26 comprobantes,
+  8 apartados, 30 traspasos (uno en tránsito y uno por enviar), 108 bajadas de
+  conos, 158 turnos de caja, 13 semanas de nómina, 2 listas de precio (Medio
+  mayoreo, Mayoreo) y 2 cupones (BIENVENIDA10, HILO200).
+
+DECISIONES
+  · Las ventas de la muestra SOLO usan hilos de la muestra. Los 8 hilos reales,
+    sus 406 bultos y su kardex no se movieron (verificado después de sembrar).
+  · "tienda moroleon" estaba DESACTIVADA (activo = 0) y la muestra la usa como
+    segunda sucursal: se activó mientras dure y limpiar.js la vuelve a
+    desactivar.
+  · Se escribió Admin → Configuración (envío $150 y datos de depósito
+    rotulados "de demostración"); la limpieza regresa los valores que había.
+  · El periodo real de nómina 1 (30-ago a 5-sep, borrador) se recalculó con la
+    muestra; la limpieza lo vuelve a calcular.
+  · Las cancelaciones de la muestra ocurren SIEMPRE con el turno abierto: con
+    el turno cerrado, el sistema saca el efectivo del OTRO turno abierto de
+    esa caja, y en la Caja Cuautepec ese es el turno real 88 (abierto desde el
+    2026-09-05).
+
+CÓMO SE PROBÓ
+  En una copia de la base (demo_ensayo): sembrar → verificar → limpiar →
+  comparar CHECKSUM de las 48 tablas contra la real. Solo difirieron fechas de
+  "actualizado_en"; los valores quedaron idénticos. Luego se sembró en
+  producción con respaldo previo (/root/respaldos/desarrollo_antes_demo_*.sql).
+  23 endpoints en 200 y capturas del panel con Chrome headless.
+
+HALLAZGOS QUE NO SON DE LA MUESTRA
+  · EL CONO NUNCA TIENE COSTO. El desarme no le pasa al cono el costo del
+    paquete, así que sus ventas congelan costo NULL y el margen no las ve (en
+    la muestra: las 336 líneas de cono). Le pasa igual a la operación real.
+  · MySQL del servidor está en UTC: lo vendido en vivo queda 6 horas adelante y
+    después de las 18:00 de México "hoy" ya es mañana.
+  · La tarjeta del catálogo en línea dice "ROJO" dos veces sin el calibre.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-01 · Despliegue al servidor (devtristan.cloud)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "necesito que me hagas un nuevo deploy a servidor"
+
+QUÉ SE HIZO
+  `bash deploy/deploy.sh all` → despliegue 20261001-145310, verificado:
+  /health, / y /api/v1/productos en 200. El anterior era del 2026-07-28, así que
+  este es el primero que lleva al servidor clientes y crédito, apartados, el
+  tablero, el checkout, los comprobantes y el asistente.
+  ANTES de desplegar se auditó la base del servidor contra information_schema
+  (no contra esta bitácora): las 5 migraciones de 2026-09 y la de
+  traspasos_estados están aplicadas. El servidor usa la MISMA base "desarrollo"
+  que el `.env` local, por eso ya estaban.
+
+LO QUE QUEDÓ PENDIENTE
+  · El ASISTENTE está APAGADO en el servidor: su `.env` no tiene IA_API_KEY (ni
+    el `.env` local). Se agrega en /var/www/tienda-hilos/backend/.env y se
+    reinicia con `systemctl restart tienda-hilos-api`.
+  · `backend/uploads/` todavía no existe allá; la crea el primer comprobante que
+    se suba (el servicio corre como root, así que puede).
 
 
 -------------------------------------------------------------------------------

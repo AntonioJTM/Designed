@@ -191,6 +191,33 @@ código `1` si alguna comprobación falla.
 
 ---
 
+## 8. Muestra para enseñar el sistema (`scripts/demo/`)
+
+Siembra tres meses de operación INVENTADA —18 hilos, 40 clientes, ventas de
+mostrador y en línea, crédito, apartados, traspasos, desarmes, cortes y nómina—
+para enseñarle el sistema a alguien. Usa los mismos services que la API, con un
+reloj simulado, así que todo cuadra igual que en la operación real.
+
+```bash
+cd backend
+node scripts/demo/sembrar.js --base <DB_NAME>                 # del 2026-07-01 a hoy
+node scripts/demo/sembrar.js --base <DB_NAME> --dia 2026-10-05  # un día más (el de la muestra)
+node scripts/demo/limpiar.js --base <DB_NAME>                 # dice qué borraría
+node scripts/demo/limpiar.js --base <DB_NAME> --confirmar     # la borra
+node scripts/demo/generar-imagenes.js                         # fotos del catálogo (necesita Chrome)
+```
+
+- `--base` es obligatorio y tiene que coincidir con `DB_NAME`.
+- Corre en el servidor (`/var/www/tienda-hilos/backend`): ahí está la carpeta de
+  comprobantes y tarda unos 15 s. Desde aquí, por la red, tardaría mucho más.
+- Todo lo sembrado queda en `_demo_registros` / `_demo_estado`; la limpieza
+  parte de ahí y borra también lo que se haya hecho en vivo con hilos, clientes
+  o turnos de la muestra. Se niega a seguir si una venta vigente mezcla la
+  muestra con hilos reales.
+- Las cuentas en línea de la muestra entran con la contraseña `Demo2026!`.
+
+---
+
 ## Referencia de archivos
 
 ```

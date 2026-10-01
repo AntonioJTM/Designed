@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <title>Propuesta de venta · Sistema de gestión para tienda de hilos</title>
+  <style>
+    @page {
+      size: letter;
+      margin: 0;
+    }
+
+    :root {
+      --tinta: #1b2333;
+      --suave: #5b6476;
+      --tenue: #8a92a3;
+      --linea: #e3e6ec;
+      --fondo: #f5f6f9;
+      --marca: #233a6b;
+      --acento: #c2562b;
+      --acento-suave: #fbeee7;
+      --ok: #2f7d4f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+    }
+
+    body {
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      color: var(--tinta);
+      font-size: 10.5pt;
+      line-height: 1.5;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .pagina {
+      width: 8.5in;
+      height: 11in;
+      padding: 0.7in 0.75in 0.85in;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+    }
+
+    .pagina:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    .pie {
+      position: absolute;
+      left: 0.75in;
+      right: 0.75in;
+      bottom: 0.4in;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8pt;
+      color: var(--tenue);
+      border-top: 1px solid var(--linea);
+      padding-top: 6px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    h2 {
+      font-size: 17pt;
+      color: var(--marca);
+      margin-bottom: 4px;
+    }
+
+    h3 {
+      font-size: 11.5pt;
+      margin-bottom: 4px;
+    }
+
+    .kicker {
+      font-size: 8.5pt;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--acento);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .intro {
+      color: var(--suave);
+      margin: 0 0 16px;
+      max-width: 6.4in;
+    }
+
+    p {
+      margin: 0 0 8px;
+    }
+
+    .num {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Portada ---------- */
+    .portada {
+      padding: 0;
+    }
+
+    .portada .banda {
+      background: var(--marca);
+      color: #fff;
+      height: 6.1in;
+      padding: 0.9in 0.85in 0.6in;
+      position: relative;
+    }
+
+    .portada .banda::after {
+      content: "";
+      position: absolute;
+      left: 0.85in;
+      bottom: 0;
+      width: 1.1in;
+      height: 6px;
+      background: var(--acento);
+    }
+
+    .portada .marca-emisor {
+      font-size: 10pt;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      opacity: .85;
+      font-weight: 600;
+    }
+
+    .portada h1 {
+      font-size: 31pt;
+      font-weight: 700;
+      margin: 0.75in 0 14px;
+      letter-spacing: -.01em;
+    }
+
+    .portada .sub {
+      font-size: 13.5pt;
+      opacity: .9;
+      max-width: 5.6in;
+      line-height: 1.45;
+    }
+
+    .portada .datos {
+      padding: 0.42in 0.85in 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .portada .dato .etq {
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--tenue);
+      font-weight: 600;
+    }
+
+    .portada .dato .val {
+      font-size: 17pt;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .portada .dato .nota {
+      font-size: 9pt;
+      color: var(--suave);
+    }
+
+    .portada .para {
+      margin: 0.45in 0.85in 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--linea);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      font-size: 10pt;
+    }
+
+    .portada .resuelve {
+      margin: 0.28in 0.85in 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .portada .resuelve div {
+      background: var(--fondo);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 9.3pt;
+      color: var(--suave);
+      line-height: 1.4;
+    }
+
+    .portada .resuelve strong {
+      display: block;
+      color: var(--marca);
+      font-size: 10.5pt;
+      margin-bottom: 3px;
+    }
+
+    .portada .para .etq {
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--tenue);
+      font-weight: 600;
+    }
+
+    /* ---------- Módulos ---------- */
+    .modulos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+    }
+
+    .modulo {
+      border: 1px solid var(--linea);
+      border-radius: 8px;
+      padding: 11px 13px 9px;
+    }
+
+    .modulo h3 {
+      color: var(--marca);
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .modulo h3 .n {
+      color: var(--acento);
+      font-size: 10pt;
+      font-weight: 700;
+    }
+
+    .modulo ul {
+      margin: 4px 0 0;
+      padding-left: 16px;
+      color: var(--suave);
+      font-size: 9.4pt;
+      line-height: 1.42;
+    }
+
+    .modulo li {
+      margin-bottom: 2px;
+    }
+
+    .resumen-caja {
+      background: var(--fondo);
+      border-radius: 8px;
+      padding: 12px 15px;
+      margin-bottom: 14px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      font-size: 9.5pt;
+      color: var(--suave);
+    }
+
+    .resumen-caja strong {
+      display: block;
+      color: var(--tinta);
+      font-size: 10.5pt;
+    }
+
+    /* ---------- Plan ---------- */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    .gantt th,
+    .gantt td {
+      border-bottom: 1px solid var(--linea);
+      padding: 5px 4px;
+      font-size: 9.3pt;
+    }
+
+    .gantt th {
+      font-size: 8.3pt;
+      color: var(--tenue);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .gantt th:first-child {
+      text-align: left;
+    }
+
+    .gantt td.act {
+      width: 2.9in;
+      padding-right: 10px;
+    }
+
+    .gantt td.act span {
+      display: block;
+      color: var(--tenue);
+      font-size: 8.4pt;
+      line-height: 1.3;
+    }
+
+    .gantt td.s {
+      width: 0.42in;
+      text-align: center;
+      padding: 5px 2px;
+    }
+
+    .gantt td.s i {
+      display: block;
+      height: 13px;
+      border-radius: 3px;
+      background: transparent;
+    }
+
+    .gantt td.s.on i {
+      background: var(--marca);
+    }
+
+    .gantt td.s.hito i {
+      background: var(--acento);
+    }
+
+    .gantt tr.hito-fila td.act {
+      font-weight: 700;
+      color: var(--acento);
+    }
+
+    .leyenda {
+      display: flex;
+      gap: 18px;
+      font-size: 8.6pt;
+      color: var(--suave);
+      margin: 8px 0 12px;
+    }
+
+    .leyenda b {
+      display: inline-block;
+      width: 18px;
+      height: 9px;
+      border-radius: 2px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    .entregas {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .entrega {
+      border-left: 4px solid var(--acento);
+      background: var(--acento-suave);
+      border-radius: 0 8px 8px 0;
+      padding: 10px 14px;
+    }
+
+    .entrega h3 {
+      color: var(--acento);
+    }
+
+    .entrega ul {
+      margin: 2px 0 0;
+      padding-left: 16px;
+      font-size: 9.4pt;
+      color: var(--tinta);
+    }
+
+    /* ---------- Inversión ---------- */
+    .desglose td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--linea);
+      font-size: 10pt;
+      line-height: 1.35;
+    }
+
+    .desglose td.monto {
+      text-align: right;
+      white-space: nowrap;
+      width: 1.3in;
+    }
+
+    .desglose td span {
+      display: block;
+      color: var(--tenue);
+      font-size: 8.6pt;
+    }
+
+    .desglose tr.total td {
+      border-bottom: none;
+      border-top: 2px solid var(--tinta);
+      font-size: 12.5pt;
+      font-weight: 700;
+      padding-top: 8px;
+    }
+
+    .desglose tr.total td.monto {
+      color: var(--marca);
+      font-size: 15pt;
+    }
+
+    .pagos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 4px;
+    }
+
+    .pago {
+      border: 1px solid var(--linea);
+      border-radius: 8px;
+      padding: 10px 14px 6px;
+    }
+
+    .pago.rec {
+      border: 2px solid var(--marca);
+    }
+
+    .pago .tag {
+      display: inline-block;
+      font-size: 7.8pt;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: var(--marca);
+      color: #fff;
+      border-radius: 99px;
+      padding: 2px 8px;
+      margin-bottom: 6px;
+    }
+
+    .pago h3 {
+      margin-bottom: 8px;
+    }
+
+    .pago table td {
+      padding: 3px 0;
+      font-size: 9.4pt;
+      border-bottom: 1px dashed var(--linea);
+      vertical-align: top;
+    }
+
+    .pago table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .pago table td.m {
+      text-align: right;
+      font-weight: 700;
+      white-space: nowrap;
+      padding-left: 10px;
+    }
+
+    .pago table td small {
+      color: var(--tenue);
+      display: block;
+      font-size: 8.3pt;
+    }
+
+    .medios {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .medio {
+      background: var(--fondo);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 9.2pt;
+      color: var(--suave);
+    }
+
+    .medio strong {
+      display: block;
+      color: var(--tinta);
+      font-size: 10pt;
+      margin-bottom: 2px;
+    }
+
+    /* ---------- Condiciones ---------- */
+    .cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 22px;
+    }
+
+    .bloque h3 {
+      color: var(--marca);
+      margin-bottom: 3px;
+    }
+
+    .bloque ul {
+      margin: 0;
+      padding-left: 16px;
+      font-size: 9.3pt;
+      color: var(--suave);
+      line-height: 1.42;
+    }
+
+    .bloque p {
+      font-size: 9.3pt;
+      color: var(--suave);
+      line-height: 1.42;
+    }
+
+    .firma {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 30px;
+    }
+
+    .firma div {
+      border-top: 1px solid var(--tinta);
+      padding-top: 6px;
+      font-size: 9pt;
+      color: var(--suave);
+    }
+
+    .firma strong {
+      display: block;
+      color: var(--tinta);
+      font-size: 9.8pt;
+    }
+
+    .aviso {
+      background: var(--fondo);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 9.2pt;
+      color: var(--suave);
+      margin-top: 16px;
+    }
+
+    /* ---------- Cambios a la medida ---------- */
+    .cambios {
+      border: 2px solid var(--marca);
+      border-radius: 8px;
+      padding: 12px 16px 10px;
+      margin-bottom: 16px;
+    }
+
+    .cambios h3 {
+      color: var(--marca);
+      margin-bottom: 4px;
+    }
+
+    .cambios p {
+      font-size: 9.4pt;
+      color: var(--suave);
+      line-height: 1.45;
+    }
+
+    .pasos {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 8px 0 8px;
+    }
+
+    .paso {
+      background: var(--fondo);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 9pt;
+      color: var(--suave);
+      line-height: 1.4;
+    }
+
+    .paso b {
+      display: block;
+      color: var(--acento);
+      font-size: 9.5pt;
+      margin-bottom: 1px;
+    }
+
+    .incluido {
+      color: var(--ok);
+      font-weight: 700;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ======================= 1. PORTADA ======================= -->
+  <section class="pagina portada">
+    <div class="banda">
+      <div class="marca-emisor">Evortex · Desarrollo de software</div>
+      <h1>Propuesta de venta<br>e implementación</h1>
+      <div class="sub">Sistema de gestión para tienda de hilos, terminado y listo para usarse: punto de venta,
+        inventario por almacén, catálogo en línea, clientes y crédito, reportes y nómina.</div>
+    </div>
+    <div class="datos">
+      <div class="dato">
+        <div class="etq">Inversión total</div>
+        <div class="val num">$40,000 MXN</div>
+        <div class="nota">Pago único, sin rentas mensuales</div>
+      </div>
+      <div class="dato">
+        <div class="etq">Implementación</div>
+        <div class="val">2 meses</div>
+        <div class="nota">Vendiendo con él desde la semana 4</div>
+      </div>
+      <div class="dato">
+        <div class="etq">Forma de pago</div>
+        <div class="val">3 pagos</div>
+        <div class="nota">Contra avance (o 4 pagos fijos)</div>
+      </div>
+      <div class="dato">
+        <div class="etq">Garantía</div>
+        <div class="val">4 meses</div>
+        <div class="nota">Después de la entrega final</div>
+      </div>
+    </div>
+    <div class="para">
+      <div>
+        <div class="etq">Preparada para</div>
+        Propietario(a) de la tienda de hilos
+      </div>
+      <div>
+        <div class="etq">Fecha y vigencia</div>
+        1 de octubre de 2026 · Válida 15 días (hasta el 16 de octubre de 2026)<br>
+        Folio PROP-2026-003
+      </div>
+    </div>
+    <div class="resuelve">
+      <div><strong>Cobrar lo justo</strong>Cada bulto se cobra por lo que pesa de verdad, escaneando su código.</div>
+      <div><strong>Saber qué hay y dónde</strong>Existencias de bodega y sucursales al momento, con su historial.</div>
+      <div><strong>Saber quién debe</strong>Crédito, apartados y cobranza con fechas, sin libretas.</div>
+    </div>
+    <div class="pie"><span>Propuesta PROP-2026-003</span><span>1</span></div>
+  </section>
+
+  <!-- ======================= 2. QUÉ INCLUYE ======================= -->
+  <section class="pagina">
+    <div class="kicker">El sistema</div>
+    <h2>Qué compra su negocio</h2>
+    <p class="intro">Un sistema web ya terminado, pensado para cómo trabaja una tienda de hilos: se vende por peso,
+      cada bulto pesa distinto, la mercancía llega en paquetes y se baja a conos para el mostrador. Puede verlo
+      funcionando antes de decidir. Se usa desde cualquier computadora o celular con navegador.</p>
+
+    <div class="resumen-caja">
+      <div><strong>Una sola base de datos</strong>Mostrador, bodega y catálogo en línea ven las mismas existencias.
+      </div>
+      <div><strong>Varias sucursales</strong>Bodega matriz y sucursales, cada una con su caja.</div>
+      <div><strong>Usuarios con permisos</strong>Administrador, gerente, cajero y almacenista.</div>
+    </div>
+
+    <div class="modulos">
+      <div class="modulo">
+        <h3><span class="n">01</span>Punto de venta y caja</h3>
+        <ul>
+          <li>Cobro por el peso real de cada bulto, con lector de código de barras.</li>
+          <li>Cobro en efectivo o por transferencia, o combinando los dos.</li>
+          <li>Precios de mayoreo y medio mayoreo que se aplican solos al elegir al cliente.</li>
+          <li>Ventas a crédito con límite y apartados con anticipo y abonos.</li>
+          <li>Apertura y corte de caja con faltantes y sobrantes.</li>
+        </ul>
+      </div>
+      <div class="modulo">
+        <h3><span class="n">02</span>Inventario por almacén</h3>
+        <ul>
+          <li>Entrada de mercancía desde la lista de empaque en Excel del proveedor: cada bulto con su peso y lote.</li>
+          <li>Envíos de bodega a sucursal: solicitado, en camino y recibido, con acuse de quien recibe.</li>
+          <li>Bajar paquetes a conos para mostrador.</li>
+          <li>Ajustes por conteo físico, mermas, kardex y alertas de mínimo.</li>
+        </ul>
+      </div>
+      <div class="modulo">
+        <h3><span class="n">03</span>Catálogo en línea</h3>
+        <ul>
+          <li>Sus hilos con fotos, precio por kilo y existencias reales.</li>
+          <li>El cliente puede hacer su pedido: envío a domicilio o recoger en tienda, con cupones de descuento.</li>
+          <li>Paga por transferencia o en efectivo al recoger; el personal confirma el pago.</li>
+          <li>Cuenta del cliente con el seguimiento de sus pedidos.</li>
+        </ul>
+      </div>
+      <div class="modulo">
+        <h3><span class="n">04</span>Clientes y cobranza</h3>
+        <ul>
+          <li>Expediente de cada cliente: cuánto compra y qué colores se lleva.</li>
+          <li>Búsqueda por apodo o teléfono, como se les conoce en el mostrador.</li>
+          <li>Estado de cuenta, abonos y lista de quién debe y desde cuándo.</li>
+        </ul>
+      </div>
+      <div class="modulo">
+        <h3><span class="n">05</span>Reportes y tablero del negocio</h3>
+        <ul>
+          <li>Ventas del día, cortes de caja, más vendidos y qué reabastecer.</li>
+          <li>Cobranza por antigüedad y clientes que dejaron de venir.</li>
+          <li>Hilo parado (cuánto dinero hay detenido en bodega) y margen por hilo.</li>
+          <li>Avisos de pendientes junto al nombre del usuario.</li>
+        </ul>
+      </div>
+      <div class="modulo">
+        <h3><span class="n">06</span>Nómina y personal</h3>
+        <ul>
+          <li>Nómina semanal: sueldo base, comisión por ventas, horas extra y descuentos.</li>
+          <li>La comisión se calcula sola con lo que vendió cada quien en la semana.</li>
+          <li>Historial de semanas pagadas y permisos por puesto para cada usuario.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="aviso"><strong style="color:var(--tinta)">Se entrega tal como está.</strong> Lo que se describe en esta
+      página es lo que el sistema hace hoy. Si su negocio necesita un cambio o una función nueva, se cotiza aparte:
+      vea la página 5.</div>
+
+    <div class="pie"><span>Propuesta PROP-2026-003</span><span>2</span></div>
+  </section>
+
+  <!-- ======================= 3. IMPLEMENTACIÓN ======================= -->
+  <section class="pagina">
+    <div class="kicker">Tiempo de implementación</div>
+    <h2>De la firma a la operación: 8 semanas</h2>
+    <p class="intro">El sistema ya está hecho, así que no hay que esperar a que se programe. El tiempo es para
+      instalarlo,
+      cargar su información y enseñarle a su personal. Desde la semana 4 su mostrador ya vende con él.</p>
+
+    <table class="gantt">
+      <thead>
+        <tr>
+          <th>Actividad</th>
+          <th>S1</th>
+          <th>S2</th>
+          <th>S3</th>
+          <th>S4</th>
+          <th>S5</th>
+          <th>S6</th>
+          <th>S7</th>
+          <th>S8</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="act">Servidor, dominio e instalación<span>Contratados a nombre del negocio, con conexión segura
+              (https)</span></td>
+          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr>
+          <td class="act">Configuración del negocio<span>Sucursales, almacenes, cajas, usuarios, permisos y listas de
+              precio</span></td>
+          <td class="s on"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr>
+          <td class="act">Nombre y logotipo de su tienda<span>En el catálogo en línea que ven sus clientes</span></td>
+          <td class="s"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr>
+          <td class="act">Carga del catálogo e inventario inicial<span>Desde las listas de empaque del proveedor en
+              Excel</span></td>
+          <td class="s"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr>
+          <td class="act">Capacitación de caja y bodega<span>Cobro, cortes, entrada de mercancía, envíos y conos</span>
+          </td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr class="hito-fila">
+          <td class="act">Arranque en mostrador: su tienda ya vende con el sistema</td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s hito"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr>
+          <td class="act">Catálogo en línea publicado<span>Catálogo con fotos, costo de envío y datos para
+              depositar</span></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr>
+          <td class="act">Capacitación de administración<span>Clientes, crédito, apartados, reportes y nómina</span>
+          </td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+        </tr>
+        <tr>
+          <td class="act">Acompañamiento en la operación<span>Dudas del personal y ajustes de configuración</span></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s on"><i></i></td>
+          <td class="s on"><i></i></td>
+        </tr>
+        <tr class="hito-fila">
+          <td class="act">Entrega final</td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s"><i></i></td>
+          <td class="s hito"><i></i></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="leyenda"><span><b style="background:var(--marca)"></b>Trabajo</span><span><b
+          style="background:var(--acento)"></b>Entrega (hito de pago)</span></div>
+
+    <div class="entregas">
+      <div class="entrega">
+        <h3>Arranque en mostrador · semana 4</h3>
+        <ul>
+          <li>Sistema instalado en su dominio.</li>
+          <li>Catálogo e inventario cargados.</li>
+          <li>El mostrador ya cobra con el sistema.</li>
+        </ul>
+      </div>
+      <div class="entrega">
+        <h3>Entrega final · semana 8</h3>
+        <ul>
+          <li>Catálogo en línea publicado.</li>
+          <li>Personal capacitado por puesto.</li>
+          <li>Inician los 4 meses de garantía.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="aviso">Las fechas dependen de que el negocio entregue a tiempo la información que se le pida
+      (listas de empaque, precios, sucursales) y de que revise cada avance en un máximo de 3 días hábiles.
+      Si un avance tarda más en revisarse, la fecha final se recorre los mismos días.</div>
+
+    <div class="pie"><span>Propuesta PROP-2026-003</span><span>3</span></div>
+  </section>
+
+  <!-- ======================= 4. INVERSIÓN Y PAGOS ======================= -->
+  <section class="pagina">
+    <div class="kicker">Inversión</div>
+    <h2>Precio y forma de pago</h2>
+    <p class="intro">Un solo pago por el sistema y su implementación. Sin rentas mensuales por usarlo.</p>
+
+    <table class="desglose">
+      <tr>
+        <td>Licencia de uso del sistema completo<span>Los seis módulos, sin límite de usuarios ni de sucursales</span>
+        </td>
+        <td class="monto num">$30,000.00</td>
+      </tr>
+      <tr>
+        <td>Instalación y configuración<span>Servidor, dominio, https, sucursales, cajas, usuarios, listas de precio,
+            nombre y logotipo</span></td>
+        <td class="monto num">$4,000.00</td>
+      </tr>
+      <tr>
+        <td>Carga inicial de información<span>Catálogo e inventario desde las listas de empaque del proveedor</span>
+        </td>
+        <td class="monto num">$3,000.00</td>
+      </tr>
+      <tr>
+        <td>Capacitación y acompañamiento<span>Sesiones por puesto y acompañamiento en la operación hasta la semana
+            8</span></td>
+        <td class="monto num">$3,000.00</td>
+      </tr>
+      <tr>
+        <td>Garantía de 4 meses<span>Corrección sin costo de cualquier falla del sistema</span></td>
+        <td class="monto"><strong class="incluido">Incluida</strong></td>
+      </tr>
+      <tr class="total">
+        <td>Total</td>
+        <td class="monto num">$40,000.00</td>
+      </tr>
+    </table>
+    <p style="font-size:8.8pt;color:var(--tenue);margin-top:6px">Precios en pesos mexicanos. Si requiere factura, el IVA
+      ya está incluido en el total.</p>
+
+    <h3 style="margin:10px 0 6px">Elija cómo pagar</h3>
+    <div class="pagos">
+      <div class="pago rec">
+        <span class="tag">Recomendado</span>
+        <h3>Tres pagos contra avance</h3>
+        <table>
+          <tr>
+            <td>Anticipo · 40%<small>Al firmar. Con este pago arranca la implementación.</small></td>
+            <td class="m num">$16,000.00</td>
+          </tr>
+          <tr>
+            <td>Arranque en mostrador · 30%<small>Semana 4: su tienda ya vende con el sistema.</small></td>
+            <td class="m num">$12,000.00</td>
+          </tr>
+          <tr>
+            <td>Entrega final · 30%<small>Semana 8: catálogo en línea publicado y personal capacitado.</small></td>
+            <td class="m num">$12,000.00</td>
+          </tr>
+        </table>
+      </div>
+      <div class="pago">
+        <span class="tag" style="background:var(--suave)">Alternativa</span>
+        <h3>Cuatro pagos iguales</h3>
+        <table>
+          <tr>
+            <td>Pago 1 · al firmar</td>
+            <td class="m num">$10,000.00</td>
+          </tr>
+          <tr>
+            <td>Pago 2 · semana 2</td>
+            <td class="m num">$10,000.00</td>
+          </tr>
+          <tr>
+            <td>Pago 3 · semana 5</td>
+            <td class="m num">$10,000.00</td>
+          </tr>
+          <tr>
+            <td>Pago 4 · entrega final</td>
+            <td class="m num">$10,000.00</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <h3 style="margin:12px 0 0">Medios de pago</h3>
+    <div class="medios">
+      <div class="medio"><strong>Transferencia</strong>A la cuenta que se indica en el contrato. Se envía el comprobante
+        por WhatsApp o correo.</div>
+      <div class="medio"><strong>Efectivo</strong>En persona, contra recibo firmado por cada pago.</div>
+    </div>
+
+    <div class="pie"><span>Propuesta PROP-2026-003</span><span>4</span></div>
+  </section>
+
+  <!-- ======================= 5. CONDICIONES ======================= -->
+  <section class="pagina">
+    <div class="kicker">Condiciones</div>
+    <h2>Lo que conviene dejar claro</h2>
+    <p class="intro">Para que los dos sepamos exactamente qué se entrega, qué no y qué pasa después.</p>
+
+    <div class="cambios">
+      <h3>Cambios y funciones nuevas: se cotizan aparte</h3>
+      <p>El sistema se vende tal como está. Si su negocio quiere un cambio —una pantalla distinta, un reporte nuevo,
+        una función que hoy no existe— se trabaja así:</p>
+      <div class="pasos">
+        <div class="paso"><b>1. Lo pide</b>Nos describe qué necesita y para qué.</div>
+        <div class="paso"><b>2. Se cotiza</b>Le damos precio y tiempo de entrega por escrito.</div>
+        <div class="paso"><b>3. Usted autoriza</b>Solo se hace si lo aprueba, y se paga aparte de esta propuesta.</div>
+      </div>
+      <p style="margin:0">Los ajustes de <strong style="color:var(--tinta)">configuración</strong> sí están incluidos:
+        precios,
+        usuarios, sucursales, cajas y listas de precio. Además, la mayoría los puede hacer usted mismo desde el panel.
+      </p>
+    </div>
+
+    <div class="cols">
+      <div class="bloque">
+        <h3>Garantía</h3>
+        <p>4 meses a partir de la entrega final para corregir, sin costo, cualquier falla del sistema tal como se
+          entregó. No cubre cambios ni funciones nuevas. Al terminar, el soporte y el mantenimiento mensual se cotizan
+          aparte y son opcionales.</p>
+      </div>
+      <div class="bloque">
+        <h3>Propiedad</h3>
+        <p>Licencia de uso permanente para su negocio, sin límite de usuarios ni de sucursales. La información
+          (ventas, clientes, inventario) es suya: puede pedir un respaldo completo cuando lo necesite. El código
+          fuente sigue siendo de Evortex.</p>
+      </div>
+      <div class="bloque">
+        <h3>No incluye</h3>
+        <ul>
+          <li>Facturación electrónica (CFDI).</li>
+          <li>Cobro con tarjeta: ni terminal en mostrador ni pago en línea.</li>
+          <li>App nativa para celular. El sistema sí funciona desde el navegador del celular.</li>
+          <li>Equipo: computadoras, lector de código de barras, impresora.</li>
+          <li>Integración con paqueterías o con su sistema contable.</li>
+        </ul>
+      </div>
+      <div class="bloque">
+        <h3>Servicios de terceros</h3>
+        <ul>
+          <li>El servidor y el dominio se contratan a nombre del negocio y los paga directamente al proveedor.
+            Evortex los contrata con usted y los configura sin costo adicional.</li>
+        </ul>
+      </div>
+      <div class="bloque">
+        <h3>Lo que necesitamos del negocio</h3>
+        <ul>
+          <li>Una persona de contacto que revise cada avance.</li>
+          <li>Listas de empaque del proveedor en Excel, precios por kilo y listas de mayoreo.</li>
+          <li>Datos de sucursales, cajas y personal.</li>
+          <li>Tiempo del personal para capacitación: unas 2 horas por puesto.</li>
+        </ul>
+      </div>
+      <div class="bloque">
+        <h3>Cómo arrancamos</h3>
+        <ul>
+          <li>Aceptación de esta propuesta y firma del contrato.</li>
+          <li>Pago del anticipo: ese día empieza la semana 1.</li>
+          <li>Reunión de arranque en la tienda o en línea.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="aviso">Esta propuesta es válida hasta el 16 de octubre de 2026. Para aceptarla, basta con firmarla
+      y realizar el anticipo del esquema de pago elegido.</div>
+
+    <div class="firma">
+      <div><strong>Acepto la propuesta</strong>Nombre, firma y fecha del cliente</div>
+      <div><strong>Evortex</strong>Antonio Tristán · admin@evortex.com.mx</div>
+    </div>
+
+    <div class="pie"><span>Propuesta PROP-2026-003</span><span>5</span></div>
+  </section>
+
+</body>
+
+</html>
