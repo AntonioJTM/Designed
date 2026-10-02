@@ -46,8 +46,11 @@ async function margen(q = {}) {
  * la suma de las cuatro.
  */
 async function tablero(q = {}) {
+  // `dias` es de los clientes que dejaron de venir; el hilo parado lleva su
+  // propio umbral (`dias_parado`). Compartían el parámetro y mover "días sin
+  // venir" en la pantalla cambiaba también qué hilo contaba como parado.
   const [cob, frios, muerto, marg] = await Promise.all([
-    cobranza(q), clientesEnfriados(q), hiloMuerto(q), margen(q),
+    cobranza(q), clientesEnfriados(q), hiloMuerto({ ...q, dias: q.dias_parado }), margen(q),
   ]);
   return { cobranza: cob, clientes_enfriados: frios, hilo_muerto: muerto, margen: marg };
 }

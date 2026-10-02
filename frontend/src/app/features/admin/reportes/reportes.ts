@@ -10,10 +10,11 @@ import {
 import { ApiError } from '../../../core/models/auth.models';
 import { Barra, VerticalBars } from './charts/vertical-bars';
 import { HorizontalBars } from './charts/horizontal-bars';
+import { CantidadPipe } from '../../../shared/cantidad.pipe';
 
 @Component({
   selector: 'app-reportes',
-  imports: [FormsModule, VerticalBars, HorizontalBars],
+  imports: [FormsModule, VerticalBars, HorizontalBars, CantidadPipe],
   templateUrl: './reportes.html',
 })
 export class Reportes {
@@ -48,12 +49,22 @@ export class Reportes {
     }))
   );
 
-  /** Top más vendidos por unidades (barras horizontales, etiqueta = SKU). */
+  /** Top más vendidos en KILOS, etiquetados por hilo (color + calibre), no por SKU. */
   readonly chartMasVendidos = computed<Barra[]>(() =>
     this.masVendidos()
       .slice(0, 8)
-      .map((m) => ({ label: m.sku, value: Number(m.unidades_vendidas), title: m.producto }))
+      .map((m) => ({ label: this.nombreHilo(m), value: Number(m.unidades_vendidas), title: m.sku }))
   );
+
+  /** Cómo se nombra el hilo: color, calibre y, si es cono, que lo es. */
+  nombreHilo(m: MasVendido): string {
+    return `${m.producto}${m.calibre ? ' ' + m.calibre : ''}${m.tipo_presentacion === 'cono' ? ' · cono' : ''}`;
+  }
+
+  /** Dinero con separador de miles y el signo antes del símbolo (-$50.00). */
+  dinero(v: string | number | null | undefined): string {
+    return Number(v ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+  }
 
   constructor() {
     this.cargar();

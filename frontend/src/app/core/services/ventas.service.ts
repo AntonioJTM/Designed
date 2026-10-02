@@ -6,7 +6,6 @@ import { ApiResponse } from '../models/auth.models';
 import { Paginado } from '../models/catalogo.models';
 import { MetodoEntrega } from '../models/tienda.models';
 import {
-  Apartado,
   Apartados,
   Caja,
   CanalVenta,
@@ -118,6 +117,15 @@ export class VentasService {
   }
   obtenerSesion(id: number): Observable<SesionCaja> {
     return this.http.get<ApiResponse<SesionCaja>>(`${this.base}/caja/sesiones/${id}`).pipe(map(data));
+  }
+  /** Retiro o ingreso de efectivo a mano. El retiro exige motivo. */
+  movimientoCaja(
+    id: number,
+    body: { tipo: 'retiro' | 'ingreso'; monto: number; motivo?: string }
+  ): Observable<SesionCaja> {
+    return this.http
+      .post<ApiResponse<SesionCaja>>(`${this.base}/caja/sesiones/${id}/movimientos`, body)
+      .pipe(map(data));
   }
   cerrarSesion(id: number, monto_final: number): Observable<SesionCaja> {
     return this.http

@@ -4,10 +4,12 @@ import { CatalogoService } from '../../core/services/catalogo.service';
 import { CartService } from '../../core/services/cart.service';
 import { ProductoDetalle, Variante } from '../../core/models/catalogo.models';
 import { ApiError } from '../../core/models/auth.models';
+import { DineroPipe } from '../../shared/dinero.pipe';
+import { CantidadPipe } from '../../shared/cantidad.pipe';
 
 @Component({
   selector: 'app-producto-detalle-tienda',
-  imports: [RouterLink],
+  imports: [RouterLink, DineroPipe, CantidadPipe],
   templateUrl: './producto-detalle.html',
 })
 export class ProductoDetalleTienda {
@@ -48,7 +50,7 @@ export class ProductoDetalleTienda {
     return Number(v.disponible ?? 0);
   }
 
-  /** Unidades de esa variante que el cliente ya lleva en el carrito. */
+  /** Kilos de esa variante que el cliente ya lleva en el carrito. */
   enCarrito(v: Variante): number {
     return this.cart.items().find((i) => i.variante_id === v.id)?.cantidad ?? 0;
   }
@@ -64,7 +66,9 @@ export class ProductoDetalleTienda {
     if (!v) return 'Elige una presentación.';
     if (this.disponible(v) <= 0) return 'Esta presentación no tiene existencias.';
     if (this.restante(v) <= 0) {
-      return `Ya tienes en el carrito las ${this.disponible(v)} unidades disponibles.`;
+      // Todo se vende en kilos: "unidades" hacía pensar en piezas.
+      const kg = this.disponible(v).toLocaleString('es-MX', { maximumFractionDigits: 3 });
+      return `Ya tienes en el carrito los ${kg} ${this.producto()?.unidad || 'kg'} disponibles.`;
     }
     return null;
   }
@@ -82,7 +86,8 @@ export class ProductoDetalleTienda {
     if (!p || !v || this.bloqueo()) return;
     this.cart.agregar({
       variante_id: v.id,
-      producto: p.nombre,
+      // Con el calibre: "ROJO" solo no dice si es el 1/30 o el 2/30.
+      producto: p.grosor_calibre ? `${p.nombre} ${p.grosor_calibre}` : p.nombre,
       sku: v.sku,
       presentacion: v.presentacion,
       precio: this.precio(v),

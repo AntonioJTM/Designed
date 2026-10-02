@@ -68,8 +68,10 @@ export class ProductoFormModal implements OnInit {
     precio_kg: [null as number | null],
     descripcion: [''],
     grosor_calibre: [''],
-    // Habilita las presentaciones paquete/cono de este producto.
-    multipresentacion: [false],
+    // Habilita las presentaciones paquete/cono de este producto. Marcada por
+    // omisión: el hilo entra en paquetes y se desarma en conos, así que un
+    // producto sin ella no puede bajarse a mostrador.
+    multipresentacion: [true],
     // Habilita etiquetar sus presentaciones por lote.
     por_lotes: [false],
     destacado: [false],
@@ -171,9 +173,22 @@ export class ProductoFormModal implements OnInit {
     this.calibreHeredado.set(p.grosor_calibre?.trim() || null);
   }
 
+  /**
+   * Al CREAR el precio por kilo es obligatorio: la presentación se crea sola y
+   * hereda ese precio, y sin él no se podía crear. Antes el producto se guardaba
+   * igual, sin presentación, y el aviso decía que sí se había creado.
+   */
+  faltaPrecio(): boolean {
+    const v = this.form.getRawValue().precio_kg;
+    return !this.esEdicion() && (v == null || (v as unknown) === '' || Number(v) <= 0);
+  }
+
   guardar(): void {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.faltaPrecio()) {
       this.form.markAllAsTouched();
+      if (this.faltaPrecio()) {
+        this.error.set('Pon el precio por kilo: su presentación lo hereda y sin él no se puede vender.');
+      }
       return;
     }
     this.guardando.set(true);

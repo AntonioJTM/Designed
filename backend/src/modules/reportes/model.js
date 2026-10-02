@@ -42,8 +42,14 @@ async function ventasPorDia(desde, hastaExcl) {
 
 /** Productos más vendidos (vista v_mas_vendidos). */
 async function masVendidos(limite) {
+  // Con el calibre y la presentación: "ROJO" y "ROJO-2" no dicen qué hilo es,
+  // y el mismo color en dos calibres son dos productos.
   const [rows] = await pool.query(
-    `SELECT * FROM v_mas_vendidos ORDER BY unidades_vendidas DESC LIMIT :limite`,
+    `SELECT mv.*, p.grosor_calibre AS calibre, pv.tipo_presentacion
+       FROM v_mas_vendidos mv
+       JOIN producto_variantes pv ON pv.id = mv.variante_id
+       JOIN productos p           ON p.id = pv.producto_id
+      ORDER BY mv.unidades_vendidas DESC LIMIT :limite`,
     { limite }
   );
   return rows;

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
@@ -28,9 +28,29 @@ export class PedidoDetalle implements OnDestroy {
 
   nuevoEstado: EstadoPedido | '' = '';
 
-  readonly estados: EstadoPedido[] = [
+  private readonly ESTADOS_VENTA: EstadoPedido[] = [
     'pendiente', 'pagado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto',
   ];
+
+  /**
+   * Un APARTADO sin entregar tiene su propio camino y el selector no ofrece
+   * atajos: se entrega desde Apartados (exige liquidarlo y ahí se descuenta),
+   * aquí solo se cancela, y cancelado se reactiva como apartado. Como
+   * "pendiente" o "entregado" quedaba una venta viva sin la mercancía apartada
+   * ni descontada. El backend lo valida igual.
+   */
+  readonly estados = computed<EstadoPedido[]>(() => {
+    const p = this.pedido();
+    if (p && this.esApartadoSinEntregar(p)) {
+      return p.estado === 'apartado' ? ['apartado', 'cancelado'] : [p.estado, 'apartado'];
+    }
+    return this.ESTADOS_VENTA;
+  });
+
+  /** Nunca descontó: es un apartado vigente, o uno que se canceló antes de entregarse. */
+  esApartadoSinEntregar(p: Pedido): boolean {
+    return !Number(p.inventario_descontado ?? 1);
+  }
 
   constructor() {
     const id = Number(this.route.snapshot.paramMap.get('id'));
@@ -137,6 +157,13 @@ export class PedidoDetalle implements OnDestroy {
     const p = this.pedido();
     if (!p?.detalle || !this.nuevoEstado) return;
 
+    // Un apartado nunca salió de la bodega: no hay nada que regrese ni en qué
+    // presentación, solo se libera lo apartado.
+    if (this.esApartadoSinEntregar(p)) {
+      this.aplicarEstado(this.nuevoEstado);
+      return;
+    }
+
     const devoluciones: DevolucionLinea[] = p.detalle.map((d) => ({
       detalle_id: d.id,
       variante_id: Number(this.retornoPresentacion[d.id]),
@@ -155,10 +182,15 @@ export class PedidoDetalle implements OnDestroy {
       next: () => {
         this.aplicando.set(false);
         this.confirmando.set(false);
+        const almacen = p.almacen ?? 'su almacén';
         this.mensaje.set(
-          estado === 'cancelado' || estado === 'devuelto'
-            ? `Pedido ${estado}. La mercancía regresó al inventario de ${p.almacen ?? 'su almacén'}.`
-            : `Pedido marcado como ${estado}.`
+          this.esApartadoSinEntregar(p)
+            ? estado === 'apartado'
+              ? `Se volvió a apartar la mercancía en ${almacen}.`
+              : `Apartado cancelado. Se liberó lo apartado en ${almacen}.`
+            : estado === 'cancelado' || estado === 'devuelto'
+              ? `Pedido ${estado}. La mercancía regresó al inventario de ${almacen}.`
+              : `Pedido marcado como ${estado}.`
         );
         // Se recarga: cambiaron los bultos, los pagos y las alternativas.
         this.cargar(p.id);
@@ -185,6 +217,30 @@ export class PedidoDetalle implements OnDestroy {
   /** El pago que trae la captura, si alguno la tiene. */
   pagoConComprobante(): PagoLinea | null {
     return (this.pedido()?.pagos ?? []).find((g) => g.tiene_comprobante) ?? null;
+  }
+
+  /**
+   * Si a este pedido se le puede subir una captura. No a un apartado (se paga
+   * con abonos) ni a uno cancelado, y tampoco a una venta ya cobrada completa
+   * sin transferencia: ahí no hay pago al cual pegarla, y antes el backend
+   * creaba otro por el total. El backend lo valida igual.
+   */
+  aceptaComprobante(): boolean {
+    const p = this.pedido();
+    if (!p || p.estado === 'apartado' || p.estado === 'cancelado' || p.estado === 'devuelto') {
+      return false;
+    }
+    const pagos = p.pagos ?? [];
+    const hayAQuienPegarla = pagos.some(
+      (g) =>
+        g.estado === 'pendiente' ||
+        g.estado === 'procesando' ||
+        (g.estado === 'completado' && /transferencia/i.test(g.metodo))
+    );
+    const cobrado = pagos
+      .filter((g) => g.estado === 'completado')
+      .reduce((s, g) => s + Number(g.monto), 0);
+    return hayAQuienPegarla || Number(p.total) - cobrado > 0.004;
   }
 
   /** Un PDF no se puede pintar con `<img>`: se ofrece abrirlo aparte. */
@@ -291,6 +347,15 @@ export class PedidoDetalle implements OnDestroy {
    * la plantilla para no repetir tres veces la lógica de los guiones cuando
    * alguno de los tres falta.
    */
+  /** Pesos con separador de miles: "$12,450.00", no "$12450.00". */
+  dinero(v: unknown): string {
+    return Number(v ?? 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+      maximumFractionDigits: 2,
+    });
+  }
+
   fichaDelHilo(d: PedidoLinea): string {
     return [d.calibre, d.material, d.linea].filter(Boolean).join(' · ');
   }

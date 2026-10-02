@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, catchError, map, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -11,14 +11,6 @@ import {
   SesionActual,
   Usuario,
 } from '../models/auth.models';
-
-export interface DatosRegistroUsuario {
-  rol_id: number;
-  nombre: string;
-  correo: string;
-  contrasena: string;
-  telefono?: string;
-}
 
 export interface DatosRegistroCliente {
   nombre: string;
@@ -40,7 +32,6 @@ export class AuthService {
 
   /** Sesión actual (perfil) o null si no hay usuario autenticado. */
   readonly sesion = signal<SesionActual | null>(null);
-  readonly autenticado = computed(() => !!this.tokens.token());
 
   // ---- Login ----
 
@@ -77,15 +68,6 @@ export class AuthService {
   }
 
   // ---- Registro ----
-
-  registrarUsuario(datos: DatosRegistroUsuario): Observable<SesionActual> {
-    return this.http
-      .post<ApiResponse<LoginUsuarioResp>>(`${this.base}/usuarios/registro`, datos)
-      .pipe(
-        map((r) => this.desempaquetar(r)),
-        map(({ usuario, token }) => this.establecerSesionUsuario(usuario, token))
-      );
-  }
 
   registrarCliente(datos: DatosRegistroCliente): Observable<SesionActual> {
     return this.http

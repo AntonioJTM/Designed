@@ -47,31 +47,41 @@ async function crear(datos) {
   };
   const creado = await model.crear(registro);
 
-  // El hilo SIEMPRE entra en paquetes, así que su presentación se crea sola: el
-  // SKU y el código de barras son el nombre del color (la tienda no maneja SKU
-  // propios) y el precio lo hereda del producto. El PESO queda pendiente: lo pone
-  // la carga del Excel con el promedio real de los bultos.
-  //
-  // Si la presentación falla, el producto NO se pierde: se devuelve igual y el
-  // usuario puede capturarla a mano. Sería peor perder el alta completa.
+  // Si la presentación no se pudo crear, el producto NO se pierde: se devuelve
+  // igual, con el motivo, y la pantalla lo dice en vez de presumir que se creó.
+  // Sería peor perder el alta completa.
+  const motivo = await _crearPresentacionInicial(creado.id, registro);
+  const producto = await obtener(creado.id);
+  return motivo ? { ...producto, presentacion_pendiente: motivo } : producto;
+}
+
+/**
+ * El hilo SIEMPRE entra en paquetes, así que su presentación se crea sola: el
+ * SKU y el código de barras son el nombre del color (la tienda no maneja SKU
+ * propios) y el precio lo hereda del producto. El PESO queda pendiente: lo pone
+ * la carga del Excel con el promedio real de los bultos.
+ *
+ * Devuelve null si la creó, o el motivo por el que no pudo. El caso real es el
+ * producto sin precio por kilo: la presentación no tiene de dónde heredarlo.
+ */
+async function _crearPresentacionInicial(productoId, registro) {
   try {
-    const sku = await variantesService.skuDesdeNombre(datos.nombre);
+    const sku = await variantesService.skuDesdeNombre(registro.nombre);
     // 'paquete' necesita la bandera de multipresentación; sin ella la
     // presentación es 'simple', que también se lleva en kilos.
     const esPaquete = !!registro.multipresentacion;
     await variantesService.crear({
-      producto_id: creado.id,
+      producto_id: productoId,
       sku,
       codigo_barras: sku,
       presentacion: esPaquete ? 'Paquete' : null,
       tipo_presentacion: esPaquete ? 'paquete' : 'simple',
     });
+    return null;
   } catch (err) {
-    // Queda en el log: el alta del producto sí funcionó.
-    console.error(`[productos] no se pudo crear la presentación de "${datos.nombre}":`, err.message);
+    console.error(`[productos] no se pudo crear la presentación de "${registro.nombre}":`, err.message);
+    return err.message;
   }
-
-  return obtener(creado.id);
 }
 
 async function actualizar(id, datos) {
@@ -94,6 +104,14 @@ async function actualizar(id, datos) {
     activo: merge('activo'),
   };
   await model.actualizar(id, registro);
+
+  // Un producto que se dio de alta sin precio por kilo se quedó sin
+  // presentación. En cuanto se le pone precio, se le crea: si no, había que
+  // saber que existe una pantalla aparte para capturarla a mano.
+  const variantes = await model.variantesDe(id, null);
+  if (registro.precio_kg != null && !variantes.some((v) => v.tipo_presentacion !== 'cono')) {
+    await _crearPresentacionInicial(id, registro);
+  }
   return obtener(id);
 }
 

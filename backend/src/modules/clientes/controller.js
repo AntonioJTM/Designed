@@ -76,14 +76,6 @@ async function actualizar(req, res, next) {
 
 // --- Crédito ---
 
-async function estadoDeCuenta(req, res, next) {
-  try {
-    const { limit, offset } = parsePagination(req.query);
-    const data = await service.estadoDeCuenta(Number(req.params.id), { limit, offset });
-    res.json({ data, error: null });
-  } catch (err) { next(err); }
-}
-
 async function abonar(req, res, next) {
   try {
     const data = await service.registrarAbono(Number(req.params.id), req.body, req.auth?.sub);
@@ -98,15 +90,8 @@ async function ajustar(req, res, next) {
   } catch (err) { next(err); }
 }
 
-/** Quiénes deben. Sin paginar: es una lista corta que se lee de un golpe. */
-async function porCobrar(req, res, next) {
-  try {
-    res.json({ data: await service.porCobrar(), error: null });
-  } catch (err) { next(err); }
-}
-
 module.exports = {
   registrar, iniciarSesion, perfil,
   listar, expediente, buscar, crearDesdeStaff, actualizar,
-  estadoDeCuenta, abonar, ajustar, porCobrar,
+  abonar, ajustar,
 };

@@ -81,8 +81,13 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       hilos.push({ prod, variante, calibre });
     }
 
-    const caja = (await api('GET', '/caja/cajas')).data.find((c) => c.activo);
-    const almacen = caja.almacen_id;
+    // Caja PROPIA de la prueba, nunca el turno de una caja real: en producción
+    // la primera caja activa tiene un turno de verdad abierto y las ventas de
+    // prueba quedarían en su corte. Va en el almacén donde vende el mostrador.
+    const almacen = (await api('GET', '/caja/cajas')).data.find((c) => c.activo).almacen_id;
+    const caja = (await api('POST', '/caja/cajas', {
+      almacen_id: almacen, nombre: 'TMPCC Caja ' + SUF,
+    })).data;
     for (const h of hilos) {
       await api('POST', '/inventario/movimientos', {
         variante_id: h.variante, almacen_id: almacen, tipo: 'entrada',
@@ -170,7 +175,8 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
     ck('la venta a crédito pasa', fiado.status === 201, fiado.data?.numero_pedido);
     ck('y queda PENDIENTE, no pagada', fiado.data.estado === 'pendiente', fiado.data?.estado);
 
-    const cuenta = (await api('GET', `/clientes/${cli.id}/estado-cuenta`)).data;
+    // El estado de cuenta viaja en el expediente: saldo, disponible y movimientos.
+    const cuenta = (await api('GET', `/clientes/${cli.id}`)).data;
     ck('le carga los 600 a su cuenta', cerca(cuenta.saldo, 600), cuenta.saldo);
     ck('y le bajan los 600 de disponible', cerca(cuenta.credito_disponible, 400),
       cuenta.credito_disponible);
@@ -195,7 +201,7 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       a_credito: 400,
     });
     ck('acepta venta mixta (paga algo, debe el resto)', mixta.status === 201, mixta.status);
-    const trasMixta = (await api('GET', `/clientes/${cli.id}/estado-cuenta`)).data;
+    const trasMixta = (await api('GET', `/clientes/${cli.id}`)).data;
     ck('y solo carga la parte fiada', cerca(trasMixta.saldo, 1000), trasMixta.saldo);
 
     const sinCliente = await api('POST', '/pedidos', {
@@ -209,13 +215,13 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
     // ------------------------------------------------------- 4. Cancelar y abonar
     console.log('\n4 · Cancelar la deuda, y abonar');
     await api('PATCH', `/pedidos/${fiado.data.id}/estado`, { estado: 'cancelado' });
-    let saldo = (await api('GET', `/clientes/${cli.id}/estado-cuenta`)).data;
+    let saldo = (await api('GET', `/clientes/${cli.id}`)).data;
     ck('cancelar la venta le quita la deuda', cerca(saldo.saldo, 400), saldo.saldo);
     ck('sin borrar el rastro: queda el cargo y su reverso',
-      saldo.movimientos.some((x) => x.tipo === 'ajuste' && /Cancelación/.test(x.notas || '')));
+      saldo.credito_movimientos.some((x) => x.tipo === 'ajuste' && /Cancelación/.test(x.notas || '')));
 
     await api('PATCH', `/pedidos/${fiado.data.id}/estado`, { estado: 'cancelado' });
-    saldo = (await api('GET', `/clientes/${cli.id}/estado-cuenta`)).data;
+    saldo = (await api('GET', `/clientes/${cli.id}`)).data;
     ck('cancelar dos veces NO perdona la deuda dos veces', cerca(saldo.saldo, 400), saldo.saldo);
 
     // Abono en efectivo: tiene que entrar al turno.
@@ -251,14 +257,13 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
 
     // --------------------------------------------------------- 5. Quién debe
     console.log('\n5 · Quién me debe');
-    const cobrar = (await api('GET', '/clientes/por-cobrar')).data;
-    const mio = cobrar.items.find((x) => x.cliente_id === cli.id);
-    ck('aparece en la lista de deudores', !!mio, mio && `debe ${mio.saldo}`);
-    ck('con su teléfono, para poder llamarle', mio.telefono === '4459998888');
-
-    const soloDeudores = (await api('GET', '/clientes?con_saldo=true')).data;
+    // Es el listado de Clientes filtrado a los que deben ("quién me debe más").
+    const soloDeudores = (await api('GET', '/clientes?con_saldo=true&orden=saldo&limit=100')).data;
     ck('el listado se puede filtrar a los que deben',
       soloDeudores.items.every((x) => Number(x.saldo) > 0), soloDeudores.items.length + ' cliente(s)');
+    const mio = soloDeudores.items.find((x) => x.id === cli.id);
+    ck('aparece en la lista de deudores', !!mio, mio && `debe ${mio.saldo}`);
+    ck('con su teléfono, para poder llamarle', mio?.telefono === '4459998888');
 
     // El ajuste exige motivo y no deja saldo negativo.
     const sinMotivo = await api('POST', `/clientes/${cli.id}/ajustes`, { monto: -10 });
@@ -283,13 +288,7 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       const pids = peds.map((r) => r.id);
       if (pids.length) {
         await db.query('DELETE FROM movimientos_inventario WHERE referencia_tipo="pedido" AND referencia_id IN (?)', [pids]);
-        await db.query('DELETE FROM movimientos_caja WHERE referencia_id IN (?) AND tipo IN ("venta","devolucion")', [pids]);
         await db.query('DELETE FROM pedidos WHERE id IN (?)', [pids]);
-      }
-      const [mvs] = await db.query('SELECT id FROM credito_movimientos WHERE cliente_id IN (?)', [ids]);
-      if (mvs.length) {
-        await db.query('DELETE FROM movimientos_caja WHERE referencia_id IN (?) AND tipo = "ingreso"',
-          [mvs.map((r) => r.id)]);
       }
       await db.query('DELETE FROM clientes WHERE id IN (?)', [ids]); // arrastra credito_movimientos
     }
@@ -305,6 +304,18 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
         await db.query('DELETE FROM producto_variantes WHERE id IN (?)', [vids]);
       }
       await db.query('DELETE FROM productos WHERE id IN (?)', [pr]);
+    }
+    // La caja de la prueba con su turno y sus movimientos. Se borra por TURNO y
+    // no por referencia_id: ese campo guarda a veces un pedido y a veces un
+    // abono de crédito, y por número podría alcanzar un movimiento real.
+    const [cjs] = await db.query("SELECT id FROM cajas WHERE nombre LIKE 'TMPCC Caja%'");
+    if (cjs.length) {
+      const [ses] = await db.query('SELECT id FROM sesiones_caja WHERE caja_id IN (?)', [cjs.map((r) => r.id)]);
+      if (ses.length) {
+        await db.query('DELETE FROM movimientos_caja WHERE sesion_caja_id IN (?)', [ses.map((r) => r.id)]);
+        await db.query('DELETE FROM sesiones_caja WHERE id IN (?)', [ses.map((r) => r.id)]);
+      }
+      await db.query('DELETE FROM cajas WHERE id IN (?)', [cjs.map((r) => r.id)]);
     }
     const [[{ n }]] = await db.query(
       "SELECT (SELECT COUNT(*) FROM clientes WHERE nombre LIKE 'TMPCC%') + " +

@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../../config/db');
+const { porPalabras } = require('../../utils/query');
 
 // Acceso a datos de `producto_variantes`. Es el SKU real que se vende e
 // inventaría; el inventario/carrito/pedidos SIEMPRE apuntan aquí, no a productos.
@@ -56,12 +57,19 @@ async function listar({ producto_id, q, activo, tipo_presentacion, limit, offset
     where.push('pv.tipo_presentacion = :tipo_presentacion');
     params.tipo_presentacion = tipo_presentacion;
   }
-  if (q) {
-    // Busca por SKU, código principal, nombre de producto o cualquier código
-    // adicional de la variante (sus bultos, en variante_codigos).
-    where.push(`(pv.sku LIKE :q OR pv.codigo_barras LIKE :q OR prod.nombre LIKE :q
-      OR EXISTS (SELECT 1 FROM variante_codigos vc WHERE vc.variante_id = pv.id AND vc.codigo LIKE :q))`);
-    params.q = `%${q}%`;
+  // Busca por SKU, código principal, color, calibre o cualquier código
+  // adicional de la variante (sus bultos, en variante_codigos), palabra por
+  // palabra: "rojo 2/30" encuentra el rojo de ese calibre.
+  const busca = porPalabras(q, [
+    'pv.sku', 'pv.codigo_barras', 'prod.nombre',
+    { col: 'prod.grosor_calibre', calibre: true },
+    // EXISTS y no GROUP_CONCAT: GROUP_CONCAT se corta a 1,024 caracteres y en
+    // una remesa de 80 bultos los últimos códigos ya no se encontrarían.
+    (p) => `EXISTS (SELECT 1 FROM variante_codigos vc WHERE vc.variante_id = pv.id AND vc.codigo LIKE ${p})`,
+  ]);
+  if (busca) {
+    where.push(busca.sql);
+    Object.assign(params, busca.params);
   }
   if (activo !== undefined) {
     where.push('pv.activo = :activo');

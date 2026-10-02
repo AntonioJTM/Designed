@@ -20,6 +20,7 @@ const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Se niega a correr contra la base del servidor. Ver el módulo.
 require('./_no-en-produccion');
+const { soloPropios } = require('./_propios');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
@@ -198,6 +199,16 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       cerca(autopagado.data.pagos[0].monto, autopagado.data.total),
       autopagado.data.pagos[0]?.monto);
 
+    // El cliente pagó en efectivo en el mostrador y el administrador lo da por
+    // pagado: su pago tiene que quedar COBRADO. Antes el pedido decía "pagado"
+    // y su pago seguía "pendiente".
+    const marcado = await api('PATCH', '/pedidos/' + autopagado.data.id + '/estado', { estado: 'pagado' });
+    ck('el administrador lo da por pagado', marcado.status === 200 && marcado.data?.estado === 'pagado',
+      marcado.status + ' ' + marcado.data?.estado);
+    ck('y su pago queda COMPLETADO, no pendiente',
+      (marcado.data?.pagos ?? []).length === 1 && marcado.data.pagos.every((p) => p.estado === 'completado'),
+      (marcado.data?.pagos ?? []).map((p) => p.estado).join(','));
+
     // ------------------------------------------------------------- 4. El pedido
     console.log('\n4 · El pedido dice lo que se prometió');
     ck('guarda que va a domicilio', conEnvioGratis.data.metodo_entrega === 'envio',
@@ -266,10 +277,9 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
   } finally {
     console.log('\nLimpiando…');
     // El orden importa: primero lo que cuelga de los pedidos.
-    const nuevos = async (tabla) => {
-      const [r] = await db.query('SELECT id FROM ' + tabla);
-      return r.map((x) => x.id).filter((id) => !foto[tabla].has(id));
-    };
+// Solo lo NUEVO que sea de la prueba (prefijo TMP): una venta real hecha
+    // mientras corría no se toca. Ver _propios.js.
+        const nuevos = soloPropios(db, foto);
     const pedidosNuevos = await nuevos('pedidos');
     if (pedidosNuevos.length) {
       await db.query('DELETE FROM movimientos_inventario WHERE referencia_tipo = "pedido" AND referencia_id IN (?)', [pedidosNuevos]);

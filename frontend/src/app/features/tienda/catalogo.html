@@ -27,7 +27,8 @@
         </div>
         <div class="body">
           <span class="cat">{{ p.categoria }}</span>
-          <span class="nombre">{{ p.nombre }}</span>
+          <!-- Con su calibre: ROJO 1/30 y ROJO 2/30 son dos hilos distintos. -->
+          <span class="nombre">{{ p.nombre }}@if (p.grosor_calibre) { <span class="calibre">{{ p.grosor_calibre }}</span> }</span>
           <span class="precio">
             @if (p.precio_desde) {
               desde ${{ p.precio_desde }}<span class="por-unidad">/{{ p.unidad || 'kg' }}</span>

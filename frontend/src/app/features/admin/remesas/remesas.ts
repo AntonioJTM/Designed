@@ -6,13 +6,13 @@ import {
   Remesa,
   ResultadoRemesa,
 } from '../../../core/services/inventario.service';
-import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
+import { DineroPipe } from '../../../shared/dinero.pipe';
 
 /**
  * Recepción de remesas: se sube la lista de empaque del proveedor y cada
@@ -21,12 +21,11 @@ import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
  */
 @Component({
   selector: 'app-remesas',
-  imports: [FormsModule, CantidadPipe, FechaPipe],
+  imports: [FormsModule, CantidadPipe, FechaPipe, DineroPipe],
   templateUrl: './remesas.html',
 })
 export class Remesas {
   private readonly inv = inject(InventarioService);
-  private readonly catalogo = inject(CatalogoService);
 
   readonly almacenes = signal<Almacen[]>([]);
   readonly paquetes = signal<Variante[]>([]);

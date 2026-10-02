@@ -74,13 +74,6 @@ export class ClientesService {
 
   // ---- Crédito ----
 
-  estadoDeCuenta(id: number, limit = 50): Observable<EstadoDeCuenta> {
-    const p = new HttpParams().set('limit', limit);
-    return this.http
-      .get<ApiResponse<EstadoDeCuenta>>(`${this.base}/${id}/estado-cuenta`, { params: p })
-      .pipe(map(data));
-  }
-
   /**
    * Registra un abono. Si es en efectivo hace falta `sesion_caja_id`: el dinero
    * tiene que entrar al turno o el corte no cuadra.

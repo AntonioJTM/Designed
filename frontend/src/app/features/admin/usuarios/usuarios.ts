@@ -34,7 +34,7 @@ export class Usuarios {
     this.api.roles().subscribe({
       next: (r) => {
         this.roles.set(r);
-        if (r[0]) this.form.patchValue({ rol_id: r[0].id });
+        this.form.patchValue({ rol_id: this.rolPorOmision() });
       },
       error: (e) => this.error.set(this.msg(e)),
     });
@@ -58,7 +58,7 @@ export class Usuarios {
   nuevo(): void {
     this.editandoId.set(null);
     this.form.reset({
-      rol_id: this.roles()[0]?.id ?? null,
+      rol_id: this.rolPorOmision(),
       nombre: '',
       correo: '',
       telefono: '',
@@ -141,5 +141,15 @@ export class Usuarios {
 
   private msg(e: unknown): string {
     return (e as { error?: { error?: ApiError } })?.error?.error?.message ?? 'Ocurrió un error.';
+  }
+
+  /**
+   * Con qué rol arranca un alta: CAJERO, no el primero de la lista. El primero
+   * es "administrador" y un descuido al dar de alta a alguien de mostrador le
+   * daba acceso a sueldos, costos y configuración.
+   */
+  private rolPorOmision(): number | null {
+    const r = this.roles();
+    return (r.find((x) => x.nombre === 'cajero') ?? r.find((x) => x.nombre !== 'administrador') ?? r[0])?.id ?? null;
   }
 }

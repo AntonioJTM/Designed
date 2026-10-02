@@ -43,12 +43,4 @@ async function listar(req, res, next) {
   }
 }
 
-async function obtener(req, res, next) {
-  try {
-    res.json({ data: await service.obtener(Number(req.params.id)), error: null });
-  } catch (err) {
-    next(err);
-  }
-}
-
-module.exports = { previa, confirmar, listar, obtener };
+module.exports = { previa, confirmar, listar };

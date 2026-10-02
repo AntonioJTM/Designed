@@ -53,7 +53,7 @@
           <td>{{ p.linea || '—' }}</td>
           <td>
             @if (p.precio_kg != null) {
-              ${{ p.precio_kg }}<span class="muted">/{{ p.unidad }}</span>
+              {{ p.precio_kg | dinero }}<span class="muted">/{{ p.unidad }}</span>
             } @else {
               <span class="muted">sin precio</span>
             }

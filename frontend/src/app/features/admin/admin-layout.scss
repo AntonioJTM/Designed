@@ -137,7 +137,10 @@
 }
 
 @media (max-width: 720px) {
-  .admin { grid-template-columns: 1fr; }
+  /* minmax(0, 1fr) y no 1fr: una columna 1fr mide como mínimo lo que su
+     contenido, y el menú en una sola fila (18 opciones) ensanchaba la página a
+     ~1,600 px en el celular. Ahora el menú se desliza de lado dentro de su barra. */
+  .admin { grid-template-columns: minmax(0, 1fr); }
   .side {
     flex-direction: row;
     align-items: center;
@@ -148,5 +151,6 @@
     height: auto;
     overflow: visible;
   }
-  .side nav { flex-direction: row; }
+  .side nav { flex-direction: row; max-width: 100%; overflow-x: auto; }
+  .side nav a { white-space: nowrap; }
 }

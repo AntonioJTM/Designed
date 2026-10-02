@@ -7,7 +7,7 @@
     <h2 style="margin-top: 0">¡Gracias por tu compra! 🎉</h2>
     <p>
       Tu pedido <b>{{ p.numero_pedido }}</b> quedó registrado por
-      <b>${{ p.total }}</b>.
+      <b>{{ p.total | dinero }}</b>.
     </p>
 
     @if (pagaPorTransferencia()) {
@@ -30,6 +30,13 @@
           @if (config().tienda_telefono) { Tel. {{ config().tienda_telefono }} }
         </p>
       }
+    } @else if (p.metodo_entrega === 'envio') {
+      <!-- No hay cobro a domicilio: con envío, el efectivo se deja en la tienda
+           y el pedido sale cuando se paga. Decir "cuando pases por tu pedido"
+           a quien pidió que se lo mandaran era contradecirse. -->
+      <p>
+        Pagas en efectivo en la tienda. En cuanto quede pagado, te lo enviamos.
+      </p>
     } @else {
       <p>Pagas en efectivo cuando pases por tu pedido.</p>
     }

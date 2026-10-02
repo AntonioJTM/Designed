@@ -16,6 +16,7 @@ const fs = require('node:fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Se niega a correr contra la base del servidor. Ver el módulo.
 require('./_no-en-produccion');
+const { soloPropios } = require('./_propios');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
@@ -141,7 +142,9 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
   } finally {
     console.log('\n=== Limpieza ===');
     await db.query('SET FOREIGN_KEY_CHECKS=0');
-    const nuevos = async (x) => (await db.query('SELECT id FROM ' + x))[0].map((r) => r.id).filter((i) => !foto[x].has(i));
+    // Solo lo NUEVO que sea de la prueba (prefijo TMP): una venta real hecha
+    // mientras corría no se toca. Ver _propios.js.
+    const nuevos = soloPropios(db, foto);
     for (const id of await nuevos('productos')) {
       const sub = '(SELECT id FROM producto_variantes WHERE producto_id=?)';
       for (const tb of ['variante_codigos', 'movimientos_inventario', 'inventario', 'variante_precios']) await db.query('DELETE FROM ' + tb + ' WHERE variante_id IN ' + sub, [id]);

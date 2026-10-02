@@ -48,7 +48,7 @@
           <!-- Cuáles hay que enviar y cuáles esperan a que pasen por ellos. -->
           <td class="muted">{{ p.metodo_entrega === 'envio' ? 'Envío' : 'Recoge' }}</td>
           <td><span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">{{ p.estado }}</span></td>
-          <td>${{ p.total }}</td>
+          <td>{{ p.total | dinero }}</td>
           <td class="muted">{{ p.creado_en | fecha }}</td>
           <td><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/pedidos', p.id]">Ver</a></td>
         </tr>

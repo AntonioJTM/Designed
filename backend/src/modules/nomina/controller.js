@@ -53,15 +53,6 @@ async function listarPeriodos(req, res, next) {
   }
 }
 
-async function obtenerPeriodo(req, res, next) {
-  try {
-    const data = await service.obtenerPeriodo(Number(req.params.id));
-    return res.json({ data, error: null });
-  } catch (err) {
-    return next(err);
-  }
-}
-
 async function calcular(req, res, next) {
   try {
     const data = await service.calcular(Number(req.params.id));
@@ -118,7 +109,6 @@ module.exports = {
   periodoActual,
   crearPeriodo,
   listarPeriodos,
-  obtenerPeriodo,
   calcular,
   cambiarEstado,
   ventasDelPeriodo,

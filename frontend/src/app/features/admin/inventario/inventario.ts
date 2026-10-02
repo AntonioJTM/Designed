@@ -16,6 +16,7 @@ import { FechaPipe } from '../../../shared/fecha.pipe';
 import { BarraApilada, StackedBars } from '../../../shared/charts/stacked-bars';
 import { DesarmeModal } from './desarme-modal';
 import { MovimientoModal } from './movimiento-modal';
+import { MinimoModal } from './minimo-modal';
 
 /** Un producto (color + calibre) con sus presentaciones juntas. */
 interface GrupoColor {
@@ -46,6 +47,7 @@ interface GrupoColor {
     StackedBars,
     DesarmeModal,
     MovimientoModal,
+    MinimoModal,
   ],
   templateUrl: './inventario.html',
 })
@@ -62,7 +64,9 @@ export class Inventario {
   readonly error = signal<string | null>(null);
 
   /** Qué modal está abierto. */
-  readonly modal = signal<'desarme' | 'movimiento' | null>(null);
+  readonly modal = signal<'desarme' | 'movimiento' | 'minimo' | null>(null);
+  /** El renglón cuyo mínimo se está fijando. */
+  readonly filaMinimo = signal<StockItem | null>(null);
 
   // Filtros de la tabla de existencias
   filtroAlmacen: number | '' = '';
@@ -216,12 +220,6 @@ export class Inventario {
 
   // ---- Tabla agrupada por color ----
 
-  /** Renglones del comparativo, opcionalmente solo los que tienen existencias. */
-  filasResumen(): ResumenFila[] {
-    const filas = this.resumen()?.filas ?? [];
-    return this.soloConStock() ? filas.filter((f) => f.total > 0) : filas;
-  }
-
   /**
    * Las presentaciones del mismo color van juntas. Antes cada una era un renglón
    * suelto con el nombre del color repetido, y la tabla parecía tener duplicados
@@ -314,9 +312,6 @@ export class Inventario {
     this.stock().some((s) => Number(s.cantidad_reservada) > 0)
   );
 
-  /** Y la de mínimo, solo si hay alguno capturado. */
-  readonly hayMinimos = computed(() => this.stock().some((s) => Number(s.stock_minimo) > 0));
-
   /** Presentación de un renglón de existencias, sin adivinar por el SKU. */
   presentacionStock(s: StockItem): string {
     if (s.tipo_presentacion === 'cono') return 'Cono';
@@ -328,6 +323,17 @@ export class Inventario {
 
   bajoMinimo(s: StockItem): boolean {
     return Number(s.stock_minimo) > 0 && Number(s.disponible) <= Number(s.stock_minimo);
+  }
+
+  /** Abre el modal del mínimo para ese renglón (presentación + almacén). */
+  abrirMinimo(s: StockItem): void {
+    this.filaMinimo.set(s);
+    this.modal.set('minimo');
+  }
+
+  cerrarMinimo(): void {
+    this.modal.set(null);
+    this.filaMinimo.set(null);
   }
 
   /** Trae las presentaciones de tipo cono: son las que se pueden desarmar a mano. */

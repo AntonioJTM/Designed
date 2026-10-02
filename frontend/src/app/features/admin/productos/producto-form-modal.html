@@ -27,10 +27,18 @@
       <!-- Guardado: el paso que sigue es capturar sus presentaciones -->
       <div class="modal-body">
         <p class="ok-msg">
-          Producto <b>{{ p.nombre }}</b> guardado. Su presentación en kilos se creó sola;
-          los bultos y el inventario entran subiendo el Excel del proveedor en
-          «Presentaciones».
+          Producto <b>{{ p.nombre }}</b> guardado.
+          @if (!p.presentacion_pendiente) {
+            Su presentación en kilos se creó sola; los bultos y el inventario entran
+            subiendo el Excel del proveedor en «Presentaciones».
+          }
         </p>
+        @if (p.presentacion_pendiente) {
+          <p class="alert">
+            Pero su presentación <b>no se creó</b>: {{ p.presentacion_pendiente }}
+            Edita el producto y ponle el precio por kilo, y se crea sola.
+          </p>
+        }
       </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" (click)="otro()">+ Capturar otro color</button>
@@ -91,7 +99,7 @@
             <label class="field">
               Precio por {{ unidadSel() }}
               <input type="number" step="0.01" min="0" formControlName="precio_kg"
-                     placeholder="Ej. 200.00" />
+                     placeholder="Ej. 200.00" [class.invalido]="faltaPrecio() && form.touched" />
               <span class="muted" style="font-size:0.72rem">
                 El precio de lista del hilo. Las presentaciones que se capturen después
                 arrancan con este precio.

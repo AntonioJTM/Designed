@@ -199,6 +199,11 @@ export interface Pedido {
   direccion_envio_id?: number | null;
   /** La dirección completa, para que quien surte no tenga que buscarla. */
   direccion_envio?: Direccion | null;
+  /**
+   * Solo al crear: lo que se le regresó al cliente en efectivo. No se guarda
+   * —no es dinero de la tienda— pero el ticket lo muestra.
+   */
+  cambio?: number;
 }
 
 /** Ítem del carrito POS (estado local en el navegador). */

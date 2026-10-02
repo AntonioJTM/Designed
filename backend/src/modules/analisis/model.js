@@ -121,10 +121,11 @@ async function clientesEnfriados({ dias = 60, minCompras = 2, limite = 50 } = {}
       WHERE c.activo = 1
         AND v.num_compras >= :minCompras
         AND DATEDIFF(NOW(), v.ultima_compra) >= :dias
-      ORDER BY v.total_comprado DESC, dias_sin_venir DESC
-      LIMIT :limite`,
-    { dias, minCompras, limite }
+      ORDER BY v.total_comprado DESC, dias_sin_venir DESC`,
+    { dias, minCompras }
   );
+  // Las cifras de arriba se suman sobre TODOS; el límite solo recorta la lista.
+  // Antes el LIMIT iba en el SQL y "cuántos se fueron" decía 15 cuando eran 40.
 
   // Cuántas veces su propio ritmo lleva sin venir. Es el dato que distingue al
   // que se enfrió del que simplemente compra poco seguido.
@@ -140,7 +141,7 @@ async function clientesEnfriados({ dias = 60, minCompras = 2, limite = 50 } = {}
     num_clientes: rows.length,
     // Cuánto compraban al año los que se fueron: el tamaño del hueco.
     venta_en_riesgo: Math.round(rows.reduce((s, r) => s + Number(r.total_comprado), 0) * 100) / 100,
-    clientes: rows,
+    clientes: rows.slice(0, limite),
   };
 }
 
@@ -172,6 +173,12 @@ async function hiloMuerto({ dias = 90, limite = 50 } = {}) {
             -- entró si nunca se ha vendido.
             DATEDIFF(NOW(), COALESCE(mh.ultima_salida, mh.ultima_entrada, pv.creado_en)) AS dias_parado,
             (mh.ultima_salida IS NULL) AS nunca_vendido,
+            -- Lo mismo pero del HILO: ninguna de sus presentaciones se ha
+            -- vendido. Un cono sin ventas no hace "nunca vendido" a un hilo
+            -- cuyo paquete sí sale.
+            NOT EXISTS (SELECT 1 FROM v_movimiento_hilo mh2
+                         WHERE mh2.producto_id = p.id AND mh2.ultima_salida IS NOT NULL)
+              AS hilo_nunca_vendido,
             ROUND(SUM(i.cantidad) * COALESCE(pv.costo, pv.precio), 2) AS dinero_parado,
             CASE WHEN pv.costo IS NULL THEN 'precio_venta' ELSE 'costo' END AS valorado_a
        FROM inventario i
@@ -185,10 +192,10 @@ async function hiloMuerto({ dias = 90, limite = 50 } = {}) {
                pv.sku, pv.presentacion, pv.tipo_presentacion, pv.precio, pv.costo,
                mh.ultima_salida, mh.ultima_entrada, mh.kg_vendidos_historico, pv.creado_en
       HAVING dias_parado >= :dias
-      ORDER BY dinero_parado DESC
-      LIMIT :limite`,
-    { dias, limite }
+      ORDER BY dinero_parado DESC`,
+    { dias }
   );
+  // Igual que arriba: los totales son de todo lo parado, la lista se recorta.
 
   const total = Math.round(rows.reduce((s, r) => s + Number(r.dinero_parado), 0) * 100) / 100;
   const kilos = Math.round(rows.reduce((s, r) => s + Number(r.kilos), 0) * 1000) / 1000;
@@ -197,12 +204,14 @@ async function hiloMuerto({ dias = 90, limite = 50 } = {}) {
     dias,
     dinero_parado: total,
     kilos_parados: kilos,
-    num_hilos: rows.length,
-    nunca_vendidos: rows.filter((r) => r.nunca_vendido).length,
+    // HILOS, no renglones: el paquete y el cono del mismo color son un hilo.
+    // Contar renglones decía "15 hilos" donde había 13.
+    num_hilos: new Set(rows.map((r) => r.producto_id)).size,
+    nunca_vendidos: new Set(rows.filter((r) => Number(r.hilo_nunca_vendido)).map((r) => r.producto_id)).size,
     // Si algún renglón se valoró a precio de venta, la cifra total está
     // inflada respecto al costo real y la pantalla tiene que decirlo.
     hay_sin_costo: rows.some((r) => r.valorado_a === 'precio_venta'),
-    hilos: rows,
+    hilos: rows.slice(0, limite),
   };
 }
 
@@ -220,7 +229,7 @@ async function hiloMuerto({ dias = 90, limite = 50 } = {}) {
  */
 async function margenPorHilo({ desde, hasta, limite = 50 } = {}) {
   const where = [`ped.estado NOT IN ${ESTADOS_MUERTOS}`];
-  const params = { limite };
+  const params = {};
   if (desde) { where.push('ped.creado_en >= :desde'); params.desde = desde; }
   if (hasta) { where.push('ped.creado_en < DATE_ADD(:hasta, INTERVAL 1 DAY)'); params.hasta = hasta; }
   const whereSql = where.join(' AND ');
@@ -247,8 +256,7 @@ async function margenPorHilo({ desde, hasta, limite = 50 } = {}) {
        LEFT JOIN lineas l          ON l.id = p.linea_id
       WHERE ${whereSql} AND d.costo_unitario IS NOT NULL
       GROUP BY p.id, p.nombre, p.grosor_calibre, cat.nombre, l.nombre
-      ORDER BY ganancia DESC
-      LIMIT :limite`,
+      ORDER BY ganancia DESC`,
     params
   );
 
@@ -274,7 +282,7 @@ async function margenPorHilo({ desde, hasta, limite = 50 } = {}) {
     // representa al negocio y hay que decirlo.
     sin_costo_lineas: Number(sinCosto.lineas),
     sin_costo_venta: Number(sinCosto.venta),
-    hilos: rows,
+    hilos: rows.slice(0, limite),
   };
 }
 

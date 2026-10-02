@@ -61,22 +61,6 @@ async function eliminar(id) {
   return r.affectedRows > 0;
 }
 
-/**
- * Precio que paga un tipo de cliente por una variante.
- * Sin precio propio capturado, paga el público (`producto_variantes.precio`).
- * Devuelve null si la variante no existe.
- */
-async function precioDeVariante(varianteId, tipoClienteId, ejecutor = pool) {
-  const [rows] = await ejecutor.query(
-    `SELECT pv.precio AS publico, pv.precio_oferta,
-            (SELECT vp.precio FROM variante_precios vp
-              WHERE vp.variante_id = pv.id AND vp.tipo_cliente_id = :tipo) AS propio
-       FROM producto_variantes pv WHERE pv.id = :v LIMIT 1`,
-    { v: varianteId, tipo: tipoClienteId ?? 0 }
-  );
-  return rows[0] || null;
-}
-
 module.exports = {
   listar,
   obtener,
@@ -85,5 +69,4 @@ module.exports = {
   actualizar,
   dependencias,
   eliminar,
-  precioDeVariante,
 };

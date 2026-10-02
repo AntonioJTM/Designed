@@ -15,7 +15,7 @@
       <div>
         <span class="muted">Precio de lista</span><br />
         @if (precioProducto() != null) {
-          ${{ precioProducto() }} <span class="muted">/ {{ unidadProducto() }}</span>
+          {{ precioProducto() | dinero }} <span class="muted">/ {{ unidadProducto() }}</span>
         } @else {
           <span class="muted">sin capturar</span>
         }
@@ -191,15 +191,15 @@
                   </div>
                 } @else if (v.tipo_presentacion === 'cono') {
                   <div class="muted" style="font-size:0.75rem">
-                    {{ v.piezas_por_origen }} conos por paquete {{ v.paquete_sku }} · se vende por pieza
+                    {{ v.piezas_por_origen }} conos por paquete {{ v.paquete_sku }} · se vende por kilo, al precio del paquete
                     @if (v.modo_precio === 'calculado') { <span class="pill ok">precio calculado</span> }
                   </div>
                 }
               </td>
               <td class="num">
-                ${{ v.precio }}
+                {{ dinero(v.precio) }}
                 <div class="muted" style="font-size:0.75rem">
-                  {{ v.tipo_presentacion === 'paquete' ? 'por kg' : v.tipo_presentacion === 'cono' ? 'por cono' : '' }}
+                  {{ v.tipo_presentacion === 'paquete' || v.tipo_presentacion === 'cono' ? 'por kg' : '' }}
                 </div>
               </td>
               <td>
@@ -210,7 +210,7 @@
                     <div style="font-size:0.8rem">
                       {{ tc.nombre }}:
                       @if (precioDe(v, tc.id); as pr) {
-                        <b>${{ pr.toFixed(2) }}</b>
+                        <b>{{ pr | dinero }}</b>
                       } @else {
                         <span class="muted">público</span>
                       }
@@ -219,9 +219,9 @@
                 }
               </td>
               <td class="acciones">
-                @if (tiposConPrecio().length > 0) {
+                @if (esJefe() || tiposConPrecio().length > 0) {
                   <button class="btn btn-ghost btn-sm" (click)="togglePrecios(v)">
-                    {{ editandoPrecios() === v.id ? '▾' : '▸' }} Precios
+                    {{ editandoPrecios() === v.id ? '▾' : '▸' }} {{ esJefe() ? 'Precio y peso' : 'Precios' }}
                   </button>
                 }
                 <button class="btn btn-ghost btn-sm" (click)="toggleCodigos(v)">
@@ -234,11 +234,51 @@
               <tr class="detalle-row">
                 <td colspan="6">
                   <div style="padding:1.25rem">
+                    @if (esJefe()) {
+                      <h4 style="margin:0 0 0.6rem; font-size:0.9rem">Precio público y peso de {{ v.sku }}</h4>
+                      <div class="form-concepto" style="border-top:0; margin-top:0; padding-top:0">
+                        @if (precioEditable(v)) {
+                          <label class="field">
+                            Precio público (por kg)
+                            <input type="number" step="0.01" min="0" [(ngModel)]="precioPublico"
+                                   [name]="'pp' + v.id" />
+                          </label>
+                        } @else {
+                          <p class="muted" style="margin:0; font-size:0.8rem">
+                            El precio del cono sigue al del paquete: se cambia allá.
+                          </p>
+                        }
+                        @if (pesoEditable(v)) {
+                          <label class="field">
+                            Peso de un paquete
+                            <span class="cant-peso">
+                              <input type="number" step="0.001" min="0" [(ngModel)]="pesoPaquete"
+                                     [name]="'pk' + v.id" />
+                              <span class="muted">kg</span>
+                            </span>
+                          </label>
+                        }
+                        <button class="btn btn-primary btn-sm" (click)="guardarPublico(v)"
+                                [disabled]="guardandoPublico()">
+                          {{ guardandoPublico() ? 'Guardando…' : 'Guardar' }}
+                        </button>
+                      </div>
+                      <p class="muted" style="margin:0.4rem 0 1rem; font-size:0.78rem">
+                        Lo vendido antes no cambia: cada venta guarda el precio con que se cobró.
+                        @if (v.tipo_presentacion === 'paquete' && conos().length > 0) {
+                          Los conos de precio calculado se ajustan solos.
+                        }
+                        @if (pesoEditable(v)) {
+                          El peso solo es la referencia: cada bulto se cobra por lo que pesa.
+                        }
+                      </p>
+                    }
+                    @if (tiposConPrecio().length > 0) {
                     <h4 style="margin:0 0 0.6rem; font-size:0.9rem">
                       Precios de {{ v.sku }} por tipo de cliente
                     </h4>
                     <p class="muted" style="margin:0 0 0.75rem; font-size:0.8rem">
-                      El público paga ${{ v.precio }}. Deja vacío el de un tipo para que
+                      El público paga {{ dinero(v.precio) }}. Deja vacío el de un tipo para que
                       también pague el precio público.
                     </p>
                     <div class="form-concepto" style="border-top:0; margin-top:0; padding-top:0">
@@ -254,6 +294,7 @@
                         </button>
                       }
                     </div>
+                    }
                   </div>
                 </td>
               </tr>

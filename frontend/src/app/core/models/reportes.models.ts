@@ -36,6 +36,9 @@ export interface MasVendido {
   variante_id: number;
   sku: string;
   producto: string;
+  calibre?: string | null;
+  tipo_presentacion?: string | null;
+  /** Kilos: todo se vende por peso. El nombre viene de la vista. */
   unidades_vendidas: string;
   ingresos: string;
 }

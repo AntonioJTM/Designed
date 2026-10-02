@@ -72,12 +72,6 @@ export class NominaService {
       .pipe(map(data));
   }
 
-  obtenerPeriodo(id: number): Observable<PeriodoNomina> {
-    return this.http
-      .get<ApiResponse<PeriodoNomina>>(`${this.base}/periodos/${id}`)
-      .pipe(map(data));
-  }
-
   calcular(id: number): Observable<PeriodoNomina> {
     return this.http
       .post<ApiResponse<PeriodoNomina>>(`${this.base}/periodos/${id}/calcular`, {})

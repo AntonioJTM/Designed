@@ -91,11 +91,6 @@ export class CatalogoService {
   crearVariante(body: Partial<Variante>): Observable<Variante> {
     return this.http.post<ApiResponse<Variante>>(`${this.base}/variantes`, body).pipe(map(data));
   }
-  actualizarVariante(id: number, body: Partial<Variante>): Observable<Variante> {
-    return this.http
-      .put<ApiResponse<Variante>>(`${this.base}/variantes/${id}`, body)
-      .pipe(map(data));
-  }
   eliminarVariante(id: number): Observable<unknown> {
     return this.http.delete<ApiResponse<unknown>>(`${this.base}/variantes/${id}`).pipe(map(data));
   }
@@ -154,6 +149,19 @@ export class CatalogoService {
       .delete<ApiResponse<unknown>>(`${environment.apiUrl}/tipos-cliente/${id}`)
       .pipe(map(data));
   }
+  /**
+   * Lo que se puede cambiar de una presentación que ya existe: precio público,
+   * oferta, peso y si está a la venta. Solo administradores y gerentes.
+   */
+  actualizarVariante(
+    id: number,
+    body: { precio?: number; precio_oferta?: number | null; peso_kg?: number | null; activo?: boolean }
+  ): Observable<Variante> {
+    return this.http
+      .patch<ApiResponse<Variante>>(`${this.base}/variantes/${id}`, body)
+      .pipe(map(data));
+  }
+
   /** Precio de una presentación para un tipo de cliente. `null` lo borra. */
   fijarPrecioTipo(
     varianteId: number,

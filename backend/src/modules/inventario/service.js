@@ -60,6 +60,15 @@ function _describir(m) {
     };
   }
 
+  if (m.referencia_tipo === 'remesa') {
+    return {
+      concepto: 'Remesa del proveedor',
+      folio: m.remesa_folio,
+      detalle_tipo: 'remesa',
+      detalle_id: m.referencia_id,
+    };
+  }
+
   // Movimientos capturados a mano desde Inventario.
   const nombres = {
     entrada: 'Entrada de mercancía',
@@ -135,6 +144,7 @@ async function previaDesarmeBulto(codigo) {
       variante_id: paquete.id,
       sku: paquete.sku,
       producto: paquete.producto,
+      calibre: paquete.calibre ?? null,
       presentacion: paquete.presentacion,
       peso_kg: paquete.peso_kg,
       precio: paquete.precio,

@@ -64,6 +64,7 @@ export interface Movimiento {
   motivo?: string | null;
   creado_en: string;
   producto?: string;
+  calibre?: string | null;
   /** Unidad de la cantidad: kg para peso, pz para conos. Nunca es dinero. */
   unidad?: string;
   tipo_presentacion?: string;
@@ -73,7 +74,7 @@ export interface Movimiento {
   /** Folio del documento que lo originó (venta o traspaso). */
   folio?: string | null;
   /** Documento que se puede abrir desde el kardex. */
-  detalle_tipo?: 'pedido' | 'traspaso' | 'conversion' | null;
+  detalle_tipo?: 'pedido' | 'traspaso' | 'conversion' | 'remesa' | null;
   detalle_id?: number | null;
 }
 

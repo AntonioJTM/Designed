@@ -26,13 +26,19 @@ const abrirSchema = z
   })
   .strict();
 
+// El retiro EXIGE motivo: dinero que sale del cajón sin explicación es un
+// faltante en el corte que nadie puede aclarar después.
 const movimientoSchema = z
   .object({
     tipo: z.enum(['ingreso', 'retiro']),
     monto: z.coerce.number().positive(),
     motivo: z.string().trim().max(255).optional(),
   })
-  .strict();
+  .strict()
+  .refine((m) => m.tipo !== 'retiro' || (m.motivo ?? '').length >= 3, {
+    message: 'Un retiro necesita decir para qué se sacó el dinero.',
+    path: ['motivo'],
+  });
 
 const cerrarSchema = z.object({ monto_final: z.coerce.number().nonnegative() }).strict();
 

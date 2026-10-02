@@ -18,16 +18,10 @@ const crearSchema = z
   })
   .strict();
 
-// producto_id no cambia en update; se toma del registro existente.
-const actualizarSchema = crearSchema.partial().omit({ producto_id: true });
-
 const soloStaff = [authRequired, requireTipo('usuario')];
 
-router.get('/', controller.listar); // requiere ?producto_id=
-router.get('/:id', controller.obtener);
-
+// Las imágenes se LEEN dentro de GET /productos/:id; aquí solo se agregan y se quitan.
 router.post('/', ...soloStaff, validate(crearSchema), controller.crear);
-router.put('/:id', ...soloStaff, validate(actualizarSchema), controller.actualizar);
 router.delete('/:id', ...soloStaff, controller.eliminar);
 
 module.exports = router;

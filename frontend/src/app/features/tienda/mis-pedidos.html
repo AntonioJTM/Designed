@@ -20,8 +20,8 @@
           <td style="padding:0.6rem">
             {{ p.metodo_entrega === 'envio' ? 'Te lo enviamos' : 'Recoges en tienda' }}
           </td>
-          <td style="padding:0.6rem">{{ p.estado }}</td>
-          <td style="padding:0.6rem">${{ p.total }}</td>
+          <td style="padding:0.6rem">{{ estado(p.estado) }}</td>
+          <td style="padding:0.6rem">{{ dinero(p.total) }}</td>
           <td style="padding:0.6rem" class="muted">{{ p.creado_en | fecha }}</td>
         </tr>
       }

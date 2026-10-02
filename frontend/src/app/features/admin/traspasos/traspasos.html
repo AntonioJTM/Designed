@@ -219,8 +219,13 @@
               inventario se lleva en kilos y es lo que de verdad decide si alcanza.
             -->
             <td class="num">
-              @if (kilosLibres(l); as hay) {
-                <span [class.neg]="insuficiente(l)">{{ hay | cantidad: 'kg' }}</span>
+              @if (kilosLibres(l) !== null) {
+                <span [class.neg]="insuficiente(l)">{{ kilosLibres(l) | cantidad: 'kg' }}</span>
+                @if (kilosApartados(l) > 0) {
+                  <div class="muted" style="font-size:0.7rem">
+                    {{ kilosApartados(l) | cantidad: 'kg' }} ya apartados
+                  </div>
+                }
                 @if (insuficiente(l)) {
                   <div class="neg" style="font-size:0.72rem">⚠ inventario insuficiente</div>
                 }

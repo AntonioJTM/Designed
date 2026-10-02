@@ -52,7 +52,7 @@
         </select>
         @if (paqueteSel(); as p) {
           <span class="muted" style="font-size:0.72rem">
-            Paquete de {{ p.peso_kg | cantidad: 'kg' }} nominal · ${{ p.precio }} por kilo
+            Paquete de {{ p.peso_kg | cantidad: 'kg' }} nominal · {{ p.precio | dinero }} por kilo
           </span>
         }
       </label>

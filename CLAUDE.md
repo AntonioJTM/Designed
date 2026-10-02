@@ -106,6 +106,13 @@ tienda-hilos/
   mientras quien surte se lleva los que tiene a mano. Por eso vender o desarmar **no valida** que el
   bulto estuviera en ese almacén —validarlo bloquearía ventas legítimas— y en cambio le CORRIGE la
   ubicación al almacén donde se escaneó. No añadas esa validación.
+- **El pago en efectivo se asienta por lo COBRADO, no por el billete.** Una venta de $432 pagada
+  con $500 deja un `pagos` de $432: `crearPedido` resta el cambio del efectivo antes de
+  insertarlo y devuelve `cambio` en la respuesta (no se guarda: no es dinero de la tienda). Si
+  quedara el billete, al cancelar `_efectivoDelPedido` devolvería $500 y el corte saldría con un
+  faltante que nadie se llevó. Solo el efectivo da cambio: un pago con tarjeta o transferencia
+  por encima de lo que se cobra es 422 `PAGO_EXCEDE_TOTAL`. La caja manda lo recibido y pinta el
+  cambio que le devuelve el servidor.
 - **Cancelar o devolver repone el inventario.** `cambiarEstado` es transaccional: al pasar a
   `cancelado`/`devuelto` la mercancía regresa al almacén DE DONDE SALIÓ (`pedidos.almacen_id`, el
   de la caja que vendió o el de la tienda en línea) con su `movimientos_inventario` de entrada
@@ -121,6 +128,10 @@ tienda-hilos/
   ABIERTO de la misma caja. Si no hay ninguno abierto, 409 `CAJA_CERRADA` y NO se cancela nada
   (ni inventario, ni bultos, ni estado): todo o nada.
   El movimiento del dinero va ANTES de tocar inventario, para que ese 409 no deje nada movido.
+- **Retiros e ingresos de efectivo** van por `POST /caja/sesiones/:id/movimientos` (modal "Sacar
+  o meter efectivo" en la tarjeta de la caja, `pos/movimiento-caja-modal.ts`). El retiro EXIGE
+  motivo —dinero que sale sin explicación es un faltante que nadie aclara— y no puede sacar más
+  de lo que debería haber en el cajón (409 `EFECTIVO_INSUFICIENTE`, con la sesión bloqueada).
 - **La mercancía puede regresar en OTRA presentación.** Se entrega el paquete y el cliente devuelve
   los conos: `PATCH /pedidos/:id/estado` acepta `devoluciones: [{detalle_id, variante_id, cantidad}]`
   y repone en la presentación indicada, no en la vendida. La equivalencia la calcula el backend
@@ -194,10 +205,17 @@ tienda-hilos/
   · `POST /inventario/traspasos/:id/cancelar`: si estaba solicitado libera el apartado; si iba en
     tránsito la mercancía REGRESA al origen y los bultos vuelven. Un recibido ya no se cancela
     (409): eso se corrige con un traspaso de vuelta.
-  **El apartado es BLANDO.** Se ve en inventario y otra solicitud no puede pedir lo ya apartado,
-  pero la venta de mostrador NO lo respeta —el cliente que está enfrente manda— así que
+  **El apartado DEL TRASPASO es BLANDO.** Se ve en inventario y otra solicitud no puede pedir lo ya
+  apartado, pero la venta de mostrador NO lo respeta —el cliente que está enfrente manda— así que
   `cantidad_reservada` puede quedar por encima de `cantidad`; el envío lo detecta y avisa. No metas
-  la reserva en la validación de la venta sin decidirlo con el usuario.
+  esa reserva en la validación de la venta sin decidirlo con el usuario.
+  **El apartado de un CLIENTE sí se respeta** (corregido el 2026-10-02, a petición del usuario):
+  la venta y otro apartado validan contra la existencia MENOS lo apartado por clientes
+  (`pedidos/model.js → _apartadoEnAlmacen`, sumado de los pedidos `apartado` sin descontar). Se
+  calcula de los pedidos y NO de `cantidad_reservada` precisamente porque esa columna mezcla las
+  dos reservas. Antes la caja vendía lo apartado y el día que venían por él no había con qué.
+  La pantalla del traspaso compara contra lo LIBRE (`equivalencia-paquetes` devuelve
+  `kg_apartado` y `kg_libre`), que es contra lo que valida el servidor.
   **Solo PAQUETES.** Un cono da 422 `NO_SE_TRASPASAN_CONOS`: a la sucursal se le manda el paquete
   cerrado y allá se desarma.
 - **Matriz → sucursales, por PAQUETES.** El almacén marcado con `almacenes.es_matriz` (único, como
@@ -216,6 +234,10 @@ tienda-hilos/
   mostrador. No hay pasarela y no se guardan datos de tarjeta. La tabla `metodos_pago` trae
   además tarjeta, PayPal y Mercado Pago: la tienda en línea **no los ofrece** (el filtro está
   en `metodosOfrecidos`, en `checkout.ts`), porque ofrecerlos sería prometer algo que no existe.
+- **Dar por pagado un pedido en línea cobra su pago.** De `pendiente` a `pagado` (o más adelante)
+  en `canal='tienda_linea'`, sus `pagos` pendientes pasan a `completado` en la misma
+  transacción. Antes el pedido decía "pagado" y su pago seguía "pendiente". OJO: ese efectivo NO
+  entra a ningún turno de caja; está por decidir si se cobra por la caja.
 - **Al cliente NUNCA se le cree el dinero.** En `canal='tienda_linea'` creado por un CLIENTE, el
   backend ignora `costo_envio` (lo lee de `configuracion.envio_costo_fijo`) y DESCARTA `pagos`.
   Sin eso, cualquiera puede mandar `costo_envio: 0` o `pagos: [{monto: total}]` y quedar pagado
@@ -246,6 +268,13 @@ tienda-hilos/
   `pedidos` pasa a `'pagado'` en la misma transacción, sin estado intermedio "por validar".
   Quitar la captura NO descobra el pedido: el dinero entró, y para deshacerlo está el cambio
   de estado.
+  **La captura se pega a un pago, y NUNCA crea uno de más.** Por orden: el que ya tiene captura
+  (se reemplaza), el que espera cobro, una transferencia ya cobrada (solo se le adjunta), y si no
+  hay ninguno se crea uno por lo que FALTA, no por el total. Si ya está cobrado completo y sin
+  transferencia: 409 `PEDIDO_YA_PAGADO`. A un apartado: 409 `APARTADO_USA_ABONOS`, porque se paga
+  con abonos. Antes, en una venta en efectivo o en un apartado se creaba otro pago por el total y
+  el apartado quedaba "liquidado" con dinero que no entró. La pantalla solo muestra la sección
+  donde aplica (`aceptaComprobante()` en `pedido-detalle.ts`).
   El archivo vive en DISCO (`backend/uploads/comprobantes`, ruta en `env.uploadsDir`), no en la
   base: un dump pesa 90 KB y meterle imágenes lo volvería inmanejable. En `pagos` queda solo su
   nombre. **El `rsync --delete` del despliegue borraría esa carpeta**, así que está excluida en
@@ -333,20 +362,29 @@ tienda-hilos/
   cero: un margen del 100% por un costo faltante llevaría a decisiones equivocadas.
   El costo NO viaja en la cotización del checkout: es información interna del negocio.
 - **El tablero contesta cuatro preguntas** (`modules/analisis`, `GET /analisis/tablero`), todas
-  calculadas de la base al momento — no hay tablas de resumen que mantener ni proceso nocturno:
-  · **Cobranza** (`/analisis/cobranza`): quién debe, por antigüedad. Los días se miden desde el
+  calculadas de la base al momento — no hay tablas de resumen que mantener ni proceso nocturno.
+  Llegan JUNTAS en ese único endpoint: tuvieron una ruta cada una, pero la pantalla siempre pide
+  las cuatro y el asistente lee los models directo, así que se quitaron el 2026-10-01 por no
+  tener quién las llamara.
+  · **Cobranza** (`cartera`): quién debe, por antigüedad. Los días se miden desde el
     ÚLTIMO MOVIMIENTO de la cuenta, no desde el cargo: quien abonó la semana pasada está pagando, y
     tratarlo como moroso llevaría a cobrarle a quien no toca.
-  · **Clientes enfriados** (`/analisis/clientes-enfriados`): exige **2 compras mínimo** —quien vino
+  · **Clientes enfriados**: exige **2 compras mínimo** —quien vino
     una vez hace meses no es un cliente perdido, es alguien que pasó— y compara los días sin venir
     contra SU PROPIO ritmo (`veces_su_ritmo`), no contra un número fijo.
-  · **Hilo muerto** (`/analisis/hilo-muerto`): existencias sin venderse. Se valora AL COSTO cuando
+  · **Hilo muerto**: existencias sin venderse. Viene un renglón por PRESENTACIÓN (el cono va
+    aparte, rotulado "· cono"), pero `num_hilos` y `nunca_vendidos` cuentan HILOS
+    (`producto_id`): contar renglones decía "15 hilos" donde había 10. Se valora AL COSTO cuando
     se conoce y al precio de venta cuando no, marcándolo con `valorado_a` para no presentar una
     cifra como si fuera lo que no es. Un hilo que NUNCA se vendió cuenta desde que entró: es el caso
     más importante y filtrarlo por "última venta" lo dejaría fuera justo por no tener ninguna.
-  · **Margen** (`/analisis/margen`): sobre la VENTA, no sobre el costo, que es como se lee un margen
+  · **Margen**: sobre la VENTA, no sobre el costo, que es como se lee un margen
     comercial. Solo cuenta las líneas con costo capturado.
-  El hilo muerto y el margen son **solo administradores y gerentes**: exponen costos.
+  El hilo muerto y el margen son **solo administradores y gerentes**: exponen costos. El menú se
+  lo muestra a los DOS (antes solo al administrador, aunque el servidor dejaba entrar al gerente).
+  · **Las cifras se suman sobre TODO, la lista se recorta.** El `limite` ya no va en el SQL:
+    "cuántos se fueron" decía 15 cuando eran 40. Y el umbral del hilo parado es `dias_parado`,
+    no `dias`: compartían el parámetro con "días sin venir" y moverlo cambiaba el otro bloque.
 - **`v_movimiento_hilo` mira solo las salidas por VENTA** (`referencia_tipo='pedido'`, cantidad
   negativa). Un traspaso o un desarme mueven la mercancía de sitio pero no la venden, y contarlos
   haría parecer vivo un hilo que nadie compra.
@@ -371,6 +409,15 @@ tienda-hilos/
   · **Cancelar libera la reserva y no inventa nada.** El anticipo se le devuelve (sale del turno
     como `'devolucion'`, igual que al cancelar una venta). Reactivar vuelve a apartar, y exige que
     la mercancía siga disponible.
+  · **El cambio de estado genérico no tiene atajos para un apartado** (`_validarCaminoApartado`
+    en `pedidos/model.js`, sobre `inventario_descontado = 0`). Vigente, solo se cancela: pasarlo a
+    `pagado`/`entregado` desde `PATCH /estado` lo dejaba entregado SIN descontar y apartado para
+    siempre (409 `APARTADO_SE_ENTREGA`), y devolverlo no aplica porque nunca salió (409
+    `APARTADO_NO_ENTREGADO`). Cancelado, se reactiva SOLO como `'apartado'` (409
+    `REACTIVAR_COMO_APARTADO`): como `pendiente` quedaba vivo sin reservar ni descontar. Y una venta
+    que ya descontó no puede volverse apartado (409 `NO_SE_PUEDE_APARTAR`). El selector del
+    detalle del pedido solo ofrece lo que se puede, y el panel de cancelación de un apartado dice
+    que se libera lo apartado, no que "regresa al inventario".
   · Apartar Y fiar a la vez se rechaza (422 `APARTADO_A_CREDITO`): fiar es entregar sin cobrar,
     apartar es cobrar sin entregar. Y no se aparta desde la tienda en línea (422
     `APARTADO_SOLO_MOSTRADOR`).
@@ -401,7 +448,15 @@ tienda-hilos/
   El peso NO se exige al crear —todavía no ha llegado mercancía— lo completa la primera carga del
   Excel con el promedio real de los bultos, y el DESARME sí lo exige (422 `PAQUETE_SIN_PESO`).
   Las remesas siguientes le agregan BULTOS, no presentaciones. Cuando el producto ya tiene la suya, el formulario de alta manual
-  desaparece. El CONO es la única variante extra y vive en su propia sección ("Conos para
+  desaparece.
+  **Sin precio por kilo la presentación no se puede crear** (no tiene de dónde heredarlo): el
+  producto se guarda igual y la respuesta trae `presentacion_pendiente` con el motivo, para que la
+  pantalla lo diga en vez de presumir que se creó. En cuanto un `PUT` le pone precio y no tiene
+  presentación, se crea sola. El formulario lo exige al crear y trae "Multipresentación" marcada.
+  **Precio público y peso se cambian con `PATCH /variantes/:id`** (precio, oferta, peso y activo;
+  solo administrador y gerente; botón "Precio y peso" en Presentaciones). Es angosto a propósito:
+  el SKU, el tipo y el origen del cono no se tocan con existencias y ventas encima. Si es el
+  paquete, los conos de precio calculado lo siguen. El CONO es la única variante extra y vive en su propia sección ("Conos para
   mostrador"), que solo aparece si ya hay paquete: existe únicamente para poder desarmar y vender
   por pieza. Su SKU se deriva del paquete (`<PAQUETE>-CONO`).
 - **El formulario de producto NO captura presentaciones.** Ahí solo van los datos del hilo
@@ -541,6 +596,10 @@ tienda-hilos/
   almacén; (3) *el detalle exacto* → tabla agrupada por hilo y buscador. **Las presentaciones del
   mismo hilo van JUNTAS** en la tabla, con el nombre una sola vez: antes cada una era un
   renglón suelto con el nombre repetido y parecía que la tabla tenía duplicados.
+- **El hilo se nombra con su CALIBRE en todas partes, también ante el cliente.** El catálogo y
+  la página del producto de la tienda, el carrito (el nombre se guarda con calibre), el carrito
+  del POS y "Más vendidos" dicen "ROJO 2/30", no "ROJO": había dos tarjetas "ROJO" con precios
+  distintos y parecía un duplicado.
 - **Donde se elige un hilo, la opción lleva COLOR + CALIBRE + material + línea.** No solo el
   color: el mismo color en dos calibres son dos productos y con "AMARILLO · AMARILLO" no hay forma
   de elegir bien. Ya costó caro — ver abajo. Aplica al selector de la remesa y a cualquier otro que
@@ -562,7 +621,16 @@ tienda-hilos/
 - **Sin mínimo capturado no hay alerta de stock.** `stock_minimo = 0` significa "no configurado",
   no "el mínimo es cero". La condición vive en `COND_ALERTA` (`inventario/model.js`) y exige
   `stock_minimo > 0`; sin eso, una fila en cero contaba como alerta y la pantalla decía
-  "0 productos · sin existencias · 1 bajo mínimo" en un almacén vacío.
+  "0 productos · sin existencias · 1 bajo mínimo" en un almacén vacío. La vista
+  `v_alertas_stock` (Reportes → Por reabastecer y el asistente) aplica la MISMA regla desde la
+  migración `2026-10_alertas_stock_con_minimo.sql`: antes listaba hilos agotados sin mínimo y
+  contradecía a la campana.
+  **El mínimo se captura en Inventario**, en la columna "Mínimo" de la tabla de existencias, que
+  se dibuja SIEMPRE —antes se escondía cuando no había mínimos y entonces no había dónde
+  ponerlos—. Su botón abre `inventario/minimo-modal.ts`: es por presentación y almacén, se puede
+  teclear en paquetes (con el peso promedio REAL de los bultos de ahí, como en Ajuste / merma) y
+  se guarda en kilos con `PUT /inventario/configuracion`. Ese endpoint escribe mínimo, máximo y
+  ubicación juntos, así que el modal manda los dos que no cambia para no borrarlos.
 - **Si algo tarda más de unos segundos, la pantalla lo dice.** El asistente avisa
   "Consultando tus datos… suele tardar medio minuto" a los 6 s (señal `tardando` en
   `asistente.ts`), porque la capa gratuita de Gemini se toma ~30 s en una respuesta
@@ -594,6 +662,19 @@ tienda-hilos/
 - **Una gráfica ancha va en `.chart-box`.** El SVG se estira al ancho que le den, así que un
   viewBox angosto dentro de una tarjeta de 1,300 px escala el texto al doble y se ve tosca. El tope
   de `.chart-box` la deja dibujada casi a su tamaño real.
+- **La celda de acciones de una tabla sigue siendo CELDA** (`table.grid td.acciones` con
+  `white-space: nowrap`). Con `display: flex` dejaba de estirarse a la altura del renglón —el
+  borde quedaba desalineado— y encogía los botones hasta partir "▸ Precios" en dos líneas. El
+  `flex` solo aplica cuando `.acciones` es un `div`.
+- **El panel en el celular:** la columna del layout es `minmax(0, 1fr)`, no `1fr`, y el menú se
+  desliza de lado (`overflow-x: auto`). Con `1fr` la columna medía lo que el menú en una fila
+  (18 opciones) y la página entera se ensanchaba a ~1,600 px.
+- **La tienda carga el perfil del cliente al abrir** (`tienda-layout.ts`), igual que el panel:
+  sin eso, tras recargar, el checkout decía "Comprando como cliente" en vez de su nombre. Por
+  eso `GET /clientes/perfil` NO se quitó en la limpieza aunque parecía usarse solo desde la
+  pantalla de prueba `/dashboard`.
+- **Al cliente se le habla en sus palabras:** "Mis pedidos" traduce el estado
+  (`en_preparacion` → "En preparación") y los montos van con separador de miles.
 - **La pantalla es para MIRAR; las acciones son modales.** Los listados (productos, materiales,
   inventario) muestran datos y ponen las acciones en botones del encabezado o del renglón, que
   abren un modal. No dejes formularios desplegados en la pantalla: Inventario llegó a tener siete
@@ -615,6 +696,20 @@ tienda-hilos/
   no movían el cálculo). Usa un MÉTODO normal —la detección de cambios lo reevalúa en cada tecla— o
   convierte los campos a señales. `computed` sí es correcto cuando todo lo que lee son señales
   (`input()`, `signal()`).
+- **Un hilo se busca por PALABRAS** (`utils/query.js → porPalabras`): cada palabra tiene que
+  aparecer en alguna columna, así "rojo 2/30" encuentra el rojo de ese calibre —el color y el
+  calibre viven en columnas distintas— y "2-30" también, como lo escribe el proveedor. Lo usan
+  variantes (caja, traspasos, ajuste), inventario y el catálogo. Los códigos de bulto van con
+  EXISTS, nunca con GROUP_CONCAT: se corta a 1,024 caracteres y en una remesa de 80 bultos los
+  últimos códigos dejaban de encontrarse.
+- **El dinero va con el pipe `dinero`** (`shared/dinero.pipe.ts`): separador de miles, dos
+  decimales y el signo antes del símbolo. Nunca `${{ x }}` ni `toFixed(2)` en una plantilla.
+- **El punto de venta tiene su propia rejilla** (`.pos-layout`, columnas `minmax(0, …)`). Con la
+  `.form-grid` de `1fr` una columna no encoge por debajo de su contenido, y el nombre largo de la
+  caja en el selector sacaba la columna de cobro de la pantalla. Un `select` nunca es más ancho
+  que su campo.
+- **La campana no manda a nadie a una pantalla que no puede abrir.** La cobranza lleva a los
+  jefes al tablero y al cajero a `/admin/clientes?deben=1` (la lista ya filtrada).
 - **Cantidades sin ceros de relleno.** MySQL devuelve `DECIMAL(12,3)` siempre con tres decimales
   (`350000.000`). En pantalla usa el pipe `cantidad` (`shared/cantidad.pipe.ts`), que recorta los
   ceros sobrantes y agrupa miles: `350,000`, `2.5`, `1.25`. Acepta la unidad como argumento:
@@ -719,8 +814,8 @@ tienda-hilos/
       medido con el flujo real en la capa gratuita. La pantalla avisa a los 6 segundos.
       Si molesta, activar facturación en Google sube los límites sin tocar código.
 - [x] Alta rápida de cliente desde el POS, sin salir de la venta.
-- [ ] Nada del checkout se ha probado en el NAVEGADOR: compila, pasa 12 pruebas unitarias y
-      31 comprobaciones E2E, pero nadie lo ha abierto.
+- [ ] El checkout se abrió en el navegador y se armó el pedido, pero NUNCA se ha confirmado
+      uno desde la pantalla (sí por E2E: 31 comprobaciones).
 - [x] Expediente del cliente y crédito (BACKEND, 36 comprobaciones E2E): alta sin cuenta desde
       el panel, búsqueda por apodo y teléfono, historial de compras, qué colores compra más,
       límite de crédito, venta a crédito (incluso mixta), abonos que entran a la caja, estado de
@@ -768,8 +863,44 @@ tienda-hilos/
 - [x] Frontend de apartados: se aparta desde el POS (exige cliente, anticipo libre) y la
       pantalla Admin → Apartados separa los LISTOS PARA ENTREGAR de los que aún deben —son
       dos acciones distintas y mezclarlas escondía la urgente—. Abonar y entregar desde ahí.
+- [x] Auditoría de lo que se usa (2026-10-01). Se corrigieron cinco fallas —un apartado se
+      podía marcar entregado sin descontar y no se podía reactivar como apartado; "Por
+      reabastecer" contaba hilos sin mínimo; no había dónde capturar el mínimo; el script que
+      vaciaba la base no tenía la protección contra producción; el despliegue podía subir un
+      `.env.*` y el rollback manual borraba los comprobantes— y se quitaron 18 rutas sin uso,
+      la pantalla de prueba `/dashboard`, 13 métodos de servicio sin llamadas y
+      `limpiar-para-pruebas.js`. El detalle, en `CAMBIOS.txt`.
+- [x] Revisión en el navegador (Chrome headless, 2026-10-01): todas las pantallas del panel y la
+      tienda, como administrador, cajero, cliente y visitante, a ancho de escritorio y de
+      celular, con los modales abiertos y el checkout armado hasta ANTES de confirmar. Sin
+      errores de consola ni peticiones fallidas. Lo que se encontró se corrigió (ver
+      CAMBIOS.txt). NO se confirmó ninguna venta, cancelación ni captura desde la pantalla.
+
+- [x] Siete fallas y detalles de diseño (2026-10-02): el efectivo se asienta por lo cobrado, la
+      caja no vende lo apartado, la lista de precio regresa al público, se elige otra caja con
+      turno abierto, el corte enseña su diferencia, retiros e ingresos de efectivo, ajuste de
+      deuda, precio y peso editables, alta de producto honesta, búsqueda por calibre, pesos con
+      miles en todas partes. 17 E2E en producción y 117 unitarias. Detalle en CAMBIOS.txt.
 
 ## Pendientes concretos para el usuario
+- **Propuesta de acomodo de la información, esperando decisión** (2026-10-02):
+  https://claude.ai/code/artifact/e2ab4870-b15f-44c0-9f8b-77a56fad544c — menú por tareas en siete
+  grupos y por persona, pantalla "Hoy", Cobrar y Caja por separado, ficha del hilo, un solo
+  nombre por cosa. NO está aplicada; trae cuatro preguntas para el usuario.
+- **El efectivo de un pedido en línea pagado en el mostrador no entra a ningún turno.** Se marca
+  pagado, pero el corte no lo espera. Falta decidir si se cobra por la caja.
+- **Las E2E se pueden correr contra producción** con `E2E_ACEPTO_PRODUCCION=si` (lo autorizó
+  el usuario el 2026-10-01 y se hizo: las 16 pasaron y la base quedó idéntica). Apartados,
+  crédito y margen abren su PROPIA caja temporal —antes vendían en el turno REAL 88 de
+  Cuautepec— y borran los movimientos por turno, no por `referencia_id`. Las que limpiaban con
+  `nuevos(tabla)` —TODO lo creado durante la corrida— ahora borran solo lo nuevo que es suyo:
+  `scripts/_propios.js` lo reconoce por el prefijo TMP o porque cuelga de algo TMP (2026-10-02).
+  Una prueba nueva tiene que nombrar lo que crea con TMP y limpiar con `soloPropios`.
+  Para comprobar que no tocaron nada: una foto de conteos y sumas de ids por tabla antes y
+  después.
+- **Aplicar `db/migrations/2026-10_alertas_stock_con_minimo.sql`** en la base del servidor y
+  desplegar. El usuario pidió esperar: vienen más cambios. Hasta entonces "Por reabastecer" sigue contando hilos sin mínimo.
+  `node scripts/estado-migraciones.js` dice si ya está.
 - **La base de producción tiene una MUESTRA sembrada (2026-10-01):** 18 hilos, 40 clientes y
   tres meses de ventas INVENTADOS, mezclados con lo real, para enseñarle el sistema a un
   cliente. No los tomes por datos del negocio. Todo está anotado en `_demo_registros`. Se borra

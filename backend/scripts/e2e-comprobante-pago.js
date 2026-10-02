@@ -218,6 +218,37 @@ const ck = (n, ok, d) => {
     ck('un pedido que no existe da 404', inexistente.status === 404, inexistente.status);
     ck('sin dejar archivo huérfano', nuevosEnDisco().length === 0);
 
+    // Una venta YA cobrada no se cobra dos veces por subirle una captura: antes
+    // no encontraba pago pendiente y creaba OTRO por el total.
+    console.log('\n4 · Una venta ya cobrada');
+    const efectivo = (await api('GET', '/opciones/metodos-pago')).data
+      .find((x) => x.nombre.toLowerCase().includes('efectivo')).id;
+    const itemsCobrada = [{ variante_id: variante, cantidad: 2 }];
+    const cot = (await api('POST', '/pedidos/cotizacion', {
+      canal: 'tienda_linea', metodo_entrega: 'recoger', items: itemsCobrada,
+    })).data;
+    const cobrada = await api('POST', '/pedidos', {
+      canal: 'tienda_linea', metodo_entrega: 'recoger', items: itemsCobrada,
+      pagos: [{ metodo_pago_id: efectivo, monto: cot.total }],
+    });
+    const enCobrada = await subir(`/pedidos/${cobrada.data.id}/comprobante`, JPG, 'y.jpg');
+    ck('a una venta cobrada en efectivo no se le crea otro pago',
+      enCobrada.status === 409 && enCobrada.error.code === 'PEDIDO_YA_PAGADO', enCobrada.error?.code);
+    const pagosCobrada = (await api('GET', `/pedidos/${cobrada.data.id}`)).data.pagos;
+    ck('y sigue con un solo pago', pagosCobrada.length === 1, pagosCobrada.length);
+    ck('sin dejar archivo suelto', nuevosEnDisco().length === 0);
+
+    // Cobrada por transferencia: la captura se le PEGA a ese pago, no crea otro.
+    const porTransf = await api('POST', '/pedidos', {
+      canal: 'tienda_linea', metodo_entrega: 'recoger', items: itemsCobrada,
+      pagos: [{ metodo_pago_id: transferencia, monto: cot.total }],
+    });
+    const enTransf = await subir(`/pedidos/${porTransf.data.id}/comprobante`, PNG, 'z.png');
+    const pagosTransf = enTransf.data?.pagos ?? [];
+    ck('a una transferencia ya cobrada se le adjunta la captura',
+      enTransf.status === 201 && pagosTransf.length === 1 && !!Number(pagosTransf[0].tiene_comprobante),
+      `${enTransf.status} · ${pagosTransf.length} pago(s)`);
+
   } catch (e) {
     console.error('\nERROR:', e.message, e.stack);
     f++;

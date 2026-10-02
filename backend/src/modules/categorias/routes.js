@@ -27,7 +27,6 @@ const soloStaff = [authRequired, requireTipo('usuario')];
 
 // Lecturas públicas (catálogo).
 router.get('/', controller.listar);
-router.get('/:id', controller.obtener);
 
 // Escrituras protegidas.
 router.post('/', ...soloStaff, validate(crearSchema), controller.crear);

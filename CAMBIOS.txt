@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-01
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-02
 ===============================================================================
 
 ⚠ LA BASE DE PRODUCCIÓN TIENE UNA MUESTRA SEMBRADA (2026-10-01)
@@ -20,6 +20,23 @@
   Ver la entrada "2026-10-01 · Muestra para enseñar el sistema".
 
 LO ÚLTIMO QUE SE TERMINÓ
+  SIETE FALLAS Y LOS DETALLES DE DISEÑO (2026-10-02). La más seria: la caja
+  guardaba como pago el billete y no lo cobrado, y al cancelar devolvía de más.
+  También: la caja ya no vende lo apartado, la lista de precio regresa al
+  público, se puede cambiar precio y peso de una presentación, hay retiros e
+  ingresos de efectivo y ajuste de deuda, y el corte enseña su diferencia.
+  ⚠ HAY UNA PROPUESTA DE ACOMODO esperando decisión del usuario (menú por
+  tareas, pantalla "Hoy"…): https://claude.ai/code/artifact/e2ab4870-b15f-44c0-9f8b-77a56fad544c
+  NO está aplicada. Las 17 E2E pasan en producción y la base quedó idéntica.
+  Antes: PRUEBA GENERAL (2026-10-01): las 16 E2E corridas EN PRODUCCIÓN (la base quedó
+  idéntica) y todo el sistema recorrido en el navegador. Se corrigieron 13
+  cosas; la más seria, subir la captura a un apartado creaba un pago por el
+  total. Hay 4 decisiones pendientes del usuario en la entrada fechada.
+  Antes: AUDITORÍA DEL SISTEMA (2026-10-01): cinco fallas corregidas —la más seria, un
+  apartado se podía marcar entregado sin descontar— y se quitó lo que no se
+  usaba (18 rutas, la pantalla /dashboard, 13 métodos, limpiar-para-pruebas.js).
+  Ya se puede capturar el STOCK MÍNIMO desde Inventario. ⚠ Falta aplicar la
+  migración 2026-10_alertas_stock_con_minimo.sql y desplegar.
   Antes: EL ASISTENTE YA CONTESTA DE VERDAD: Admin → Asistente. Se le pregunta en
   palabras normales ("¿cuánto vendí hoy?", "¿quién me debe más?") y responde con
   los datos reales de la tienda, diciendo debajo QUÉ consultó.
@@ -284,6 +301,319 @@ CÓMO TRABAJA EL USUARIO
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
 
+
+-------------------------------------------------------------------------------
+ 2026-10-02 · Siete fallas, los detalles de diseño y la propuesta de acomodo
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "sí, resuelve las fallas, y al igual corrige todos los problemas de diseño;
+   y hazme una propuesta para que toda la información no esté escondida: hay
+   mucha información y siento que alguna está muy enredada para los usuarios.
+   Créame una propuesta y vemos si la aplicamos".
+
+LAS SIETE FALLAS (las que salieron al hacer el manual)
+  1. DINERO · En la caja se guardaba como pago lo que ENTREGABA el cliente, no
+     lo cobrado: $432 pagados con $500 dejaban un pago de $500, y al cancelar
+     la venta la caja devolvía $500 y el corte quedaba con $68 de faltante.
+     Ahora `crearPedido` resta el cambio del efectivo antes de asentarlo, y
+     devuelve `cambio` para el ticket. Solo el efectivo da cambio: un pago con
+     tarjeta por encima del total es 422 PAGO_EXCEDE_TOTAL. En la pantalla,
+     "Recibido en efectivo" solo aparece con efectivo, enseña el cambio o lo que
+     falta mientras se teclea, y vacío significa "pagó justo".
+  2. LISTA DE PRECIO · Al quitar al cliente o al terminar la venta se quedaba la
+     lista del anterior, así que el siguiente de paso pagaba con precios de
+     mayoreo. Ahora regresa al público. Además se volvió SEÑAL: como propiedad
+     con ngModel, el `effect` del total no se enteraba del cambio y la pantalla
+     seguía con el total de la lista anterior.
+  3. APARTADOS · La caja vendía lo apartado (solo miraba la existencia) y el día
+     que venían por su apartado no había con qué. Ahora la venta y el apartado
+     validan contra la existencia MENOS lo apartado por clientes
+     (`_apartadoEnAlmacen`), con un mensaje que dice cuánto está apartado. Se
+     calcula de los pedidos y NO de `cantidad_reservada`, porque esa columna
+     también lleva lo pedido por traspasos, y esa reserva sigue siendo blanda.
+  4. TRASPASOS · "Cancelar" en la pregunta del motivo cancelaba el traspaso
+     igual (`prompt() ?? ''` convertía el null en motivo vacío).
+  5. PRESENTACIONES · No había forma de cambiar el precio público ni el peso de
+     una presentación que ya existía. Volvió `PATCH /variantes/:id`, pero
+     ANGOSTO: precio, oferta, peso y activo, solo jefes. El SKU, el tipo y el
+     origen del cono no se tocan ahí. En la pantalla es "Precio y peso" en cada
+     renglón; el cono de precio calculado sigue al paquete solo.
+  6. ALTA DE PRODUCTO · Sin precio por kilo, la presentación no se creaba y el
+     aviso decía que sí. Ahora la respuesta trae `presentacion_pendiente` y la
+     pantalla lo dice; al ponerle precio (PUT), la presentación se crea sola. En
+     el formulario el precio es obligatorio al crear y "Multipresentación" viene
+     marcada.
+  7. CAJAS · Si la primera caja tenía turno abierto no se podía elegir otra.
+     Ahora la tarjeta "Caja abierta" trae el selector.
+
+LOS DETALLES DE DISEÑO
+  · El corte: al cerrar la caja la pantalla volvía a "Abrir caja" y la
+    diferencia NUNCA se llegaba a ver. Ahora queda una tarjeta con lo que debía
+    haber, lo contado y si falta o sobra. Y se pide confirmar antes de cerrar.
+  · Retiros e ingresos de efectivo (el punto 14): modal "Sacar o meter efectivo"
+    en la caja. El retiro exige motivo y no deja sacar más de lo que hay
+    (409 EFECTIVO_INSUFICIENTE, con la sesión bloqueada).
+  · Ajustar la deuda (el punto 15): "Corregir la deuda" en el expediente, solo
+    jefes, con quitar/agregar, motivo obligatorio y cómo queda.
+  · Calibre en el kardex, en el modal de bajar conos y en el panel de
+    cancelación. También en el mensaje de "agotado".
+  · La caja avisa ANTES de cobrar cuando algo no alcanza (antes seguía con el
+    estimado y el error salía hasta darle a Cobrar).
+  · El punto de venta tiene su rejilla (`.pos-layout`, columnas `minmax(0, …)`):
+    el nombre largo de la caja empujaba la columna de cobro fuera de la
+    pantalla. El carrito ya no lleva columna SKU (repetía el nombre).
+  · Pesos con separador de miles en el detalle del pedido, el listado de
+    pedidos, la caja, productos, presentaciones, remesas y la tienda: pipe nuevo
+    `shared/dinero.pipe.ts`.
+  · Campana: los kilos sin ceros de relleno, y al cajero ya no lo manda al
+    tablero (que no puede ver) sino a Clientes filtrado en quién debe
+    (`/admin/clientes?deben=1`). El gerente ya ve "Cómo va el negocio" en el
+    menú: el servidor ya lo dejaba entrar.
+  · Kardex: "Entradas de mercancía" incluye las remesas, que salen como "Remesa
+    del proveedor" con su folio.
+  · Tablero: las cifras de arriba se suman sobre TODO, no sobre los 15
+    renglones que se muestran; y "días sin venir" ya no cambia qué hilo cuenta
+    como parado (compartían el parámetro `dias`; ahora es `dias_parado`).
+  · Personal: un alta nueva arranca como cajero, no como administrador.
+  · Surtir sucursal: "Hay libre" muestra lo LIBRE (existencia menos lo
+    apartado), que es contra lo que valida el servidor. `equivalencia-paquetes`
+    devuelve `kg_apartado` y `kg_libre`.
+  · Búsqueda por color Y calibre, palabra por palabra ("rojo 2/30", también
+    "2-30"), en caja, inventario, traspasos y tienda (`utils/query.js →
+    porPalabras`). Los códigos de bulto van con EXISTS: GROUP_CONCAT se corta a
+    1,024 caracteres y en una remesa de 80 bultos los últimos no se encontraban.
+  · Marcar como pagado un pedido en línea deja su pago como cobrado; antes el
+    pedido decía "pagado" y su pago seguía "pendiente".
+  · Tienda: "unidades" → kilos, y con envío en efectivo ya no dice "cuando
+    pases por tu pedido".
+  · Botones de una fila (Registrar / Cancelar) ya no quedan pegados.
+
+LA PROPUESTA
+  Documento aparte (Claude Docs): https://claude.ai/code/artifact/e2ab4870-b15f-44c0-9f8b-77a56fad544c
+  Menú por tareas en siete grupos y por persona, una pantalla "Hoy" con los
+  pendientes, una tarea por pantalla (Cobrar y Caja por separado, ficha del
+  hilo, pedido con botones), un solo nombre por cosa, y lo que hoy no se ve.
+  NADA DE ESO ESTÁ APLICADO: el usuario decide. Trae cuatro preguntas.
+
+LAS PRUEBAS EN PRODUCCIÓN AHORA SOLO BORRAN LO SUYO
+  `scripts/_propios.js`: las 8 suites que limpiaban con `nuevos(tabla)` —todo lo
+  creado durante la corrida— ahora borran solo lo nuevo que lleva el prefijo
+  TMP o cuelga de algo que lo lleva. Una venta real hecha mientras corren ya no
+  se borraría. Suite nueva: `e2e-edicion-catalogo.js` (19). Comprobaciones
+  nuevas en caja (billete, tarjeta de más, retiros), apartados (la caja no vende
+  lo apartado), checkout (pagado deja el pago cobrado) y remesas (el kardex).
+
+CÓMO SE COMPROBÓ
+  · Las 17 E2E contra producción: todas OK. Foto de la base antes y después:
+    IDÉNTICA. (El servidor local se cortó una vez a media corrida; las
+    limpiezas corrieron igual y no quedó nada.)
+  · 117 pruebas unitarias (11 nuevas: el punto de venta no tenía ninguna, y
+    traspasos). Build sin advertencias.
+  · Mirado en Chrome headless: cobro, caja, retiro, presentaciones, expediente,
+    traspaso, kardex, alta de producto, pedido, menú del gerente, campana del
+    cajero y tienda. NO se confirmó nada desde la pantalla.
+  · NO se aplicó la migración pendiente ni se desplegó. Ningún cambio de esta
+    entrada necesita migración.
+
+LO QUE QUEDA ABIERTO
+  · El efectivo de un pedido EN LÍNEA que se paga en el mostrador no entra a
+    ningún turno: se marca pagado, pero el corte no lo espera. Hay que decidir
+    si se cobra por la caja.
+  · El corte con diferencia solo se vio en la prueba unitaria: cerrar un turno
+    de verdad para mirarlo habría tocado la caja real.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-01 (3) · E2E en producción y revisión completa en el navegador
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "quita igual la 12, no apliques migración ya que aún se van a hacer más
+   cambios, y ahora corre las pruebas en producción sin problema, y si puedes
+   abre el navegador y corre una prueba general en todo buscando algún tipo de
+   bug; si tienes la solución la aplicas y si no me lo dejas".
+
+PUNTO 12
+  Quitados `tipos-cliente/model.precioDeVariante`, `ESTADOS_TRASPASO` y el
+  `ESTADOS` de nómina: nadie los usaba.
+
+LAS E2E EN PRODUCCIÓN (las 16, todas OK)
+  · Antes de correrlas: apartados, clientes-credito y costo-margen vendían en
+    el turno abierto de la primera caja activa, que en producción es el turno
+    REAL 88 de Cuautepec. Y su limpieza borraba movimientos de caja por
+    `referencia_id IN (pedidos de prueba)` sin filtrar el turno: ese campo a
+    veces guarda un abono de crédito, así que podía borrar uno real. Ahora abren
+    su PROPIA caja temporal (TMPAP/TMPCC/TMPCM2 Caja) y borran por turno.
+  · Se tomó una foto de la base (filas y suma de ids de las 50 tablas, saldos
+    de inventario, movimientos de los turnos abiertos, bultos, configuración)
+    antes y después: quedó IDÉNTICA.
+  · Riesgo que queda (no se cambió): 8 suites limpian con `nuevos(tabla)`, que
+    borra todo lo creado durante la corrida. Con la tienda vendiendo, se
+    llevarían esa venta. Ver Pendientes en CLAUDE.md.
+
+LA REVISIÓN EN EL NAVEGADOR
+  Chrome headless manejado por su protocolo de depuración (script en el
+  scratchpad, no en el repo), contra el backend local en el puerto 3210 y el
+  build de producción servido con proxy a /api. Sesión con un token firmado con
+  la llave del .env local, igual que las E2E. Cuatro pasadas: todas las
+  pantallas (admin, cajero, cliente, visitante), los modales, el panel de
+  cancelación de un apartado SIN confirmar, el POS buscando y armando carrito,
+  la tienda hasta el checkout SIN confirmar, y ancho de celular. Ninguna
+  pantalla con errores de consola ni peticiones fallidas.
+
+LO QUE SE ENCONTRÓ Y SE CORRIGIÓ
+  1. COMPROBANTE → PAGO DUPLICADO (el más serio). Subir la captura a un
+     apartado, o a una venta ya cobrada en efectivo, no encontraba pago al cual
+     pegarla y creaba OTRO por el total: el apartado quedaba "liquidado" con
+     dinero que no entró. Ahora: apartado → 409 APARTADO_USA_ABONOS; se pega a
+     una transferencia ya cobrada si la hay; si no, se crea solo por lo que
+     FALTA, y si no falta nada → 409 PEDIDO_YA_PAGADO. La pantalla ya no ofrece
+     "Subir captura" donde no aplica. +5 comprobaciones E2E.
+  2. "HILO PARADO" contaba presentaciones como hilos ("15 hilos" eran 10) y la
+     gráfica repetía "BLANCO 2/30" (paquete y cono sin rotular). Ahora cuenta
+     por producto y el cono dice "· cono".
+  3. EL CALIBRE no aparecía en el catálogo de la tienda (dos tarjetas "ROJO"),
+     en el carrito ni en el checkout ("ROJO (Paquete)"), en el carrito del POS
+     ni en "Más vendidos" (que además usaba el SKU y decía "unidades").
+  4. EL CHECKOUT decía "Comprando como cliente": la tienda nunca cargaba el
+     perfil, así que tras recargar no sabía el nombre.
+  5. EL EXPEDIENTE mostraba los ajustes negativos como "+-$17,941.79".
+  6. PRESENTACIONES decía que el cono "se vende por pieza" y "$130 por cono":
+     se vende por kilo al precio del paquete.
+  7. EL DETALLE DEL PEDIDO decía "1.496 kg por paquete" en un cono.
+  8. "MIS PEDIDOS" mostraba la clave interna (en_preparacion) y montos sin
+     separador de miles.
+  9. REPORTES: "Más vendidos" es de SIEMPRE aunque está bajo el filtro de
+     fechas (ahora lo dice); cantidades con ceros de relleno; montos sin miles.
+  10. EL POS: el buscador de cliente salía angosto y cortaba su texto.
+  11. LAS CELDAS DE ACCIONES (12 tablas) tenían display:flex: botones partidos
+      en dos líneas y bordes de renglón desalineados.
+  12. EL PANEL EN CELULAR se salía de la pantalla (~1,600 px de ancho) por el
+      menú en una sola fila.
+  13. El selector "Ordenar" de Apartados no tenía estilo; las píldoras partían
+      "kg" en otra línea.
+
+LO QUE NO SE CAMBIÓ (decisión del usuario, ver la respuesta del 2026-10-01)
+  · La tienda se llama "Hilos & Co." y el pie dice "Tienda en línea · Demo",
+    escrito fijo en tienda-layout.html.
+  · La campana manda a "Cómo va el negocio" a un CAJERO, que no puede verlo; y
+    el menú se lo oculta al GERENTE aunque el backend sí lo deja entrar.
+  · "Más vendidos" podría filtrarse por las fechas del reporte.
+  · El cliente no puede abrir el detalle de un pedido en "Mis pedidos".
+
+CÓMO SE PROBÓ
+  · Frontend: compila sin advertencias, 106/106 pruebas (+3 del comprobante).
+  · Las E2E afectadas se volvieron a correr después de cada cambio de backend:
+    comprobante-pago, apartados, checkout-online, asistente, costo-margen,
+    clientes-credito. Foto de la base al final: idéntica a la del principio.
+  · Cada arreglo de pantalla se volvió a capturar y se miró.
+
+-------------------------------------------------------------------------------
+ 2026-10-01 (2) · Auditoría: cinco fallas corregidas y limpieza de lo que no se usa
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "verifica todo el sistema y revisa qué se ocupa y qué no y me lo muestras, yo
+   veré si lo quitamos o no". Se le mostró una lista numerada (33 puntos) y
+  eligió: corregir primero las fallas, y quitar los puntos 11, 16, 18, 20, 21,
+  22, 25 y 27. Pidió NO quitar 13, 14 y 15 (mínimo de stock, retiros de caja y
+  ajuste de deuda: se les hará pantalla). El 12 quedó pendiente de confirmar:
+  lo puso en las dos listas.
+
+LA VERIFICACIÓN
+  Compila sin advertencias, 91/91 pruebas unitarias, los 87 archivos del
+  backend cargan (133 rutas), dependencias limpias. Las E2E NO se corrieron: el
+  .env apunta a producción y la base local ya no tiene su .env.local.respaldo.
+
+LAS CINCO FALLAS
+  1. APARTADOS por el cambio de estado genérico (PATCH /pedidos/:id/estado):
+     · un apartado vigente se podía pasar a 'pagado' o 'entregado' sin cobrar
+       lo que faltaba y SIN descontar: quedaba entregado y apartado para siempre;
+     · cancelado, no se podía reactivar como 'apartado' (no estaba en la lista
+       de estados), así que quedaba 'pendiente' sin reservar ni descontar, y el
+       bloque que vuelve a apartar nunca corría.
+     Ahora `_validarCaminoApartado` (pedidos/model.js) lo impide antes de mover
+     nada: APARTADO_SE_ENTREGA, APARTADO_NO_ENTREGADO, REACTIVAR_COMO_APARTADO,
+     NO_SE_PUEDE_APARTAR. El selector del detalle del pedido solo ofrece lo que
+     se puede y el panel de cancelación de un apartado ya no dice que "regresa
+     al inventario".
+  2. "POR REABASTECER" contaba hilos sin mínimo: la vista v_alertas_stock no
+     tenía el `stock_minimo > 0` que sí tienen Inventario y la campana.
+     Migración 2026-10_alertas_stock_con_minimo.sql (SIN APLICAR todavía).
+  3. NO HABÍA DÓNDE CAPTURAR EL MÍNIMO: el endpoint existía, ninguna pantalla lo
+     llamaba, y la columna se escondía justo cuando no había mínimos. Para los
+     hilos reales la alerta nunca sonaba. Modal nuevo en Inventario.
+  4. limpiar-para-pruebas.js vaciaba la base sin la protección contra
+     producción, con el .env apuntando al servidor. Se BORRÓ (era de la
+     limpieza única del 2026-07-26 y ya no conocía credito_movimientos).
+  5. DESPLIEGUE: el tar solo excluía `.env` exacto (un .env.produccion se
+     habría subido al servidor) y el rollback manual del README no excluía
+     uploads/, así que habría borrado los comprobantes.
+
+QUÉ SE QUITÓ
+  · 18 rutas que nadie llamaba (133 → 115): GET /api/v1/, GET por id de
+    categorías, tipos de cliente, variantes, almacenes, remesas y periodos de
+    nómina; PUT /variantes/:id; GET, GET :id y PUT de imágenes;
+    GET /almacenes/matriz; /analisis/cobranza, /clientes-enfriados,
+    /hilo-muerto y /margen (llegan juntas en /analisis/tablero);
+    GET /clientes/por-cobrar y GET /clientes/:id/estado-cuenta (lo dan el
+    listado con con_saldo y el expediente). Con ellas, los handlers, y las
+    funciones de service/model que solo servían a esas rutas
+    (imagenes listar/actualizar, almacenes matriz/idMatriz, remesas obtener,
+    clientes porCobrar/conSaldo).
+    SE CONSERVÓ clientes/service.estadoDeCuenta: lo devuelve el ajuste de deuda.
+  · Frontend: la pantalla /dashboard (la de prueba del primer día), 13 métodos
+    de servicio sin llamadas —entre ellos registrarUsuario, que apuntaba a una
+    ruta que ya no existía, y crearTraspaso, copia de solicitarTraspaso—, el
+    signal `autenticado`, 3 imports y 6 miembros sin uso, environment.production.
+    SE CONSERVÓ clientes.service.ajustar (punto 15) e inventario.configurar (lo
+    usa el modal nuevo).
+  · backend/.gitkeep, frontend/README.md (el genérico de Angular) y
+    frontend/.vscode/ (ahora ignorado entero).
+
+ARCHIVOS
+  NUEVO   db/migrations/2026-10_alertas_stock_con_minimo.sql
+  MODIF   db/schema_mysql.sql                      la vista con el filtro nuevo
+  MODIF   backend/scripts/estado-migraciones.js    huella `vista~texto` para
+                                                   migraciones que solo cambian
+                                                   una vista
+  MODIF   backend/src/modules/pedidos/{model,routes}.js   falla 1
+  MODIF   backend/src/routes.js y 9 módulos (rutas, controllers, services,
+          models) la limpieza de rutas
+  MODIF   backend/scripts/e2e-apartados.js         +8 comprobaciones (atajo a
+                                                   entregado, reactivar)
+  MODIF   backend/scripts/e2e-clientes-credito.js  lee el expediente y el
+                                                   listado en vez de las rutas
+                                                   quitadas
+  MODIF   backend/scripts/e2e-costo-margen.js      el margen, desde el tablero
+  BORRADO backend/scripts/limpiar-para-pruebas.js, backend/.gitkeep
+  NUEVO   frontend/src/app/features/admin/inventario/minimo-modal.{ts,html,spec.ts}
+  MODIF   frontend/.../inventario/inventario.{ts,html}    columna Mínimo siempre
+  MODIF   frontend/.../pedidos/pedido-detalle.{ts,html,spec.ts}   falla 1
+  MODIF   frontend/src/app/core/services/*.ts, app.routes.ts, environments/*
+  BORRADO frontend/src/app/features/dashboard/, frontend/README.md,
+          frontend/.vscode/
+  MODIF   deploy/deploy.sh, deploy/README.md       falla 5
+
+CÓMO SE PROBÓ
+  · Frontend: compila sin advertencias, 103/103 pruebas (91 + 4 del pedido +
+    8 del modal del mínimo).
+  · Backend: sintaxis de todo, la app carga con 115 rutas, y cambiarEstado con
+    una conexión SIMULADA (19 comprobaciones: rechaza los atajos sin escribir
+    nada, re-aparta sin descontar ni tocar el kardex, reingresa el anticipo,
+    y lo de siempre sigue igual).
+  · El tar del despliegue, contra un árbol de prueba: excluye los .env.* y
+    uploads/ de la raíz, conserva el resto.
+  · NO se corrieron las E2E (no hay base local configurada) ni se abrió nada en
+    el navegador.
+
+PENDIENTE
+  · Aplicar la migración 2026-10_alertas_stock_con_minimo.sql y desplegar.
+  · Correr e2e-apartados, e2e-clientes-credito y e2e-costo-margen contra una
+    base local.
+  · Confirmar con el usuario el punto 12 (exports que solo se usan dentro de su
+    propio archivo).
 
 -------------------------------------------------------------------------------
  2026-10-01 · Muestra para enseñar el sistema (datos de prueba en producción)

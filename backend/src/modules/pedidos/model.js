@@ -13,7 +13,11 @@ const { hoyLocal } = require('../../utils/fechas');
 // UNA transacción: pedidos + pedido_detalle + pagos + descuento de inventario +
 // movimientos_inventario (salida) + (si POS) movimientos_caja (venta).
 
-const ESTADOS = ['pendiente', 'pagado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto'];
+// 'apartado' es destino válido SOLO para reactivar un apartado cancelado; lo
+// vigila `_validarCaminoApartado`.
+const ESTADOS = [
+  'apartado', 'pendiente', 'pagado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto',
+];
 // Cómo llega la mercancía al cliente. El mostrador siempre es 'recoger'.
 const METODOS_ENTREGA = ['recoger', 'envio'];
 
@@ -72,6 +76,24 @@ async function _resolverCupon(conn, codigo, subtotal, bloquear = true) {
  *             ese caso el backend NO acepta el costo de envío ni los pagos:
  *             los calcula y los ignora respectivamente (ver abajo).
  */
+/**
+ * Kilos de una presentación que están APARTADOS en un almacén: los de los
+ * apartados vigentes que todavía no se entregan. Se calcula de los pedidos y no
+ * se lee de `inventario.cantidad_reservada`, que mezcla los apartados con lo
+ * pedido por los traspasos.
+ */
+async function _apartadoEnAlmacen(conn, varianteId, almacenId) {
+  const [[r]] = await conn.query(
+    `SELECT COALESCE(SUM(pd.cantidad), 0) AS kg
+       FROM pedido_detalle pd
+       JOIN pedidos p ON p.id = pd.pedido_id
+      WHERE p.estado = 'apartado' AND p.inventario_descontado = 0
+        AND p.almacen_id = :a AND pd.variante_id = :v`,
+    { v: varianteId, a: almacenId }
+  );
+  return Number(r.kg);
+}
+
 async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {}) {
   const esPOS = datos.canal === 'punto_venta';
   const paraBloquear = bloquear ? 'FOR UPDATE' : '';
@@ -161,7 +183,7 @@ async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {
     const [vrows] = await conn.query(
       `SELECT pv.id, pv.precio, pv.precio_oferta, pv.presentacion, pv.activo,
               pv.costo,
-              p.nombre AS producto, imp.porcentaje AS imp_pct,
+              p.nombre AS producto, p.grosor_calibre AS calibre, imp.porcentaje AS imp_pct,
               (SELECT vp.precio FROM variante_precios vp
                 WHERE vp.variante_id = pv.id AND vp.tipo_cliente_id = :tipo_cliente) AS precio_tipo
          FROM producto_variantes pv
@@ -181,15 +203,26 @@ async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {
       { v: item.variante_id, a: almacenId }
     );
     const existente = irows[0] ? Number(irows[0].cantidad) : 0;
-    if (existente < item.cantidad) {
+    // Lo apartado por clientes sigue en la bodega pero ya tiene dueño: no se le
+    // vende a otro. Si se vendiera, el día que vengan por su apartado no habría
+    // con qué entregarlo. Se cuenta APARTE de `cantidad_reservada` porque esa
+    // columna también lleva lo pedido por un traspaso, y esa reserva es blanda:
+    // el cliente que está enfrente manda sobre una sucursal que pidió.
+    const apartado = await _apartadoEnAlmacen(conn, item.variante_id, almacenId);
+    const libre = round3(existente - apartado);
+    if (libre + 0.0001 < item.cantidad) {
       // Mensaje en términos del producto, no del id interno: lo lee el cliente.
-      const nombre = `${v.producto}${v.presentacion ? ' · ' + v.presentacion : ''}`;
+      // Con el calibre: "MARINO OSCURO · Paquete" no dice si es el 1/30 o el 2/30.
+      const nombre = `${v.producto}${v.calibre ? ' ' + v.calibre : ''}${v.presentacion ? ' · ' + v.presentacion : ''}`;
       throw new AppError(
         409,
         'STOCK_INSUFICIENTE',
-        existente === 0
-          ? `"${nombre}" está agotado.`
-          : `Solo quedan ${existente} de "${nombre}" y pediste ${item.cantidad}.`
+        apartado > 0
+          ? `De "${nombre}" hay ${round3(existente)}, pero ${round3(apartado)} están apartados ` +
+            `para otros clientes: quedan ${Math.max(0, libre)} para vender y pediste ${item.cantidad}.`
+          : existente === 0
+            ? `"${nombre}" está agotado.`
+            : `Solo quedan ${existente} de "${nombre}" y pediste ${item.cantidad}.`
       );
     }
 
@@ -344,6 +377,35 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       estado = 'pagado';
     }
 
+    // Lo que se ASIENTA como pago es lo que se COBRÓ, no lo que entregó el
+    // cliente. Paga una venta de $432 con un billete de $500: se le dan $68 de
+    // cambio, y en `pagos` quedan $432. Si quedaran $500, al cancelar la venta
+    // la caja devolvería $500 —`_efectivoDelPedido` suma esos pagos— y el corte
+    // saldría con $68 de faltante que nadie se llevó.
+    // Solo el efectivo da cambio: con tarjeta o transferencia se cobra justo, y
+    // un pago así por encima del total es un error de captura.
+    const esEfectivo = {};
+    let cambio = 0;
+    if (pagos.length) {
+      const ids = pagos.map((p) => p.metodo_pago_id);
+      const [mrows] = await conn.query('SELECT id, nombre FROM metodos_pago WHERE id IN (:ids)', { ids });
+      for (const m of mrows) esEfectivo[m.id] = (m.nombre || '').toLowerCase().includes('efectivo');
+
+      const porCobrar = round2(total - aCredito);
+      const sobra = round2(pagado - porCobrar);
+      if (sobra > 0.0001) {
+        const efectivoRecibido = round2(
+          pagos.filter((p) => esEfectivo[p.metodo_pago_id]).reduce((s, p) => s + Number(p.monto), 0)
+        );
+        if (sobra > efectivoRecibido + 0.0001) {
+          throw new AppError(422, 'PAGO_EXCEDE_TOTAL',
+            `Se registran $${pagado.toFixed(2)} para cobrar $${porCobrar.toFixed(2)}, y solo el ` +
+            'efectivo da cambio: con tarjeta o transferencia se cobra el importe justo.');
+        }
+        cambio = sobra;
+      }
+    }
+
     if (intencionPago) {
       const [mrows] = await conn.query(
         'SELECT id, activo FROM metodos_pago WHERE id = :id LIMIT 1',
@@ -456,21 +518,25 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
 
     // 7. Pagos. Se acumula lo pagado con métodos NO-efectivo (tarjeta, etc.)
     //    para deducir el efectivo neto que queda en la caja.
+    //    El cambio se le resta al efectivo (ver arriba): lo que queda asentado
+    //    es lo cobrado.
     let noEfectivo = 0;
-    if (pagos.length) {
-      const ids = pagos.map((p) => p.metodo_pago_id);
-      const [mrows] = await conn.query('SELECT id, nombre FROM metodos_pago WHERE id IN (:ids)', { ids });
-      const nombrePorId = Object.fromEntries(mrows.map((m) => [m.id, m.nombre]));
-      for (const p of pagos) {
-        await conn.query(
-          `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
-           VALUES (:pedido_id, :metodo_pago_id, :monto, 'completado', :ref)`,
-          { pedido_id: pedidoId, metodo_pago_id: p.metodo_pago_id, monto: p.monto, ref: p.referencia_transaccion ?? null }
-        );
-        if (!(nombrePorId[p.metodo_pago_id] || '').toLowerCase().includes('efectivo')) {
-          noEfectivo = round2(noEfectivo + Number(p.monto));
-        }
+    let cambioPorDar = cambio;
+    for (const p of pagos) {
+      let monto = round2(Number(p.monto));
+      if (cambioPorDar > 0 && esEfectivo[p.metodo_pago_id]) {
+        const quita = Math.min(monto, cambioPorDar);
+        monto = round2(monto - quita);
+        cambioPorDar = round2(cambioPorDar - quita);
       }
+      // Un billete que fue todo cambio no es un pago.
+      if (monto <= 0) continue;
+      await conn.query(
+        `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
+         VALUES (:pedido_id, :metodo_pago_id, :monto, 'completado', :ref)`,
+        { pedido_id: pedidoId, metodo_pago_id: p.metodo_pago_id, monto, ref: p.referencia_transaccion ?? null }
+      );
+      if (!esEfectivo[p.metodo_pago_id]) noEfectivo = round2(noEfectivo + monto);
     }
 
     // Cómo dijo el cliente que va a pagar. Queda como pago 'pendiente' por el
@@ -561,7 +627,12 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       await conn.query('UPDATE cupones SET usos_actuales = usos_actuales + 1 WHERE id = :id', { id: cuponId });
     }
 
-    return _obtenerConn(conn, pedidoId);
+    // El cambio no se guarda en ningún lado —no es dinero de la tienda— pero
+    // el ticket lo necesita, y calcularlo en la pantalla con un total que
+    // pudo cambiar al cobrar daría otra cifra.
+    const pedido = await _obtenerConn(conn, pedidoId);
+    pedido.cambio = cambio;
+    return pedido;
   });
 }
 
@@ -689,6 +760,50 @@ async function listar({ canal, estado, cliente_id, limit, offset }) {
 
 /** Un pedido cancelado o devuelto ya no retiene la mercancía ni el dinero. */
 const INACTIVOS = ['cancelado', 'devuelto'];
+
+/**
+ * Un APARTADO que no se ha entregado (`inventario_descontado = 0`) tiene su
+ * propio camino, y el cambio de estado genérico no puede saltárselo:
+ *  · Se ENTREGA con `POST /pedidos/:id/entregar`, que exige que esté liquidado
+ *    y es donde por fin se descuenta. Pasarlo a 'pagado' o 'entregado' desde
+ *    aquí dejaba la mercancía entregada sin salir del inventario y apartada
+ *    para siempre.
+ *  · Se CANCELA, que libera la reserva. "Devolver" no aplica: nunca se entregó.
+ *  · Cancelado, se REACTIVA como 'apartado', que vuelve a reservar. Como
+ *    'pendiente' quedaba una venta viva sin mercancía apartada ni descontada.
+ * Y al revés: un pedido que ya descontó no puede volverse 'apartado'.
+ * Se valida antes de mover nada.
+ */
+function _validarCaminoApartado(pedido, estado) {
+  const antes = pedido.estado;
+  if (estado === antes) return;
+  const sinEntregar = !Number(pedido.inventario_descontado);
+  const num = pedido.numero_pedido;
+  const estabaInactivo = INACTIVOS.includes(antes);
+
+  if (estado === 'apartado') {
+    if (!sinEntregar || !estabaInactivo) {
+      throw new AppError(409, 'NO_SE_PUEDE_APARTAR',
+        `${num} no es un apartado cancelado: solo esos pueden volver a apartarse. ` +
+        'Para apartar mercancía, hazlo desde el punto de venta.');
+    }
+    return;
+  }
+  if (!sinEntregar) return;
+
+  if (estado === 'devuelto') {
+    throw new AppError(409, 'APARTADO_NO_ENTREGADO',
+      `${num} es un apartado que no se ha entregado: no hay nada que devolver. Cancélalo.`);
+  }
+  if (!INACTIVOS.includes(estado)) {
+    throw estabaInactivo
+      ? new AppError(409, 'REACTIVAR_COMO_APARTADO',
+        `${num} era un apartado: se reactiva como "apartado", que vuelve a guardar la mercancía.`)
+      : new AppError(409, 'APARTADO_SE_ENTREGA',
+        `${num} es un apartado: se entrega desde Apartados, que exige que esté liquidado ` +
+        'y descuenta el inventario.');
+  }
+}
 
 /**
  * Efectivo que la caja recibió por este pedido. Solo cuenta los pagos en
@@ -854,6 +969,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     if (!prev[0]) throw new AppError(404, 'NO_ENCONTRADO', 'Pedido no encontrado');
 
     const pedido = prev[0];
+    _validarCaminoApartado(pedido, estado);
     const { estado: antes, numero_pedido: numero, almacen_id: almacenId } = pedido;
     const eraInactivo = INACTIVOS.includes(antes);
     const esInactivo = INACTIVOS.includes(estado);
@@ -1115,6 +1231,19 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
       );
     }
 
+    // Un pedido en línea que se da por PAGADO a mano —el cliente pagó en
+    // efectivo en el mostrador— tiene que dejar su pago como cobrado. Si no, el
+    // pedido decía "pagado" y su pago seguía "pendiente": el detalle mostraba
+    // que faltaba dinero y una captura del depósito después crearía otro pago.
+    // Solo al salir de 'pendiente' hacia adelante; cancelar no lo toca.
+    if (antes === 'pendiente' && POR_COBRADO.includes(estado) && pedido.canal === 'tienda_linea') {
+      await conn.query(
+        `UPDATE pagos SET estado = 'completado'
+          WHERE pedido_id = :id AND estado IN ('pendiente', 'procesando')`,
+        { id }
+      );
+    }
+
     // El UPDATE del estado va al final: si algo de arriba falló (p.ej. no hay
     // existencias para reactivar), el pedido no se mueve.
     await conn.query('UPDATE pedidos SET estado = :estado WHERE id = :id', { estado, id });
@@ -1122,6 +1251,9 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     return _obtenerConn(conn, id);
   });
 }
+
+/** Estados que dicen que el pedido ya se cobró. */
+const POR_COBRADO = ['pagado', 'en_preparacion', 'enviado', 'entregado'];
 
 /**
  * Lo que costaría el pedido, sin crearlo. Es lo que el checkout consulta para
@@ -1200,24 +1332,48 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
         `${pedido.numero_pedido} está ${pedido.estado}. Reactívalo antes de registrar el pago.`);
     }
 
+    // Un apartado se paga con ABONOS (Apartados → Abonar), que llevan la cuenta
+    // de lo que falta. Pegarle una captura creaba un pago por el TOTAL, y el
+    // apartado quedaba "liquidado" con dinero que nunca entró.
+    if (pedido.estado === 'apartado') {
+      await archivos.borrar(CARPETA_COMPROBANTES, guardado.nombre);
+      throw new AppError(409, 'APARTADO_USA_ABONOS',
+        `${pedido.numero_pedido} es un apartado: registra el depósito como un abono en ` +
+        'Apartados, con el método Transferencia, para que cuente contra lo que falta.');
+    }
+
     // A qué pago se le pega la captura, por orden de preferencia:
     //   1. el que YA tiene un comprobante  → se está reemplazando la captura;
     //   2. el que está esperando cobro     → se está registrando el pago;
-    //   3. ninguno                         → se crea uno por el total.
+    //   3. una transferencia ya cobrada    → solo se le adjunta la prueba;
+    //   4. ninguno                         → se crea uno por lo que FALTA.
     // El paso 1 importa: sin él, subir una segunda captura creaba un pago NUEVO
     // (el primero ya estaba 'completado' y no lo encontraba), y el pedido
-    // acababa con el doble de pagos registrados.
+    // acababa con el doble de pagos registrados. Los pasos 3 y 4, por lo mismo:
+    // en una venta ya cobrada se creaba otro pago por el total.
     const [pgrows] = await conn.query(
-      `SELECT id FROM pagos
-        WHERE pedido_id = :id
-          AND (comprobante_archivo IS NOT NULL OR estado IN ('pendiente', 'procesando'))
-        ORDER BY (comprobante_archivo IS NOT NULL) DESC, id
+      `SELECT pg.id FROM pagos pg
+         JOIN metodos_pago mp ON mp.id = pg.metodo_pago_id
+        WHERE pg.pedido_id = :id
+          AND (pg.comprobante_archivo IS NOT NULL
+               OR pg.estado IN ('pendiente', 'procesando')
+               OR (pg.estado = 'completado' AND LOWER(mp.nombre) LIKE '%transferencia%'))
+        ORDER BY (pg.comprobante_archivo IS NOT NULL) DESC,
+                 (pg.estado IN ('pendiente', 'procesando')) DESC, pg.id
         LIMIT 1 FOR UPDATE`,
       { id: pedidoId }
     );
     let pagoId = pgrows[0]?.id ?? null;
 
     if (!pagoId) {
+      const cobrado = await _abonado(conn, pedidoId);
+      const falta = round2(Number(pedido.total) - cobrado);
+      if (falta <= 0.004) {
+        await archivos.borrar(CARPETA_COMPROBANTES, guardado.nombre);
+        throw new AppError(409, 'PEDIDO_YA_PAGADO',
+          `${pedido.numero_pedido} ya está cobrado completo y no tiene un pago por ` +
+          'transferencia al cual pegar la captura.');
+      }
       const [mrows] = await conn.query(
         `SELECT id FROM metodos_pago
           WHERE activo = 1 AND LOWER(nombre) LIKE '%transferencia%' LIMIT 1`
@@ -1230,7 +1386,7 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
       const [ins] = await conn.query(
         `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado)
          VALUES (:pedido, :metodo, :monto, 'pendiente')`,
-        { pedido: pedidoId, metodo: mrows[0].id, monto: pedido.total }
+        { pedido: pedidoId, metodo: mrows[0].id, monto: falta }
       );
       pagoId = ins.insertId;
     }

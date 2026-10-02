@@ -3,10 +3,11 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { AuthService } from '../../core/services/auth.service';
 import { NotificacionesService } from '../../core/services/notificaciones.service';
 import { FechaPipe } from '../../shared/fecha.pipe';
+import { CantidadPipe } from '../../shared/cantidad.pipe';
 
 @Component({
   selector: 'app-admin-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FechaPipe],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FechaPipe, CantidadPipe],
   templateUrl: './admin-layout.html',
   styleUrl: './admin-layout.scss',
 })
@@ -40,13 +41,22 @@ export class AdminLayout {
     return this.sesion()?.rol === 'administrador';
   }
 
+  /**
+   * Administrador o gerente: los que pueden ver "Cómo va el negocio". El
+   * servidor ya dejaba entrar al gerente, pero el menú se lo escondía; y la
+   * campana mandaba al cajero a esa pantalla, que le contesta "sin permiso".
+   */
+  esJefe(): boolean {
+    const rol = this.sesion()?.rol;
+    return rol === 'administrador' || rol === 'gerente';
+  }
+
   alternar(): void {
     this.abierto.update((v) => !v);
     // Al abrirla se refresca: si acabas de surtir algo, el número debe bajar.
     if (this.abierto()) this.notif.refrescar();
   }
 
-  /** Al tocar un pendiente se va a su pantalla y se cierra el panel. */
   /** Dinero para los avisos de la campana. */
   dinero(v: unknown): string {
     return Number(v ?? 0).toLocaleString('es-MX', {
@@ -56,6 +66,7 @@ export class AdminLayout {
     });
   }
 
+  /** Al tocar un pendiente se va a su pantalla y se cierra el panel. */
   irA(ruta: string): void {
     this.abierto.set(false);
     this.router.navigateByUrl(ruta);

@@ -5,10 +5,11 @@ import { VentasService } from '../../../core/services/ventas.service';
 import { CanalVenta, EstadoPedido, Pedido } from '../../../core/models/ventas.models';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { ApiError } from '../../../core/models/auth.models';
+import { DineroPipe } from '../../../shared/dinero.pipe';
 
 @Component({
   selector: 'app-pedidos-list',
-  imports: [FormsModule, RouterLink, FechaPipe],
+  imports: [FormsModule, RouterLink, FechaPipe, DineroPipe],
   templateUrl: './pedidos-list.html',
 })
 export class PedidosList {

@@ -28,7 +28,7 @@
         <div class="previa-calculo">
           <div class="renglon">
             <span>
-              <b>{{ pb.paquete.producto }}</b>
+              <b>{{ pb.paquete.producto }}{{ pb.paquete.calibre ? ' ' + pb.paquete.calibre : '' }}</b>
               <span class="muted"> · bulto {{ pb.bulto.codigo }}</span>
               @if (pb.bulto.lote) { <span class="muted"> · lote {{ pb.bulto.lote }}</span> }
             </span>
@@ -106,7 +106,7 @@
               Cono a producir
               <select [(ngModel)]="manual.cono_id">
                 @for (c of conos(); track c.id) {
-                  <option [ngValue]="c.id">{{ c.sku }} · {{ c.producto }}</option>
+                  <option [ngValue]="c.id">{{ c.producto }}{{ c.calibre ? ' ' + c.calibre : '' }} · {{ c.sku }}</option>
                 }
               </select>
               @if (conoSel(); as c) {
@@ -199,7 +199,7 @@
           <tbody>
             @for (c of ultimas(); track c.id) {
               <tr>
-                <td>{{ c.producto }}</td>
+                <td>{{ c.producto }}{{ c.calibre ? ' ' + c.calibre : '' }}</td>
                 <td class="muted">{{ c.paquete_sku }} → {{ c.cono_sku }}</td>
                 <td class="num">
                   <span class="neg">−{{ c.kg_consumidos | cantidad }}</span>

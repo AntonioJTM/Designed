@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { VentasService } from '../../../core/services/ventas.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Expediente } from '../../../core/models/clientes.models';
 import { MetodoPago, SesionCaja } from '../../../core/models/ventas.models';
 import { ApiError } from '../../../core/models/auth.models';
@@ -26,6 +27,7 @@ export class ClienteExpediente {
   private readonly clientes = inject(ClientesService);
   private readonly ventas = inject(VentasService);
   private readonly route = inject(ActivatedRoute);
+  private readonly auth = inject(AuthService);
 
   readonly exp = signal<Expediente | null>(null);
   readonly cargando = signal(true);
@@ -40,6 +42,18 @@ export class ClienteExpediente {
   montoAbono: number | null = null;
   metodoAbono: number | '' = '';
   referenciaAbono = '';
+
+  // --- Ajuste de la deuda (solo jefes) ---
+  //
+  // Para lo que no es un abono: condonar una deuda, corregir un cargo capturado
+  // de más o agregar uno que faltó. Queda en el libro como 'ajuste' con su
+  // motivo; el cargo original no se borra.
+  readonly esJefe = computed(() => ['administrador', 'gerente'].includes(this.auth.sesion()?.rol ?? ''));
+  readonly ajustando = signal(false);
+  readonly guardandoAjuste = signal(false);
+  sentidoAjuste: 'baja' | 'sube' = 'baja';
+  montoAjuste: number | null = null;
+  motivoAjuste = '';
 
   private readonly id: number;
 
@@ -132,6 +146,58 @@ export class ClienteExpediente {
     this.abonando.set(false);
   }
 
+  abrirAjuste(): void {
+    this.abonando.set(false);
+    this.sentidoAjuste = 'baja';
+    this.montoAjuste = null;
+    this.motivoAjuste = '';
+    this.error.set(null);
+    this.ajustando.set(true);
+  }
+
+  cerrarAjuste(): void {
+    this.ajustando.set(false);
+  }
+
+  /** Cómo quedaría la deuda. Método, no `computed`: lee campos de ngModel. */
+  saldoTrasAjuste(): number {
+    const saldo = this.num(this.exp()?.saldo);
+    const m = Number(this.montoAjuste ?? 0);
+    return Math.round((this.sentidoAjuste === 'baja' ? saldo - m : saldo + m) * 100) / 100;
+  }
+
+  guardarAjuste(): void {
+    const e = this.exp();
+    const m = Number(this.montoAjuste ?? 0);
+    const motivo = this.motivoAjuste.trim();
+    if (!e || !(m > 0)) {
+      this.error.set('Pon de cuánto es el ajuste.');
+      return;
+    }
+    if (motivo.length < 3) {
+      this.error.set('Escribe el motivo: un saldo que cambia sin explicación no se puede aclarar después.');
+      return;
+    }
+    if (this.saldoTrasAjuste() < 0) {
+      this.error.set(`Debe ${this.dinero(e.saldo)}: no se le puede quitar más que eso.`);
+      return;
+    }
+    this.guardandoAjuste.set(true);
+    this.error.set(null);
+    this.clientes.ajustar(e.id, this.sentidoAjuste === 'baja' ? -m : m, motivo).subscribe({
+      next: () => {
+        this.guardandoAjuste.set(false);
+        this.ajustando.set(false);
+        this.mensaje.set(`Ajuste registrado. Ahora debe ${this.dinero(this.saldoTrasAjuste())}.`);
+        this.cargar();
+      },
+      error: (err) => {
+        this.guardandoAjuste.set(false);
+        this.error.set(this.msg(err));
+      },
+    });
+  }
+
   registrarAbono(): void {
     const e = this.exp();
     if (!e || !this.montoAbono || this.montoAbono <= 0) {
@@ -201,6 +267,17 @@ export class ClienteExpediente {
   });
 
   /** Etiqueta del movimiento de crédito, en palabras de la tienda. */
+  /**
+   * El monto con el signo de hacia dónde mueve la deuda: el abono la baja, el
+   * cargo la sube y el ajuste trae su propio signo. Antes se le pegaba un "+" a
+   * todo lo que no fuera abono, y el ajuste negativo salía como "+-$17,941.79".
+   */
+  montoMovimiento(m: { tipo: string; monto: unknown }): string {
+    const n = this.num(m.monto);
+    const efecto = m.tipo === 'abono' ? -Math.abs(n) : n;
+    return (efecto < 0 ? '−' : '+') + this.dinero(Math.abs(efecto));
+  }
+
   etiquetaMovimiento(tipo: string): string {
     return tipo === 'cargo' ? 'Se llevó a crédito'
       : tipo === 'abono' ? 'Abonó'

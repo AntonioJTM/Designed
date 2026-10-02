@@ -28,4 +28,34 @@ function parseBool(valor) {
   return undefined;
 }
 
-module.exports = { parsePagination, paginado, parseBool };
+/**
+ * Búsqueda de un hilo por PALABRAS: cada palabra tiene que aparecer en alguna
+ * de las columnas, en cualquier orden. Así "rojo 2/30" encuentra el ROJO de
+ * calibre 2/30 —el color está en el nombre y el calibre en otra columna— y
+ * "2-30" también, porque el proveedor escribe el calibre con guion.
+ *
+ * Devuelve el pedazo de WHERE y sus parámetros (`:bq0`, `:bq1`…), o null si
+ * no hay nada que buscar. Va con un tope de palabras para que una búsqueda
+ * pegada por error no arme una consulta enorme.
+ */
+function porPalabras(q, columnas) {
+  const palabras = String(q ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 6);
+  if (!palabras.length) return null;
+  const params = {};
+  const partes = palabras.map((w, i) => {
+    params[`bq${i}`] = `%${w}%`;
+    params[`bc${i}`] = `%${w.replace(/-/g, '/')}%`;
+    // La variante con "/" solo cambia algo en el calibre; en las demás columnas
+    // basta la palabra tal cual. Una columna también puede ser una función que
+    // arma su condición con el nombre del parámetro (para un EXISTS).
+    const cond = (c) => {
+      if (typeof c === 'function') return c(`:bq${i}`);
+      if (c.calibre) return `${c.col} LIKE :bc${i}`;
+      return `${c.col ?? c} LIKE :bq${i}`;
+    };
+    return '(' + columnas.map(cond).join(' OR ') + ')';
+  });
+  return { sql: partes.join(' AND '), params };
+}
+
+module.exports = { parsePagination, paginado, parseBool, porPalabras };
