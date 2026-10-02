@@ -19,6 +19,7 @@ const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Se niega a correr contra la base del servidor. Ver el módulo.
 require('./_no-en-produccion');
+const { soloPropios } = require('./_propios');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
@@ -113,10 +114,39 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
     ck('el turno CERRADO no se tocó', (await neto(s.id)) === netoFinal, '$' + (await neto(s.id)) + ' (su corte sigue cuadrado)');
     ck('el dinero salió del turno NUEVO', (await neto(s2.id)) === -300, '$' + (await neto(s2.id)));
     ck('y ahora sí se repuso el inventario', (await stock(v, alm)) === stockAntes + 3, (await stock(v, alm)) + ' kg');
+
+    console.log('\n=== 7. Paga con un billete: se guarda lo COBRADO, no el billete ===');
+    // $400 pagados con $500: el cambio es $100 y no es dinero de la tienda.
+    const netoAntes7 = await neto(s2.id);
+    r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s2.id, items: [{ variante_id: v, cantidad: 4 }], pagos: [{ metodo_pago_id: efe.id, monto: 500 }] });
+    const pedB = r.data?.id;
+    ck('se cobra', r.status === 201, r.status + ' ' + (r.error?.message ?? ''));
+    ck('devuelve el cambio', Number(r.data?.cambio) === 100, '$' + r.data?.cambio);
+    const [pgB] = await db.query('SELECT monto FROM pagos WHERE pedido_id=?', [pedB]);
+    ck('el pago queda por $400, no por $500', pgB.length === 1 && Number(pgB[0].monto) === 400, pgB.map((x) => '$' + x.monto).join(', '));
+    ck('a la caja entran $400', (await neto(s2.id)) === netoAntes7 + 400, '$' + ((await neto(s2.id)) - netoAntes7));
+    await api('PATCH', '/pedidos/' + pedB + '/estado', { estado: 'cancelado' });
+    ck('AL CANCELAR SALEN $400, NO $500', (await neto(s2.id)) === netoAntes7, '$' + ((await neto(s2.id)) - netoAntes7) + ' neto');
+
+    r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s2.id, items: [{ variante_id: v, cantidad: 4 }], pagos: [{ metodo_pago_id: tarj.id, monto: 500 }] });
+    ck('con tarjeta por encima del total: 422 PAGO_EXCEDE_TOTAL', r.status === 422 && r.error?.code === 'PAGO_EXCEDE_TOTAL', r.status + ' ' + r.error?.code);
+
+    console.log('\n=== 8. Retiros e ingresos de efectivo ===');
+    const esperado8 = Number((await api('GET', '/caja/sesiones/' + s2.id)).data.esperado_actual);
+    r = await api('POST', '/caja/sesiones/' + s2.id + '/movimientos', { tipo: 'ingreso', monto: 1000, motivo: 'TMPK cambio' });
+    ck('un ingreso sube lo esperado', Number(r.data?.esperado_actual) === esperado8 + 1000, '$' + r.data?.esperado_actual);
+    r = await api('POST', '/caja/sesiones/' + s2.id + '/movimientos', { tipo: 'retiro', monto: 200 });
+    ck('un retiro SIN motivo: 422', r.status === 422, r.status + ' ' + (r.error?.message ?? ''));
+    r = await api('POST', '/caja/sesiones/' + s2.id + '/movimientos', { tipo: 'retiro', monto: esperado8 + 5000, motivo: 'TMPK de más' });
+    ck('sacar más de lo que hay: 409 EFECTIVO_INSUFICIENTE', r.status === 409 && r.error?.code === 'EFECTIVO_INSUFICIENTE', r.status + ' ' + r.error?.code);
+    r = await api('POST', '/caja/sesiones/' + s2.id + '/movimientos', { tipo: 'retiro', monto: 300, motivo: 'TMPK depósito' });
+    ck('un retiro con motivo baja lo esperado', Number(r.data?.esperado_actual) === esperado8 + 700, '$' + r.data?.esperado_actual);
   } finally {
     console.log('\n=== Limpieza ===');
     await db.query('SET FOREIGN_KEY_CHECKS=0');
-    const nuevos = async (x) => (await db.query('SELECT id FROM ' + x))[0].map((r) => r.id).filter((i) => !foto[x].has(i));
+    // Solo lo NUEVO que sea de la prueba (prefijo TMP): una venta real hecha
+    // mientras corría no se toca. Ver _propios.js.
+    const nuevos = soloPropios(db, foto);
     for (const id of await nuevos('pedidos')) {
       await db.query('DELETE FROM pedido_detalle_bultos WHERE detalle_id IN (SELECT id FROM pedido_detalle WHERE pedido_id=?)', [id]);
       await db.query('DELETE FROM pedido_detalle WHERE pedido_id=?', [id]);

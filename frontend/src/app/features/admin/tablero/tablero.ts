@@ -44,7 +44,6 @@ export class Tablero implements OnInit {
   // --- Filtros. Se aplican al pedir de nuevo, no al teclear. ---
   diasAviso = 30;
   diasSinVenir = 60;
-  diasParado = 90;
 
   /**
    * La rampa ORDINAL de la antigüedad: un solo tono, de claro a oscuro. El orden
@@ -172,7 +171,9 @@ export class Tablero implements OnInit {
     const h = this.datos()?.hilo_muerto;
     if (!h) return [];
     return h.hilos.slice(0, 12).map((x) => ({
-      label: `${x.color}${x.calibre ? ' ' + x.calibre : ''}`,
+      // El cono es otro renglón del MISMO hilo: sin decirlo, "BLANCO 2/30"
+      // salía dos veces y parecía un duplicado.
+      label: `${x.color}${x.calibre ? ' ' + x.calibre : ''}${x.tipo_presentacion === 'cono' ? ' · cono' : ''}`,
       value: Number(x.dinero_parado),
       detalle:
         `${Number(x.kilos).toLocaleString('es-MX', { maximumFractionDigits: 1 })} kg · ` +

@@ -93,8 +93,13 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
       tipo_presentacion: 'paquete', peso_kg: 10, precio: 100,
     })).data.id;
 
-    const caja = (await api('GET', '/caja/cajas')).data.find((c) => c.activo);
-    const almacen = caja.almacen_id;
+    // Caja PROPIA de la prueba, nunca el turno de una caja real: en producción
+    // la primera caja activa tiene un turno de verdad abierto y las ventas de
+    // prueba quedarían en su corte. Va en el almacén donde vende el mostrador.
+    const almacen = (await api('GET', '/caja/cajas')).data.find((c) => c.activo).almacen_id;
+    const caja = (await api('POST', '/caja/cajas', {
+      almacen_id: almacen, nombre: 'TMPAP Caja ' + SUF,
+    })).data;
     await api('POST', '/inventario/movimientos', {
       variante_id: variante, almacen_id: almacen, tipo: 'entrada',
       cantidad: 100, motivo: 'TMPAP alta de prueba',
@@ -145,6 +150,27 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
     ck('lo apartado sale de lo DISPONIBLE',
       cerca(disp.d, tras.cantidad - 20), `${disp.d} disponibles de ${tras.cantidad}`);
 
+    // Y la caja ya no se lo vende a otro. Antes sí: la venta solo miraba la
+    // existencia, y el día que venían por el apartado no había con qué.
+    const libre = Math.round((tras.cantidad - 20) * 1000) / 1000;
+    const venderApartado = await api('POST', '/pedidos', {
+      canal: 'punto_venta', sesion_caja_id: sesion.id,
+      items: [{ variante_id: variante, cantidad: libre + 1 }],
+      pagos: [{ metodo_pago_id: efectivo, monto: 999999 }],
+    });
+    ck('la caja NO vende lo apartado: 409 STOCK_INSUFICIENTE',
+      venderApartado.status === 409 && venderApartado.error?.code === 'STOCK_INSUFICIENTE',
+      venderApartado.status + ' ' + venderApartado.error?.code);
+    ck('y el mensaje dice que está apartado',
+      /apartad/i.test(venderApartado.error?.message ?? ''), venderApartado.error?.message);
+    const otroApartado = await api('POST', '/pedidos', {
+      canal: 'punto_venta', sesion_caja_id: sesion.id, cliente_id: cliente.id, apartado: true,
+      items: [{ variante_id: variante, cantidad: libre + 1 }],
+    });
+    ck('ni se aparta dos veces lo mismo',
+      otroApartado.status === 409 && otroApartado.error?.code === 'STOCK_INSUFICIENTE',
+      otroApartado.status + ' ' + otroApartado.error?.code);
+
     const total = Number(ap.data.total);
     // 20 kg × $100 = $2,000 de subtotal, más el IVA que tenga el impuesto.
     ck('el total del apartado lleva el impuesto',
@@ -152,6 +178,16 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
 
     // --------------------------------------------- 2. Lo que no se permite
     console.log('\n2 · Lo que no se permite');
+    // Subirle la captura de un depósito creaba un pago por el TOTAL y lo daba
+    // por liquidado: un apartado se paga con abonos.
+    const conCaptura = await fetch(`${B}/pedidos/${ap.data.id}/comprobante`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/octet-stream' },
+      body: Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 7)]),
+    }).then(async (x) => ({ status: x.status, ...(await x.json()) }));
+    ck('a un apartado no se le sube captura: se le abona',
+      conCaptura.status === 409 && conCaptura.error?.code === 'APARTADO_USA_ABONOS', conCaptura.error?.code);
+
     const sinLiquidar = await api('POST', `/pedidos/${ap.data.id}/entregar`);
     ck('no se entrega sin liquidar',
       sinLiquidar.status === 409 && sinLiquidar.error.code === 'APARTADO_NO_LIQUIDADO',
@@ -256,6 +292,12 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
     ck('el segundo apartado reserva 15 kg',
       cerca(conApartado.reservada, antesCancel.reservada + 15), conApartado.reservada);
 
+    // El cambio de estado genérico no puede saltarse "Entregar": sin esto el
+    // apartado quedaba entregado sin descontar y apartado para siempre.
+    const atajo = await api('PATCH', `/pedidos/${ap2.data.id}/estado`, { estado: 'entregado' });
+    ck('un apartado no se marca entregado desde el cambio de estado',
+      atajo.status === 409 && atajo.error?.code === 'APARTADO_SE_ENTREGA', atajo.error?.code);
+
     await api('PATCH', `/pedidos/${ap2.data.id}/estado`, { estado: 'cancelado' });
     const trasCancel = await inv(variante, almacen);
     ck('cancelar LIBERA la reserva',
@@ -269,6 +311,34 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
     const yaNoEstá = (await api('GET', '/pedidos/apartados')).data;
     ck('y desaparece de la lista de apartados',
       !yaNoEstá.items.some((x) => x.pedido_id === ap2.data.id));
+
+    // ------------------------------------------------------ 5. Reactivar
+    console.log('\n5 · Reactivar un apartado cancelado');
+    const comoVenta = await api('PATCH', `/pedidos/${ap2.data.id}/estado`, { estado: 'pendiente' });
+    ck('no se reactiva como venta pendiente (quedaría sin apartar ni descontar)',
+      comoVenta.status === 409 && comoVenta.error?.code === 'REACTIVAR_COMO_APARTADO',
+      comoVenta.error?.code);
+
+    const reactivado = await api('PATCH', `/pedidos/${ap2.data.id}/estado`, { estado: 'apartado' });
+    ck('se reactiva como apartado', reactivado.status === 200 && reactivado.data?.estado === 'apartado',
+      reactivado.error?.code ?? reactivado.data?.estado);
+    const trasReactivar = await inv(variante, almacen);
+    ck('y la mercancía se vuelve a apartar',
+      cerca(trasReactivar.reservada, antesCancel.reservada + 15), `reservada ${trasReactivar.reservada}`);
+    ck('sin descontarla', cerca(trasReactivar.cantidad, antesCancel.cantidad),
+      `${antesCancel.cantidad} → ${trasReactivar.cantidad}`);
+    ck('ni tocar el kardex', (await movsDe(ap2.data.id)) === 0);
+    ck('y vuelve a la lista de apartados',
+      (await api('GET', '/pedidos/apartados')).data.items.some((x) => x.pedido_id === ap2.data.id));
+
+    const normal = (await api('GET', `/pedidos/${ap.data.id}`)).data;
+    const aApartar = await api('PATCH', `/pedidos/${ap.data.id}/estado`, { estado: 'apartado' });
+    ck('un pedido que ya descontó no se vuelve apartado',
+      aApartar.status === 409 && aApartar.error?.code === 'NO_SE_PUEDE_APARTAR',
+      `${normal?.estado}: ${aApartar.error?.code}`);
+
+    // Se cancela otra vez para dejar la reserva como estaba antes de limpiar.
+    await api('PATCH', `/pedidos/${ap2.data.id}/estado`, { estado: 'cancelado' });
 
     if (abriYo) await api('POST', `/caja/sesiones/${sesion.id}/cerrar`, { monto_final: 0 });
 
@@ -299,7 +369,6 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
     const pids = [...pedidos];
     if (pids.length) {
       await db.query('DELETE FROM movimientos_inventario WHERE referencia_tipo="pedido" AND referencia_id IN (?)', [pids]);
-      await db.query('DELETE FROM movimientos_caja WHERE referencia_id IN (?)', [pids]);
       await db.query('DELETE FROM pedidos WHERE id IN (?)', [pids]);
     }
     if (cids.length) await db.query('DELETE FROM clientes WHERE id IN (?)', [cids]);
@@ -310,6 +379,18 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
       await db.query('DELETE FROM producto_variantes WHERE id IN (?)', [vids]);
     }
     if (pr.length) await db.query('DELETE FROM productos WHERE id IN (?)', [pr]);
+    // La caja de la prueba con su turno y sus movimientos. Se borra por TURNO y
+    // no por referencia_id: ese campo guarda a veces un pedido y a veces un
+    // abono de crédito, y por número podría alcanzar un movimiento real.
+    const [cjs] = await db.query("SELECT id FROM cajas WHERE nombre LIKE 'TMPAP Caja%'");
+    if (cjs.length) {
+      const [ses] = await db.query('SELECT id FROM sesiones_caja WHERE caja_id IN (?)', [cjs.map((r) => r.id)]);
+      if (ses.length) {
+        await db.query('DELETE FROM movimientos_caja WHERE sesion_caja_id IN (?)', [ses.map((r) => r.id)]);
+        await db.query('DELETE FROM sesiones_caja WHERE id IN (?)', [ses.map((r) => r.id)]);
+      }
+      await db.query('DELETE FROM cajas WHERE id IN (?)', [cjs.map((r) => r.id)]);
+    }
 
     const [[{ n }]] = await db.query(
       "SELECT (SELECT COUNT(*) FROM clientes WHERE nombre LIKE 'TMPAP%') + " +

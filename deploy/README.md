@@ -69,10 +69,14 @@ mano:
 
 ```bash
 ssh -i ~/.ssh/hostinger_vps root@72.60.112.92 \
-  'rsync -a --delete --exclude=.env --exclude=node_modules/ \
+  'rsync -a --delete --exclude=.env --exclude=node_modules/ --exclude=uploads/ \
      /var/www/tienda-hilos/backend.prev/ /var/www/tienda-hilos/backend/ && \
    systemctl restart tienda-hilos-api'
 ```
+
+**No quites el `--exclude=uploads/`:** ahí viven los comprobantes de pago, que
+solo existen en el servidor. Sin esa exclusión, `--delete` dejaría la carpeta
+como estaba en la versión anterior y borraría los comprobantes subidos después.
 
 Para ensayar que el rollback sigue funcionando, sin desplegar código roto:
 

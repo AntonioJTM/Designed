@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ClientesService, OrdenClientes } from '../../../core/services/clientes.service';
 import { Cliente } from '../../../core/models/clientes.models';
 import { ApiError } from '../../../core/models/auth.models';
@@ -22,6 +22,7 @@ import { ClienteFormModal } from './cliente-form-modal';
 })
 export class ClientesList {
   private readonly clientes = inject(ClientesService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly items = signal<Cliente[]>([]);
   readonly total = signal(0);
@@ -46,6 +47,12 @@ export class ClientesList {
   ];
 
   constructor() {
+    // `?deben=1` abre la lista ya filtrada en quién debe, del que más debe al
+    // que menos: es a donde manda la campana a quien no ve el tablero.
+    if (this.route.snapshot.queryParamMap.get('deben') === '1') {
+      this.conSaldo = true;
+      this.orden = 'saldo';
+    }
     this.cargar();
   }
 

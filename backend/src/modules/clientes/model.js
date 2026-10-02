@@ -410,21 +410,6 @@ async function agregarMovimiento(datos, ejecutor = pool) {
   return r.insertId;
 }
 
-/** Quiénes deben, ordenados por lo que deben. Es la pregunta de todos los días. */
-async function conSaldo() {
-  const [rows] = await pool.query(
-    `SELECT s.cliente_id, c.codigo, c.nombre, c.nombre_comercial, c.telefono,
-            s.saldo, s.limite_credito, s.disponible, s.ultimo_abono,
-            (SELECT MAX(p.creado_en) FROM pedidos p
-              WHERE p.cliente_id = c.id AND p.estado NOT IN ${ESTADOS_MUERTOS}) AS ultima_compra
-       FROM v_clientes_saldo s
-       JOIN clientes c ON c.id = s.cliente_id
-      WHERE s.saldo > 0
-      ORDER BY s.saldo DESC`
-  );
-  return rows;
-}
-
 /**
  * Registra un abono del cliente, en UNA transacción.
  *
@@ -640,6 +625,5 @@ module.exports = {
   registrarAbono,
   cargarVentaACredito,
   ajustarCreditoPorPedido,
-  conSaldo,
   SIGNO_CREDITO,
 };

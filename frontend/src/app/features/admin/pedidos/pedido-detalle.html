@@ -74,13 +74,13 @@
               <br />
               <span class="muted mono">{{ d.sku }}</span>
               @if (d.peso_kg) {
-                <br /><span class="muted">{{ d.peso_kg | cantidad: 'kg' }} por paquete</span>
+                <br /><span class="muted">{{ d.peso_kg | cantidad: 'kg' }} {{ d.tipo_presentacion === 'cono' ? 'por cono' : 'por paquete' }}</span>
               }
             </td>
             <td>{{ d.cantidad | cantidad: 'kg' }}</td>
-            <td>${{ d.precio_unitario }}</td>
-            <td>${{ d.impuesto }}</td>
-            <td>${{ d.subtotal }}</td>
+            <td>{{ dinero(d.precio_unitario) }}</td>
+            <td>{{ dinero(d.impuesto) }}</td>
+            <td>{{ dinero(d.subtotal) }}</td>
           </tr>
 
           <!--
@@ -118,11 +118,11 @@
       </tbody>
     </table>
     <div style="text-align:right; margin-top:1rem; line-height:1.8">
-      <div>Subtotal: <b>${{ p.subtotal }}</b></div>
-      @if (+p.descuento > 0) { <div>Descuento: −${{ p.descuento }}</div> }
-      <div>Impuestos: <b>${{ p.impuestos }}</b></div>
-      @if (+p.costo_envio > 0) { <div>Envío: ${{ p.costo_envio }}</div> }
-      <div style="font-size:1.2rem">Total: <b>${{ p.total }}</b></div>
+      <div>Subtotal: <b>{{ dinero(p.subtotal) }}</b></div>
+      @if (+p.descuento > 0) { <div>Descuento: −{{ dinero(p.descuento) }}</div> }
+      <div>Impuestos: <b>{{ dinero(p.impuestos) }}</b></div>
+      @if (+p.costo_envio > 0) { <div>Envío: {{ dinero(p.costo_envio) }}</div> }
+      <div style="font-size:1.2rem">Total: <b>{{ dinero(p.total) }}</b></div>
     </div>
   </div>
 
@@ -136,7 +136,7 @@
           @for (pg of p.pagos; track pg.id) {
             <tr>
               <td>{{ pg.metodo }}</td>
-              <td>${{ pg.monto }}</td>
+              <td>{{ dinero(pg.monto) }}</td>
               <td>
                 <span class="pill" [class.ok]="pg.estado === 'completado'">{{ pg.estado }}</span>
               </td>
@@ -153,6 +153,8 @@
       La captura del depósito. El cliente la manda por fuera (WhatsApp, correo)
       y aquí se guarda: subirla deja el pedido PAGADO en un paso.
     -->
+    <!-- Solo donde aplica: no en un apartado ni en una venta ya cobrada en efectivo. -->
+    @if (pagoConComprobante() || aceptaComprobante()) {
     <div class="comprobante">
       <h4>Comprobante del depósito</h4>
 
@@ -215,6 +217,7 @@
         </p>
       }
     </div>
+    }
   </div>
 
   <div class="card">
@@ -222,12 +225,18 @@
     <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap">
       <span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">{{ p.estado }}</span>
       <select [(ngModel)]="nuevoEstado" style="padding:0.5rem; border:1px solid #d1d5db; border-radius:8px">
-        @for (e of estados; track e) { <option [value]="e">{{ e }}</option> }
+        @for (e of estados(); track e) { <option [value]="e">{{ e }}</option> }
       </select>
       <button class="btn btn-primary btn-sm" (click)="cambiarEstado()" [disabled]="aplicando()">
         {{ aplicando() ? 'Aplicando…' : 'Actualizar estado' }}
       </button>
     </div>
+    @if (p.estado === 'apartado') {
+      <p class="muted" style="margin:0.5rem 0 0; font-size:0.8rem">
+        Un apartado se entrega desde <a routerLink="/admin/apartados">Apartados</a>: ahí se
+        cobra lo que falta y se descuenta del inventario.
+      </p>
+    }
 
     <!-- Cancelar o devolver mueve mercancía y dinero: se confirma antes -->
     @if (confirmando()) {
@@ -235,54 +244,63 @@
         <h4 style="margin:0 0 0.5rem">
           {{ nuevoEstado === 'devuelto' ? 'Confirmar devolución' : 'Confirmar cancelación' }}
         </h4>
-        <p class="muted" style="margin:0 0 0.75rem; font-size:0.82rem">
-          La mercancía regresa al inventario de <b>{{ p.almacen || 'su almacén' }}</b>, que es de
-          donde salió. Si el cliente la devuelve en otra presentación —te llevaste el paquete y
-          regresa coneado— cámbiala aquí.
-        </p>
+        @if (esApartadoSinEntregar(p)) {
+          <p class="muted" style="margin:0 0 0.75rem; font-size:0.82rem">
+            Se libera lo apartado en <b>{{ p.almacen || 'su almacén' }}</b>. La mercancía nunca
+            salió de ahí, así que no hay nada que reponer.
+          </p>
+        } @else {
+          <p class="muted" style="margin:0 0 0.75rem; font-size:0.82rem">
+            La mercancía regresa al inventario de <b>{{ p.almacen || 'su almacén' }}</b>, que es de
+            donde salió. Si el cliente la devuelve en otra presentación —te llevaste el paquete y
+            regresa coneado— cámbiala aquí.
+          </p>
 
-        <table class="grid" style="margin-bottom:0.75rem">
-          <thead>
-            <tr><th>Se vendió</th><th>Regresa como</th><th>Cantidad</th></tr>
-          </thead>
-          <tbody>
-            @for (d of p.detalle; track d.id) {
-              <tr>
-                <td>
-                  {{ d.descripcion }}
-                  <br /><span class="muted" style="font-size:0.74rem">{{ d.cantidad | cantidad }}</span>
-                </td>
-                <td>
-                  @if (d.alternativas_devolucion?.length) {
-                    <select [(ngModel)]="retornoPresentacion[d.id]"
-                            (ngModelChange)="alCambiarPresentacion(d)"
-                            style="padding:0.35rem; border:1px solid #d1d5db; border-radius:6px">
-                      <option [ngValue]="d.variante_id">Lo mismo ({{ d.sku }})</option>
-                      @for (a of d.alternativas_devolucion; track a.variante_id) {
-                        <option [ngValue]="a.variante_id">{{ a.sku }}{{ a.presentacion ? ' · ' + a.presentacion : '' }}</option>
-                      }
-                    </select>
-                  } @else {
-                    <span class="muted">{{ d.sku }}</span>
-                  }
-                </td>
-                <td style="white-space:nowrap">
-                  <input type="number" step="0.001" min="0.001"
-                         [(ngModel)]="retornoCantidad[d.id]"
-                         style="width:90px; padding:0.35rem; border:1px solid #d1d5db; border-radius:6px" />
-                  <span class="muted" style="font-size:0.74rem"> {{ unidadRetorno(d) }}</span>
-                  @if (hayCambio(d)) {
-                    <br /><span class="muted" style="font-size:0.72rem">cambio de presentación</span>
-                  }
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+          <table class="grid" style="margin-bottom:0.75rem">
+            <thead>
+              <tr><th>Se vendió</th><th>Regresa como</th><th>Cantidad</th></tr>
+            </thead>
+            <tbody>
+              @for (d of p.detalle; track d.id) {
+                <tr>
+                  <td>
+                    <!-- Con el calibre: "ROJO · Paquete" no dice cuál de los dos ROJO
+                         regresa a la bodega. -->
+                    {{ d.producto || d.descripcion }}{{ d.calibre ? ' ' + d.calibre : '' }}
+                    <br /><span class="muted" style="font-size:0.74rem">{{ d.cantidad | cantidad: 'kg' }}</span>
+                  </td>
+                  <td>
+                    @if (d.alternativas_devolucion?.length) {
+                      <select [(ngModel)]="retornoPresentacion[d.id]"
+                              (ngModelChange)="alCambiarPresentacion(d)"
+                              style="padding:0.35rem; border:1px solid #d1d5db; border-radius:6px">
+                        <option [ngValue]="d.variante_id">Lo mismo ({{ d.sku }})</option>
+                        @for (a of d.alternativas_devolucion; track a.variante_id) {
+                          <option [ngValue]="a.variante_id">{{ a.sku }}{{ a.presentacion ? ' · ' + a.presentacion : '' }}</option>
+                        }
+                      </select>
+                    } @else {
+                      <span class="muted">{{ d.sku }}</span>
+                    }
+                  </td>
+                  <td style="white-space:nowrap">
+                    <input type="number" step="0.001" min="0.001"
+                           [(ngModel)]="retornoCantidad[d.id]"
+                           style="width:90px; padding:0.35rem; border:1px solid #d1d5db; border-radius:6px" />
+                    <span class="muted" style="font-size:0.74rem"> {{ unidadRetorno(d) }}</span>
+                    @if (hayCambio(d)) {
+                      <br /><span class="muted" style="font-size:0.72rem">cambio de presentación</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
 
         @if (efectivoADevolver() > 0) {
           <p style="margin:0 0 0.75rem; font-size:0.85rem">
-            Salen <b>${{ efectivoADevolver().toFixed(2) }}</b> en efectivo de la caja, para que el
+            Salen <b>{{ dinero(efectivoADevolver()) }}</b> en efectivo de la caja, para que el
             corte cuadre. Si el turno de la venta ya cerró, se registra en el turno abierto.
           </p>
         }

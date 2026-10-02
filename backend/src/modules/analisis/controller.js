@@ -9,9 +9,5 @@ const responder = (fn) => async (req, res, next) => {
 };
 
 module.exports = {
-  cobranza: responder(service.cobranza),
-  clientesEnfriados: responder(service.clientesEnfriados),
-  hiloMuerto: responder(service.hiloMuerto),
-  margen: responder(service.margen),
   tablero: responder(service.tablero),
 };

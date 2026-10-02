@@ -1,0 +1,106 @@
+<!-- No cierra al hacer clic en el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-min-titulo">
+    <div class="modal-head">
+      <h2 id="modal-min-titulo">Stock mínimo</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p style="margin-top:0">
+        <b>{{ fila().producto }}</b>
+        @if (fila().calibre) { <span> {{ fila().calibre }}</span> }
+        <span class="muted"> · {{ fila().sku }} · {{ fila().almacen }}</span>
+      </p>
+      <p class="muted" style="font-size:0.85rem">
+        Cuando lo disponible en este almacén llegue al mínimo, la campana avisa y el hilo aparece
+        en Reportes → Por reabastecer. Es por almacén: la matriz y cada sucursal llevan el suyo.
+      </p>
+
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+
+      <div class="form-grid">
+        <!-- Solo los paquetes se cuentan por pieza; el cono y el simple van en kilos. -->
+        @if (esPaquete() && pesoRef()) {
+          <label class="field">
+            Capturar en
+            <select [(ngModel)]="unidad">
+              <option value="paq">Paquetes</option>
+              <option value="kg">Kilos (kg)</option>
+            </select>
+          </label>
+        }
+        <label class="field">
+          Avisar cuando queden
+          <span class="cant-peso">
+            <input type="number" [step]="unidad === 'paq' ? 1 : 0.001" min="0"
+                   [(ngModel)]="cantidad" (keydown.enter)="guardar()" />
+            <span class="muted">{{ unidad === 'paq' ? 'paquetes' : 'kg' }}</span>
+          </span>
+        </label>
+      </div>
+
+      <div class="previa-calculo">
+        <div class="renglon">
+          <span class="muted">Hoy hay disponible</span>
+          <span>
+            {{ disponible() | cantidad: 'kg' }}
+            @if (enPaquetes(disponible()); as p) { <span class="muted"> · {{ p }} paq</span> }
+          </span>
+        </div>
+        <div class="renglon">
+          <span class="muted">Mínimo actual</span>
+          <span>
+            @if (minimoActual() > 0) {
+              {{ minimoActual() | cantidad: 'kg' }}
+              @if (enPaquetes(minimoActual()); as p) { <span class="muted"> · {{ p }} paq</span> }
+            } @else {
+              <span class="muted">sin mínimo, no avisa</span>
+            }
+          </span>
+        </div>
+        @if (kilos() != null) {
+          <div class="renglon total">
+            <span>Se guarda</span>
+            <span>
+              <b>{{ kilos() | cantidad: 'kg' }}</b>
+              @if (unidad === 'kg' && enPaquetes(kilos()); as p) {
+                <span class="muted"> · {{ p }} paq</span>
+              }
+            </span>
+          </div>
+        }
+        @if (quedaBajo()) {
+          <p class="aviso" style="margin:0.5rem 0 0">
+            Con lo que hay hoy ya está en el mínimo o debajo: la campana va a avisar en cuanto
+            guardes.
+          </p>
+        }
+        @if (esPaquete() && pesoRef()) {
+          <p class="muted" style="font-size:0.75rem; margin:0.5rem 0 0">
+            @if (pesoEsNominal()) {
+              Un paquete se cuenta como {{ pesoRef() }} kg, el peso NOMINAL: aquí no hay bultos
+              ubicados de los que sacar el promedio real.
+            } @else {
+              Un paquete se cuenta como {{ pesoRef() }} kg, el promedio REAL de los
+              {{ equivalencia()?.disponible?.paquetes }} bultos que hay aquí.
+            }
+          </p>
+        }
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <span class="nota">Se guarda en kilos.</span>
+      @if (minimoActual() > 0) {
+        <button type="button" class="btn btn-ghost" (click)="quitar()" [disabled]="guardando()">
+          Quitar mínimo
+        </button>
+      }
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" (click)="guardar()" [disabled]="guardando()">
+        {{ guardando() ? 'Guardando…' : 'Guardar' }}
+      </button>
+    </div>
+  </div>
+</div>

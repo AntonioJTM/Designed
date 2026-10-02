@@ -137,20 +137,45 @@ async function obtenerSesion(id) {
   return sesion;
 }
 
+/**
+ * Retiro o ingreso de efectivo a mano: el dueño saca dinero para depositar, se
+ * paga una compra chica con el cajón, se mete cambio a media mañana.
+ *
+ * Un retiro no puede sacar más de lo que debería haber en el cajón: dejaría el
+ * esperado en negativo y el corte ya no diría nada. La sesión se bloquea para
+ * que dos retiros a la vez no pasen el tope entre los dos.
+ */
 async function registrarMovimientoManual(sesion_id, { tipo, monto, motivo }) {
-  const [rows] = await pool.query(
-    `SELECT estado FROM sesiones_caja WHERE id = :id LIMIT 1`,
-    { id: sesion_id }
-  );
-  if (!rows[0]) throw new AppError(404, 'NO_ENCONTRADO', 'Sesión de caja no encontrada');
-  if (rows[0].estado !== 'abierta') {
-    throw new AppError(409, 'SESION_CERRADA', 'La sesión de caja está cerrada');
-  }
-  await pool.query(
-    `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, motivo)
-     VALUES (:sesion_id, :tipo, :monto, :motivo)`,
-    { sesion_id, tipo, monto, motivo: motivo ?? null }
-  );
+  await withTransaction(async (conn) => {
+    const [rows] = await conn.query(
+      'SELECT estado, monto_inicial FROM sesiones_caja WHERE id = :id FOR UPDATE',
+      { id: sesion_id }
+    );
+    if (!rows[0]) throw new AppError(404, 'NO_ENCONTRADO', 'Sesión de caja no encontrada');
+    if (rows[0].estado !== 'abierta') {
+      throw new AppError(409, 'SESION_CERRADA', 'La sesión de caja está cerrada');
+    }
+    if (tipo === 'retiro') {
+      const [tot] = await conn.query(
+        `SELECT tipo, COALESCE(SUM(monto),0) AS suma
+           FROM movimientos_caja WHERE sesion_caja_id = :id GROUP BY tipo`,
+        { id: sesion_id }
+      );
+      let neto = 0;
+      for (const row of tot) neto += (SIGNO_CAJA[row.tipo] ?? 0) * Number(row.suma);
+      const enCajon = round2(Number(rows[0].monto_inicial) + neto);
+      if (Number(monto) > enCajon + 0.001) {
+        throw new AppError(409, 'EFECTIVO_INSUFICIENTE',
+          `En el cajón debería haber $${enCajon.toFixed(2)}; no se pueden sacar ` +
+          `$${Number(monto).toFixed(2)}.`);
+      }
+    }
+    await conn.query(
+      `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, motivo)
+       VALUES (:sesion_id, :tipo, :monto, :motivo)`,
+      { sesion_id, tipo, monto, motivo: motivo ?? null }
+    );
+  });
   return obtenerSesion(sesion_id);
 }
 

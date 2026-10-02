@@ -67,8 +67,13 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
       tipo_presentacion: 'paquete', peso_kg: 10, precio: 200,
     })).data.id;
 
-    const caja = (await api('GET', '/caja/cajas')).data.find((c) => c.activo);
-    const almacen = caja.almacen_id;
+    // Caja PROPIA de la prueba, nunca el turno de una caja real: en producción
+    // la primera caja activa tiene un turno de verdad abierto y las ventas de
+    // prueba quedarían en su corte. Va en el almacén donde vende el mostrador.
+    const almacen = (await api('GET', '/caja/cajas')).data.find((c) => c.activo).almacen_id;
+    const caja = (await api('POST', '/caja/cajas', {
+      almacen_id: almacen, nombre: 'TMPCM2 Caja ' + SUF,
+    })).data;
     let sesion = (await api('GET', `/caja/sesiones/abierta?caja_id=${caja.id}`)).data;
     const abriYo = !sesion;
     if (!sesion) {
@@ -143,7 +148,8 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
 
     // ------------------------------------------------------------ 3. El margen
     console.log('\n3 · El margen');
-    const marg = (await api('GET', '/analisis/margen')).data;
+    // El margen llega dentro del tablero, con los mismos filtros por omisión.
+    const marg = (await api('GET', '/analisis/tablero')).data.margen;
     const mio = marg.hilos.find((h) => h.producto_id === prod);
     ck('el hilo aparece en el margen', !!mio, mio && `venta ${mio.venta}, costo ${mio.costo}`);
     ck('venta 2000, costo 2250 → pierde 250', cerca(mio.ganancia, -250), mio?.ganancia);
@@ -167,7 +173,7 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
       items: [{ variante_id: vSin, cantidad: 4 }], // 200
       pagos: [{ metodo_pago_id: efectivo, monto: 500 }],
     });
-    const marg2 = (await api('GET', '/analisis/margen')).data;
+    const marg2 = (await api('GET', '/analisis/tablero')).data.margen;
     ck('el hilo sin costo NO entra al margen',
       !marg2.hilos.some((h) => h.producto_id === sinCosto));
     ck('se reporta aparte cuánta venta quedó fuera',
@@ -201,7 +207,6 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
         const pids = peds.map((r) => r.pedido_id);
         if (pids.length) {
           await db.query('DELETE FROM movimientos_inventario WHERE referencia_tipo="pedido" AND referencia_id IN (?)', [pids]);
-          await db.query('DELETE FROM movimientos_caja WHERE referencia_id IN (?)', [pids]);
           await db.query('DELETE FROM pedidos WHERE id IN (?)', [pids]);
         }
         await db.query('DELETE FROM remesas WHERE variante_id IN (?)', [vids]);
@@ -211,6 +216,17 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
         await db.query('DELETE FROM producto_variantes WHERE id IN (?)', [vids]);
       }
       await db.query('DELETE FROM productos WHERE id IN (?)', [pr]);
+    }
+    // La caja de la prueba con su turno y sus movimientos. Se borra por TURNO y
+    // no por referencia_id: por número podría alcanzar un movimiento real.
+    const [cjs] = await db.query("SELECT id FROM cajas WHERE nombre LIKE 'TMPCM2 Caja%'");
+    if (cjs.length) {
+      const [ses] = await db.query('SELECT id FROM sesiones_caja WHERE caja_id IN (?)', [cjs.map((r) => r.id)]);
+      if (ses.length) {
+        await db.query('DELETE FROM movimientos_caja WHERE sesion_caja_id IN (?)', [ses.map((r) => r.id)]);
+        await db.query('DELETE FROM sesiones_caja WHERE id IN (?)', [ses.map((r) => r.id)]);
+      }
+      await db.query('DELETE FROM cajas WHERE id IN (?)', [cjs.map((r) => r.id)]);
     }
     const [[{ n }]] = await db.query("SELECT COUNT(*) n FROM productos WHERE nombre LIKE 'TMPCM2%'");
     ck('no quedó basura en la base (TMPCM2)', Number(n) === 0, n);

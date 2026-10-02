@@ -124,10 +124,6 @@ export class Traspasos {
     });
   }
 
-  esPaquete(v: Variante): boolean {
-    return v.tipo_presentacion === 'paquete';
-  }
-
   /** Cómo se identifica el hilo: el color solo no alcanza. */
   etiquetaHilo(v: {
     producto?: string | null;
@@ -167,7 +163,12 @@ export class Traspasos {
   /** Kilos LIBRES en el origen: la existencia menos lo ya apartado a otras solicitudes. */
   kilosLibres(l: LineaEnvio): number | null {
     const d = this.pesos()[l.variante.id]?.disponible;
-    return d ? Number(d.kg_inventario) : null;
+    return d ? Number(d.kg_libre ?? d.kg_inventario) : null;
+  }
+
+  /** Lo que ya tiene dueño en el origen, para explicar por qué lo libre es menos. */
+  kilosApartados(l: LineaEnvio): number {
+    return Number(this.pesos()[l.variante.id]?.disponible.kg_apartado ?? 0);
   }
 
   /**
@@ -401,7 +402,11 @@ export class Traspasos {
   }
 
   cancelar(t: Traspaso): void {
-    const motivo = prompt(`¿Por qué se cancela el traspaso ${t.folio}?`) ?? '';
+    // "Cancelar" en la pregunta devuelve null y quiere decir "no cancelo el
+    // traspaso". Con un `?? ''` se convertía en motivo vacío y se cancelaba
+    // igual: justo lo contrario de lo que se pidió. Aceptar sin escribir nada sí
+    // cancela, sin motivo.
+    const motivo = prompt(`¿Por qué se cancela el traspaso ${t.folio}?`);
     if (motivo === null) return;
     this.error.set(null);
     this.inv.cancelarTraspaso(t.id, motivo.trim() || undefined).subscribe({

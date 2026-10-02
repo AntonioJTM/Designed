@@ -57,6 +57,8 @@ describe('Traspasos', () => {
       peso_min: 18.5,
       peso_max: 19.8,
       kg_inventario: 57.033,
+      kg_apartado: 0,
+      kg_libre: 57.033,
     },
     peso_referencia: 19.011,
     referencia_nominal: false,
@@ -88,11 +90,14 @@ describe('Traspasos', () => {
 
   let solicitado: TraspasoInput | null = null;
   let recibido: { id: number; body: RecepcionInput } | null = null;
+  let cancelado: number | null = null;
+  /** La equivalencia que contesta el servidor; una prueba la cambia. */
+  let eqActual: EquivalenciaPaquetes = equivalencia;
 
   const invFalso = {
     almacenes: () => of(almacenes),
     traspasos: () => of({ items: [enTransito], total: 1, page: 1, limit: 50, paginas: 1 }),
-    equivalenciaPaquetes: () => of(equivalencia),
+    equivalenciaPaquetes: () => of(eqActual),
     buscarVariantes: () => of([paquete, cono]),
     solicitarTraspaso: (body: TraspasoInput) => {
       solicitado = body;
@@ -100,6 +105,10 @@ describe('Traspasos', () => {
     },
     enviarTraspaso: (id: number) =>
       of({ id, folio: 'TRA-1', estado: 'en_transito' as const, lineas: [] }),
+    cancelarTraspaso: (id: number) => {
+      cancelado = id;
+      return of({ id, folio: 'TRA-77', estado: 'cancelado' as const, lineas: [] });
+    },
     recibirTraspaso: (id: number, body: RecepcionInput) => {
       recibido = { id, body };
       return of({ id, folio: 'TRA-77', estado: 'recibido' as const, faltantes: 1, lineas: [] });
@@ -119,6 +128,8 @@ describe('Traspasos', () => {
   beforeEach(() => {
     solicitado = null;
     recibido = null;
+    cancelado = null;
+    eqActual = equivalencia;
   });
   afterEach(() => TestBed.resetTestingModule());
 
@@ -237,5 +248,34 @@ describe('Traspasos', () => {
 
     expect(recibido).toBeNull();
     expect(c.error()).toContain('mayor a lo que se envió');
+  });
+
+  it('compara contra lo LIBRE, no contra la existencia: lo apartado ya tiene dueño', async () => {
+    // Hay 57.033 kg, pero 20 ya los pidió otra sucursal: libres, 37.033.
+    eqActual = {
+      ...equivalencia,
+      disponible: { ...equivalencia.disponible, kg_apartado: 20, kg_libre: 37.033 },
+    };
+    const c = await montar();
+    c.agregar(paquete);
+    expect(c.kilosLibres(c.lineas()[0])).toBe(37.033);
+    expect(c.kilosApartados(c.lineas()[0])).toBe(20);
+
+    c.cambiarKg(c.lineas()[0], 40);
+    expect(c.insuficiente(c.lineas()[0])).toBe(true);
+  });
+
+  it('"Cancelar" en la pregunta del motivo NO cancela el traspaso', async () => {
+    const c = await montar();
+    spyOn(window, 'prompt').and.returnValue(null);
+    c.cancelar(enTransito);
+    expect(cancelado).toBeNull();
+  });
+
+  it('aceptar sin motivo sí cancela', async () => {
+    const c = await montar();
+    spyOn(window, 'prompt').and.returnValue('');
+    c.cancelar(enTransito);
+    expect(cancelado).toBe(77);
   });
 });

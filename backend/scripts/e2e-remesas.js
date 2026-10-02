@@ -19,6 +19,7 @@ const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Se niega a correr contra la base del servidor. Ver el módulo.
 require('./_no-en-produccion');
+const { soloPropios } = require('./_propios');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 
@@ -138,6 +139,7 @@ async function subir() {
     ck('da entrada a 1,527.5 kg', Number(r.data?.kg_total) === 1527.5,
       `${r.data?.saldo_anterior} → ${r.data?.saldo_nuevo} kg`);
     const remesa = r.data.id;
+    const folioRemesa = r.data.folio;
 
     const [[{ n }]] = await db.query('SELECT COUNT(*) n FROM variante_codigos WHERE remesa_id = ?', [remesa]);
     ck('los bultos quedaron ligados a su remesa', n === 80, n);
@@ -152,10 +154,17 @@ async function subir() {
       Number(b2.peso_kg) === 10.75 && b2.conos === 7, `${b2.peso_kg} kg · ${b2.conos} conos`);
 
     console.log('\n=== 3. El kardex lo explica ===');
-    r = await api('GET', '/inventario/movimientos?limit=5');
+    // Filtrado por la presentación: en producción hay más movimientos y los
+    // últimos cinco de toda la tienda pueden no ser de esta prueba.
+    r = await api('GET', `/inventario/movimientos?variante_id=${paq}&limit=5`);
     const mov = r.data.items.find((x) => x.referencia_tipo === 'remesa');
     ck('el movimiento aparece', !!mov, `${mov?.concepto} · +${mov?.cantidad} ${mov?.unidad}`);
     ck('el motivo dice bultos y lotes', /80 bultos/.test(mov?.motivo ?? ''), mov?.motivo);
+    ck('dice que es una remesa y trae su folio',
+      mov?.concepto === 'Remesa del proveedor' && mov?.folio === folioRemesa, `${mov?.concepto} · ${mov?.folio}`);
+    r = await api('GET', `/inventario/movimientos?variante_id=${paq}&concepto=entradas&limit=5`);
+    ck('y sale en el filtro "Entradas de mercancía"',
+      r.data.items.some((x) => x.referencia_tipo === 'remesa'), `${r.data.items.length} movimientos`);
 
     console.log('\n=== 4. Escanear un bulto encuentra su presentación ===');
     r = await api('GET', `/variantes?q=${cod('00548087')}`);
@@ -221,8 +230,9 @@ async function subir() {
   } finally {
     console.log('\n=== Limpieza ===');
     await db.query('SET FOREIGN_KEY_CHECKS = 0');
-    const nuevos = async (t) =>
-      (await db.query(`SELECT id FROM ${t}`))[0].map((r) => r.id).filter((i) => !antes[t].has(i));
+// Solo lo NUEVO que sea de la prueba (prefijo TMP): una venta real hecha
+    // mientras corría no se toca. Ver _propios.js.
+        const nuevos = soloPropios(db, antes);
     for (const id of await nuevos('productos')) {
       const sub = '(SELECT id FROM producto_variantes WHERE producto_id = ?)';
       for (const tabla of ['variante_codigos', 'movimientos_inventario', 'inventario']) {

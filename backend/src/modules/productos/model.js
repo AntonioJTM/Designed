@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../../config/db');
+const { porPalabras } = require('../../utils/query');
 
 // Acceso a datos de `productos` (la línea/modelo). Las variantes (SKU) e
 // imágenes viven en sus propias tablas y se agregan en el detalle.
@@ -37,9 +38,12 @@ const SELECT_BASE = `
 async function listar({ q, categoria_id, activo, destacado, limit, offset, almacen_online }) {
   const where = [];
   const params = { almacen_online: almacen_online ?? 0 };
-  if (q) {
-    where.push('(p.nombre LIKE :q OR p.descripcion LIKE :q)');
-    params.q = `%${q}%`;
+  // El color, el calibre o la descripción, palabra por palabra: en la tienda
+  // hay dos ROJO y el cliente escribe "rojo 2/30".
+  const busca = porPalabras(q, ['p.nombre', 'p.descripcion', { col: 'p.grosor_calibre', calibre: true }]);
+  if (busca) {
+    where.push(busca.sql);
+    Object.assign(params, busca.params);
   }
   if (categoria_id !== undefined) {
     where.push('p.categoria_id = :categoria_id');

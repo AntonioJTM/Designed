@@ -21,11 +21,11 @@ import { Barra } from './vertical-bars';
               rx="4" fill="var(--viz-grid)" opacity="0.5" />
         <!-- barra -->
         <path [attr.d]="b.d" [attr.fill]="b.color || 'var(--viz-series-1)'">
-          <title>{{ b.title || b.label }}: {{ prefix() }}{{ fmt(b.value) }}</title>
+          <title>{{ b.title || b.label }}: {{ prefix() }}{{ fmt(b.value) }}{{ sufijo() }}</title>
         </path>
         <!-- valor al final -->
         <text [attr.x]="b.valX" [attr.y]="b.cy + 4" class="viz-value"
-              [attr.text-anchor]="b.dentro ? 'end' : 'start'">{{ prefix() }}{{ fmt(b.value) }}</text>
+              [attr.text-anchor]="b.dentro ? 'end' : 'start'">{{ prefix() }}{{ fmt(b.value) }}{{ sufijo() }}</text>
       }
     </svg>
   `,
@@ -34,9 +34,13 @@ export class HorizontalBars {
   readonly data = input<Barra[]>([]);
   readonly prefix = input('');
   readonly decimals = input(0);
+  /** Unidad después del número (" kg"): un número en pantalla lleva su unidad. */
+  readonly sufijo = input('');
 
   readonly W = 640;
-  readonly gutter = 92; // espacio para la etiqueta izquierda
+  // Espacio para la etiqueta izquierda. Cabe "CAFE CHOCOLATE 1/30": con menos se
+  // cortaba justo el calibre, que es lo que distingue un hilo de otro.
+  readonly gutter = 150;
   readonly rowH = 34;
   readonly barH = 20;
   readonly padRight = 52;
@@ -53,7 +57,7 @@ export class HorizontalBars {
       const y = i * this.rowH + 6;
       const cy = y + this.barH / 2;
       // Si la barra es corta, el valor va afuera (a la derecha); si es larga, dentro.
-      const dentro = w > 46;
+      const dentro = w > 70;
       return {
         ...d,
         y,
@@ -61,7 +65,7 @@ export class HorizontalBars {
         d: this.pathRight(this.gutter, y, w, this.barH),
         valX: dentro ? this.gutter + w - 6 : this.gutter + w + 6,
         dentro,
-        corta: d.label.length > 13 ? d.label.slice(0, 12) + '…' : d.label,
+        corta: d.label.length > 24 ? d.label.slice(0, 23) + '…' : d.label,
       };
     });
   });

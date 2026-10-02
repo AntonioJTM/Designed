@@ -21,15 +21,6 @@ async function listar(req, res, next) {
   }
 }
 
-async function obtener(req, res, next) {
-  try {
-    const data = await service.obtener(Number(req.params.id));
-    return res.json({ data, error: null });
-  } catch (err) {
-    return next(err);
-  }
-}
-
 async function crear(req, res, next) {
   try {
     const data = await service.crear(req.body);
@@ -111,7 +102,6 @@ async function eliminarCodigo(req, res, next) {
 
 module.exports = {
   listar,
-  obtener,
   crear,
   actualizar,
   eliminar,

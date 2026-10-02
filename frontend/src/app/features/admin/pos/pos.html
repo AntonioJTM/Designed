@@ -85,20 +85,56 @@
     @if (t.pedido.estado === 'apartado') {
       <h3 style="margin-top:0">✅ Apartado {{ t.pedido.numero_pedido }}</h3>
       <p>
-        Apartado de <b>${{ t.pedido.total }}</b>.
+        Apartado de <b>{{ dinero(t.pedido.total) }}</b>
+        @if (t.pagadoHoy > 0) { · dejó <b>{{ dinero(t.pagadoHoy) }}</b> de anticipo }.
         La mercancía queda guardada; se entrega cuando la liquide.
       </p>
       <a class="btn btn-ghost" routerLink="/admin/apartados">Ver apartados</a>
       <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
     } @else if (num(t.pedido.total) > 0 && t.pedido.estado === 'pendiente') {
       <h3 style="margin-top:0">✅ Entregado a crédito · {{ t.pedido.numero_pedido }}</h3>
-      <p>Total: <b>${{ t.pedido.total }}</b>. Quedó cargado a su cuenta.</p>
+      <p>
+        Total: <b>{{ dinero(t.pedido.total) }}</b>.
+        @if (t.pagadoHoy > 0) {
+          Pagó hoy <b>{{ dinero(t.pagadoHoy) }}</b>
+          @if (t.cambio > 0) { (cambio: <b>{{ dinero(t.cambio) }}</b>) }
+          y quedaron <b>{{ dinero(t.fiado) }}</b> cargados a su cuenta.
+        } @else {
+          Quedó cargado a su cuenta.
+        }
+      </p>
       <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
     } @else {
       <h3 style="margin-top:0">✅ Venta {{ t.pedido.numero_pedido }}</h3>
-      <p>Total: <b>${{ t.pedido.total }}</b> · Cambio: <b>${{ t.cambio.toFixed(2) }}</b></p>
+      <p>Total: <b>{{ dinero(t.pedido.total) }}</b> · Cambio: <b>{{ dinero(t.cambio) }}</b></p>
       <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
     }
+  </div>
+}
+
+<!-- Resultado del último corte. -->
+@if (ultimoCorte(); as c) {
+  <div class="card corte-resultado"
+       [class.cuadra]="diferenciaCorte(c) === 0"
+       [class.falta]="diferenciaCorte(c) < 0"
+       [class.sobra]="diferenciaCorte(c) > 0">
+    <h3 style="margin:0">Corte de {{ c.caja }}</h3>
+    <div class="cifras">
+      <div><span>Debía haber</span><b>{{ dinero(c.monto_esperado) }}</b></div>
+      <div><span>Se contó</span><b>{{ dinero(c.monto_final) }}</b></div>
+      <div>
+        <span>{{ diferenciaCorte(c) < 0 ? 'Falta' : diferenciaCorte(c) > 0 ? 'Sobra' : 'Diferencia' }}</span>
+        <b [class.neg]="diferenciaCorte(c) < 0">{{ dinero(diferenciaCorte(c) < 0 ? -diferenciaCorte(c) : diferenciaCorte(c)) }}</b>
+      </div>
+    </div>
+    <p class="muted" style="margin:0 0 0.75rem; font-size:0.85rem">
+      @if (diferenciaCorte(c) === 0) {
+        El cajón cuadra.
+      } @else {
+        La diferencia queda guardada en el corte; se ve después en Reportes → Cortes de caja.
+      }
+    </p>
+    <button class="btn btn-ghost btn-sm" (click)="ultimoCorte.set(null)">Entendido</button>
   </div>
 }
 
@@ -135,7 +171,7 @@
   </div>
 } @else {
   <!-- Sesión abierta: POS operativo -->
-  <div class="form-grid" style="align-items:start">
+  <div class="pos-layout">
     <!-- Columna izquierda: búsqueda + carrito -->
     <div>
       <!--
@@ -171,7 +207,7 @@
             Cliente <span class="muted">(opcional)</span>
             <div style="display:flex; gap:0.5rem">
               <input type="text" [(ngModel)]="qCliente" name="qcli"
-                     (keyup)="buscarCliente()"
+                     (keyup)="buscarCliente()" style="flex:1; min-width:0"
                      placeholder="Nombre, apodo o teléfono" />
             </div>
             <span class="muted" style="font-size:0.75rem">
@@ -244,7 +280,7 @@
         <div class="card">
           <label class="field" style="margin:0">
             Tipo de cliente
-            <select [(ngModel)]="tipoClienteSel">
+            <select [ngModel]="tipoClienteSel()" (ngModelChange)="tipoClienteSel.set($event)">
               @for (tc of tiposCliente(); track tc.id) {
                 <option [ngValue]="tc.id">{{ tc.nombre }}</option>
               }
@@ -272,9 +308,11 @@
             <tbody>
               @for (r of resultados(); track r.id) {
                 <tr>
-                  <td>{{ r.sku }}</td>
-                  <td>{{ r.producto }} {{ r.presentacion ? '· ' + r.presentacion : '' }}</td>
-                  <td>${{ r.precio.toFixed(2) }}<span class="muted">/{{ r.unidad || 'kg' }}</span></td>
+                  <td>
+                    {{ r.producto }} {{ r.presentacion ? '· ' + r.presentacion : '' }}
+                    <br /><span class="muted mono" style="font-size:0.72rem">{{ r.sku }}</span>
+                  </td>
+                  <td>{{ r.precio | dinero }}<span class="muted">/{{ r.unidad || 'kg' }}</span></td>
                   <td><button class="btn btn-ghost btn-sm" (click)="agregar(r)">Agregar</button></td>
                 </tr>
               }
@@ -289,13 +327,15 @@
           <p class="empty">Vacío. Busca y agrega productos.</p>
         } @else {
           <table class="grid">
-            <thead><tr><th>SKU</th><th>Producto</th><th>Precio</th><th>Cant.</th><th>Importe</th><th></th></tr></thead>
+            <!-- Sin columna SKU: repite el nombre del color y empujaba el carrito
+                 fuera de su tarjeta. Va debajo del hilo, en chico. -->
+            <thead><tr><th>Producto</th><th>Precio</th><th>Cant.</th><th>Importe</th><th></th></tr></thead>
             <tbody>
               @for (i of carrito(); track i.variante_id) {
                 <tr>
-                  <td>{{ i.sku }}</td>
                   <td>
                     {{ i.producto }}
+                    <br /><span class="muted mono" style="font-size:0.72rem">{{ i.sku }}</span>
                     @if (i.bultos?.length) {
                       <br />
                       <span class="muted" style="font-size:0.72rem">
@@ -307,7 +347,7 @@
                       </span>
                     }
                   </td>
-                  <td>${{ i.precio.toFixed(2) }}<span class="muted">/{{ i.unidad || 'kg' }}</span></td>
+                  <td>{{ i.precio | dinero }}<span class="muted">/{{ i.unidad || 'kg' }}</span></td>
                   <td style="width:120px">
                     <span class="cant-peso">
                       <input type="number" step="0.001" min="0.001" [ngModel]="i.cantidad"
@@ -316,7 +356,7 @@
                       <span class="muted">{{ i.unidad || 'kg' }}</span>
                     </span>
                   </td>
-                  <td>${{ (i.precio * i.cantidad).toFixed(2) }}</td>
+                  <td>{{ i.precio * i.cantidad | dinero }}</td>
                   <td><button class="btn btn-danger btn-sm" (click)="quitar(i)">✕</button></td>
                 </tr>
               }
@@ -326,7 +366,7 @@
             @if (nombreTipoCliente()) {
               Precios de <b>{{ nombreTipoCliente() }}</b><br />
             }
-            Subtotal estimado (sin IVA): <b>${{ subtotalEstimado().toFixed(2) }}</b><br />
+            Subtotal estimado (sin IVA): <b>{{ subtotalEstimado() | dinero }}</b><br />
             <span style="font-size:0.8rem">
               El precio final y los impuestos los calcula el servidor al cobrar, según el tipo de cliente.
             </span>
@@ -339,13 +379,32 @@
     <div>
       <div class="card">
         <h3 style="margin-top:0">Caja abierta</h3>
+        <!-- Con varias cajas hay que poder pasar a otra aunque esta tenga turno:
+             antes solo se elegía caja cuando no había ninguno abierto, y si la
+             primera lo tenía, las demás quedaban fuera de alcance. -->
+        @if (cajas().length > 1) {
+          <label class="field" style="margin:0 0 0.5rem">
+            Caja
+            <select [(ngModel)]="cajaSel" (ngModelChange)="cambiarCaja()">
+              @for (c of cajas(); track c.id) { <option [ngValue]="c.id">{{ c.nombre }} · {{ c.almacen }}</option> }
+            </select>
+          </label>
+        }
         <ul class="muted" style="list-style:none; padding:0; margin:0; font-size:0.9rem">
-          <li>Sesión #{{ sesion()!.id }} · {{ sesion()!.caja }}</li>
+          <li>Turno #{{ sesion()!.id }} · {{ sesion()!.caja }}</li>
           <li>Cajero: {{ sesion()!.usuario }}</li>
-          <li>Inicial: ${{ sesion()!.monto_inicial }}</li>
-          <li>Efectivo esperado: <b>${{ sesion()!.esperado_actual }}</b></li>
+          <li>Inicial: {{ dinero(sesion()!.monto_inicial) }}</li>
+          <li>Efectivo esperado: <b>{{ dinero(sesion()!.esperado_actual) }}</b></li>
         </ul>
+        <button class="btn btn-ghost btn-sm" style="margin-top:0.6rem" (click)="movCajaAbierto.set(true)">
+          Sacar o meter efectivo
+        </button>
       </div>
+      @if (movCajaAbierto()) {
+        <app-movimiento-caja-modal [sesion]="sesion()!"
+                                   (guardado)="movimientoRegistrado($event)"
+                                   (cerrado)="movCajaAbierto.set(false)" />
+      }
 
       <div class="card">
         <h3 style="margin-top:0">Cobrar</h3>
@@ -362,6 +421,9 @@
             <span class="cifra-pie">estimado sin IVA; el servidor lo calcula al cobrar</span>
           }
         </div>
+        @if (avisoCotizacion(); as aviso) {
+          <p class="alert" style="margin:0 0 0.75rem">⚠ {{ aviso }} Quítalo o cambia la cantidad para poder cobrar.</p>
+        }
 
         <!-- Apartar y fiar. Los dos exigen cliente identificado: sin saber a
              quién, ni se le guarda mercancía ni se le fía. Son excluyentes —
@@ -449,10 +511,26 @@
               @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
             </select>
           </label>
-          <label class="field">
-            Monto recibido
-            <input type="number" step="0.01" [(ngModel)]="montoPago" />
-          </label>
+          @if (esEfectivoSel()) {
+            <label class="field">
+              Recibido en efectivo
+              <div class="campo-moneda">
+                <span>$</span>
+                <input type="number" min="0" step="0.01" [(ngModel)]="montoPago"
+                       [placeholder]="aPagarHoy().toFixed(2)" />
+              </div>
+              <span class="muted" style="font-size:0.72rem">
+                Vacío = pagó justo. Se guarda lo cobrado, no el billete.
+              </span>
+            </label>
+            @if (cambioPrevio() > 0) {
+              <p style="margin:0.25rem 0">Cambio: <b>{{ dinero(cambioPrevio()) }}</b></p>
+            } @else if (faltaPrevio() > 0) {
+              <p class="neg" style="margin:0.25rem 0">Faltan {{ dinero(faltaPrevio()) }}</p>
+            }
+          } @else {
+            <p class="muted" style="margin:0.25rem 0">Se cobran {{ dinero(aPagarHoy()) }} justos.</p>
+          }
         } @else if (fiando()) {
           <p class="muted">Se lleva todo a crédito: hoy no paga nada.</p>
         }
@@ -476,9 +554,6 @@
           <input type="number" step="0.01" [(ngModel)]="montoFinal" />
         </label>
         <button class="btn btn-ghost" style="margin-top:0.75rem" (click)="cerrarCaja()">Cerrar caja</button>
-        @if (sesion()!.estado === 'cerrada') {
-          <p>Diferencia: <b>${{ sesion()!.diferencia }}</b></p>
-        }
       </div>
     </div>
   </div>

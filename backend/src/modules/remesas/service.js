@@ -266,10 +266,4 @@ async function listar(filtros) {
   return paginado(rows, total, filtros.page, filtros.limit);
 }
 
-async function obtener(id) {
-  const r = await model.obtener(id);
-  if (!r) throw new AppError(404, 'NO_ENCONTRADO', 'Remesa no encontrada');
-  return r;
-}
-
-module.exports = { analizar, previa, confirmar, listar, obtener };
+module.exports = { analizar, previa, confirmar, listar };

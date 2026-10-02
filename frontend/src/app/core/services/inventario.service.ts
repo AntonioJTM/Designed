@@ -44,7 +44,7 @@ export interface MovimientoInput {
  */
 export interface PreviaDesarme {
   bulto: { codigo: string; peso_kg: string; lote?: string | null; conos?: number | null; remesa_folio?: string | null };
-  paquete: { variante_id: number; sku: string; producto: string; presentacion?: string | null; peso_kg: string; precio: string };
+  paquete: { variante_id: number; sku: string; producto: string; calibre?: string | null; presentacion?: string | null; peso_kg: string; precio: string };
   cono: { variante_id: number; sku: string; piezas_por_origen: number; precio: string } | null;
   conos_a_generar: number | null;
   existencias: { almacen_id: number; almacen: string; cantidad: string }[];
@@ -216,6 +216,10 @@ export interface EquivalenciaPaquetes {
     peso_min: number;
     peso_max: number;
     kg_inventario: number;
+    /** Apartado por clientes y por otras solicitudes de traspaso. */
+    kg_apartado: number;
+    /** Existencia menos lo apartado: contra esto se valida la solicitud. */
+    kg_libre: number;
   };
   peso_referencia: number;
   /** True si no hay bultos ubicados y se usó el peso nominal. */
@@ -325,6 +329,7 @@ export interface Traspaso {
 export interface Conversion {
   id: number;
   producto: string;
+  calibre?: string | null;
   paquete_sku: string;
   cono_sku: string;
   paquetes: string;
@@ -551,12 +556,6 @@ export class InventarioService {
       .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/cancelar`, {
         motivo,
       })
-      .pipe(map(data));
-  }
-
-  crearTraspaso(body: TraspasoInput): Observable<ResultadoTraspaso> {
-    return this.http
-      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos`, body)
       .pipe(map(data));
   }
 

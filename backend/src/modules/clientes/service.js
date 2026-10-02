@@ -247,16 +247,6 @@ async function ajustarCredito(id, datos, usuarioId) {
   return estadoDeCuenta(id);
 }
 
-/** Quiénes deben. Con el total, para el encabezado de la pantalla. */
-async function porCobrar() {
-  const rows = await model.conSaldo();
-  return {
-    items: rows,
-    total_por_cobrar: rows.reduce((s, r) => s + Number(r.saldo), 0),
-    num_clientes: rows.length,
-  };
-}
-
 module.exports = {
   registrar,
   iniciarSesion,
@@ -269,5 +259,4 @@ module.exports = {
   estadoDeCuenta,
   registrarAbono,
   ajustarCredito,
-  porCobrar,
 };

@@ -76,14 +76,6 @@ async function marcarUnicaMatriz(id) {
   await pool.query('UPDATE almacenes SET es_matriz = (id = :id)', { id });
 }
 
-/** Almacén que surte a las sucursales, o null si no hay ninguno marcado. */
-async function idMatriz() {
-  const [rows] = await pool.query(
-    'SELECT id FROM almacenes WHERE es_matriz = 1 AND activo = 1 ORDER BY id LIMIT 1'
-  );
-  return rows[0]?.id ?? null;
-}
-
 /**
  * Almacén del que descuenta la tienda en línea.
  *
@@ -115,5 +107,4 @@ module.exports = {
   marcarUnicoTiendaLinea,
   marcarUnicaMatriz,
   idTiendaLinea,
-  idMatriz,
 };

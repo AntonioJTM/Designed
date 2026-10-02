@@ -29,10 +29,7 @@ const actualizarSchema = crearSchema.partial();
 const soloAdmin = [authRequired, requireTipo('usuario'), requireRol('administrador')];
 
 router.get('/', controller.listar);
-// Ruta específica antes de '/:id' para que no la absorba.
 router.get('/tienda-linea', controller.tiendaLinea);
-router.get('/matriz', controller.matriz);
-router.get('/:id', controller.obtener);
 router.post('/', ...soloAdmin, validate(crearSchema), controller.crear);
 router.put('/:id', ...soloAdmin, validate(actualizarSchema), controller.actualizar);
 router.delete('/:id', ...soloAdmin, controller.eliminar);

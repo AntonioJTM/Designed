@@ -16,6 +16,7 @@ import {
 } from '../../core/models/tienda.models';
 import { ApiError } from '../../core/models/auth.models';
 import { CantidadPipe } from '../../shared/cantidad.pipe';
+import { DineroPipe } from '../../shared/dinero.pipe';
 
 /** Campos vacíos de una dirección nueva. */
 function direccionVacia(): DireccionInput {
@@ -48,7 +49,7 @@ function direccionVacia(): DireccionInput {
  */
 @Component({
   selector: 'app-checkout',
-  imports: [RouterLink, FormsModule, CantidadPipe],
+  imports: [RouterLink, FormsModule, CantidadPipe, DineroPipe],
   templateUrl: './checkout.html',
 })
 export class Checkout implements OnInit {
@@ -99,10 +100,6 @@ export class Checkout implements OnInit {
       const n = m.nombre.toLowerCase();
       return n.includes('efectivo') || n.includes('transferencia');
     })
-  );
-
-  readonly direccionElegida = computed(() =>
-    this.direcciones().find((d) => d.id === this.direccionId()) ?? null
   );
 
   readonly metodoElegido = computed(() =>

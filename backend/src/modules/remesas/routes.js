@@ -46,7 +46,6 @@ const confirmarSchema = z
 const cuerpoBinario = express.raw({ type: () => true, limit: '15mb' });
 
 router.get('/', ...soloStaff, controller.listar);
-router.get('/:id', ...soloStaff, controller.obtener);
 router.post('/previa', ...soloStaff, cuerpoBinario, controller.previa);
 router.post('/', ...soloStaff, validate(confirmarSchema), controller.confirmar);
 

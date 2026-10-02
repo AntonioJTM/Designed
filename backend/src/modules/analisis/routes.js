@@ -7,16 +7,12 @@ const { authRequired, requireTipo, requireRol } = require('../../middlewares/aut
 const router = Router();
 
 // El tablero muestra saldos de clientes, costos y márgenes: es información
-// sensible del negocio. Los costos y el margen, solo administradores y
-// gerentes; la cobranza y los clientes enfriados los necesita quien atiende.
-const soloStaff = [authRequired, requireTipo('usuario')];
+// sensible del negocio, solo para administradores y gerentes.
 const soloJefes = [authRequired, requireTipo('usuario'), requireRol('administrador', 'gerente')];
 
-router.get('/cobranza', ...soloStaff, controller.cobranza);
-router.get('/clientes-enfriados', ...soloStaff, controller.clientesEnfriados);
-router.get('/hilo-muerto', ...soloJefes, controller.hiloMuerto);
-router.get('/margen', ...soloJefes, controller.margen);
-// Todo junto, de un viaje. Requiere ser jefe porque incluye costos y margen.
+// Las cuatro preguntas de un viaje: cobranza, clientes enfriados, hilo muerto y
+// margen. Tenían una ruta cada una, pero la pantalla siempre pide las cuatro y
+// el asistente lee los models directo, así que nadie las usaba sueltas.
 router.get('/tablero', ...soloJefes, controller.tablero);
 
 module.exports = router;

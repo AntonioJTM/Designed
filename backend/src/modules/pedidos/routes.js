@@ -85,7 +85,10 @@ const devolucionSchema = z
 
 const estadoSchema = z
   .object({
-    estado: z.enum(['pendiente', 'pagado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto']),
+    // 'apartado' solo para reactivar un apartado cancelado (lo valida el model).
+    estado: z.enum([
+      'apartado', 'pendiente', 'pagado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto',
+    ]),
     devoluciones: z.array(devolucionSchema).max(200).optional(),
   })
   .strict();

@@ -47,7 +47,9 @@
         <tr [class.abierta]="abierto() === m.id">
           <td class="muted">{{ m.creado_en | fecha }}</td>
           <td>
-            {{ m.producto }}
+            <!-- Con el color solo no se sabe qué hilo es: ROJO 1/30 y ROJO 2/30
+                 son dos productos. -->
+            {{ m.producto }}@if (m.calibre) { <span> {{ m.calibre }}</span> }
             <div class="muted" style="font-size:0.75rem">{{ m.sku }}</div>
           </td>
           <td>{{ m.almacen }}</td>

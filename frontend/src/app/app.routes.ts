@@ -17,11 +17,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/registro').then((m) => m.Registro),
   },
   {
-    path: 'dashboard',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard),
-  },
-  {
     path: 'admin',
     canActivate: [authGuard, staffGuard],
     loadChildren: () => import('./features/admin/admin.routes').then((m) => m.ADMIN_ROUTES),

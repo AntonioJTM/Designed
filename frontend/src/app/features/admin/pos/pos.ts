@@ -12,10 +12,12 @@ import { ClientesService } from '../../../core/services/clientes.service';
 import { ClienteParaVenta } from '../../../core/models/clientes.models';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { ApiError } from '../../../core/models/auth.models';
+import { MovimientoCajaModal } from './movimiento-caja-modal';
+import { DineroPipe } from '../../../shared/dinero.pipe';
 
 @Component({
   selector: 'app-pos',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, MovimientoCajaModal, DineroPipe],
   templateUrl: './pos.html',
 })
 export class Pos {
@@ -28,7 +30,15 @@ export class Pos {
 
   /** Listas de precio. Se cobra la elegida; por omisión, la del público. */
   readonly tiposCliente = signal<TipoCliente[]>([]);
-  tipoClienteSel: number | '' = '';
+  /**
+   * La lista con que se cobra. Es SEÑAL, no una propiedad con ngModel: el total
+   * real se recalcula en un `effect`, y un `effect` solo se entera de que algo
+   * cambió si lo que lee es una señal. Como propiedad, cambiar de lista dejaba
+   * en pantalla el total de la anterior.
+   */
+  readonly tipoClienteSel = signal<number | ''>('');
+  /** La lista del público: a la que se regresa al quitar al cliente o cobrar. */
+  private publicoId: number | '' = '';
 
   // ---- El cliente de la venta ----
   //
@@ -71,7 +81,18 @@ export class Pos {
   readonly metodos = signal<MetodoPago[]>([]);
   readonly sesion = signal<SesionCaja | null>(null);
   readonly error = signal<string | null>(null);
-  readonly ticket = signal<{ pedido: Pedido; cambio: number } | null>(null);
+  readonly ticket = signal<{
+    pedido: Pedido;
+    cambio: number;
+    /** Lo que pagó hoy y lo que se le fió: una venta mixta lleva las dos cosas. */
+    pagadoHoy: number;
+    fiado: number;
+  } | null>(null);
+
+  /** El último corte, para que la diferencia quede a la vista al cerrar. */
+  readonly ultimoCorte = signal<SesionCaja | null>(null);
+  /** Modal de retiro / ingreso de efectivo. */
+  readonly movCajaAbierto = signal(false);
 
   cajaSel: number | '' = '';
   montoInicial: number | null = 0;
@@ -113,6 +134,12 @@ export class Pos {
    */
   readonly totalReal = signal<number | null>(null);
   readonly cotizando = signal(false);
+  /**
+   * Por qué no se pudo cotizar, cuando es algo que el cajero tiene que saber
+   * ANTES de cobrar: "ROJO 2/30 está agotado", "quedan 80 para vender". Antes
+   * la caja seguía con el estimado y el error salía hasta darle a Cobrar.
+   */
+  readonly avisoCotizacion = signal<string | null>(null);
 
   /** El total que se usa para todo: el del servidor, o el estimado mientras llega. */
   readonly total = computed(() => this.totalReal() ?? this.subtotalEstimado());
@@ -128,10 +155,11 @@ export class Pos {
     // olvidara.
     effect(() => {
       const items = this.carrito();
-      const tipo = this.tipoClienteSel;
+      const tipo = this.tipoClienteSel();
       const s = this.sesion();
       if (items.length === 0 || !s) {
         this.totalReal.set(null);
+        this.avisoCotizacion.set(null);
         return;
       }
       this.cotizando.set(true);
@@ -145,12 +173,16 @@ export class Pos {
         .subscribe({
           next: (c) => {
             this.totalReal.set(c.total);
+            this.avisoCotizacion.set(null);
             this.cotizando.set(false);
           },
           // Si la cotización falla se sigue con el estimado: no vale la pena
-          // frenar la caja por no poder mostrar el IVA.
-          error: () => {
+          // frenar la caja por no poder mostrar el IVA. Pero si el servidor dijo
+          // POR QUÉ —casi siempre, existencias— se avisa ya.
+          error: (e) => {
             this.totalReal.set(null);
+            const api = (e as { error?: { error?: ApiError } })?.error?.error;
+            this.avisoCotizacion.set(api?.code === 'STOCK_INSUFICIENTE' ? api.message : null);
             this.cotizando.set(false);
           },
         });
@@ -182,7 +214,8 @@ export class Pos {
         const activos = ts.filter((x) => x.activo);
         this.tiposCliente.set(activos);
         // Arranca en el público: es el precio de mostrador.
-        this.tipoClienteSel = (activos.find((x) => x.es_publico) ?? activos[0])?.id ?? '';
+        this.publicoId = (activos.find((x) => x.es_publico) ?? activos[0])?.id ?? '';
+        this.tipoClienteSel.set(this.publicoId);
       },
       error: () => {},
     });
@@ -334,7 +367,7 @@ export class Pos {
       this.agregar({
         id: v.id,
         sku: v.sku,
-        producto: v.producto ?? '',
+        producto: this.nombreHilo(v),
         presentacion: v.presentacion,
         precio: Number(v.precio_oferta ?? v.precio),
         unidad: v.unidad,
@@ -355,7 +388,7 @@ export class Pos {
           {
             variante_id: v.id,
             sku: v.sku,
-            producto: v.producto ?? '',
+            producto: this.nombreHilo(v),
             presentacion: v.presentacion,
             precio: Number(v.precio_oferta ?? v.precio),
             unidad: v.unidad,
@@ -404,7 +437,7 @@ export class Pos {
           vs.map((v) => ({
             id: v.id,
             sku: v.sku,
-            producto: v.producto ?? '',
+            producto: this.nombreHilo(v),
             presentacion: v.presentacion,
             precio: Number(v.precio_oferta ?? v.precio),
             unidad: v.unidad,
@@ -412,6 +445,14 @@ export class Pos {
         ),
       error: (e) => this.error.set(this.msg(e)),
     });
+  }
+
+  /**
+   * El hilo con su calibre: ROJO 1/30 y ROJO 2/30 son dos productos, y con el
+   * color solo el carrito y el ticket no dicen cuál se está vendiendo.
+   */
+  private nombreHilo(v: { producto?: string | null; calibre?: string | null }): string {
+    return `${v.producto ?? ''}${v.calibre ? ' ' + v.calibre : ''}`;
   }
 
   agregar(r: {
@@ -504,7 +545,8 @@ export class Pos {
     this.clienteSel.set(c);
     this.resultadosCliente.set([]);
     this.qCliente = '';
-    if (c.tipo_cliente_id) this.tipoClienteSel = c.tipo_cliente_id;
+    // Sin lista propia se cobra al público, aunque antes se hubiera elegido otra.
+    this.tipoClienteSel.set(c.tipo_cliente_id ?? this.publicoId);
     this.error.set(null);
   }
 
@@ -574,10 +616,16 @@ export class Pos {
       });
   }
 
+  /**
+   * Quita al cliente y REGRESA al precio público. Si la lista se quedara, el
+   * siguiente que pasa —que casi siempre es un cliente de mostrador— pagaría
+   * con los precios de mayoreo del anterior.
+   */
   quitarCliente(): void {
     this.clienteSel.set(null);
     this.aCredito = null;
     this.fiando.set(false);
+    this.tipoClienteSel.set(this.publicoId);
   }
 
   /** Cuánto se le puede fiar ahora mismo. */
@@ -671,14 +719,23 @@ export class Pos {
       this.error.set('Elige con qué está pagando lo de hoy.');
       return;
     }
+    const aPagar = this.aPagarHoy();
+    // Con tarjeta o transferencia se cobra justo. En efectivo, lo que el cliente
+    // entrega; vacío quiere decir que pagó con el importe exacto.
+    const recibido = this.esEfectivoSel() ? Number(this.montoPago ?? aPagar) : aPagar;
+    if (aPagar > 0 && recibido + 0.001 < aPagar) {
+      this.error.set(
+        `Faltan ${this.dinero(aPagar - recibido)}: recibió ${this.dinero(recibido)} y son ${this.dinero(aPagar)}.`
+      );
+      return;
+    }
     this.error.set(null);
-    const monto = this.montoPago ?? 0;
 
     this.ventas
       .crearPedido({
         canal: 'punto_venta',
         sesion_caja_id: s.id,
-        tipo_cliente_id: this.tipoClienteSel ? Number(this.tipoClienteSel) : undefined,
+        tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         // Si se identificó al cliente, la venta queda en su historial.
         cliente_id: this.clienteSel()?.id,
         a_credito: fiado > 0 ? fiado : undefined,
@@ -688,16 +745,21 @@ export class Pos {
           // Va el rastro de los bultos escaneados, si hubo.
           bultos: i.bultos?.length ? i.bultos : undefined,
         })),
-        // Sin nada que pagar hoy (todo a crédito) no se manda pago alguno.
-        pagos:
-          this.aPagarHoy() > 0
-            ? [{ metodo_pago_id: Number(this.metodoSel), monto }]
-            : undefined,
+        // Sin nada que pagar hoy (todo a crédito) no se manda pago alguno. Se
+        // manda lo RECIBIDO: el servidor asienta lo cobrado y devuelve el cambio.
+        pagos: aPagar > 0 ? [{ metodo_pago_id: Number(this.metodoSel), monto: recibido }] : undefined,
       })
       .subscribe({
         next: (pedido) => {
-          const cambio = Math.max(0, monto - Number(pedido.total));
-          this.ticket.set({ pedido, cambio });
+          // El cambio lo calcula el servidor contra el total con que de verdad
+          // se cobró; el de la pantalla pudo ser el estimado.
+          const cambio = Number(pedido.cambio ?? Math.max(0, recibido - (Number(pedido.total) - fiado)));
+          this.ticket.set({
+            pedido,
+            cambio,
+            pagadoHoy: Math.round((Number(pedido.total) - fiado) * 100) / 100,
+            fiado,
+          });
           this.carrito.set([]);
           this.montoPago = null;
           this.qVar = '';
@@ -717,13 +779,52 @@ export class Pos {
       this.error.set('Indica el monto final contado.');
       return;
     }
+    // Cerrar no tiene vuelta: después de esto el turno ya no recibe ventas.
+    if (!confirm(`¿Cerrar ${s.caja ?? 'la caja'} con ${this.dinero(this.montoFinal)} contados?`)) return;
     this.ventas.cerrarSesion(s.id, this.montoFinal).subscribe({
       next: (fresh) => {
+        // La pantalla regresa a "Abrir caja", que no muestra la sesión: el
+        // resultado del corte va en su propia tarjeta para que no se pierda.
+        this.ultimoCorte.set(fresh);
         this.sesion.set(fresh);
         this.montoFinal = null;
       },
       error: (e) => this.error.set(this.msg(e)),
     });
+  }
+
+  /** Diferencia del corte: positiva sobra, negativa falta. */
+  diferenciaCorte(c: SesionCaja): number {
+    return Number(c.diferencia ?? 0);
+  }
+
+  /** ¿El método elegido es efectivo? Solo el efectivo da cambio. */
+  esEfectivoSel(): boolean {
+    const m = this.metodos().find((x) => x.id === Number(this.metodoSel));
+    return !!m && m.nombre.toLowerCase().includes('efectivo');
+  }
+
+  /** El cambio que se va a dar, mientras se teclea. Método: lee ngModel. */
+  cambioPrevio(): number {
+    if (!this.esEfectivoSel() || this.montoPago == null) return 0;
+    return Math.max(0, Math.round((Number(this.montoPago) - this.aPagarHoy()) * 100) / 100);
+  }
+
+  /** Lo que falta si lo recibido no alcanza. Método: lee ngModel. */
+  faltaPrevio(): number {
+    if (!this.esEfectivoSel() || this.montoPago == null) return 0;
+    return Math.max(0, Math.round((this.aPagarHoy() - Number(this.montoPago)) * 100) / 100);
+  }
+
+  /** Cambiar de caja con un turno abierto: la otra tiene su propio cajón. */
+  cambiarCaja(): void {
+    this.ultimoCorte.set(null);
+    this.verificarSesion();
+  }
+
+  movimientoRegistrado(s: SesionCaja): void {
+    this.sesion.set(s);
+    this.mensaje.set(`Listo. En el cajón debería haber ${this.dinero(s.esperado_actual)}.`);
   }
 
   nuevaVenta(): void {
@@ -732,7 +833,7 @@ export class Pos {
 
   /** Nombre del tipo elegido, para rotular el carrito. */
   nombreTipoCliente(): string {
-    return this.tiposCliente().find((t) => t.id === Number(this.tipoClienteSel))?.nombre ?? '';
+    return this.tiposCliente().find((t) => t.id === Number(this.tipoClienteSel()))?.nombre ?? '';
   }
 
   /**
@@ -750,7 +851,7 @@ export class Pos {
         canal: 'punto_venta',
         sesion_caja_id: s.id,
         cliente_id: this.clienteSel()!.id,
-        tipo_cliente_id: this.tipoClienteSel ? Number(this.tipoClienteSel) : undefined,
+        tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         apartado: true,
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
@@ -766,7 +867,7 @@ export class Pos {
       .subscribe({
         next: (pedido) => {
           // El "cambio" de un apartado es cero: el anticipo se queda tal cual.
-          this.ticket.set({ pedido, cambio: 0 });
+          this.ticket.set({ pedido, cambio: 0, pagadoHoy: anticipo, fiado: 0 });
           this.carrito.set([]);
           this.montoPago = null;
           this.qVar = '';

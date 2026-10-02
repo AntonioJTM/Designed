@@ -12,7 +12,7 @@
 
     <div>
       <span class="muted">{{ p.categoria }}</span>
-      <h1>{{ p.nombre }}</h1>
+      <h1>{{ p.nombre }}@if (p.grosor_calibre) { <span class="calibre">{{ p.grosor_calibre }}</span> }</h1>
       @if (p.descripcion) { <p class="muted">{{ p.descripcion }}</p> }
 
       <h3>Presentaciones</h3>
@@ -36,11 +36,11 @@
                 @if (disponible(v) <= 0) {
                   <div class="sin-stock">Sin existencias</div>
                 } @else if (disponible(v) <= 5) {
-                  <div class="poco-stock">Quedan {{ disponible(v) }} {{ p.unidad || 'kg' }}</div>
+                  <div class="poco-stock">Quedan {{ disponible(v) | cantidad: (p.unidad || 'kg') }}</div>
                 }
               </div>
               <span class="precio">
-                ${{ precio(v).toFixed(2) }}<span class="muted" style="font-size:0.8rem">/{{ p.unidad || 'kg' }}</span>
+                {{ precio(v) | dinero }}<span class="muted" style="font-size:0.8rem">/{{ p.unidad || 'kg' }}</span>
               </span>
             </div>
           }

@@ -3,13 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
-import {
-  ClientesEnfriados,
-  Cobranza,
-  HiloMuerto,
-  Margen,
-  Tablero,
-} from '../models/analisis.models';
+import { Tablero } from '../models/analisis.models';
 
 function data<T>(r: ApiResponse<T>): T {
   if (r.error || r.data === null) throw r.error ?? { code: 'DESCONOCIDO', message: 'Respuesta vacía' };
@@ -50,30 +44,6 @@ export class AnalisisService {
   tablero(f: FiltrosTablero = {}): Observable<Tablero> {
     return this.http
       .get<ApiResponse<Tablero>>(`${this.base}/tablero`, { params: aParams(f) })
-      .pipe(map(data));
-  }
-
-  cobranza(f: FiltrosTablero = {}): Observable<Cobranza> {
-    return this.http
-      .get<ApiResponse<Cobranza>>(`${this.base}/cobranza`, { params: aParams(f) })
-      .pipe(map(data));
-  }
-
-  clientesEnfriados(f: FiltrosTablero = {}): Observable<ClientesEnfriados> {
-    return this.http
-      .get<ApiResponse<ClientesEnfriados>>(`${this.base}/clientes-enfriados`, { params: aParams(f) })
-      .pipe(map(data));
-  }
-
-  hiloMuerto(f: FiltrosTablero = {}): Observable<HiloMuerto> {
-    return this.http
-      .get<ApiResponse<HiloMuerto>>(`${this.base}/hilo-muerto`, { params: aParams(f) })
-      .pipe(map(data));
-  }
-
-  margen(f: FiltrosTablero = {}): Observable<Margen> {
-    return this.http
-      .get<ApiResponse<Margen>>(`${this.base}/margen`, { params: aParams(f) })
       .pipe(map(data));
   }
 }

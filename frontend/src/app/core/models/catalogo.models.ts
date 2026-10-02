@@ -143,6 +143,12 @@ export interface Imagen {
 
 export interface Producto {
   id: number;
+  /**
+   * Solo al crear: por qué no se pudo crear su presentación (normalmente, que no
+   * trae precio por kilo). Si viene, la pantalla lo dice en vez de presumir que
+   * se creó.
+   */
+  presentacion_pendiente?: string;
   categoria_id: number;
   categoria?: string;
   /** Calibres del material del producto, tal como los define la categoría. */

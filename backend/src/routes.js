@@ -25,10 +25,6 @@ const configuracionRoutes = require('./modules/configuracion/routes');
 // Enrutador raíz de la API v1. Aquí se montan los módulos por dominio.
 const router = Router();
 
-router.get('/', (req, res) => {
-  res.json({ data: { api: 'tienda-hilos', version: 'v1' }, error: null });
-});
-
 // Seguridad / cuentas
 router.use('/usuarios', usuariosRoutes);
 router.use('/clientes', clientesRoutes);

@@ -118,7 +118,6 @@ Formato del archivo (una hoja, encabezado en el primer renglón):
 | POST | `/api/v1/remesas/previa` | Recibe el `.xlsx` en crudo y devuelve la vista previa sin guardar nada |
 | POST | `/api/v1/remesas` | Confirma: registra los bultos y da entrada al total en kilos |
 | GET | `/api/v1/remesas` | Historial |
-| GET | `/api/v1/remesas/:id` | Una remesa con sus bultos |
 
 La vista previa devuelve el resumen (bultos, kilos, rango de peso, conos, desglose por lote), los
 bultos ya normalizados y los avisos: renglones sin código o con peso inválido, códigos repetidos
@@ -196,8 +195,6 @@ editarlos o borrarlos es de **administrador**.
 | GET | `/api/v1/almacenes` | Lista (`?activo=true` filtra) | — |
 | GET | `/api/v1/inventario/resumen` | Qué hay en cada almacén: totales + matriz producto × almacén | Bearer (staff) |
 | GET | `/api/v1/almacenes/tienda-linea` | El que surte la tienda en línea | — |
-| GET | `/api/v1/almacenes/matriz` | El que surte a las sucursales | — |
-| GET | `/api/v1/almacenes/:id` | Detalle | — |
 | POST | `/api/v1/almacenes` | `nombre`, `direccion?`, `es_punto_venta?`, `es_tienda_linea?`, `es_matriz?`, `activo?` | Bearer (admin) |
 | PUT | `/api/v1/almacenes/:id` | Igual, todo opcional | Bearer (admin) |
 | DELETE | `/api/v1/almacenes/:id` | Solo si no tiene nada colgando | Bearer (admin) |
@@ -265,7 +262,6 @@ empleado figura como vendedor (`pedidos.usuario_id`); los cancelados y devueltos
 | GET | `/api/v1/nomina/periodos/actual` | Semana que contiene `?fecha=YYYY-MM-DD` (hoy por omisión) y su periodo, o `null` si no existe |
 | GET | `/api/v1/nomina/periodos` | Histórico paginado con el total de cada semana |
 | POST | `/api/v1/nomina/periodos` | Crea el periodo de la semana de `fecha` (se ajusta al domingo) |
-| GET | `/api/v1/nomina/periodos/:id` | Periodo con sus recibos y conceptos |
 | GET | `/api/v1/nomina/periodos/:id/ventas` | `?usuario_id=` · pedidos que forman la base comisionable |
 | POST | `/api/v1/nomina/periodos/:id/calcular` | Recalcula sueldos y comisiones (solo en `borrador`) |
 | PATCH | `/api/v1/nomina/periodos/:id/estado` | `borrador` → `pagado` \| `cancelado` |

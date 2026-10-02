@@ -11,8 +11,6 @@ const { AppError } = require('../../middlewares/error');
 // o devueltos no cuentan, igual que en el módulo de reportes.
 const VENTA_VALIDA = "estado NOT IN ('cancelado','devuelto')";
 
-const ESTADOS = ['borrador', 'pagado', 'cancelado'];
-
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 // ---------------------------------------------------------------------------
@@ -415,7 +413,6 @@ function _diaSiguiente(fecha) {
 }
 
 module.exports = {
-  ESTADOS,
   listarEmpleados,
   obtenerEmpleado,
   guardarEmpleado,

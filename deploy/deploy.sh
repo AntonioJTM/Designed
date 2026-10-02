@@ -89,9 +89,12 @@ fi
 if [ "$TARGET" = all ] || [ "$TARGET" = backend ]; then
   paso "Empaquetando backend"
   # Se excluye .env a propósito: el del servidor tiene las credenciales reales
-  # y NO debe sobreescribirse desde local.
+  # y NO debe sobreescribirse desde local. Tampoco cualquier .env.* (el de
+  # producción, el respaldo de la base local…): llevan contraseñas y no tienen
+  # nada que hacer en el servidor. ./uploads son comprobantes de pruebas locales.
   tar czf "$TMP/backend.tar.gz" -C backend \
-      --exclude=node_modules --exclude=.env --exclude=.git --exclude='*.log' .
+      --exclude=node_modules --exclude=.env --exclude='.env.*' --exclude=./uploads \
+      --exclude=.git --exclude='*.log' .
   verde "  Empaquetado: $(du -h "$TMP/backend.tar.gz" | cut -f1)"
 
   # Aviso útil: si hay cambios sin commitear, se despliegan (es lo que queremos),

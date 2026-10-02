@@ -1,9 +1,9 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { CatalogoService } from '../../../core/services/catalogo.service';
+import { AuthService } from '../../../core/services/auth.service';
 import {
   InventarioService,
   PreviaRemesa,
@@ -14,7 +14,6 @@ import {
   Imagen,
   LoteDeBultos,
   ModoPrecio,
-  Opcion,
   ProductoDetalle,
   TipoCliente,
   TipoPresentacion,
@@ -24,6 +23,7 @@ import {
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
+import { DineroPipe } from '../../../shared/dinero.pipe';
 
 /**
  * Presentaciones (SKU) e imágenes de un producto, en su propia pantalla.
@@ -34,12 +34,16 @@ import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
  */
 @Component({
   selector: 'app-producto-presentaciones',
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe, DineroPipe],
   templateUrl: './producto-presentaciones.html',
 })
 export class ProductoPresentaciones {
   private readonly fb = inject(FormBuilder);
   private readonly catalogo = inject(CatalogoService);
+  private readonly auth = inject(AuthService);
+
+  /** El precio que se le cobra a todos lo cambian los jefes, no la caja. */
+  readonly esJefe = computed(() => ['administrador', 'gerente'].includes(this.auth.sesion()?.rol ?? ''));
   private readonly inv = inject(InventarioService);
   private readonly route = inject(ActivatedRoute);
 
@@ -77,6 +81,14 @@ export class ProductoPresentaciones {
   /** Precio que se está capturando por tipo de cliente. */
   readonly editandoPrecios = signal<number | null>(null);
   precioTipo: Record<number, number | null> = {};
+  /**
+   * Precio público y peso de la presentación abierta. Antes no había dónde
+   * cambiarlos: el precio quedaba como se heredó del producto el día del alta y
+   * el peso como lo puso la primera remesa.
+   */
+  precioPublico: number | null = null;
+  pesoPaquete: number | null = null;
+  readonly guardandoPublico = signal(false);
 
   /** Tipos que llevan precio propio: todos menos el público. */
   readonly tiposConPrecio = computed(() => this.tiposCliente().filter((t) => !t.es_publico));
@@ -228,7 +240,7 @@ export class ProductoPresentaciones {
     lote: [''],
     codigo_barras: [''],
     // Presentación: 'paquete' se vende por kilo y se puede desarmar en conos;
-    // 'cono' sale de un paquete y se vende por pieza.
+    // 'cono' sale de un paquete y también se vende por kilo, al mismo precio.
     tipo_presentacion: ['paquete' as TipoPresentacion],
     peso_kg: [null as number | null],
     origen_variante_id: [null as number | null],
@@ -239,33 +251,9 @@ export class ProductoPresentaciones {
     costo: [null as number | null],
   });
 
-  private readonly varFormValor = toSignal(this.varForm.valueChanges, {
-    initialValue: this.varForm.getRawValue(),
-  });
-
   readonly paquetes = computed(() =>
     this.variantes().filter((v) => v.tipo_presentacion === 'paquete')
   );
-
-  readonly previaCono = computed(() => {
-    const v = this.varFormValor();
-    if (v.tipo_presentacion !== 'cono' || v.modo_precio !== 'calculado') return null;
-    const paq = this.paquetes().find((p) => p.id === Number(v.origen_variante_id));
-    const piezas = Number(v.piezas_por_origen);
-    if (!paq || !paq.peso_kg || !piezas) return null;
-
-    const precioKg = Number(paq.precio);
-    const pesoPaq = Number(paq.peso_kg);
-    return {
-      paquete: paq.sku,
-      precioKg,
-      pesoPaq,
-      valorPaquete: precioKg * pesoPaq,
-      piezas,
-      pesoCono: pesoPaq / piezas,
-      precioCono: Math.round(((precioKg * pesoPaq) / piezas) * 100) / 100,
-    };
-  });
 
   readonly imgForm = this.fb.nonNullable.group({
     url: ['', Validators.required],
@@ -372,7 +360,7 @@ export class ProductoPresentaciones {
       if (!v.origen_variante_id) return 'Elige de qué paquete se desarma el cono.';
       if (!v.piezas_por_origen) return 'Indica cuántos conos salen de un paquete.';
       if (v.modo_precio === 'manual' && v.precio == null) {
-        return 'Con precio por pieza tienes que capturar el precio del cono.';
+        return 'Con precio manual tienes que capturar el precio por kilo del cono.';
       }
     }
     if (v.tipo_presentacion === 'simple' && sinPrecio) {
@@ -574,6 +562,8 @@ export class ProductoPresentaciones {
       return;
     }
     this.editandoPrecios.set(v.id);
+    this.precioPublico = v.precio != null ? Number(v.precio) : null;
+    this.pesoPaquete = v.peso_kg != null ? Number(v.peso_kg) : null;
     this.precioTipo = {};
     for (const t of this.tiposConPrecio()) {
       const p = v.precios?.find((x) => x.tipo_cliente_id === t.id);
@@ -585,6 +575,66 @@ export class ProductoPresentaciones {
   precioDe(v: Variante, tipoId: number): number | null {
     const p = v.precios?.find((x) => x.tipo_cliente_id === tipoId);
     return p ? Number(p.precio) : null;
+  }
+
+  dinero(v: unknown): string {
+    return Number(v ?? 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+      maximumFractionDigits: 2,
+    });
+  }
+
+  /** El cono con precio calculado sigue al paquete: su precio no se edita. */
+  precioEditable(v: Variante): boolean {
+    return !(v.tipo_presentacion === 'cono' && v.modo_precio === 'calculado');
+  }
+
+  /** El peso del cono sale del paquete entre sus piezas: solo se edita el del paquete. */
+  pesoEditable(v: Variante): boolean {
+    return v.tipo_presentacion !== 'cono';
+  }
+
+  guardarPublico(v: Variante): void {
+    const body: { precio?: number; peso_kg?: number | null } = {};
+    if (this.precioEditable(v)) {
+      const p = Number(this.precioPublico);
+      if (this.precioPublico == null || !(p >= 0)) {
+        this.error.set('Escribe el precio público.');
+        return;
+      }
+      if (p !== Number(v.precio)) body.precio = p;
+    }
+    if (this.pesoEditable(v)) {
+      const w = this.pesoPaquete == null || (this.pesoPaquete as unknown) === '' ? null : Number(this.pesoPaquete);
+      if (w !== null && !(w > 0)) {
+        this.error.set('El peso tiene que ser mayor que cero, o déjalo vacío.');
+        return;
+      }
+      if (w !== (v.peso_kg != null ? Number(v.peso_kg) : null)) body.peso_kg = w;
+    }
+    if (Object.keys(body).length === 0) {
+      this.mensaje.set('No hubo cambios.');
+      return;
+    }
+    this.error.set(null);
+    this.guardandoPublico.set(true);
+    this.catalogo.actualizarVariante(v.id, body).subscribe({
+      next: () => {
+        this.guardandoPublico.set(false);
+        this.mensaje.set(
+          v.tipo_presentacion === 'paquete' && this.conos().length > 0 && body.precio != null
+            ? `Precio de ${v.sku} actualizado. Los conos de precio calculado también cambiaron.`
+            : `${v.sku} actualizado.`
+        );
+        // Se recarga todo: si cambió el paquete, los conos cambiaron con él.
+        this.recargar();
+      },
+      error: (e) => {
+        this.guardandoPublico.set(false);
+        this.error.set(this.msg(e));
+      },
+    });
   }
 
   guardarPrecioTipo(v: Variante, tipoId: number): void {

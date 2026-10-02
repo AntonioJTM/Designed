@@ -186,18 +186,4 @@ async function listar({ variante_id, limit, offset }) {
   return { rows, total };
 }
 
-/** La remesa con sus bultos, para poder revisar qué entró. */
-async function obtener(id) {
-  const [rows] = await pool.query(`${SELECT_REMESA} WHERE r.id = :id LIMIT 1`, { id });
-  const remesa = rows[0];
-  if (!remesa) return null;
-  const [bultos] = await pool.query(
-    `SELECT codigo, peso_kg, lote, conos FROM variante_codigos
-      WHERE remesa_id = :id ORDER BY id`,
-    { id }
-  );
-  remesa.bultos = bultos;
-  return remesa;
-}
-
-module.exports = { codigosExistentes, crearRemesa, listar, obtener };
+module.exports = { codigosExistentes, crearRemesa, listar };

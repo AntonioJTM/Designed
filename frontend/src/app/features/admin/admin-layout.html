@@ -15,8 +15,8 @@
       <a routerLink="/admin/clientes" routerLinkActive="on">Clientes</a>
       <a routerLink="/admin/apartados" routerLinkActive="on">Apartados</a>
       <a routerLink="/admin/reportes" routerLinkActive="on">Reportes</a>
-      @if (esAdmin()) {
-        <!-- Muestra costos y márgenes: solo administradores. -->
+      @if (esJefe()) {
+        <!-- Muestra costos y márgenes: administradores y gerentes. -->
         <a routerLink="/admin/tablero" routerLinkActive="on">Cómo va el negocio</a>
       }
       @if (esAdmin()) {
@@ -63,7 +63,7 @@
                 <button type="button" class="aviso-item" (click)="irA('/admin/traspasos')">
                   <b>{{ t.almacen_destino }}</b> pide
                   {{ t.num_lineas }} {{ +t.num_lineas === 1 ? 'producto' : 'productos' }}
-                  <span class="kg">({{ t.kg }} kg)</span>
+                  <span class="kg">({{ t.kg | cantidad: 'kg' }})</span>
                   <span class="cuando">{{ t.creado_en | fecha }} · falta enviarlo</span>
                 </button>
               }
@@ -73,7 +73,7 @@
               <h4>Van en camino</h4>
               @for (t of p.traspasos_por_recibir; track t.id) {
                 <button type="button" class="aviso-item" (click)="irA('/admin/traspasos')">
-                  A <b>{{ t.almacen_destino }}</b>, {{ t.kg }} kg
+                  A <b>{{ t.almacen_destino }}</b>, {{ t.kg | cantidad: 'kg' }}
                   <span class="cuando">
                     salió el {{ t.enviado_en | fecha }} · falta que acusen recibo
                   </span>
@@ -92,7 +92,8 @@
 
             @if (p.cobranza && p.cobranza.num_clientes > 0) {
               <h4>Por cobrar</h4>
-              <button type="button" class="aviso-item" (click)="irA('/admin/tablero')">
+              <button type="button" class="aviso-item"
+                      (click)="irA(esJefe() ? '/admin/tablero' : '/admin/clientes?deben=1')">
                 <b>{{ p.cobranza.num_clientes }}</b>
                 {{ p.cobranza.num_clientes === 1 ? 'cliente debe' : 'clientes deben' }}
                 {{ dinero(p.cobranza.monto) }}
@@ -137,7 +138,8 @@
 
             @if (p.enfriados && p.enfriados.num_clientes > 0) {
               <h4>Dejaron de venir</h4>
-              <button type="button" class="aviso-item" (click)="irA('/admin/tablero')">
+              <button type="button" class="aviso-item"
+                      (click)="irA(esJefe() ? '/admin/tablero' : '/admin/clientes')">
                 <b>{{ p.enfriados.num_clientes }}</b>
                 {{ p.enfriados.num_clientes === 1 ? 'cliente' : 'clientes' }}
                 sin aparecer

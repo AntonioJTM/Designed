@@ -9,12 +9,6 @@ async function listar(req, res, next) {
   } catch (err) { next(err); }
 }
 
-async function obtener(req, res, next) {
-  try {
-    res.json({ data: await service.obtener(Number(req.params.id)), error: null });
-  } catch (err) { next(err); }
-}
-
 async function crear(req, res, next) {
   try {
     res.status(201).json({ data: await service.crear(req.body), error: null });
@@ -34,4 +28,4 @@ async function eliminar(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar };
+module.exports = { listar, crear, actualizar, eliminar };

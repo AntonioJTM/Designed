@@ -191,6 +191,65 @@ describe('PedidoDetalle', () => {
     expect(c.pagoConComprobante()).not.toBeNull();
   });
 
+  // Un apartado sin entregar no puede tomar atajos: se entrega desde
+  // Apartados, y cancelado se reactiva como apartado.
+  it('a un apartado vigente solo le ofrece cancelarlo', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'apartado', inventario_descontado: 0 };
+    const c = (await montar()).componentInstance;
+
+    expect(c.estados()).toEqual(['apartado', 'cancelado']);
+  });
+
+  it('un apartado cancelado se reactiva como apartado, no como venta', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'cancelado', inventario_descontado: 0 };
+    const c = (await montar()).componentInstance;
+
+    expect(c.estados()).toEqual(['cancelado', 'apartado']);
+  });
+
+  it('una venta normal no ofrece volverse apartado', async () => {
+    actual = { ...pedidoBase(), inventario_descontado: 1 };
+    const c = (await montar()).componentInstance;
+
+    expect(c.estados()).not.toContain('apartado');
+    expect(c.estados()).toContain('entregado');
+  });
+
+  it('cancelar un apartado no manda devoluciones: nunca salió de la bodega', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'apartado', inventario_descontado: 0 };
+    const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
+    const c = (await montar()).componentInstance;
+
+    c.nuevoEstado = 'cancelado';
+    c.cambiarEstado();
+    c.confirmarDevolucion();
+
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined]);
+    expect(c.mensaje()).toContain('Se liberó lo apartado');
+  });
+
+  // Subir la captura donde no hay pago al cual pegarla creaba otro por el total.
+  it('ofrece subir la captura a un pedido que espera el depósito', async () => {
+    const c = (await montar()).componentInstance;
+    expect(c.aceptaComprobante()).toBe(true);
+  });
+
+  it('no ofrece la captura en un apartado: se le abona', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'apartado', inventario_descontado: 0 };
+    const c = (await montar()).componentInstance;
+    expect(c.aceptaComprobante()).toBe(false);
+  });
+
+  it('no ofrece la captura en una venta ya cobrada en efectivo', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado',
+      pagos: [{ id: 9, metodo_pago_id: 1, metodo: 'Efectivo', monto: '348.00',
+                estado: 'completado', creado_en: '2026-09-05 10:00:00' }],
+    } as Pedido;
+    const c = (await montar()).componentInstance;
+    expect(c.aceptaComprobante()).toBe(false);
+  });
+
   it('libera el object URL al salir de la pantalla', async () => {
     const fixture = await montar();
     const c = fixture.componentInstance;

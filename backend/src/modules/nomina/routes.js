@@ -56,11 +56,10 @@ const ventasQuerySchema = z
 router.get('/empleados', ...soloAdmin, controller.listarEmpleados);
 router.put('/empleados/:usuarioId', ...soloAdmin, validate(empleadoSchema), controller.guardarEmpleado);
 
-// Periodos semanales. '/actual' va antes de '/:id' para no colisionar.
+// Periodos semanales. '/actual' va antes de '/:id/...' para no colisionar.
 router.get('/periodos/actual', ...soloAdmin, controller.periodoActual);
 router.get('/periodos', ...soloAdmin, controller.listarPeriodos);
 router.post('/periodos', ...soloAdmin, validate(crearPeriodoSchema), controller.crearPeriodo);
-router.get('/periodos/:id', ...soloAdmin, controller.obtenerPeriodo);
 router.get('/periodos/:id/ventas', ...soloAdmin, validate(ventasQuerySchema, 'query'), controller.ventasDelPeriodo);
 router.post('/periodos/:id/calcular', ...soloAdmin, controller.calcular);
 router.patch('/periodos/:id/estado', ...soloAdmin, validate(estadoSchema), controller.cambiarEstado);

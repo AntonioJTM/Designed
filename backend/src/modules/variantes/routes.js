@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -32,9 +32,6 @@ const crearSchema = z
   })
   .strict();
 
-// En update no se permite cambiar producto_id (la variante pertenece a su producto).
-const actualizarSchema = crearSchema.partial().omit({ producto_id: true });
-
 const precioTipoSchema = z
   .object({
     tipo_cliente_id: z.coerce.number().int().positive(),
@@ -55,13 +52,28 @@ const codigoSchema = z
   })
   .strict();
 
+// Lo que se puede cambiar de una presentación que YA existe: su precio
+// público, su oferta, su peso y si está a la venta. El SKU, el tipo y de qué
+// paquete sale un cono no se tocan aquí: cambiarlos con existencias y ventas
+// encima dejaría el kardex hablando de otra cosa.
+const actualizarSchema = z
+  .object({
+    precio: z.coerce.number().nonnegative().max(9999999).optional(),
+    precio_oferta: z.coerce.number().nonnegative().max(9999999).nullable().optional(),
+    peso_kg: z.coerce.number().positive().max(999999).nullable().optional(),
+    activo: z.coerce.boolean().optional(),
+  })
+  .strict()
+  .refine((d) => Object.keys(d).length > 0, { message: 'No hay nada que cambiar' });
+
 const soloStaff = [authRequired, requireTipo('usuario')];
+// Cambiar el precio que se le cobra a todos es decisión de los jefes, no de caja.
+const soloJefes = [...soloStaff, requireRol('administrador', 'gerente')];
 
 router.get('/', controller.listar);
-router.get('/:id', controller.obtener);
 
 router.post('/', ...soloStaff, validate(crearSchema), controller.crear);
-router.put('/:id', ...soloStaff, validate(actualizarSchema), controller.actualizar);
+router.patch('/:id', ...soloJefes, validate(actualizarSchema), controller.actualizar);
 router.delete('/:id', ...soloStaff, controller.eliminar);
 
 // Precio de la variante para un tipo de cliente.

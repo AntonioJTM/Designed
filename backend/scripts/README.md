@@ -183,6 +183,14 @@ código `1` si alguna comprobación falla.
 > paquete válida**. Con una `simple` el endpoint también responde 422, pero por
 > la otra razón (`NO_ES_PAQUETE`), y la prueba pasaría engañada.
 
+> **Las pruebas solo borran lo SUYO** (`_propios.js`). Corren contra la base de
+> producción (con `E2E_ACEPTO_PRODUCCION=si`), así que al limpiar no basta con
+> "todo lo que no estaba antes": una venta real hecha mientras corren también es
+> nueva. `soloPropios(db, foto)` devuelve solo lo nuevo que lleva el prefijo
+> `TMP` en el nombre o cuelga de algo que lo lleva (el pedido de una caja TMP, la
+> remesa de un hilo TMP). Una prueba nueva nombra con `TMP` lo que crea y limpia
+> con eso.
+
 > Las suites que usan el `.xlsx` real le ponen a los códigos un sufijo propio por
 > corrida (`marcar()` / `cod()` en cada guion). Es a propósito: los códigos del
 > archivo ya están ocupados en la base porque la tienda lo cargó de verdad, y sin
@@ -233,7 +241,8 @@ backend/
     e2e-carga-por-producto.js ← prueba E2E del vaciado masivo desde el producto
     e2e-bajar-a-mostrador.js ← prueba E2E de escanear el paquete y bajar conos
     e2e-traspaso-paquetes.js ← prueba E2E del traspaso por paquetes con peso real
-    limpiar-para-pruebas.js ← deja la base lista para capturar (conserva personal y config)
+    e2e-edicion-catalogo.js ← alta sin precio, precio y peso editables, búsqueda por calibre
+    _propios.js     ← qué puede borrar una prueba al terminar (solo lo TMP nuevo)
     generar-muestras-xlsx.js ← genera listas de empaque de prueba en muestras/
     README.md       ← este archivo
   .env              ← credenciales de conexión (no se versiona)

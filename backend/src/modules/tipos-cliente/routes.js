@@ -24,7 +24,6 @@ const soloStaff = [authRequired, requireTipo('usuario')];
 const soloAdmin = [authRequired, requireTipo('usuario'), requireRol('administrador')];
 
 router.get('/', ...soloStaff, controller.listar);
-router.get('/:id', ...soloStaff, controller.obtener);
 router.post('/', ...soloAdmin, validate(crearSchema), controller.crear);
 router.put('/:id', ...soloAdmin, validate(actualizarSchema), controller.actualizar);
 router.delete('/:id', ...soloAdmin, controller.eliminar);

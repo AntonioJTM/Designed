@@ -34,12 +34,6 @@ export class TiendaService {
   crearDireccion(body: DireccionInput): Observable<Direccion> {
     return this.http.post<ApiResponse<Direccion>>(`${this.base}/direcciones`, body).pipe(map(data));
   }
-  actualizarDireccion(id: number, body: Partial<DireccionInput>): Observable<Direccion> {
-    return this.http.put<ApiResponse<Direccion>>(`${this.base}/direcciones/${id}`, body).pipe(map(data));
-  }
-  eliminarDireccion(id: number): Observable<unknown> {
-    return this.http.delete<ApiResponse<unknown>>(`${this.base}/direcciones/${id}`).pipe(map(data));
-  }
 
   // ---- Configuración de la tienda ----
   /** Las claves públicas: tarifa de envío, datos para depositar, dónde recoger. */

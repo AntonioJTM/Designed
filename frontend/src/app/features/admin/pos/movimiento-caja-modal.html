@@ -1,0 +1,84 @@
+<!-- No cierra al hacer clic en el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-movcaja-titulo">
+    <div class="modal-head">
+      <h2 id="modal-movcaja-titulo">Retiro o ingreso de efectivo</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p class="muted" style="margin-top:0; font-size:0.85rem">
+        {{ sesion().caja }} · turno de {{ sesion().usuario }}. Lo que se saque o se meta aquí
+        cuenta en el corte, así que el cajón cuadra al cerrar.
+      </p>
+
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+
+      <div class="opciones-tipo" role="radiogroup" aria-label="Qué se hace">
+        <label class="opcion" [class.on]="tipo === 'retiro'">
+          <input type="radio" name="tipo-mov" value="retiro" [(ngModel)]="tipo" />
+          <b>Sacar dinero</b>
+          <span class="muted">depósito, pago de una compra, gasto</span>
+        </label>
+        <label class="opcion" [class.on]="tipo === 'ingreso'">
+          <input type="radio" name="tipo-mov" value="ingreso" [(ngModel)]="tipo" />
+          <b>Meter dinero</b>
+          <span class="muted">cambio, fondo extra</span>
+        </label>
+      </div>
+
+      <div class="form-grid">
+        <label class="field">
+          Cuánto
+          <div class="campo-moneda">
+            <span>$</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="monto" name="monto-mov"
+                   (keydown.enter)="guardar()" />
+          </div>
+        </label>
+        <label class="field">
+          Para qué
+          @if (tipo === 'ingreso') { <span class="muted">(opcional)</span> }
+          <input type="text" maxlength="255" [(ngModel)]="motivo" name="motivo-mov"
+                 [placeholder]="tipo === 'retiro' ? 'Depósito al banco' : 'Cambio para el día'" />
+        </label>
+      </div>
+
+      <div class="previa-calculo">
+        <div class="renglon">
+          <span class="muted">En el cajón debería haber</span>
+          <span>{{ dinero(enCajon()) }}</span>
+        </div>
+        @if (monto) {
+          <div class="renglon total">
+            <span>Quedaría</span>
+            <span [class.neg]="quedaria() < 0"><b>{{ dinero(quedaria()) }}</b></span>
+          </div>
+        }
+      </div>
+
+      @if (manuales().length > 0) {
+        <h3 style="font-size:0.95rem; margin:1rem 0 0.4rem">Ya registrados en este turno</h3>
+        <table class="grid">
+          <tbody>
+            @for (m of manuales(); track m.id) {
+              <tr>
+                <td class="muted">{{ hora(m.creado_en) }}</td>
+                <td>{{ m.tipo === 'retiro' ? 'Sacó' : 'Metió' }}</td>
+                <td class="num">{{ dinero(m.monto) }}</td>
+                <td class="muted">{{ m.motivo || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+    <div class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" (click)="guardar()" [disabled]="guardando()">
+        {{ guardando() ? 'Guardando…' : (tipo === 'retiro' ? 'Sacar del cajón' : 'Meter al cajón') }}
+      </button>
+    </div>
+  </div>
+</div>

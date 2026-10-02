@@ -598,6 +598,20 @@
       color: var(--ok);
       font-weight: 700;
     }
+
+    /* Lo que paga o hace el cliente: monto en blanco para llenarse a mano. */
+    .desglose td em.espacio {
+      display: inline-block;
+      width: 1in;
+      height: 13px;
+      border-bottom: 1px solid var(--tinta);
+      vertical-align: baseline;
+    }
+
+    .por-cliente {
+      color: var(--suave);
+      font-weight: 700;
+    }
   </style>
 </head>
 
@@ -606,7 +620,7 @@
   <!-- ======================= 1. PORTADA ======================= -->
   <section class="pagina portada">
     <div class="banda">
-      <div class="marca-emisor">Evortex · Desarrollo de software</div>
+      <div class="marca-emisor">Propuesta comercial</div>
       <h1>Propuesta de venta<br>e implementación</h1>
       <div class="sub">Sistema de gestión para tienda de hilos, terminado y listo para usarse: punto de venta,
         inventario por almacén, catálogo en línea, clientes y crédito, reportes y nómina.</div>
@@ -614,8 +628,8 @@
     <div class="datos">
       <div class="dato">
         <div class="etq">Inversión total</div>
-        <div class="val num">$40,000 MXN</div>
-        <div class="nota">Pago único, sin rentas mensuales</div>
+        <div class="val num">$30,000 MXN</div>
+        <div class="nota">Pago único, sin rentas por el sistema</div>
       </div>
       <div class="dato">
         <div class="etq">Implementación</div>
@@ -735,8 +749,8 @@
     <div class="kicker">Tiempo de implementación</div>
     <h2>De la firma a la operación: 8 semanas</h2>
     <p class="intro">El sistema ya está hecho, así que no hay que esperar a que se programe. El tiempo es para
-      instalarlo,
-      cargar su información y enseñarle a su personal. Desde la semana 4 su mostrador ya vende con él.</p>
+      instalarlo, configurarlo y capacitar a su personal, que es quien carga el catálogo y el inventario.
+      Desde la semana 4 su mostrador ya vende con él.</p>
 
     <table class="gantt">
       <thead>
@@ -754,8 +768,8 @@
       </thead>
       <tbody>
         <tr>
-          <td class="act">Servidor, dominio e instalación<span>Contratados a nombre del negocio, con conexión segura
-              (https)</span></td>
+          <td class="act">Instalación en su servidor<span>Servidor y dominio a cargo del negocio; la instalación y la
+              conexión segura (https) van incluidas</span></td>
           <td class="s on"><i></i></td>
           <td class="s"><i></i></td>
           <td class="s"><i></i></td>
@@ -789,11 +803,11 @@
           <td class="s"><i></i></td>
         </tr>
         <tr>
-          <td class="act">Carga del catálogo e inventario inicial<span>Desde las listas de empaque del proveedor en
-              Excel</span></td>
+          <td class="act">Capacitación de caja y bodega<span>Cobro, cortes, carga de mercancía desde Excel, envíos y
+              conos</span></td>
           <td class="s"><i></i></td>
           <td class="s on"><i></i></td>
-          <td class="s on"><i></i></td>
+          <td class="s"><i></i></td>
           <td class="s"><i></i></td>
           <td class="s"><i></i></td>
           <td class="s"><i></i></td>
@@ -801,10 +815,10 @@
           <td class="s"><i></i></td>
         </tr>
         <tr>
-          <td class="act">Capacitación de caja y bodega<span>Cobro, cortes, entrada de mercancía, envíos y conos</span>
-          </td>
+          <td class="act">Carga del catálogo e inventario (su personal)<span>Desde las listas de empaque del proveedor,
+              con nuestra guía</span></td>
           <td class="s"><i></i></td>
-          <td class="s"><i></i></td>
+          <td class="s on"><i></i></td>
           <td class="s on"><i></i></td>
           <td class="s"><i></i></td>
           <td class="s"><i></i></td>
@@ -879,7 +893,7 @@
         <h3>Arranque en mostrador · semana 4</h3>
         <ul>
           <li>Sistema instalado en su dominio.</li>
-          <li>Catálogo e inventario cargados.</li>
+          <li>Catálogo e inventario cargados por su personal.</li>
           <li>El mostrador ya cobra con el sistema.</li>
         </ul>
       </div>
@@ -893,9 +907,9 @@
       </div>
     </div>
 
-    <div class="aviso">Las fechas dependen de que el negocio entregue a tiempo la información que se le pida
-      (listas de empaque, precios, sucursales) y de que revise cada avance en un máximo de 3 días hábiles.
-      Si un avance tarda más en revisarse, la fecha final se recorre los mismos días.</div>
+    <div class="aviso">Las fechas dependen de que el negocio cargue a tiempo su catálogo e inventario, entregue la
+      información que se le pida (precios, sucursales, personal) y revise cada avance en un máximo de 3 días hábiles.
+      Si algo de esto se atrasa, la fecha final se recorre los mismos días.</div>
 
     <div class="pie"><span>Propuesta PROP-2026-003</span><span>3</span></div>
   </section>
@@ -904,7 +918,8 @@
   <section class="pagina">
     <div class="kicker">Inversión</div>
     <h2>Precio y forma de pago</h2>
-    <p class="intro">Un solo pago por el sistema y su implementación. Sin rentas mensuales por usarlo.</p>
+    <p class="intro">Un solo pago por el sistema, con la configuración, la capacitación y el acompañamiento ya
+      incluidos. Sin rentas mensuales por usarlo.</p>
 
     <table class="desglose">
       <tr>
@@ -913,19 +928,14 @@
         <td class="monto num">$30,000.00</td>
       </tr>
       <tr>
-        <td>Instalación y configuración<span>Servidor, dominio, https, sucursales, cajas, usuarios, listas de precio,
-            nombre y logotipo</span></td>
-        <td class="monto num">$4,000.00</td>
-      </tr>
-      <tr>
-        <td>Carga inicial de información<span>Catálogo e inventario desde las listas de empaque del proveedor</span>
-        </td>
-        <td class="monto num">$3,000.00</td>
+        <td>Instalación y configuración<span>Instalación en su servidor con https, sucursales, cajas, usuarios, listas
+            de precio, nombre y logotipo</span></td>
+        <td class="monto"><strong class="incluido">Incluida</strong></td>
       </tr>
       <tr>
         <td>Capacitación y acompañamiento<span>Sesiones por puesto y acompañamiento en la operación hasta la semana
             8</span></td>
-        <td class="monto num">$3,000.00</td>
+        <td class="monto"><strong class="incluido">Incluidos</strong></td>
       </tr>
       <tr>
         <td>Garantía de 4 meses<span>Corrección sin costo de cualquier falla del sistema</span></td>
@@ -933,11 +943,24 @@
       </tr>
       <tr class="total">
         <td>Total</td>
-        <td class="monto num">$40,000.00</td>
+        <td class="monto num">$30,000.00</td>
       </tr>
     </table>
     <p style="font-size:8.8pt;color:var(--tenue);margin-top:6px">Precios en pesos mexicanos. Si requiere factura, el IVA
       ya está incluido en el total.</p>
+
+    <h3 style="margin:10px 0 2px">A cargo del negocio <span style="font-weight:400;color:var(--tenue);font-size:9pt">· no
+        incluido en el total</span></h3>
+    <table class="desglose a-cargo">
+      <tr>
+        <td>Servidor y dominio<span>Se contratan a nombre del negocio y se pagan directamente al proveedor</span></td>
+        <td class="monto num">$ <em class="espacio"></em></td>
+      </tr>
+      <tr>
+        <td>Carga de información<span>Catálogo, inventario inicial y clientes: los captura su personal</span></td>
+        <td class="monto"><strong class="por-cliente">Su personal</strong></td>
+      </tr>
+    </table>
 
     <h3 style="margin:10px 0 6px">Elija cómo pagar</h3>
     <div class="pagos">
@@ -947,15 +970,15 @@
         <table>
           <tr>
             <td>Anticipo · 40%<small>Al firmar. Con este pago arranca la implementación.</small></td>
-            <td class="m num">$16,000.00</td>
+            <td class="m num">$12,000.00</td>
           </tr>
           <tr>
             <td>Arranque en mostrador · 30%<small>Semana 4: su tienda ya vende con el sistema.</small></td>
-            <td class="m num">$12,000.00</td>
+            <td class="m num">$9,000.00</td>
           </tr>
           <tr>
             <td>Entrega final · 30%<small>Semana 8: catálogo en línea publicado y personal capacitado.</small></td>
-            <td class="m num">$12,000.00</td>
+            <td class="m num">$9,000.00</td>
           </tr>
         </table>
       </div>
@@ -965,19 +988,19 @@
         <table>
           <tr>
             <td>Pago 1 · al firmar</td>
-            <td class="m num">$10,000.00</td>
+            <td class="m num">$7,500.00</td>
           </tr>
           <tr>
             <td>Pago 2 · semana 2</td>
-            <td class="m num">$10,000.00</td>
+            <td class="m num">$7,500.00</td>
           </tr>
           <tr>
             <td>Pago 3 · semana 5</td>
-            <td class="m num">$10,000.00</td>
+            <td class="m num">$7,500.00</td>
           </tr>
           <tr>
             <td>Pago 4 · entrega final</td>
-            <td class="m num">$10,000.00</td>
+            <td class="m num">$7,500.00</td>
           </tr>
         </table>
       </div>
@@ -1025,7 +1048,7 @@
         <h3>Propiedad</h3>
         <p>Licencia de uso permanente para su negocio, sin límite de usuarios ni de sucursales. La información
           (ventas, clientes, inventario) es suya: puede pedir un respaldo completo cuando lo necesite. El código
-          fuente sigue siendo de Evortex.</p>
+          fuente sigue siendo del desarrollador.</p>
       </div>
       <div class="bloque">
         <h3>No incluye</h3>
@@ -1038,10 +1061,12 @@
         </ul>
       </div>
       <div class="bloque">
-        <h3>Servicios de terceros</h3>
+        <h3>A cargo del negocio</h3>
         <ul>
           <li>El servidor y el dominio se contratan a nombre del negocio y los paga directamente al proveedor.
-            Evortex los contrata con usted y los configura sin costo adicional.</li>
+            Le ayudamos a contratarlos y los configuramos sin costo adicional.</li>
+          <li>La carga del catálogo, del inventario inicial y de los clientes la hace su personal, con la
+            capacitación incluida.</li>
         </ul>
       </div>
       <div class="bloque">
@@ -1068,7 +1093,7 @@
 
     <div class="firma">
       <div><strong>Acepto la propuesta</strong>Nombre, firma y fecha del cliente</div>
-      <div><strong>Evortex</strong>Antonio Tristán · admin@evortex.com.mx</div>
+      <div><strong>Por el desarrollador</strong>Antonio Tristán · firma y fecha</div>
     </div>
 
     <div class="pie"><span>Propuesta PROP-2026-003</span><span>5</span></div>

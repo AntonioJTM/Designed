@@ -101,10 +101,4 @@ async function tiendaLinea() {
   return id ? model.obtener(id) : null;
 }
 
-/** Almacén matriz: el que surte a las sucursales. */
-async function matriz() {
-  const id = await model.idMatriz();
-  return id ? model.obtener(id) : null;
-}
-
-module.exports = { listar, obtener, crear, actualizar, eliminar, tiendaLinea, matriz };
+module.exports = { listar, obtener, crear, actualizar, eliminar, tiendaLinea };

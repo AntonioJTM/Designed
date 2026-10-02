@@ -203,8 +203,9 @@
 
 <!--
   4 · Buscador, para lo que no cabe arriba y para ver el detalle de un almacén:
-  cuándo se movió por última vez y si tiene mínimo capturado. Las columnas que
-  estarían todas en cero (reservada, mínimo) no se dibujan.
+  cuándo se movió por última vez y su mínimo. La columna de reservada no se
+  dibuja si está toda en cero; la de mínimo SIEMPRE, porque es donde se captura
+  (antes se escondía sin mínimos y entonces no había dónde ponerlos).
 -->
 <div class="card">
   <div class="acciones-periodo" style="margin-bottom:0.75rem">
@@ -247,7 +248,7 @@
             <th>Almacén</th>
             <th class="num">Cantidad</th>
             @if (hayReservas()) { <th class="num">Reservada</th> }
-            @if (hayMinimos()) { <th class="num">Mínimo</th> }
+            <th class="num">Mínimo</th>
             <th>Último movimiento</th>
           </tr>
         </thead>
@@ -289,16 +290,19 @@
                   }
                 </td>
               }
-              @if (hayMinimos()) {
-                <td class="num">
-                  @if (num(s.stock_minimo) > 0) {
-                    {{ s.stock_minimo | cantidad: 'kg' }}
-                    @if (bajoMinimo(s)) { <span class="pill off">bajo</span> }
-                  } @else {
-                    <span class="muted">sin mínimo</span>
-                  }
-                </td>
-              }
+              <td class="num">
+                @if (num(s.stock_minimo) > 0) {
+                  {{ s.stock_minimo | cantidad: 'kg' }}
+                  @if (bajoMinimo(s)) { <span class="pill off">bajo</span> }
+                } @else {
+                  <span class="muted">sin mínimo</span>
+                }
+                <div>
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="abrirMinimo(s)">
+                    {{ num(s.stock_minimo) > 0 ? 'Cambiar' : 'Fijar' }}
+                  </button>
+                </div>
+              </td>
               <td class="muted">{{ s.actualizado_en | fecha }}</td>
             </tr>
           }
@@ -327,5 +331,13 @@
     [almacenes]="almacenes()"
     (cerrado)="modal.set(null)"
     (hecho)="alMover()"
+  />
+}
+
+@if (modal() === 'minimo' && filaMinimo(); as fila) {
+  <app-minimo-modal
+    [fila]="fila"
+    (cerrado)="cerrarMinimo()"
+    (guardado)="alMover()"
   />
 }

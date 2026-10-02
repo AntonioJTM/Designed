@@ -16,6 +16,15 @@ export class TiendaLayout {
 
   readonly esCliente = () => this.tokens.tipo() === 'cliente';
 
+  constructor() {
+    // La sesión vive en localStorage, pero el PERFIL (nombre, correo) solo se
+    // tenía al iniciar sesión: tras recargar, el checkout decía "Comprando como
+    // cliente" en vez del nombre. El panel ya lo pedía así; la tienda no.
+    if (this.esCliente() && !this.auth.sesion()) {
+      this.auth.cargarPerfil().subscribe({ next: () => {}, error: () => {} });
+    }
+  }
+
   salir(): void {
     this.auth.logout();
   }

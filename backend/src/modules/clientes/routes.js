@@ -92,17 +92,16 @@ const ajusteSchema = z
   })
   .strict();
 
-// Búsqueda rápida para el POS y lista de deudores: literales antes de '/:id'.
+// Búsqueda rápida para el POS: literal antes de '/:id'.
 router.get('/buscar', ...soloStaff, controller.buscar);
-router.get('/por-cobrar', ...soloStaff, controller.porCobrar);
 
 router.get('/', ...soloStaff, controller.listar);
 router.post('/', ...soloStaff, validate(expedienteSchema), controller.crearDesdeStaff);
 router.get('/:id', ...soloStaff, controller.expediente);
 router.put('/:id', ...soloStaff, validate(editarSchema), controller.actualizar);
 
-// Crédito
-router.get('/:id/estado-cuenta', ...soloStaff, controller.estadoDeCuenta);
+// Crédito. El estado de cuenta viaja dentro del expediente (GET /:id) y la lista
+// de quién debe, en el tablero (GET /analisis/tablero).
 router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), controller.abonar);
 router.post('/:id/ajustes', ...soloJefes, validate(ajusteSchema), controller.ajustar);
 

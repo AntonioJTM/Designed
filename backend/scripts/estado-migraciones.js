@@ -23,6 +23,8 @@ const mysql = require('mysql2/promise');
 // tabla            → la tabla debe EXISTIR
 // tabla.columna    → la columna debe EXISTIR
 // tabla.!columna   → la columna NO debe existir (migración que elimina)
+// vista~texto      → la definición de la vista debe CONTENER ese texto
+//                    (migración que solo cambia una vista, sin tocar columnas)
 const MIGRACIONES = [
   ['2026-07_variante_codigos', 'variante_codigos'],
   ['2026-07_nomina', 'nomina_periodos'],
@@ -59,6 +61,7 @@ const MIGRACIONES = [
   ['2026-09_costo_y_margen', 'remesas.costo_kg'],
   ['2026-09_costo_y_margen (congelado)', 'pedido_detalle.costo_unitario'],
   ['2026-09_apartados', 'pedidos.inventario_descontado'],
+  ['2026-10_alertas_stock_con_minimo', 'v_alertas_stock~`stock_minimo` > 0'],
 ];
 
 (async () => {
@@ -72,6 +75,17 @@ const MIGRACIONES = [
 
   const faltan = [];
   for (const [nombre, huella] of MIGRACIONES) {
+    if (huella.includes('~')) {
+      const [vista, texto] = huella.split('~');
+      const [[v]] = await c.query(
+        'SELECT VIEW_DEFINITION d FROM information_schema.views WHERE table_schema = ? AND table_name = ?',
+        [process.env.DB_NAME, vista]
+      );
+      const ok = !!v && v.d.includes(texto);
+      console.log(`  ${ok ? 'ok      ' : 'FALTA   '} ${nombre}${ok ? '' : `  → ${vista} no filtra ${texto}`}`);
+      if (!ok) faltan.push(nombre);
+      continue;
+    }
     const [tabla, col] = huella.split('.');
     const [[t]] = await c.query(
       'SELECT COUNT(*) n FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',

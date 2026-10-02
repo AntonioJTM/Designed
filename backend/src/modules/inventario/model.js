@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { pool, withTransaction } = require('../../config/db');
+const { porPalabras } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 
 // Acceso a datos de inventario (multi-almacén) y su bitácora (kardex).
@@ -53,9 +54,11 @@ async function listarStock({ almacen_id, variante_id, q, bajo_stock, limit, offs
     where.push('i.variante_id = :variante_id');
     params.variante_id = variante_id;
   }
-  if (q) {
-    where.push('(pv.sku LIKE :q OR p.nombre LIKE :q)');
-    params.q = `%${q}%`;
+  // Color, calibre o SKU, palabra por palabra ("marino 2/30").
+  const busca = porPalabras(q, ['pv.sku', 'p.nombre', { col: 'p.grosor_calibre', calibre: true }]);
+  if (busca) {
+    where.push(busca.sql);
+    Object.assign(params, busca.params);
   }
   if (bajo_stock) {
     where.push(COND_ALERTA);
@@ -178,7 +181,9 @@ const FILTROS_CONCEPTO = {
   ventas: "m.referencia_tipo = 'pedido'",
   traspasos: "m.referencia_tipo = 'traspaso'",
   desarmes: "m.referencia_tipo = 'conversion'",
-  entradas: "m.tipo = 'entrada' AND m.referencia_tipo IS NULL",
+  // La mercancía que entra por la remesa del proveedor ES la entrada de
+  // mercancía; sin ella el filtro solo mostraba las capturadas a mano.
+  entradas: "m.tipo = 'entrada' AND (m.referencia_tipo IS NULL OR m.referencia_tipo = 'remesa')",
   ajustes: "m.tipo = 'ajuste'",
   mermas: "m.tipo = 'merma'",
   manuales: 'm.referencia_tipo IS NULL',
@@ -208,6 +213,7 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limi
   // traspaso o desarme) para que el kardex diga qué pasó y no solo el tipo.
   const [rows] = await pool.query(
     `SELECT m.id, m.variante_id, pv.sku, prod.nombre AS producto,
+            prod.grosor_calibre AS calibre,
             m.almacen_id, a.nombre AS almacen,
             m.tipo, m.cantidad, m.costo_unitario, m.referencia_tipo, m.referencia_id,
             m.usuario_id, u.nombre AS usuario, m.motivo, m.creado_en,
@@ -215,6 +221,7 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limi
             tr.folio AS traspaso_folio,
             tao.nombre AS traspaso_origen, tad.nombre AS traspaso_destino,
             cvo.sku AS conversion_paquete, cvd.sku AS conversion_cono,
+            rem.folio AS remesa_folio,
             CASE pv.tipo_presentacion
               WHEN 'paquete' THEN 'kg'
               WHEN 'cono'    THEN 'kg'
@@ -237,6 +244,8 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limi
                                          AND cv.id = m.referencia_id
        LEFT JOIN producto_variantes cvo ON cvo.id = cv.variante_origen_id
        LEFT JOIN producto_variantes cvd ON cvd.id = cv.variante_destino_id
+       LEFT JOIN remesas rem      ON m.referencia_tipo = 'remesa'
+                                 AND rem.id = m.referencia_id
        ${whereSql}
       ORDER BY m.creado_en DESC, m.id DESC
       LIMIT :limit OFFSET :offset`,
@@ -385,9 +394,12 @@ async function disponibilidadEnPaquetes(varianteId, almacenId) {
     { v: varianteId, a: almacenId }
   );
   const [[saldo]] = await pool.query(
-    'SELECT COALESCE(cantidad, 0) AS kg FROM inventario WHERE variante_id = :v AND almacen_id = :a',
+    `SELECT COALESCE(cantidad, 0) AS kg, COALESCE(cantidad_reservada, 0) AS apartado
+       FROM inventario WHERE variante_id = :v AND almacen_id = :a`,
     { v: varianteId, a: almacenId }
   );
+  const kgInventario = round3(saldo?.kg ?? 0);
+  const kgApartado = round3(saldo?.apartado ?? 0);
   return {
     paquetes: Number(fila.paquetes),
     kg_en_bultos: round3(fila.kg),
@@ -396,7 +408,13 @@ async function disponibilidadEnPaquetes(varianteId, almacenId) {
     peso_max: round3(fila.maximo),
     // El saldo de inventario puede diferir de la suma de bultos: hay mercancía
     // que entró sin bultos (captura manual) o bultos sin ubicar.
-    kg_inventario: round3(saldo?.kg ?? 0),
+    kg_inventario: kgInventario,
+    // Lo que ya tiene dueño: apartados de clientes y otras solicitudes de
+    // traspaso. La solicitud se valida contra lo LIBRE, así que la pantalla
+    // tiene que enseñar lo libre y no la existencia: si no, dice "hay 200 kg",
+    // se piden 150 y el servidor contesta que no alcanza.
+    kg_apartado: kgApartado,
+    kg_libre: round3(Math.max(0, kgInventario - kgApartado)),
   };
 }
 
@@ -611,9 +629,6 @@ async function desarmar(datos, usuarioId) {
     };
   });
 }
-
-/** Un traspaso pasa por aquí: solicitado → en tránsito → recibido. */
-const ESTADOS_TRASPASO = ['solicitado', 'en_transito', 'recibido', 'cancelado'];
 
 /** Datos de la variante que necesita un traspaso, con su validación básica. */
 async function _varianteParaTraspaso(conn, varianteId) {
@@ -1174,7 +1189,7 @@ async function listarConversiones({ variante_id, limit, offset }) {
             c.motivo, c.creado_en,
             c.variante_origen_id, vo.sku AS paquete_sku,
             c.variante_destino_id, vd.sku AS cono_sku,
-            prod.nombre AS producto,
+            prod.nombre AS producto, prod.grosor_calibre AS calibre,
             ao.nombre AS almacen_origen, ad.nombre AS almacen_destino,
             u.nombre AS usuario
        FROM variante_conversiones c
@@ -1224,7 +1239,6 @@ module.exports = {
   disponibilidadEnPaquetes,
   existenciasDe,
   listarConversiones,
-  ESTADOS_TRASPASO,
   solicitarTraspaso,
   enviarTraspaso,
   recibirTraspaso,

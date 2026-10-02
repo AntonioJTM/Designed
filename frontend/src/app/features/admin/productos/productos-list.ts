@@ -5,10 +5,11 @@ import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Categoria, Producto } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { ProductoFormModal } from './producto-form-modal';
+import { DineroPipe } from '../../../shared/dinero.pipe';
 
 @Component({
   selector: 'app-productos-list',
-  imports: [RouterLink, FormsModule, ProductoFormModal],
+  imports: [RouterLink, FormsModule, ProductoFormModal, DineroPipe],
   templateUrl: './productos-list.html',
 })
 export class ProductosList {

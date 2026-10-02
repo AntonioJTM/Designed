@@ -23,6 +23,8 @@ describe('MovimientoModal', () => {
       peso_min: 10.75,
       peso_max: 19.8,
       kg_inventario: 1919.71,
+      kg_apartado: 0,
+      kg_libre: 1919.71,
     },
     peso_referencia: 19.197,
     referencia_nominal: false,
