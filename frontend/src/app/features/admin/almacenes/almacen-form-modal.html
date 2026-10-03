@@ -1,0 +1,76 @@
+<!--
+  No se cierra al hacer clic en el fondo, igual que los demás modales del panel:
+  un clic distraído borraría la captura. Se sale con la ✕, con "Cancelar" o con
+  Escape.
+-->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-almacen-titulo">
+    <div class="modal-head">
+      <h2 id="modal-almacen-titulo">{{ esEdicion() ? 'Editar almacén' : 'Nuevo almacén' }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="guardar()">
+      <div class="modal-body">
+        <div class="columna" style="gap: 16px">
+          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+
+          <p class="muted" style="margin: 0; font-size: 14px; line-height: 1.45">
+            Las tiendas y las bodegas se dan de alta aquí: para el sistema son lo mismo, un lugar que
+            guarda existencias. Una sucursal nueva es un almacén con mostrador más su caja, y lleva su
+            propio inventario.
+          </p>
+
+          <div class="form-grid">
+            <label class="field full">
+              Nombre
+              <input type="text" formControlName="nombre" placeholder="Ej. Tienda Cuautepec de Hinojosa" />
+              <span class="ayuda">El nombre de la sucursal o de la bodega, como lo dicen en la tienda.</span>
+            </label>
+            <label class="field full">
+              Dirección
+              <input type="text" formControlName="direccion" placeholder="Opcional" />
+            </label>
+            <label class="field check full">
+              <input type="checkbox" formControlName="es_punto_venta" />
+              Tiene mostrador: vende y almacena (necesita una caja)
+            </label>
+            <label class="field check full">
+              <input type="checkbox" formControlName="es_matriz" />
+              Es la matriz: surte a las demás sucursales
+            </label>
+            <!--
+              TIENDA EN LÍNEA APAGADA (2026-10). Para regresar la casilla,
+              descomentarla junto con su control en almacen-form-modal.ts.
+            <label class="field check full">
+              <input type="checkbox" formControlName="es_tienda_linea" /> Surte la tienda en línea
+            </label>
+            -->
+            @if (esEdicion()) {
+              <label class="field check full">
+                <input type="checkbox" formControlName="activo" /> Activo
+              </label>
+            }
+          </div>
+
+          <p class="muted" style="margin: 0; font-size: 13px">
+            Solo un almacén puede ser la matriz: al marcarla aquí, se le quita al que la tenía.
+          </p>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        @if (esEdicion()) {
+          <!-- El backend lo rechaza si tiene existencias, kardex, cajas o pedidos, y dice qué hacer. -->
+          <button type="button" class="btn btn-danger" style="margin-right: auto" [disabled]="guardando()" (click)="eliminar()">
+            Eliminar
+          </button>
+        }
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+          {{ guardando() ? 'Guardando…' : esEdicion() ? 'Guardar cambios' : 'Dar de alta' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

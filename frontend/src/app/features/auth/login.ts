@@ -1,14 +1,21 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiError, SesionActual } from '../../core/models/auth.models';
 
+/**
+ * Entrar al panel (rediseño 2026-10, pantalla partida). Solo entra el
+ * personal: con la tienda en línea apagada, `AuthService.login` ya no reintenta
+ * como cliente. Tiene sus propios estilos (`login.scss`); `auth.scss` se queda
+ * para el registro de clientes, apagado junto con la tienda.
+ */
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, RouterLink],
+  // TIENDA EN LÍNEA APAGADA: RouterLink solo servía para el enlace a /registro.
+  imports: [ReactiveFormsModule],
   templateUrl: './login.html',
-  styleUrl: './auth.scss',
+  styleUrl: './login.scss',
 })
 export class Login {
   private readonly fb = inject(FormBuilder);

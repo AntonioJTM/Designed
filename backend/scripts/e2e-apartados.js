@@ -22,6 +22,7 @@
 const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('./_no-en-produccion');
+const { borrarTurnosPropios, borrarCajasSinTurnos } = require('./_propios');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
@@ -385,11 +386,10 @@ const cerca = (a, b, tol = 0.011) => Math.abs(Number(a) - Number(b)) < tol;
     const [cjs] = await db.query("SELECT id FROM cajas WHERE nombre LIKE 'TMPAP Caja%'");
     if (cjs.length) {
       const [ses] = await db.query('SELECT id FROM sesiones_caja WHERE caja_id IN (?)', [cjs.map((r) => r.id)]);
-      if (ses.length) {
-        await db.query('DELETE FROM movimientos_caja WHERE sesion_caja_id IN (?)', [ses.map((r) => r.id)]);
-        await db.query('DELETE FROM sesiones_caja WHERE id IN (?)', [ses.map((r) => r.id)]);
-      }
-      await db.query('DELETE FROM cajas WHERE id IN (?)', [cjs.map((r) => r.id)]);
+      // Solo los turnos que nadie más usó: si alguien cobró en la caja de la
+      // prueba (pasó el 2026-10-03), ese turno y su caja se quedan. Ver _propios.js.
+      await borrarTurnosPropios(db, ses.map((r) => r.id));
+      await borrarCajasSinTurnos(db, cjs.map((r) => r.id));
     }
 
     const [[{ n }]] = await db.query(

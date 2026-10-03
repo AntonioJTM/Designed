@@ -1,0 +1,146 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+@if (datos().num_clientes === 0) {
+  <section class="card">
+    <p class="vacio">Nadie te debe nada. Cuando se fíe una venta, aquí aparece quién y desde cuándo.</p>
+  </section>
+} @else {
+  <!-- ==================================================== Desde cuándo te deben -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Desde cuándo te deben</h2>
+        <p>
+          Se cuenta desde el último movimiento de su cuenta, no desde la venta: quien abonó la semana
+          pasada está pagando.
+        </p>
+      </div>
+    </div>
+    <div class="leyenda" style="margin-bottom: 16px">
+      @for (t of tramos(); track t.clave) {
+        <span><i [style.background]="t.color"></i>{{ t.etiqueta }} · <b class="num" style="color: var(--tinta)">{{ pesos(t.monto) }}</b></span>
+      }
+    </div>
+    <div class="tramos" role="img" [attr.aria-label]="resumenTramos()">
+      @for (t of tramos(); track t.clave) {
+        @if (t.monto > 0) {
+          <span [style.flex-grow]="t.monto" style="flex-basis: 0" [style.background]="t.color" [style.color]="t.tinta"
+                [title]="t.etiqueta + ': ' + pesos(t.monto) + ' · ' + t.clientes + (t.clientes === 1 ? ' cliente' : ' clientes')">{{ t.texto }}</span>
+        }
+      }
+    </div>
+  </section>
+
+  <div class="fila estirar">
+    <!-- ======================================================== Quién debe más -->
+    <section class="card mitad">
+      <div class="card-head">
+        <div>
+          <h2>Quién debe más</h2>
+          <p>Saldo de cada cuenta, del mayor al menor.</p>
+        </div>
+      </div>
+      <div class="barras" style="--etiqueta: 170px">
+        @for (f of porSaldo().filas; track f.c.cliente_id) {
+          <div class="barra-fila">
+            <span class="barra-etiqueta">
+              <a [routerLink]="['/admin/clientes', f.c.cliente_id]" [queryParams]="{ ver: 'deuda' }"
+                 [title]="f.c.nombre_comercial || f.c.nombre" style="display: block; color: var(--tinta); text-decoration: none">{{ f.c.nombre }}</a>
+            </span>
+            <span class="barra-valor">
+              <span class="relleno" [style.width.%]="f.ancho"></span>
+              <b>{{ pesos(f.c.saldo) }}</b>
+            </span>
+          </div>
+        }
+      </div>
+      @if (porSaldo().resto > 0) {
+        <p class="muted" style="margin: 12px 0 0; font-size: 13px">Y {{ porSaldo().resto }} más en la tabla de abajo.</p>
+      }
+    </section>
+
+    <!-- ============================================ Cuánto de su crédito han usado -->
+    <section class="card mitad">
+      <div class="card-head">
+        <div>
+          <h2>Cuánto de su crédito han usado</h2>
+          <p>La barra completa es su límite. En naranja, los que ya casi no tienen dónde fiar.</p>
+        </div>
+      </div>
+      @if (porUso().filas.length === 0) {
+        <p class="muted" style="margin: 0">Ninguno de los que deben tiene un límite de crédito capturado.</p>
+      } @else {
+        <div class="barras" style="--etiqueta: 170px; --cola: 150px">
+          @for (f of porUso().filas; track f.c.cliente_id) {
+            <div class="barra-fila con-cola">
+              <span class="barra-etiqueta"><span [title]="f.c.nombre_comercial || f.c.nombre">{{ f.c.nombre }}</span></span>
+              <span class="carril" style="height: 18px" role="img"
+                    [attr.aria-label]="'Usa el ' + f.texto + ' de su crédito'">
+                <span [style.width.%]="f.pct" [style.background]="f.color"></span>
+              </span>
+              <span class="num" style="font-size: 13px; color: var(--tinta-2); text-align: right; white-space: nowrap">
+                <b style="color: var(--tinta)">{{ f.texto }}</b> ·
+                @if (f.queda >= 0) { quedan {{ pesos(f.queda) }} } @else { se pasó {{ pesos(-f.queda) }} }
+              </span>
+            </div>
+          }
+        </div>
+        @if (porUso().resto > 0) {
+          <p class="muted" style="margin: 12px 0 0; font-size: 13px">Y {{ porUso().resto }} más en la tabla de abajo.</p>
+        }
+      }
+    </section>
+  </div>
+
+  <!-- ===================================================== A quién cobrarle primero -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>A quién cobrarle primero</h2>
+        <p>Del que más tiempo lleva sin abonar al más reciente. El abono se registra aquí mismo.</p>
+      </div>
+    </div>
+    <div class="tabla-scroll">
+      <table class="grid" style="min-width: 900px">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th class="num">Debe</th>
+            <th class="num">Límite</th>
+            <th>Último abono</th>
+            <th class="num">Sin abonar</th>
+            <th>Cómo va</th>
+            <th><span class="oculto">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of porAntiguedad(); track r.cliente_id) {
+            <tr>
+              <td>
+                <div style="font-weight: 500">{{ r.nombre }}</div>
+                <div class="mono muted">{{ r.telefono || r.nombre_comercial || '—' }}</div>
+              </td>
+              <td class="num" style="font-weight: 600">{{ r.saldo | dinero }}</td>
+              <td class="num muted">{{ num(r.limite_credito) > 0 ? (r.limite_credito | dinero) : 'sin límite' }}</td>
+              <td style="white-space: nowrap">{{ r.ultimo_abono ? fechaCorta(r.ultimo_abono) : 'nunca ha abonado' }}</td>
+              <td class="num">{{ r.dias_sin_abonar }} días</td>
+              <td><span [class]="'pill ' + TRAMO[r.tramo].pill">{{ TRAMO[r.tramo].texto }}</span></td>
+              <td class="acciones">
+                <button type="button" class="btn btn-primary btn-sm" (click)="abonar.emit(r)">Abonar</button>
+                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', r.cliente_id]" [queryParams]="{ ver: 'deuda' }">Ver</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}

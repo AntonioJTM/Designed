@@ -130,6 +130,48 @@ const ck = (n, ok, d) => {
     ck('dice la existencia, lo apartado y lo libre',
       Number(d.kg_inventario) === 100 && Number(d.kg_apartado) === 30 && Number(d.kg_libre) === 70,
       `${d.kg_inventario} − ${d.kg_apartado} = ${d.kg_libre}`);
+
+    console.log('\n=== 6. Solo se elimina un producto SIN nada cargado ===');
+    // El del paso 5 ya tiene existencias y movimientos.
+    r = await api('GET', `/productos/${prod}/eliminacion`);
+    ck('con existencias y movimientos NO se puede', r.data?.se_puede === false, r.data?.mensaje);
+    r = await api('DELETE', '/productos/' + prod);
+    ck('y el borrado se rechaza: 409', r.status === 409 && r.error?.code === 'PRODUCTO_CON_MOVIMIENTOS', r.error?.message);
+    r = await api('GET', '/productos/' + prod);
+    ck('el producto sigue ahí', r.status === 200, r.status);
+
+    // Recién dado de alta: solo su presentación vacía, que se crea sola.
+    r = await api('POST', '/productos', {
+      categoria_id: cat, unidad_medida_id: kgu, nombre: 'TMPED VACIO ' + SUF, grosor_calibre: '2/30',
+      multipresentacion: true, precio_kg: 100,
+    });
+    const vacio = r.data?.id;
+    const varVacio = (r.data?.variantes ?? [])[0]?.id;
+    ck('el recién capturado trae su presentación vacía', !!varVacio, varVacio);
+    r = await api('GET', `/productos/${vacio}/eliminacion`);
+    ck('y SÍ se puede eliminar', r.data?.se_puede === true, JSON.stringify(r.data?.motivos));
+    r = await cajero('DELETE', '/productos/' + vacio);
+    ck('un cajero no lo borra: 403', r.status === 403, r.status);
+    r = await api('DELETE', '/productos/' + vacio);
+    ck('se borra', r.status === 200, r.status);
+    const [[{ quedan }]] = await db.query('SELECT COUNT(*) quedan FROM producto_variantes WHERE id = ?', [varVacio]);
+    ck('y su presentación vacía con él', Number(quedan) === 0, quedan);
+
+    // Con un solo bulto capturado a mano (sin existencias ni kardex): antes la
+    // cascada lo borraba sin avisar.
+    r = await api('POST', '/productos', {
+      categoria_id: cat, unidad_medida_id: kgu, nombre: 'TMPED BULTO ' + SUF, grosor_calibre: '2/30',
+      multipresentacion: true, precio_kg: 100,
+    });
+    const conBulto = r.data?.id;
+    const varBulto = (r.data?.variantes ?? [])[0]?.id;
+    await api('POST', `/variantes/${varBulto}/codigos`, { codigo: 'TMPED-B-' + SUF, peso_kg: 19 });
+    r = await api('GET', `/productos/${conBulto}/eliminacion`);
+    ck('con un bulto ya NO se puede', r.data?.se_puede === false && /1 bulto/.test(r.data?.mensaje ?? ''), r.data?.mensaje);
+    r = await api('DELETE', '/productos/' + conBulto);
+    ck('el borrado se rechaza: 409', r.status === 409, r.status);
+    const [[{ bultos }]] = await db.query('SELECT COUNT(*) bultos FROM variante_codigos WHERE variante_id = ?', [varBulto]);
+    ck('y el bulto sigue ahí', Number(bultos) === 1, bultos);
   } catch (e) {
     console.error('\nERROR:', e.message);
     f++;

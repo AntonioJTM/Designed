@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   AsistenteService,
@@ -7,6 +7,7 @@ import {
   Turno,
 } from '../../../core/services/asistente.service';
 import { ApiError } from '../../../core/models/auth.models';
+import { FechaPipe } from '../../../shared/fecha.pipe';
 
 /** Un mensaje en la pantalla: lo que se preguntó o lo que contestó. */
 interface Mensaje {
@@ -17,21 +18,48 @@ interface Mensaje {
   /** No pudo terminar: se agotaron las vueltas. */
   incompleto?: boolean;
   error?: boolean;
+  /** A qué hora contestó ("13:50"): la cifra es de ese momento. */
+  hora?: string;
 }
 
 /**
- * El asistente: se le pregunta en palabras normales y contesta con los datos de
- * la tienda.
+ * Cómo se dice cada consulta en el renglón "Consulté: …". El nombre técnico de
+ * la herramienta ("quien_me_debe") no le dice nada a la tienda; esto sí. Una
+ * herramienta nueva que no esté aquí sale con su nombre en palabras, así que no
+ * se rompe nada si se agrega en el backend y se olvida aquí.
+ */
+const NOMBRE_CONSULTA: Record<string, string> = {
+  ventas_del_dia: 'ventas del día',
+  ventas_por_rango: 'ventas entre dos fechas',
+  mas_vendidos: 'los más vendidos',
+  existencias: 'existencias por almacén',
+  resumen_almacenes: 'kilos por almacén',
+  por_reabastecer: 'existencias bajo su mínimo',
+  quien_me_debe: 'cobranza por antigüedad',
+  clientes_que_no_vuelven: 'clientes que dejaron de venir',
+  buscar_cliente: 'búsqueda de clientes',
+  expediente_cliente: 'expediente del cliente',
+  apartados: 'apartados',
+  hilo_parado: 'hilo parado',
+  margen_por_hilo: 'margen por hilo',
+  cortes_de_caja: 'cortes de caja',
+};
+
+/**
+ * Pregúntame (rediseño 2026-10): se le pregunta en palabras normales y contesta
+ * con los datos de la tienda. No cambia nada.
  *
  * DE DÓNDE SALIÓ LA RESPUESTA se muestra debajo de cada contestación. Es lo que
  * hace que se pueda confiar en ella: si dice "vendiste $12,400 hoy", debajo se
  * ve que lo consultó en las ventas del día y no que se lo inventó. Un asistente
- * cuyas cifras no se pueden rastrear no sirve para decidir nada.
+ * cuyas cifras no se pueden rastrear no sirve para decidir nada. Por eso
+ * también se dice cuando contestó SIN consultar datos.
  */
 @Component({
   selector: 'app-asistente',
   imports: [FormsModule],
   templateUrl: './asistente.html',
+  styleUrl: './asistente.scss',
 })
 export class Asistente implements OnInit {
   private readonly svc = inject(AsistenteService);
@@ -57,6 +85,11 @@ export class Asistente implements OnInit {
 
   /** Solo hay algo que mostrar cuando ya se preguntó algo. */
   readonly empezado = computed(() => this.mensajes().length > 0);
+
+  constructor() {
+    // Si se sale de la pantalla mientras espera, el reloj no debe quedar vivo.
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.relojTardanza));
+  }
 
   ngOnInit(): void {
     this.svc.capacidades().subscribe({
@@ -102,6 +135,7 @@ export class Asistente implements OnInit {
             texto: r.respuesta,
             consultado: r.consultado,
             incompleto: r.incompleto,
+            hora: this.horaActual(),
           },
         ]);
         this.dejarDePensar();
@@ -140,10 +174,34 @@ export class Asistente implements OnInit {
     });
   }
 
-  /** El nombre de una herramienta, en palabras. */
+  /**
+   * El renglón de debajo de la respuesta: "Consulté: ventas del día · hoy 13:50".
+   * Cuando no consultó nada se dice también: esa respuesta no salió de los datos.
+   */
+  nota(m: Mensaje): string {
+    const hora = m.hora ? `hoy ${m.hora}` : '';
+    const fuentes = (m.consultado ?? []).map((c) => this.nombreConsulta(c));
+    // La misma consulta dos veces (con otras fechas) se nombra una sola vez.
+    const unicas = [...new Set(fuentes)];
+    const que = unicas.length > 0 ? `Consulté: ${unicas.join(', ')}` : 'Sin consultar datos';
+    return [que, hora].filter(Boolean).join(' · ');
+  }
+
+  /** El nombre de una consulta, en palabras, con sus fechas si las llevó. */
   nombreConsulta(c: Consulta): string {
-    const n = c.herramienta.replace(/_/g, ' ');
-    return n.charAt(0).toUpperCase() + n.slice(1);
+    const base = NOMBRE_CONSULTA[c.herramienta] ?? c.herramienta.replace(/_/g, ' ');
+    const a = c.argumentos ?? {};
+    const f = (v: unknown) => new FechaPipe().transform(String(v), true);
+    if (typeof a['fecha'] === 'string' && a['fecha']) return `${base} (${f(a['fecha'])})`;
+    if (typeof a['desde'] === 'string' && typeof a['hasta'] === 'string' && a['desde'] && a['hasta']) {
+      return `${base} (${f(a['desde'])} al ${f(a['hasta'])})`;
+    }
+    return base;
+  }
+
+  private horaActual(): string {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
 
   private msg(e: unknown): string {

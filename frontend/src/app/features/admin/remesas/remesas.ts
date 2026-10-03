@@ -6,27 +6,50 @@ import {
   Remesa,
   ResultadoRemesa,
 } from '../../../core/services/inventario.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
-import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
+import { cotejarArchivo, hiloDelArchivo, textoAviso } from '../../../shared/remesa-archivo';
 import { DineroPipe } from '../../../shared/dinero.pipe';
+import { CuandoPipe } from '../inventario/cuando.pipe';
+import { FolioPipe } from '../../../shared/folio.pipe';
+import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
+import { SE_LLEVA_COSTO } from '../../../core/costos';
+import { CargaLista } from './carga-lista';
+
+/** Las dos formas de cargar: la lista completa del proveedor o la de un solo hilo. */
+type Modo = 'lista' | 'hilo';
+const CLAVE_MODO = 'remesa_modo';
+
+/** Cuántos bultos se ven de entrada en la revisión; el resto, con "Ver todos". */
+const BULTOS_A_LA_VISTA = 6;
 
 /**
  * Recepción de remesas: se sube la lista de empaque del proveedor y cada
  * renglón entra como un bulto de la presentación elegida, con su peso real y su
  * lote. El total en kilos se da de entrada al almacén.
+ *
+ * Tres pasos, como en la tienda: a qué hilo entra, la lista de empaque, y la
+ * revisión. Nada se mueve hasta confirmar.
  */
 @Component({
   selector: 'app-remesas',
-  imports: [FormsModule, CantidadPipe, FechaPipe, DineroPipe],
+  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, DineroPipe, CuandoPipe, CargaLista],
   templateUrl: './remesas.html',
+  styleUrl: './remesas.scss',
 })
 export class Remesas {
   private readonly inv = inject(InventarioService);
+  private readonly auth = inject(AuthService);
 
+  /**
+   * Lista completa (varios colores, lo normal) o un solo hilo. Se recuerda en
+   * este navegador: quien recibe suele cargar siempre del mismo modo.
+   */
+  readonly modo = signal<Modo>(Remesas.modoGuardado());
   readonly almacenes = signal<Almacen[]>([]);
   readonly paquetes = signal<Variante[]>([]);
   readonly historial = signal<Remesa[]>([]);
@@ -37,6 +60,19 @@ export class Remesas {
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
   readonly verTodos = signal(false);
+  /** El archivo se está arrastrando encima de la caja. */
+  readonly arrastrando = signal(false);
+  /** La carga cuyo PDF se está generando (para el "Generando…" de su botón). */
+  readonly generandoPdf = signal<number | null>(null);
+
+  /**
+   * Capturar el precio de compra es de quien recibe la remesa; VER costos ya
+   * guardados (el del historial, el promedio que quedó) es de quien tiene
+   * `hacer:ver_costos`.
+   */
+  readonly veCostos = computed(() => this.auth.puede('hacer:ver_costos'));
+  /** ¿Se pide el precio de compra al cargar? No: la tienda no lleva el costo (core/costos.ts). */
+  readonly seLlevaCosto = SE_LLEVA_COSTO;
 
   varianteSel: number | '' = '';
   almacenSel: number | '' = '';
@@ -62,7 +98,7 @@ export class Remesas {
   /** Bultos que se muestran en la tabla; por omisión solo los primeros. */
   readonly bultosVisibles = computed(() => {
     const b = this.previa()?.bultos ?? [];
-    return this.verTodos() ? b : b.slice(0, 15);
+    return this.verTodos() ? b : b.slice(0, BULTOS_A_LA_VISTA);
   });
 
   /** Es un MÉTODO: `varianteSel` es un campo de ngModel, no una señal. */
@@ -88,6 +124,17 @@ export class Remesas {
     const p = this.paqueteSel();
     if (!p || !this.archivo) return null;
     return textoAviso(cotejarArchivo(this.archivo.name, p));
+  }
+
+  /**
+   * Para la etiqueta de la caja del archivo: 'coincide' solo si de verdad se pudo
+   * leer el hilo del nombre y cuadra; null si no hay nada que cotejar (sin hilo
+   * elegido o un archivo con otro nombre), y entonces no se opina.
+   */
+  cotejo(): 'coincide' | 'no' | null {
+    const p = this.paqueteSel();
+    if (!p || !this.archivo || !hiloDelArchivo(this.archivo.name)) return null;
+    return this.avisoArchivo() ? 'no' : 'coincide';
   }
 
   /**
@@ -131,7 +178,22 @@ export class Remesas {
    * entraron al hilo equivocado: hay tres del 2026-07-28 y a ojo no se ven.
    */
   avisoHistorial(r: Remesa): string | null {
+    // Un archivo que entró en VARIAS cargas es una lista con varios colores: su
+    // nombre no dice un hilo y no hay nada que cotejar.
+    if (r.archivo && this.archivosDeLista().has(r.archivo)) return null;
     return textoAviso(cotejarArchivo(r.archivo, r));
+  }
+
+  /** Los archivos del historial que dejaron más de una carga (listas con varios colores). */
+  private readonly archivosDeLista = computed(() => {
+    const veces = new Map<string, number>();
+    for (const r of this.historial()) if (r.archivo) veces.set(r.archivo, (veces.get(r.archivo) ?? 0) + 1);
+    return new Set([...veces].filter(([, n]) => n > 1).map(([a]) => a));
+  });
+
+  /** El nombre del archivo, sin la extensión: "ROJO 1-30". Para la pastilla corta. */
+  nombreArchivo(r: Remesa): string {
+    return (r.archivo ?? '').split(/[\\/]/).pop()!.replace(/\.(xlsx|xls)$/i, '');
   }
 
   /** Cuántas remesas del historial no cuadran con su archivo. */
@@ -139,7 +201,36 @@ export class Remesas {
     () => this.historial().filter((r) => this.avisoHistorial(r) !== null).length
   );
 
-  private cargarHistorial(): void {
+  /** Una remesa sin precio de compra no mueve el costo: el margen de ese hilo no es de fiar. */
+  sinCosto(r: Remesa): boolean {
+    // Sin llevar costo, que una carga no lo traiga es lo normal: no se avisa.
+    if (!this.seLlevaCosto) return false;
+    // La lista con varios colores ya no pide precio de compra (los precios se
+    // ponen en Productos): avisar en cada una de sus cargas sería ruido.
+    if (r.archivo && this.archivosDeLista().has(r.archivo)) return false;
+    return r.costo_kg == null;
+  }
+
+  private static modoGuardado(): Modo {
+    try {
+      return localStorage.getItem(CLAVE_MODO) === 'hilo' ? 'hilo' : 'lista';
+    } catch {
+      return 'lista';
+    }
+  }
+
+  cambiarModo(m: Modo): void {
+    this.modo.set(m);
+    this.error.set(null);
+    this.mensaje.set(null);
+    try {
+      localStorage.setItem(CLAVE_MODO, m);
+    } catch {
+      /* sin almacenamiento: se queda solo en esta visita */
+    }
+  }
+
+  cargarHistorial(): void {
     this.inv.remesas().subscribe({
       next: (p) => this.historial.set(p.items),
       error: () => {},
@@ -148,7 +239,28 @@ export class Remesas {
 
   elegirArchivo(e: Event): void {
     const input = e.target as HTMLInputElement;
-    this.archivo = input.files?.[0] ?? null;
+    const f = input.files?.[0] ?? null;
+    // Se limpia para que volver a elegir el MISMO archivo (ya corregido) vuelva
+    // a leerlo; si no, el navegador no avisa del cambio.
+    input.value = '';
+    this.tomarArchivo(f);
+  }
+
+  /** Lo arrastran a la caja: es lo mismo que elegirlo. */
+  soltar(e: DragEvent): void {
+    e.preventDefault();
+    this.arrastrando.set(false);
+    const f = e.dataTransfer?.files?.[0] ?? null;
+    if (f) this.tomarArchivo(f);
+  }
+
+  arrastrar(e: DragEvent, encima: boolean): void {
+    e.preventDefault();
+    this.arrastrando.set(encima);
+  }
+
+  private tomarArchivo(f: File | null): void {
+    this.archivo = f;
     this.previa.set(null);
     this.ultima.set(null);
     this.error.set(null);
@@ -202,12 +314,10 @@ export class Remesas {
       .subscribe({
         next: (r) => {
           this.ultima.set(r);
-          this.mensaje.set(
-            `Remesa ${r.folio} recibida: ${r.num_bultos} bultos, ${r.kg_total} kg.` +
-              (r.costo_promedio != null
-                ? ` El costo del hilo quedó en $${Number(r.costo_promedio).toFixed(2)} por kilo.`
-                : '')
-          );
+          this.mensaje.set(null);
+          // Cada carga deja su comprobante en PDF: se baja solo al terminar, y se
+          // puede volver a sacar cuando sea desde el historial.
+          this.descargarPdf(r.id, r.folio);
           this.previa.set(null);
           this.archivo = null;
           this.notas = '';
@@ -220,6 +330,21 @@ export class Remesas {
           this.enviando.set(false);
         },
       });
+  }
+
+  /** El PDF de una carga: el hilo, el almacén y cada bulto con su peso real. */
+  descargarPdf(id: number, folio: string): void {
+    this.generandoPdf.set(id);
+    this.inv.pdfCarga(id).subscribe({
+      next: (blob) => {
+        this.generandoPdf.set(null);
+        guardarArchivo(blob, `Carga ${folio}.pdf`);
+      },
+      error: async (e) => {
+        this.generandoPdf.set(null);
+        this.error.set(await mensajeDeError(e));
+      },
+    });
   }
 
   nombreAlmacen(): string {

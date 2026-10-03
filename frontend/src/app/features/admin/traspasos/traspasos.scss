@@ -1,0 +1,67 @@
+/* Surtir sucursal: lo propio de esta pantalla. */
+.card > .card-head:last-child { margin-bottom: 0; }
+.sub { font-size: 12px; color: var(--tinta-3); margin-top: 2px; }
+.sub.neg { color: var(--peligro-t); }
+.hilo { font-weight: 500; }
+
+/* ---- Pendientes: una caja por traspaso ---- */
+.pendientes { display: flex; flex-direction: column; gap: 12px; }
+.traspaso {
+  border: 1px solid var(--borde); border-radius: 10px; padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.traspaso-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+.traspaso-que { flex: 1 1 260px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.traspaso-que > b { font-size: 15px; font-weight: 600; }
+.traspaso-que .mono { font-size: 13px; }
+.traspaso-que .lleva { font-size: 13px; color: var(--tinta-2); }
+.traspaso-quien { flex: 0 1 auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--tinta-3); }
+.traspaso-acciones { display: flex; gap: 8px; }
+
+/* Pedido → En camino → Recibido */
+.avance { flex: 1 1 300px; margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 13px; }
+.avance li { display: flex; align-items: center; gap: 6px; color: var(--tinta-3); }
+.avance .punto { width: 12px; height: 12px; border-radius: 50%; background: var(--superficie); box-shadow: 0 0 0 2px var(--borde-campo); }
+.avance li.hecho { color: var(--tinta); }
+.avance li.hecho .punto { background: var(--acento); box-shadow: 0 0 0 2px var(--acento); }
+.avance li.actual { font-weight: 600; }
+
+.lineas { margin: 0; padding: 10px 0 0; border-top: 1px solid var(--borde-suave); list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--tinta-2); }
+.notas { margin: 0; font-size: 13px; }
+
+/* ---- Nueva solicitud ---- */
+.campos { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+.campos > .field { flex: 1 1 220px; }
+.campos > .field.ancho { flex: 2 1 320px; }
+.campos .buscador { padding-right: 4px; }
+.campos .buscador input { min-height: 40px; }
+
+.resultados { border: 1px solid var(--borde); border-radius: 10px; margin-bottom: 16px; }
+.resultado { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--borde-suave); }
+.resultado:first-child { border-top: 0; }
+
+table.grid.lineas-solicitud { min-width: 700px; }
+table.grid tr.fila-alerta > td { background: var(--peligro-f); }
+.cant-kg { display: inline-flex; align-items: center; gap: 6px; }
+.cant-kg input {
+  width: 100px; height: 36px; padding: 0 8px; border: 1px solid var(--borde-campo); border-radius: 6px;
+  font: inherit; font-size: 14px; text-align: right; background: var(--superficie); color: var(--tinta);
+}
+.cant-kg input:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533; }
+
+.alert { margin: 14px 0 0; }
+.tabla-scroll + .field, .alert + .field { margin-top: 16px; }
+.total-solicitud {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 16px; padding: 14px 16px; border-radius: 8px; background: var(--fondo); font-size: 14px;
+}
+
+/* ---- Cerrados ---- */
+table.grid.cerrados { min-width: 860px; }
+table.grid.cerrados td.llevo { color: var(--tinta-2); font-size: 13px; }
+
+/* ---- Modales ---- */
+.explica { margin: 0 0 14px; font-size: 14px; color: var(--tinta-2); line-height: 1.45; }
+.modal-body .alert, .modal-body .aviso { margin: 0 0 14px; }
+.notas-recepcion { margin-top: 16px; }
+.notas-recepcion + .aviso { margin: 14px 0 0; }

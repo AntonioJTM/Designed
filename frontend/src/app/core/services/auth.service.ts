@@ -1,8 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { TokenService } from './token.service';
+import { SE_LLEVA_COSTO } from '../costos';
 import {
   ApiResponse,
   Cliente,
@@ -41,12 +42,34 @@ export class AuthService {
    * (cuenta inactiva) sí se propaga, porque el correo sí coincidió.
    */
   login(correo: string, contrasena: string): Observable<SesionActual> {
-    return this.loginUsuario(correo, contrasena).pipe(
-      catchError((err: HttpErrorResponse) => {
-        if (err?.status === 401) return this.loginCliente(correo, contrasena);
-        return throwError(() => err);
-      })
-    );
+    // TIENDA EN LÍNEA APAGADA (2026-10): solo entra el personal. Para volver a
+    // abrirla, regresar el reintento como cliente que está comentado abajo.
+    return this.loginUsuario(correo, contrasena);
+    // return this.loginUsuario(correo, contrasena).pipe(
+    //   catchError((err: HttpErrorResponse) => {
+    //     if (err?.status === 401) return this.loginCliente(correo, contrasena);
+    //     return throwError(() => err);
+    //   })
+    // );
+  }
+
+  /**
+   * ¿Puede el usuario de la sesión ver o hacer esto? `null` = cualquiera del
+   * personal; 'admin' = solo el administrador. El administrador lo puede todo.
+   */
+  puede(permiso: string | null): boolean {
+    const s = this.sesion();
+    if (!s || s.tipo !== 'usuario') return false;
+    // La tienda no lleva el costo (core/costos.ts): nadie lo ve.
+    if (permiso === 'hacer:ver_costos' && !SE_LLEVA_COSTO) return false;
+    if (s.rol === 'administrador') return true;
+    if (permiso === null) return true;
+    if (permiso === 'admin') return false;
+    return (s.permisos ?? []).includes(permiso);
+  }
+
+  esAdmin(): boolean {
+    return this.sesion()?.rol === 'administrador';
   }
 
   private loginUsuario(correo: string, contrasena: string): Observable<SesionActual> {
@@ -58,7 +81,8 @@ export class AuthService {
       );
   }
 
-  private loginCliente(correo: string, contrasena: string): Observable<SesionActual> {
+  /** Login de cliente de la tienda en línea (apagada: nadie lo llama hoy). */
+  loginCliente(correo: string, contrasena: string): Observable<SesionActual> {
     return this.http
       .post<ApiResponse<LoginClienteResp>>(`${this.base}/clientes/login`, { correo, contrasena })
       .pipe(
@@ -117,6 +141,7 @@ export class AuthService {
       nombre: usuario.nombre,
       correo: usuario.correo,
       rol: usuario.rol,
+      permisos: usuario.permisos ?? [],
     };
     this.sesion.set(sesion);
     return sesion;

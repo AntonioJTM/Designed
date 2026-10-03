@@ -30,17 +30,23 @@ export class MaterialFormModal implements OnInit {
   readonly cerrado = output<void>();
   /** Se guardó: el listado se recarga. */
   readonly guardado = output<Categoria>();
+  /** Se eliminó (lleva el nombre, para que el listado lo diga). */
+  readonly eliminado = output<string>();
 
   readonly esEdicion = computed(() => this.material() !== null);
 
   readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
+  /**
+   * Pidió eliminar y el modal pregunta antes. Vive aquí y no en el renglón del
+   * listado, igual que en productos: junto a "Editar" estaba a un clic distraído.
+   */
+  readonly confirmandoBorrado = signal(false);
 
   readonly form = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(1)]],
     descripcion: [''],
     calibres: [''],
-    orden: [0],
     activo: [true],
   });
 
@@ -56,7 +62,6 @@ export class MaterialFormModal implements OnInit {
       nombre: m.nombre,
       descripcion: m.descripcion ?? '',
       calibres: m.calibres ?? '',
-      orden: m.orden,
       activo: !!m.activo,
     });
   }
@@ -74,7 +79,6 @@ export class MaterialFormModal implements OnInit {
       nombre: v.nombre,
       descripcion: v.descripcion.trim() || undefined,
       calibres: v.calibres.trim() || null,
-      orden: v.orden,
       activo: v.activo,
     };
 
@@ -92,6 +96,28 @@ export class MaterialFormModal implements OnInit {
       error: (e) => {
         this.error.set(this.msg(e));
         this.guardando.set(false);
+      },
+    });
+  }
+
+  /**
+   * El servidor no deja borrar un material que todavía tiene productos (409
+   * `CATEGORIA_EN_USO`) y su mensaje dice cuántos: se muestra tal cual.
+   */
+  eliminar(): void {
+    const m = this.material();
+    if (!m) return;
+    this.guardando.set(true);
+    this.error.set(null);
+    this.catalogo.eliminarCategoria(m.id).subscribe({
+      next: () => {
+        this.guardando.set(false);
+        this.eliminado.emit(m.nombre);
+      },
+      error: (e) => {
+        this.error.set(this.msg(e));
+        this.guardando.set(false);
+        this.confirmandoBorrado.set(false);
       },
     });
   }

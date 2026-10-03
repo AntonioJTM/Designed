@@ -1,0 +1,74 @@
+<div class="modal-overlay">
+  <div class="modal angosto" style="max-width: 700px" role="dialog" aria-modal="true" aria-labelledby="titulo-entradas">
+    <div class="modal-head">
+      <h2 id="titulo-entradas">Reporte de entradas · {{ hilo() }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      @if (error()) { <p class="alert" style="margin: 0 0 16px">{{ error() }}</p> }
+
+      <div class="bloque">
+        <h3>Todas sus entradas</h3>
+        <p>Cada carga con su fecha, almacén, bultos y kilos; cuánto entró a cada almacén y cómo están hoy esos bultos.</p>
+        <div class="periodo">
+          <label class="field">
+            Desde
+            <input type="date" [(ngModel)]="desde" name="desde" />
+          </label>
+          <label class="field">
+            Hasta
+            <input type="date" [(ngModel)]="hasta" name="hasta" />
+          </label>
+          <button type="button" class="btn btn-primary" (click)="pdfTodo()" [disabled]="generando() !== null">
+            {{ generando() === 'todo' ? 'Generando…' : 'Generar PDF' }}
+          </button>
+        </div>
+        <p>Sin fechas, salen todas las cargas de este hilo.</p>
+      </div>
+
+      <div class="bloque">
+        <h3>Una carga</h3>
+        <p>El comprobante de una carga: cada bulto con su código, su peso real y su lote.</p>
+        @if (cargas() === null) {
+          <p class="muted">Cargando…</p>
+        } @else if (cargas()!.length === 0) {
+          <p class="vacio" style="padding: 12px">Este hilo todavía no tiene cargas.</p>
+        } @else {
+          <div class="tabla-scroll lista">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>Fecha</th><th>Folio</th><th>Almacén</th>
+                  <th class="num">Bultos</th><th class="num">Kilos</th>
+                  <th><span class="oculto">PDF</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of cargas(); track c.id) {
+                  <tr>
+                    <td style="white-space: nowrap">{{ c.creado_en | fecha }}</td>
+                    <td class="mono" style="white-space: nowrap" [title]="c.folio">{{ c.folio | folio }}</td>
+                    <td style="white-space: nowrap">{{ c.almacen }}</td>
+                    <td class="num">{{ c.num_bultos | cantidad }}</td>
+                    <td class="num">{{ c.kg_total | cantidad: 'kg' }}</td>
+                    <td class="acciones">
+                      <button type="button" class="btn btn-ghost btn-sm" (click)="pdfCarga(c)"
+                              [disabled]="generando() !== null" [attr.aria-label]="'PDF de la carga ' + c.folio">
+                        {{ generando() === c.id ? 'Generando…' : 'PDF' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+    </div>
+  </div>
+</div>

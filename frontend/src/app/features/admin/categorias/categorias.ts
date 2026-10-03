@@ -8,6 +8,7 @@ import { MaterialFormModal } from './material-form-modal';
   selector: 'app-categorias',
   imports: [MaterialFormModal],
   templateUrl: './categorias.html',
+  styles: [`.calibres { display: flex; flex-wrap: wrap; gap: 6px; }`],
 })
 export class Categorias {
   private readonly catalogo = inject(CatalogoService);
@@ -64,13 +65,19 @@ export class Categorias {
     this.cargar();
   }
 
-  eliminar(c: Categoria): void {
-    if (!confirm(`¿Eliminar el material "${c.nombre}"?`)) return;
-    this.mensaje.set(null);
-    this.catalogo.eliminarCategoria(c.id).subscribe({
-      next: () => this.cargar(),
-      error: (e) => this.error.set(this.msg(e)),
-    });
+  /** Se eliminó desde el modal de edición. */
+  alEliminar(nombre: string): void {
+    this.modal.set(null);
+    this.mensaje.set(`Material "${nombre}" eliminado.`);
+    this.cargar();
+  }
+
+  /** Los calibres del material como fichas: "1/30,2/30" → ['1/30', '2/30']. */
+  calibresDe(c: Categoria): string[] {
+    return (c.calibres ?? '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean);
   }
 
   private msg(e: unknown): string {

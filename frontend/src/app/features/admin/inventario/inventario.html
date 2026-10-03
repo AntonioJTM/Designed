@@ -1,320 +1,318 @@
-<div class="page-head">
-  <h1>Inventario</h1>
-  <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap">
-    @if (totalAlertas() > 0) {
-      <span class="pill off">⚠ {{ totalAlertas() }} bajo su mínimo</span>
-    }
-    <button class="btn btn-primary" (click)="modal.set('desarme')">Bajar conos a mostrador</button>
-    <button class="btn btn-ghost" (click)="modal.set('movimiento')">Ajuste / merma</button>
-    <a class="btn btn-ghost" routerLink="/admin/kardex">Ver kardex →</a>
-  </div>
-</div>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Inventario</h1>
+      <p class="sub">Cuánto hay en cada almacén, dónde está cada hilo y el detalle exacto.</p>
+    </div>
+    <div class="acciones">
+      <!--
+        "Bajar conos a mostrador" se muestra SIEMPRE que el puesto lo pueda hacer:
+        no se condiciona a que existan conos, porque es justo donde nacen (ya
+        pasó una vez y quedó invisible). El permiso es lo único que lo esconde.
+      -->
+      @if (puedeBajarConos()) {
+        <button type="button" class="btn btn-ghost" (click)="modal.set('desarme')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 21h8 M9 21l1.5-14h3L15 21 M10.5 7a1.5 1.5 0 1 1 3 0"></path>
+          </svg>
+          Bajar conos a mostrador
+        </button>
+      }
+      @if (puedeAjustar()) {
+        <button type="button" class="btn btn-ghost" (click)="modal.set('movimiento')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 6h9 M17 6h3 M15 4v4 M4 12h3 M11 12h9 M9 10v4 M4 18h11 M19 18h1 M17 16v4"></path>
+          </svg>
+          Ajuste / merma
+        </button>
+      }
+      @if (veKardex()) {
+        <a class="btn btn-ghost" routerLink="/admin/kardex">Ver kardex</a>
+      }
+    </div>
+  </header>
 
-@if (error()) { <p class="alert">{{ error() }}</p> }
-
-@if (resumen(); as r) {
-  <!--
-    1 · Cuánto hay en cada almacén. Cada tarjeta dice su parte del total (la
-    barra) y el desglose paquete/enconado, que es lo que decide si hay que bajar
-    conos al mostrador.
-  -->
-  <div class="almacen-cards">
-    @for (a of r.almacenes; track a.almacen_id) {
-      <div class="card almacen-card">
-        <div class="cabeza">
-          <span class="nombre">{{ a.nombre }}</span>
-          <span class="pill" [class.ok]="a.es_matriz">{{ papel(a) }}</span>
-        </div>
-
-        @if (num(a.kilos) > 0) {
-          <b class="cifra">{{ a.kilos | cantidad: 'kg' }}</b>
-          <div class="barra-share" [attr.aria-label]="porcentaje(a) + '% del total'">
-            <span [style.width.%]="porcentaje(a)"></span>
-          </div>
-          <span class="muted pie">
-            {{ porcentaje(a) }}% del total · {{ a.skus }}
-            {{ num(a.skus) === 1 ? 'presentación' : 'presentaciones' }}
-          </span>
-          <div class="desglose">
-            <span>
-              <span class="muted">En paquete</span>
-              <b>{{ a.kilos_paquete | cantidad: 'kg' }}</b>
-            </span>
-            <span>
-              <span class="muted">Ya enconado</span>
-              <b>{{ num(a.kilos_cono) > 0 ? (a.kilos_cono | cantidad: 'kg') : '—' }}</b>
-            </span>
-          </div>
-        } @else {
-          <b class="cifra vacia">Sin existencias</b>
-          <span class="muted pie">Todavía no ha entrado mercancía a este almacén.</span>
-        }
-
-        @if (num(a.alertas) > 0) {
-          <span class="pill off" style="align-self:flex-start">{{ a.alertas }} bajo su mínimo</span>
-        }
-      </div>
-    }
-  </div>
+  @if (error()) { <p class="alert">{{ error() }}</p> }
 
   <!--
-    2 · Dónde está cada color. Es la pregunta que la tabla no contestaba de un
-    vistazo. La leyenda es obligatoria (dos series o más): la identidad no puede
-    depender solo del color.
+    1 · Cuánto hay en cada almacén. La cifra va con su unidad y con su parte de
+    TODO el inventario; la barra es el desglose paquete / ya enconado de ESE
+    almacén, que es lo que decide si hay que bajar conos al mostrador.
   -->
-  @if (grafica().length > 0) {
-    <div class="card">
-      <div class="acciones-periodo" style="margin-bottom:0.75rem">
-        <div>
-          <b>Dónde está cada hilo</b>
-          <span class="muted">
-            · color y calibre · kilos por almacén, del que más hay al que menos
-          </span>
-        </div>
-        <div class="viz-legend" style="margin:0">
-          @for (s of seriesGrafica(); track s.almacen_id) {
-            <span class="item">
-              <span class="swatch" [style.background]="s.color"></span>
-              {{ s.otros ? 'Otros almacenes' : s.nombre }}
-            </span>
+  @if (tarjetas().length > 0) {
+    <div class="almacenes">
+      @for (a of tarjetas(); track a.almacen_id) {
+        <div class="almacen">
+          <div class="almacen-cabeza">
+            <span class="almacen-nombre">{{ a.nombre }}</span>
+            <span class="almacen-tipo">{{ a.tipo }}</span>
+          </div>
+          @if (a.kilos > 0) {
+            <div class="almacen-cifra">
+              <span class="cifra">{{ a.kilos | cantidad: 'kg' }}</span>
+              <span class="muted">{{ a.parte }}% del inventario</span>
+            </div>
+            <div class="desglose-barra" role="img"
+                 [attr.aria-label]="'En paquete ' + a.pctPaquete + '%, ya enconado ' + a.pctCono + '%'">
+              @if (a.kgPaquete > 0) {
+                <span class="paq" [style.flex-grow]="a.kgPaquete"
+                      [title]="'En paquete: ' + (a.kgPaquete | cantidad: 'kg')"></span>
+              }
+              @if (a.kgCono > 0) {
+                <span class="cono" [style.flex-grow]="a.kgCono"
+                      [title]="'Ya enconado: ' + (a.kgCono | cantidad: 'kg')"></span>
+              }
+            </div>
+            <div class="almacen-pie">
+              <span class="desglose-texto">
+                @if (a.kgPaquete > 0) { <i class="paq" aria-hidden="true"></i> }
+                @if (a.kgCono > 0) { <i class="cono" aria-hidden="true"></i> }
+                {{ a.desglose }} · {{ a.hilos }} {{ a.hilos === 1 ? 'hilo' : 'hilos' }}
+              </span>
+              @if (a.alertas > 0) {
+                <span class="alerta">{{ a.alertas }} en su mínimo</span>
+              }
+            </div>
+          } @else {
+            <div class="almacen-cifra">
+              <span class="cifra vacia">Sin existencias</span>
+            </div>
+            <div class="desglose-barra vacia" aria-hidden="true"></div>
+            <div class="almacen-pie">
+              <span class="muted">Todavía no ha entrado mercancía a este almacén.</span>
+              @if (a.alertas > 0) {
+                <span class="alerta">{{ a.alertas }} en su mínimo</span>
+              }
+            </div>
           }
         </div>
-      </div>
-      <app-stacked-bars [data]="grafica()" unidad="kg" [decimals]="0" />
-      <p class="muted" style="font-size:0.75rem; margin:0.25rem 0 0">
-        Cada barra es un hilo —color y calibre—, con sus presentaciones sumadas (paquete y cono
-        son el mismo hilo). El número del final son sus kilos en total. Pasa el cursor por un
-        tramo para ver el material, la línea y cuánto hay en ese almacén.
-      </p>
+      }
     </div>
   }
 
   <!--
-    3 · El detalle. Una sección por color, y dentro sus presentaciones: antes cada
-    presentación era un renglón suelto con el nombre repetido y parecían duplicados.
+    2 · Dónde está cada hilo. Una barra por hilo (color y calibre), partida por
+    almacén. La leyenda es obligatoria —dos series o más—: la identidad no puede
+    depender solo del color. El único número directo es el total; cada tramo lo
+    explica su tooltip.
   -->
-  <div class="card">
-    <div class="acciones-periodo">
-      <div>
-        <b>Detalle por hilo</b>
-        <span class="muted">
-          · {{ grupos().length }} {{ grupos().length === 1 ? 'hilo' : 'hilos' }} (color y calibre),
-          {{ coloresConStock() }} con existencias · todas las cantidades en kilos
-        </span>
+  @if (grafica().length > 0) {
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Dónde está cada hilo</h2>
+          <p>
+            @if (restoGrafica().hilos > 0) {
+              Los {{ grafica().length }} hilos con más kilos.
+            } @else {
+              Cada hilo con existencias, del que más kilos tiene al que menos.
+            }
+            La barra completa es todo lo que hay de ese hilo.
+          </p>
+        </div>
       </div>
-      <label class="field check" style="margin:0">
+
+      <div class="leyenda">
+        @for (l of leyenda(); track l.nombre) {
+          <span><i [style.background]="l.color"></i>{{ l.nombre }}</span>
+        }
+      </div>
+
+      <div class="barras hilos">
+        @for (b of grafica(); track b.label) {
+          <div class="barra-fila">
+            <div class="barra-etiqueta">
+              <span [title]="b.label + ' · ' + b.detalle">{{ b.label }}</span>
+              <span class="muted">{{ b.detalle }}</span>
+            </div>
+            <div class="barra-valor">
+              <!-- El largo deja sitio al total, que va al final de la barra. -->
+              <div class="apilada" role="img" [attr.aria-label]="descripcionBarra(b)"
+                   [style.width]="'calc((100% - 120px) * ' + b.ancho + ')'">
+                @for (s of b.segmentos; track s.serie) {
+                  <span [style.flex-grow]="s.value" [style.background]="s.color"
+                        [title]="tooltip(b, s)"></span>
+                }
+              </div>
+              <b>{{ b.total | cantidad: 'kg' }}</b>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (restoGrafica().hilos > 0) {
+        <p class="muted nota">
+          Otros {{ restoGrafica().hilos }} {{ restoGrafica().hilos === 1 ? 'hilo suma' : 'hilos suman' }}
+          {{ restoGrafica().kilos | cantidad: 'kg' }}; están en el detalle de abajo.
+        </p>
+      }
+      @if (resumen()?.truncado) {
+        <p class="aviso">
+          El catálogo tiene {{ resumen()?.total_variantes }} presentaciones y la gráfica solo
+          alcanza a leer las primeras {{ resumen()?.filas?.length }}. El detalle de abajo sí
+          las tiene todas.
+        </p>
+      }
+    </section>
+  }
+
+  <!--
+    3 · El detalle exacto. Un grupo por hilo con el nombre UNA sola vez, y dentro
+    sus presentaciones en cada almacén. La columna de mínimo se dibuja SIEMPRE,
+    porque es donde se captura (antes se escondía sin mínimos y entonces no había
+    dónde ponerlos).
+  -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Detalle por hilo</h2>
+        <p>Cada presentación de un hilo va junta, con el nombre una sola vez.</p>
+      </div>
+    </div>
+
+    <div class="filtros">
+      <label class="buscador crece">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
+        </svg>
+        <span class="oculto">Buscar</span>
+        <input type="search" [(ngModel)]="filtroQ" (ngModelChange)="alTeclear()"
+               (keydown.enter)="buscarYa()" placeholder="Color, calibre o código" />
+      </label>
+      <label class="field">
+        <span class="oculto">Almacén</span>
+        <select [(ngModel)]="filtroAlmacen" (ngModelChange)="cargarStock()">
+          <option value="">Todos los almacenes</option>
+          @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+        </select>
+      </label>
+      <label class="field">
+        <span class="oculto">Qué mostrar</span>
+        <select [(ngModel)]="vista" (ngModelChange)="cargarStock()">
+          <option value="todo">Todo</option>
+          <option value="minimo">Solo lo que está en su mínimo</option>
+          <option value="apartado">Solo lo apartado</option>
+        </select>
+      </label>
+      <label class="field check">
         <input type="checkbox" [checked]="soloConStock()"
                (change)="soloConStock.set($any($event.target).checked)" />
-        Ocultar los que están en cero
+        Ocultar lo que está en cero
       </label>
     </div>
 
-    @if (r.truncado) {
-      <p class="aviso" style="margin-top:0.75rem">
-        El catálogo tiene {{ r.total_variantes }} presentaciones y aquí solo caben las primeras
-        {{ r.filas.length }}. Usa el buscador de abajo para el resto.
+    @if (cargando() && stock().length === 0) {
+      <p class="muted">Cargando…</p>
+    } @else if (grupos().length === 0) {
+      <p class="vacio">
+        @if (filtroQ || filtroAlmacen || vista !== 'todo') {
+          Nada coincide con el filtro.
+        } @else {
+          Todavía no hay existencias registradas en ningún almacén.
+        }
       </p>
-    }
-
-    @if (grupos().length === 0) {
-      <p class="empty">Todavía no hay existencias registradas en ningún almacén.</p>
     } @else {
-      <div style="overflow-x:auto">
-        <table class="grid tabla-colores" style="margin-top:0.75rem">
+      <div class="tabla-scroll">
+        <table class="grid detalle">
           <thead>
             <tr>
-              <th>Hilo</th>
-              <th>Material y línea</th>
               <th>Presentación</th>
-              @for (a of r.almacenes; track a.almacen_id) {
-                <th class="num">
-                  {{ a.nombre }}
-                  <div class="muted th-sub">{{ papel(a) }} · kg</div>
-                </th>
-              }
-              <th class="num">
-                Total del hilo
-                <div class="muted th-sub">kg y % del inventario</div>
-              </th>
+              <th>Almacén</th>
+              <th class="num">Hay</th>
+              <th class="num">Apartado</th>
+              <th class="num">Mínimo</th>
+              <th>Último movimiento</th>
             </tr>
           </thead>
-          @for (g of grupos(); track g.clave) {
-            <tbody class="grupo">
-              @for (f of g.filas; track f.variante_id; let primero = $first) {
+          <tbody>
+            @for (g of grupos(); track g.clave) {
+              <tr class="grupo-fila">
+                <td colspan="6">
+                  <b class="hilo">{{ nombreCompleto(g) }}</b>
+                  <span class="muted">
+                    · {{ clasificacion(g) }} · {{ g.total | cantidad: 'kg' }}
+                    {{ filtroAlmacen ? 'en este almacén' : 'en total' }}
+                    @if (!filtroAlmacen && !filtroQ && vista === 'todo') {
+                      · {{ porcentajeDelTotal(g.total) }}% del inventario
+                    }
+                  </span>
+                </td>
+              </tr>
+              @for (s of g.filas; track s.id) {
                 <tr>
                   <td>
-                    @if (primero) {
-                      <b>{{ g.producto }}</b>
-                      <div class="muted th-sub">
-                        {{ g.calibre ? 'calibre ' + g.calibre : 'sin calibre' }}
-                      </div>
-                    }
+                    {{ etiquetaPresentacion(s) }}
+                    <div class="sub mono">{{ s.sku }}</div>
                   </td>
                   <td>
-                    @if (primero) {
-                      <span>{{ g.material || '—' }}</span>
-                      <div class="muted th-sub">{{ g.linea || 'sin línea' }}</div>
+                    {{ s.almacen }}
+                    @if (s.ubicacion_fisica) { <div class="sub">{{ s.ubicacion_fisica }}</div> }
+                  </td>
+                  <td class="num">
+                    <b [class.en-minimo]="bajoMinimo(s)">{{ s.cantidad | cantidad: 'kg' }}</b>
+                    @if (equivalencia(s); as eq) { <div class="sub">{{ eq }}</div> }
+                    @if (bajoMinimo(s)) { <div><span class="pill ambar">en su mínimo</span></div> }
+                  </td>
+                  <td class="num">
+                    @if (num(s.cantidad_reservada) > 0) {
+                      {{ s.cantidad_reservada | cantidad: 'kg' }}
+                    } @else {
+                      <span class="muted">—</span>
                     }
                   </td>
-                  <td>
-                    <span [class.muted]="f.tipo_presentacion === 'cono'">
-                      {{ etiquetaPresentacion(f) }}
-                    </span>
-                    <div class="muted th-sub">{{ f.sku }}</div>
-                  </td>
-                  @for (a of r.almacenes; track a.almacen_id) {
-                    <td class="num">
-                      @if (celda(f, a.almacen_id); as c) {
-                        @if (num(c.cantidad) > 0) {
-                          <span [class.neg]="c.bajo_minimo">{{ c.cantidad | cantidad }}</span>
-                          @if (f.tipo_presentacion === 'paquete' && num(f.peso_kg)) {
-                            <div class="muted th-sub">≈ {{ paquetesDe(c.cantidad, f.peso_kg) }} paq</div>
-                          }
-                        } @else {
-                          <span class="muted">0</span>
-                        }
+                  <td class="num minimo">
+                    <span class="minimo-celda">
+                      @if (num(s.stock_minimo) > 0) {
+                        <span>{{ s.stock_minimo | cantidad: 'kg' }}</span>
                       } @else {
-                        <span class="muted">—</span>
+                        <span class="muted">sin mínimo</span>
                       }
-                    </td>
-                  }
-                  <!-- El total va una sola vez por hilo, en su primer renglón. -->
-                  @if (primero) {
-                    <td class="num total-color" [attr.rowspan]="g.filas.length">
-                      <b>{{ g.total | cantidad: 'kg' }}</b>
-                      <div class="muted th-sub">
-                        {{ porcentajeDelTotal(g.total) }}% del inventario
+                      <button type="button" class="btn btn-ghost btn-sm" (click)="abrirMinimo(s)">
+                        {{ num(s.stock_minimo) > 0 ? 'Cambiar' : 'Fijar' }}
+                      </button>
+                    </span>
+                  </td>
+                  <!-- La etiqueta es la del kardex: la pantalla no la reconstruye. -->
+                  <td class="ultimo">
+                    @if (s.ultimo_movimiento; as u) {
+                      {{ u.concepto }}
+                      <div class="sub">
+                        @if (u.folio) { <span class="mono" [title]="u.folio">{{ u.folio | folio }}</span> · }
+                        @else if (u.codigo_bulto) { <span class="mono">bulto {{ u.codigo_bulto }}</span> · }
+                        {{ u.creado_en | cuando }}
                       </div>
-                      <div class="barra-share mini"
-                           [title]="porcentajeDelTotal(g.total) + '% de los kilos de la tienda'">
-                        <span [style.width.%]="porcentajeDelTotal(g.total)"></span>
-                      </div>
-                    </td>
-                  }
+                    } @else {
+                      <span class="muted">—</span>
+                    }
+                  </td>
                 </tr>
               }
-            </tbody>
-          }
+            }
+          </tbody>
         </table>
       </div>
+
+      <div class="pie-tabla">
+        <span class="muted">
+          {{ grupos().length }} {{ grupos().length === 1 ? 'hilo' : 'hilos' }} ·
+          {{ stock().length }} de {{ totalStock() }} renglones · todas las cantidades en kilos
+        </span>
+        @if (hayMas()) {
+          <button type="button" class="btn btn-ghost btn-sm" (click)="cargarMas()" [disabled]="cargando()">
+            {{ cargando() ? 'Cargando…' : 'Cargar más' }}
+          </button>
+        }
+      </div>
     }
-  </div>
-}
-
-<!--
-  4 · Buscador, para lo que no cabe arriba y para ver el detalle de un almacén:
-  cuándo se movió por última vez y su mínimo. La columna de reservada no se
-  dibuja si está toda en cero; la de mínimo SIEMPRE, porque es donde se captura
-  (antes se escondía sin mínimos y entonces no había dónde ponerlos).
--->
-<div class="card">
-  <div class="acciones-periodo" style="margin-bottom:0.75rem">
-    <div>
-      <b>Buscar una presentación</b>
-      <span class="muted"> · {{ stock().length }} renglones</span>
-    </div>
-  </div>
-  <div class="form-grid">
-    <label class="field">
-      Almacén
-      <select [(ngModel)]="filtroAlmacen" (ngModelChange)="cargarStock()">
-        <option value="">— Todos —</option>
-        @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
-      </select>
-    </label>
-    <label class="field">
-      Buscar
-      <input type="text" [(ngModel)]="filtroQ" (keyup.enter)="cargarStock()"
-             placeholder="Color o SKU" />
-    </label>
-    <label class="field check">
-      <input type="checkbox" [(ngModel)]="soloBajo" (ngModelChange)="cargarStock()" />
-      Solo los que están bajo su mínimo
-    </label>
-  </div>
-
-  @if (cargando()) {
-    <p class="muted" style="margin-bottom:0">Cargando…</p>
-  } @else if (stock().length === 0) {
-    <p class="empty" style="margin-bottom:0">Sin existencias registradas para el filtro.</p>
-  } @else {
-    <div style="overflow-x:auto">
-      <table class="grid" style="margin-top:0.75rem">
-        <thead>
-          <tr>
-            <th>Hilo</th>
-            <th>Material y línea</th>
-            <th>Presentación</th>
-            <th>Almacén</th>
-            <th class="num">Cantidad</th>
-            @if (hayReservas()) { <th class="num">Reservada</th> }
-            <th class="num">Mínimo</th>
-            <th>Último movimiento</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (s of stock(); track s.id) {
-            <tr>
-              <td>
-                <b>{{ s.producto }}</b>
-                <div class="muted th-sub">
-                  {{ s.calibre ? 'calibre ' + s.calibre : 'sin calibre' }}
-                </div>
-              </td>
-              <td>
-                {{ s.material || '—' }}
-                <div class="muted th-sub">{{ s.linea || 'sin línea' }}</div>
-              </td>
-              <td>
-                {{ presentacionStock(s) }}
-                <div class="muted th-sub">{{ s.sku }}</div>
-              </td>
-              <td>
-                {{ s.almacen }}
-                @if (s.ubicacion_fisica) {
-                  <div class="muted th-sub">{{ s.ubicacion_fisica }}</div>
-                }
-              </td>
-              <td class="num">
-                <span [class.neg]="bajoMinimo(s)">{{ s.cantidad | cantidad: 'kg' }}</span>
-                @if (s.tipo_presentacion === 'paquete' && num(s.peso_kg)) {
-                  <div class="muted th-sub">≈ {{ paquetesDe(s.cantidad, s.peso_kg) }} paq</div>
-                }
-              </td>
-              @if (hayReservas()) {
-                <td class="num">
-                  @if (num(s.cantidad_reservada) > 0) {
-                    {{ s.cantidad_reservada | cantidad: 'kg' }}
-                  } @else {
-                    <span class="muted">—</span>
-                  }
-                </td>
-              }
-              <td class="num">
-                @if (num(s.stock_minimo) > 0) {
-                  {{ s.stock_minimo | cantidad: 'kg' }}
-                  @if (bajoMinimo(s)) { <span class="pill off">bajo</span> }
-                } @else {
-                  <span class="muted">sin mínimo</span>
-                }
-                <div>
-                  <button type="button" class="btn btn-ghost btn-sm" (click)="abrirMinimo(s)">
-                    {{ num(s.stock_minimo) > 0 ? 'Cambiar' : 'Fijar' }}
-                  </button>
-                </div>
-              </td>
-              <td class="muted">{{ s.actualizado_en | fecha }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  }
+  </section>
 </div>
 
 <!--
   Las acciones. Se crean al abrirlas y se destruyen al cerrarlas; ninguna pide
-  nada al servidor porque los datos que necesitan entran por input.
+  nada al servidor para abrir porque los datos que necesitan entran por input.
 -->
 @if (modal() === 'desarme') {
   <app-desarme-modal

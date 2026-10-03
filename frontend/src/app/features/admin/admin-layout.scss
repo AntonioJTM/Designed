@@ -1,156 +1,180 @@
+// El marco del panel (rediseño 2026-10): menú oscuro por grupos a la izquierda y
+// la pantalla a la derecha. En el celular el menú se vuelve una barra arriba que
+// se despliega con un botón.
+
 .admin {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 248px minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .side {
-  background: #111827;
-  color: #e5e7eb;
+  background: var(--barra);
+  color: var(--barra-tinta);
   display: flex;
   flex-direction: column;
-  padding: 1.25rem 1rem;
+  gap: 20px;
+  padding: 18px 14px 14px;
   /* Fija la barra a la altura de la ventana: no crece con la página. */
   position: sticky;
   top: 0;
+  /* Arriba de la página: la barra (sticky) es su propia capa, y sin esto lo que
+     la página dibuja con posición —los puntos y líneas de las gráficas— quedaba
+     ENCIMA del panel de avisos, que vive dentro de ella, y parecía transparente. */
+  z-index: 30;
   align-self: start;
   height: 100vh;
-  overflow-y: auto;
+  /* La barra NO se desplaza entera: solo la lista de pantallas (abajo). Así el
+     nombre, la campana y "Salir" quedan siempre a la vista; antes, con la lista
+     del administrador, había que bajar para encontrar la campana. */
+  overflow: hidden;
 }
+.side-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .brand {
-  font-weight: 700;
-  font-size: 1.05rem;
-  margin-bottom: 1.5rem;
-}
-.side nav {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex: 1;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+.brand:hover { color: #fff; }
+.btn-menu {
+  display: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid #333A48;
+  background: transparent;
+  color: #E2E6EE;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* La lista se desplaza con la rueda o el panel táctil, SIN barra visible: el
+   usuario la pidió quitar ("se ve todo bien, no hace falta"). En una ventana de
+   ~920 px de alto el menú del administrador no cabe completo de todos modos. */
+.side nav {
+  display: flex; flex-direction: column; gap: 10px;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  scrollbar-width: none;
+}
+.side nav::-webkit-scrollbar { display: none; }
+/* Sin barra, el final se desvanece mientras haya opciones abajo (ver revisarMenu). */
+.side nav.mas-abajo {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+}
+.grupo { display: flex; flex-direction: column; gap: 1px; }
+.grupo-titulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--barra-titulo);
+  padding: 0 10px 4px;
 }
 .side nav a {
-  color: #cbd5e1;
-  text-decoration: none;
-  padding: 0.6rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 38px;
+  padding: 0 12px;
   border-radius: 8px;
-  font-size: 0.95rem;
+  color: var(--barra-tinta);
+  text-decoration: none;
+  font-size: 14px;
 }
-.side nav a:hover { background: #1f2937; }
-.side nav a.on { background: #4f46e5; color: #fff; }
+.side nav a:hover { background: #1C212C; color: #fff; }
+.side nav a.on { background: var(--acento); color: #fff; font-weight: 500; }
 
 .user {
-  /* Ancla del panel de avisos, que flota hacia arriba. */
+  /* Siempre abajo y a la vista: el nombre, el puesto, la campana y "Salir". */
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  border-top: 1px solid #1f2937;
-  padding-top: 1rem;
+  gap: 10px;
+  border-top: 1px solid var(--barra-linea);
+  padding: 12px 10px 0;
+  flex: 0 0 auto;
 }
-.user .quien { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.user .nombre { font-size: 0.9rem; display: block; }
-.user .rol { font-size: 0.75rem; color: #94a3b8; text-transform: capitalize; }
+.user .quien { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nombre-rol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.user .nombre { font-size: 14px; color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user .rol { font-size: 12px; color: var(--barra-titulo); text-transform: capitalize; }
 
 /* Campana de pendientes, junto al nombre y el tipo de usuario. */
 .campana {
   position: relative;
-  background: transparent;
-  border: 1px solid #374151;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
-  padding: 0.3rem 0.45rem;
-  font-size: 1rem;
-  line-height: 1;
+  border: 1px solid #333A48;
+  background: transparent;
+  color: #E2E6EE;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  margin: 0;
 }
+.campana:hover { background: #1C212C; }
 .campana .badge {
   position: absolute;
-  top: -7px;
-  right: -7px;
-  background: #dc2626;
-  color: #fff;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  min-width: 17px;
-  padding: 0.05rem 0.25rem;
-}
-
-/*
-  Panel de avisos. Cada uno es un botón: lleva a la pantalla donde se atiende.
-
-  FLOTA hacia arriba, sobre el menú: metido en el flujo empujaba la barra —que mide
-  100vh— y el panel se salía de la pantalla por abajo.
-*/
-.avisos {
-  position: absolute;
-  bottom: calc(100% + 0.5rem);
-  left: 0;
-  right: 0;
-  z-index: 20;
-  max-height: 60vh;
-  overflow-y: auto;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
-  background: #111827;
-  border: 1px solid #374151;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  box-sizing: border-box;
   border-radius: 10px;
-  padding: 0.5rem;
+  background: #C2410C;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
 }
-.avisos h4 {
-  margin: 0.35rem 0 0.3rem;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #94a3b8;
-}
-.avisos .vacio { color: #94a3b8; font-size: 0.8rem; margin: 0.4rem 0.25rem; }
-.aviso-item {
-  display: block;
-  width: 100%;
-  text-align: left;
+
+.salir {
+  min-height: 40px;
   background: transparent;
-  border: 0;
+  border: 1px solid #333A48;
+  color: #E2E6EE;
   border-radius: 8px;
-  color: #e5e7eb;
-  font-size: 0.8rem;
-  padding: 0.4rem 0.45rem;
-  margin: 0;
+  font: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
-.aviso-item:hover { background: #1f2937; }
-.aviso-item .kg { color: #94a3b8; }
-.aviso-item .cuando { display: block; font-size: 0.7rem; color: #94a3b8; margin-top: 0.1rem; }
-.user button {
-  margin-top: 0.5rem;
-  background: transparent;
-  border: 1px solid #374151;
-  color: #e5e7eb;
-  padding: 0.4rem;
-  border-radius: 8px;
-  cursor: pointer;
-}
+.salir:hover { background: #1C212C; }
 
 .main {
-  background: #f9fafb;
-  padding: 1.75rem 2rem;
-  overflow-x: auto;
+  background: var(--fondo);
+  /* Márgenes contenidos: con 56 px abajo, una página que cabía justa sacaba barra
+     de desplazamiento por unos cuantos píxeles. */
+  padding: 28px 32px 32px;
+  min-width: 0;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   /* minmax(0, 1fr) y no 1fr: una columna 1fr mide como mínimo lo que su
-     contenido, y el menú en una sola fila (18 opciones) ensanchaba la página a
-     ~1,600 px en el celular. Ahora el menú se desliza de lado dentro de su barra. */
+     contenido, y el menú ensanchaba la página en el celular. */
   .admin { grid-template-columns: minmax(0, 1fr); }
   .side {
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    /* En móvil la barra vuelve a fluir arriba (sin fijar altura). */
-    position: static;
+    position: sticky;
+    top: 0;
+    z-index: 30;
     height: auto;
-    overflow: visible;
+    max-height: 100vh;
+    padding: 10px 14px;
+    gap: 12px;
   }
-  .side nav { flex-direction: row; max-width: 100%; overflow-x: auto; }
-  .side nav a { white-space: nowrap; }
+  .btn-menu { display: inline-flex; }
+  /* Cerrado, solo se ve la barra de arriba. */
+  .side:not(.abierta) nav, .side:not(.abierta) .user { display: none; }
+  .main { padding: 20px 16px 40px; }
 }

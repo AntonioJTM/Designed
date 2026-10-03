@@ -7,7 +7,7 @@
     </div>
 
     <div class="modal-body">
-      <p class="muted" style="margin-top:0; font-size:0.85rem">
+      <p class="explica">
         Escanea el paquete que vas a abrir: el sistema dice cuántos conos trae y, al confirmar, lo
         deshace —descuenta sus kilos de la bodega y da entrada al mostrador—. El cono se vende por
         kilo, al mismo precio; si le pones destare, esos kilos se suman.
@@ -17,43 +17,46 @@
       @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
 
       <!-- 1 · Escanear el bulto: es el flujo normal -->
-      <div class="input-scan" style="max-width:560px">
-        <input #lector type="text" [(ngModel)]="codigo"
-               (keydown.enter)="$event.preventDefault(); escanear()"
-               placeholder="Escanea el paquete que vas a bajar" />
-        <button type="button" class="btn btn-primary" (click)="escanear()">Leer</button>
-      </div>
+      <label class="field">
+        Código del paquete
+        <span class="escaneo">
+          <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
+                 (keydown.enter)="$event.preventDefault(); escanear()"
+                 placeholder="Escanea el paquete que vas a bajar" />
+          <button type="button" class="btn btn-primary" (click)="escanear()">Leer</button>
+        </span>
+      </label>
 
       @if (previaBulto(); as pb) {
-        <div class="previa-calculo">
+        <div class="previa">
           <div class="renglon">
             <span>
               <b>{{ pb.paquete.producto }}{{ pb.paquete.calibre ? ' ' + pb.paquete.calibre : '' }}</b>
-              <span class="muted"> · bulto {{ pb.bulto.codigo }}</span>
-              @if (pb.bulto.lote) { <span class="muted"> · lote {{ pb.bulto.lote }}</span> }
+              <span class="muted"> · bulto <span class="mono">{{ pb.bulto.codigo }}</span></span>
+              @if (pb.bulto.lote) { <span class="muted"> · lote <span class="mono">{{ pb.bulto.lote }}</span></span> }
             </span>
-            <span class="neg">−{{ pb.bulto.peso_kg | cantidad: 'kg' }}</span>
+            <b class="neg">−{{ pb.bulto.peso_kg | cantidad: 'kg' }}</b>
           </div>
           <div class="renglon">
             <span>
               Salen <b>{{ pb.conos_a_generar }}</b> conos
               @if (!pb.cono) {
-                <span class="muted"> · se dará de alta la presentación</span>
+                <span class="muted"> · se dará de alta la presentación de cono</span>
               }
             </span>
-            <span style="color:#166534">+{{ pesoEnconado() | cantidad: 'kg' }}</span>
+            <b class="pos">+{{ pesoEnconado() | cantidad: 'kg' }}</b>
           </div>
           @if (destare) {
             <div class="renglon">
               <span class="muted">
-                {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ destare }} de destare
+                {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ destare | cantidad: 'kg' }} de destare
               </span>
               <span class="muted">se venden por kilo</span>
             </div>
           }
         </div>
 
-        <div class="form-grid" style="margin-top:0.75rem">
+        <div class="campos">
           <label class="field">
             Sale de
             <select [(ngModel)]="origen">
@@ -67,9 +70,7 @@
               }
             </select>
             @if (pb.existencias.length === 0) {
-              <span class="muted" style="font-size:0.72rem">
-                Este paquete no tiene existencias en ningún almacén.
-              </span>
+              <span class="ayuda">Este paquete no tiene existencias en ningún almacén.</span>
             }
           </label>
           <label class="field">
@@ -81,15 +82,18 @@
             </select>
           </label>
           <label class="field">
-            Destare (kg) <span class="muted">(opcional)</span>
-            <input type="number" step="0.001" min="0" [(ngModel)]="destare" placeholder="Ej. 0.5" />
-            <span class="muted" style="font-size:0.72rem">
+            <span>Destare <span class="muted">(opcional)</span></span>
+            <span class="cant">
+              <input type="number" step="0.001" min="0" [(ngModel)]="destare" placeholder="Ej. 0.5" />
+              <span>kg</span>
+            </span>
+            <span class="ayuda">
               Lo que gana de peso al enconarse, por el tubo de cada cono. Se suma a los kilos que
               entran al mostrador; no cambia lo que se descuenta del paquete.
             </span>
           </label>
           <label class="field">
-            Motivo (opcional)
+            <span>Motivo <span class="muted">(opcional)</span></span>
             <input type="text" [(ngModel)]="motivo" placeholder="Ej. Surtido de mostrador" />
           </label>
         </div>
@@ -97,20 +101,20 @@
 
       <!-- 2 · Sin lector: se captura a mano -->
       @if (!previaBulto() && conos().length > 0) {
-        <details style="margin-top:1rem">
-          <summary class="muted" style="cursor:pointer; font-size:0.85rem">
-            Capturar a mano, sin escanear
-          </summary>
-          <div class="form-grid" style="margin-top:0.75rem">
-            <label class="field">
+        <details class="a-mano">
+          <summary>Capturar a mano, sin escanear</summary>
+          <div class="campos">
+            <label class="field completo">
               Cono a producir
               <select [(ngModel)]="manual.cono_id">
                 @for (c of conos(); track c.id) {
-                  <option [ngValue]="c.id">{{ c.producto }}{{ c.calibre ? ' ' + c.calibre : '' }} · {{ c.sku }}</option>
+                  <option [ngValue]="c.id">
+                    {{ c.producto }}{{ c.calibre ? ' ' + c.calibre : '' }}{{ c.material ? ' — ' + c.material : '' }}{{ c.linea ? ' · ' + c.linea : '' }} · {{ c.sku }}
+                  </option>
                 }
               </select>
               @if (conoSel(); as c) {
-                <span class="muted" style="font-size:0.72rem">
+                <span class="ayuda">
                   Sale del paquete {{ c.paquete_sku }} de {{ c.paquete_peso_kg | cantidad: 'kg' }} ·
                   {{ c.piezas_por_origen }} conos por paquete
                 </span>
@@ -121,20 +125,19 @@
               <input type="number" step="1" min="1" [(ngModel)]="manual.paquetes" />
             </label>
             <label class="field">
-              Kilos reales <span class="muted">(opcional)</span>
-              <input type="number" step="0.001" min="0" [(ngModel)]="manual.kg"
-                     [placeholder]="previaManual() ? previaManual()!.nominal + ' kg' : 'peso nominal'" />
-              <span class="muted" style="font-size:0.72rem">
-                Solo si el bulto no pesó lo nominal. Vacío usa el peso del paquete.
+              <span>Kilos reales <span class="muted">(opcional)</span></span>
+              <span class="cant">
+                <input type="number" step="0.001" min="0" [(ngModel)]="manual.kg"
+                       [placeholder]="previaManual() ? (previaManual()!.nominal | cantidad) : 'peso nominal'" />
+                <span>kg</span>
               </span>
+              <span class="ayuda">Solo si el bulto no pesó lo nominal. Vacío usa el peso del paquete.</span>
             </label>
             <label class="field">
-              Conos reales <span class="muted">(opcional)</span>
+              <span>Conos reales <span class="muted">(opcional)</span></span>
               <input type="number" step="1" min="1" [(ngModel)]="manual.conos"
                      [placeholder]="previaManual() ? previaManual()!.piezasNominal + ' conos' : 'los nominales'" />
-              <span class="muted" style="font-size:0.72rem">
-                Solo si el bulto rinde menos de lo normal. Vacío usa los nominales.
-              </span>
+              <span class="ayuda">Solo si el bulto rinde menos de lo normal. Vacío usa los nominales.</span>
             </label>
             <label class="field">
               Sale de (bodega)
@@ -148,38 +151,37 @@
                 @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
               </select>
             </label>
-            <label class="field full">
-              Motivo (opcional)
+            <label class="field">
+              <span>Motivo <span class="muted">(opcional)</span></span>
               <input type="text" [(ngModel)]="motivo" placeholder="Ej. Surtido de mostrador" />
             </label>
           </div>
 
           @if (previaManual(); as p) {
-            <div class="previa-calculo">
+            <div class="previa">
               <div class="renglon">
                 <span>
-                  {{ p.paqueteSku }}
+                  <span class="mono">{{ p.paqueteSku }}</span>
                   @if (p.ajustado) {
-                    <span class="muted">· ajustado, nominal {{ p.nominal | cantidad: 'kg' }}</span>
+                    <span class="muted"> · ajustado, nominal {{ p.nominal | cantidad: 'kg' }}</span>
                   }
                 </span>
-                <span class="neg">−{{ p.kg | cantidad: 'kg' }}</span>
+                <b class="neg">−{{ p.kg | cantidad: 'kg' }}</b>
               </div>
               <div class="renglon">
                 <span>
-                  {{ p.conoSku }}
+                  <span class="mono">{{ p.conoSku }}</span>
                   @if (p.piezasAjustadas) {
-                    <span class="muted">· ajustado, nominal {{ p.piezasNominal | cantidad }}</span>
+                    <span class="muted"> · ajustado, nominal {{ p.piezasNominal | cantidad }}</span>
                   }
                 </span>
-                <span style="color:#166534">+{{ p.piezas | cantidad }} conos</span>
+                <b class="pos">+{{ p.piezas | cantidad }} conos</b>
               </div>
             </div>
           }
 
-          <div style="margin-top:1rem">
-            <button type="button" class="btn btn-ghost btn-sm" (click)="desarmarManual()"
-                    [disabled]="bajando()">
+          <div class="acciones-a-mano">
+            <button type="button" class="btn btn-ghost btn-sm" (click)="desarmarManual()" [disabled]="bajando()">
               Desarmar sin escanear
             </button>
           </div>
@@ -188,36 +190,36 @@
 
       <!-- Las últimas bajadas: contesta "¿ya lo bajé?" sin salir del modal. -->
       @if (ultimas().length > 0) {
-        <h4 style="margin:1.5rem 0 0.5rem; font-size:0.9rem">Últimas bajadas</h4>
-        <table class="grid mini">
-          <thead>
-            <tr>
-              <th>Producto</th><th>Paquete</th><th class="num">Kilos</th>
-              <th class="num">Conos</th><th>Destino</th><th>Cuándo</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (c of ultimas(); track c.id) {
-              <tr>
-                <td>{{ c.producto }}{{ c.calibre ? ' ' + c.calibre : '' }}</td>
-                <td class="muted">{{ c.paquete_sku }} → {{ c.cono_sku }}</td>
-                <td class="num">
-                  <span class="neg">−{{ c.kg_consumidos | cantidad }}</span>
-                  <span class="muted"> / </span>
-                  <span style="color:#166534">
-                    +{{ num(c.kg_consumidos) + num(c.destare_kg) | cantidad }}
-                  </span>
-                </td>
-                <td class="num muted">{{ c.piezas_generadas | cantidad }}</td>
-                <td class="muted">{{ c.almacen_destino }}</td>
-                <td class="muted">{{ c.creado_en | fecha }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-        <p class="muted" style="font-size:0.78rem; margin-bottom:0">
-          El histórico completo está en el Kardex.
-        </p>
+        <div class="recientes">
+          <h3>Últimas bajadas</h3>
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>Hilo</th><th>Paquete → cono</th><th class="num">Kilos</th>
+                  <th class="num">Conos</th><th>Destino</th><th>Cuándo</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of ultimas(); track c.id) {
+                  <tr>
+                    <td>{{ c.producto }}{{ c.calibre ? ' ' + c.calibre : '' }}</td>
+                    <td class="muted mono">{{ c.paquete_sku }} → {{ c.cono_sku }}</td>
+                    <td class="num">
+                      <span class="neg">−{{ c.kg_consumidos | cantidad }}</span>
+                      <span class="muted"> / </span>
+                      <span class="pos">+{{ num(c.kg_consumidos) + num(c.destare_kg) | cantidad }}</span>
+                    </td>
+                    <td class="num">{{ c.piezas_generadas | cantidad }}</td>
+                    <td>{{ c.almacen_destino }}</td>
+                    <td class="muted" [title]="c.creado_en | fecha">{{ c.creado_en | cuando }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">El histórico completo está en el Kardex.</p>
+        </div>
       }
     </div>
 

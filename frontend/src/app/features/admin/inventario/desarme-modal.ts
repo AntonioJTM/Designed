@@ -6,6 +6,7 @@ import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
+import { CuandoPipe } from './cuando.pipe';
 
 /**
  * BAJAR CONOS A MOSTRADOR, en un modal. El flujo es el mismo de antes —escanear
@@ -20,8 +21,9 @@ import { FechaPipe } from '../../../shared/fecha.pipe';
  */
 @Component({
   selector: 'app-desarme-modal',
-  imports: [FormsModule, CantidadPipe, FechaPipe],
+  imports: [FormsModule, CantidadPipe, FechaPipe, CuandoPipe],
   templateUrl: './desarme-modal.html',
+  styleUrl: './modales.scss',
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class DesarmeModal implements OnInit {

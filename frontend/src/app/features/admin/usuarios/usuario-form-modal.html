@@ -1,0 +1,74 @@
+<!--
+  No se cierra al hacer clic en el fondo, igual que los demás modales del panel:
+  un clic distraído borraría la captura. Se sale con la ✕, con "Cancelar" o con
+  Escape.
+-->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-usuario-titulo">
+    <div class="modal-head">
+      <h2 id="modal-usuario-titulo">{{ esEdicion() ? 'Editar empleado' : 'Nuevo empleado' }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="guardar()">
+      <div class="modal-body">
+        <div class="columna" style="gap: 16px">
+          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+
+          <div class="form-grid">
+            <label class="field full">
+              Nombre
+              <input type="text" formControlName="nombre" placeholder="Nombre completo" />
+            </label>
+            <label class="field">
+              Puesto
+              <select formControlName="rol_id">
+                @for (r of roles(); track r.id) {
+                  <option [ngValue]="r.id">{{ nombrePuesto(r) }}</option>
+                }
+              </select>
+              <span class="ayuda">Lo que puede hacer cada puesto se decide en Permisos.</span>
+            </label>
+            <label class="field">
+              Teléfono <span class="muted" style="font-weight: 400">(opcional)</span>
+              <input type="tel" formControlName="telefono" />
+            </label>
+            <label class="field full">
+              Correo
+              <input type="email" formControlName="correo" placeholder="correo@tienda.mx" autocomplete="off" />
+              @if (esEdicion()) {
+                <span class="ayuda">El correo no se puede cambiar: es con lo que entra.</span>
+              } @else {
+                <span class="ayuda">Con este correo entra al sistema.</span>
+              }
+            </label>
+            <label class="field full">
+              {{ esEdicion() ? 'Nueva contraseña' : 'Contraseña' }}
+              <input
+                type="password"
+                formControlName="contrasena"
+                autocomplete="new-password"
+                [placeholder]="esEdicion() ? 'Déjala vacía para no cambiarla' : 'Mínimo 8 caracteres'"
+              />
+              <span class="ayuda">
+                {{ esEdicion() ? 'Solo si hay que restablecerla. La actual no se puede ver.' : 'Dásela en persona; aquí no se vuelve a mostrar.' }}
+              </span>
+            </label>
+            @if (esEdicion()) {
+              <label class="field check full">
+                <input type="checkbox" formControlName="activo" /> Activo: puede entrar al sistema
+              </label>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+          {{ guardando() ? 'Guardando…' : esEdicion() ? 'Guardar cambios' : 'Dar de alta' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

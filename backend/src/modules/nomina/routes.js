@@ -4,13 +4,13 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 
 // La nómina expone sueldos del personal: es exclusiva de administradores,
 // igual que la gestión de staff.
-const soloAdmin = [authRequired, requireRol('administrador')];
+const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:nomina')];
 
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa el formato YYYY-MM-DD');
 

@@ -13,9 +13,19 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 // ---- Cajas ----
 async function listarCajas() {
+  // Cada caja con su turno abierto (si tiene) y su último corte: la pantalla
+  // Caja los enseña en la lista y el POS elige con eso a qué caja entrar.
   const [rows] = await pool.query(
-    `SELECT c.id, c.almacen_id, a.nombre AS almacen, c.nombre, c.activo
-       FROM cajas c JOIN almacenes a ON a.id = c.almacen_id
+    `SELECT c.id, c.almacen_id, a.nombre AS almacen, c.nombre, c.activo,
+            ab.id AS turno_id, ab.fecha_apertura AS turno_desde, ua.nombre AS turno_usuario,
+            uc.fecha_cierre AS ultimo_corte, uc.diferencia AS ultimo_corte_diferencia
+       FROM cajas c
+       JOIN almacenes a ON a.id = c.almacen_id
+       LEFT JOIN sesiones_caja ab ON ab.caja_id = c.id AND ab.estado = 'abierta'
+       LEFT JOIN usuarios ua ON ua.id = ab.usuario_id
+       LEFT JOIN sesiones_caja uc ON uc.id = (
+         SELECT s.id FROM sesiones_caja s WHERE s.caja_id = c.id AND s.estado = 'cerrada'
+          ORDER BY s.fecha_cierre DESC, s.id DESC LIMIT 1)
       ORDER BY c.nombre`
   );
   return rows;
@@ -125,9 +135,18 @@ async function obtenerSesion(id) {
   const sesion = rows[0];
   if (!sesion) return null;
 
+  // Venta y devolución apuntan a un pedido: se trae su folio y su cliente para
+  // que la pantalla Caja diga "POS-91B0 · Confecciones Paty" y no un número. Un
+  // 'ingreso' NO se cruza: su referencia puede ser un pedido (abono a un
+  // apartado) o un movimiento de crédito (abono a la cuenta), y su motivo ya
+  // dice cuál fue.
   const [movs] = await pool.query(
-    `SELECT id, tipo, monto, referencia_id, motivo, creado_en
-       FROM movimientos_caja WHERE sesion_caja_id = :id ORDER BY creado_en, id`,
+    `SELECT m.id, m.tipo, m.monto, m.referencia_id, m.motivo, m.creado_en,
+            p.numero_pedido, COALESCE(NULLIF(cl.nombre_comercial, ''), cl.nombre) AS cliente
+       FROM movimientos_caja m
+       LEFT JOIN pedidos p ON m.tipo IN ('venta', 'devolucion') AND p.id = m.referencia_id
+       LEFT JOIN clientes cl ON cl.id = p.cliente_id
+      WHERE m.sesion_caja_id = :id ORDER BY m.creado_en, m.id`,
     { id }
   );
   const { neto, porTipo } = await totalesSesion(id);
@@ -215,6 +234,7 @@ async function cerrarSesion(id, monto_final) {
 }
 
 module.exports = {
+  totalesSesion,
   listarCajas,
   crearCaja,
   actualizarCaja,

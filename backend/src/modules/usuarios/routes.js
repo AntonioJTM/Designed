@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -36,7 +36,7 @@ const actualizarSchema = z
   .strict();
 
 // El alta de staff es exclusiva de administradores (ya no hay registro público).
-const soloAdmin = [authRequired, requireRol('administrador')];
+const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:personal')];
 
 // Sesión propia
 router.post('/login', validate(loginSchema), controller.iniciarSesion);

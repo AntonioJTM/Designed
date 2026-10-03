@@ -1,26 +1,55 @@
-<div class="auth-card">
-  <h1>Iniciar sesión</h1>
-  <p class="sub">Tienda de hilos · acceso a la plataforma</p>
+<!--
+  Pantalla partida (rediseño 2026-10): a la izquierda qué es el sistema, a la
+  derecha el formulario. Solo entra el personal: la tienda en línea está
+  apagada y con ella el acceso de clientes.
+-->
+<div class="lado">
+  <div class="marca">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#8FB2F2" stroke-width="1.75"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M7 3h10 M7 21h10 M8.5 3v18 M15.5 3v18 M8.5 8l7 3 M8.5 12l7 3 M8.5 16l7 3"></path>
+    </svg>
+    <span>Tienda de hilos</span>
+  </div>
+  <div class="lema">
+    <p class="titulo">Inventario, ventas y clientes, en un solo lugar.</p>
+    <p>Cada bulto con su peso real, cada cliente con su cuenta, cada sucursal con lo que tiene.</p>
+  </div>
+  <span class="pie">Si no puedes entrar, pídele al administrador que revise tu cuenta.</span>
+</div>
 
-  <form [formGroup]="form" (ngSubmit)="enviar()">
-    <label>
+<main>
+  <form [formGroup]="form" (ngSubmit)="enviar()" novalidate>
+    <div class="encabezado">
+      <h1>Entrar</h1>
+      <p>Con el correo y la contraseña que te dio el administrador.</p>
+    </div>
+
+    <label class="field">
       Correo
-      <input type="email" formControlName="correo" autocomplete="username" placeholder="correo@ejemplo.com" />
+      <input type="email" formControlName="correo" autocomplete="username" placeholder="nombre@correo.com"
+             [class.invalido]="form.controls.correo.touched && form.controls.correo.invalid" />
     </label>
 
-    <label>
+    <label class="field">
       Contraseña
-      <input type="password" formControlName="contrasena" autocomplete="current-password" placeholder="••••••••" />
+      <input type="password" formControlName="contrasena" autocomplete="current-password"
+             [class.invalido]="form.controls.contrasena.touched && form.controls.contrasena.invalid" />
     </label>
 
     @if (error()) {
-      <p class="alert">{{ error() }}</p>
+      <p class="alert" role="alert">{{ error() }}</p>
     }
 
-    <button type="submit" [disabled]="cargando()">
+    <button type="submit" class="btn btn-primary btn-entrar" [disabled]="cargando()">
       {{ cargando() ? 'Entrando…' : 'Entrar' }}
     </button>
-  </form>
 
-  <p class="pie">¿No tienes cuenta? <a routerLink="/registro">Regístrate</a></p>
-</div>
+    <!--
+      TIENDA EN LÍNEA APAGADA (2026-10): sin tienda no hay registro de clientes.
+      Para regresarlo, descomentar este enlace, importar RouterLink en login.ts y
+      reabrir la ruta 'registro' en app.routes.ts.
+    <p class="registro">¿No tienes cuenta? <a routerLink="/registro">Regístrate</a></p>
+    -->
+  </form>
+</main>

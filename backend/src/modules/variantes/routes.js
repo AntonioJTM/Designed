@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -68,22 +68,24 @@ const actualizarSchema = z
 
 const soloStaff = [authRequired, requireTipo('usuario')];
 // Cambiar el precio que se le cobra a todos es decisión de los jefes, no de caja.
-const soloJefes = [...soloStaff, requireRol('administrador', 'gerente')];
+const soloJefes = [...soloStaff, requirePermiso('hacer:cambiar_precios')];
+// Dar de alta o quitar presentaciones y códigos es del catálogo.
+const catalogo = [...soloStaff, requirePermiso('ver:catalogo')];
 
 router.get('/', controller.listar);
 
-router.post('/', ...soloStaff, validate(crearSchema), controller.crear);
+router.post('/', ...catalogo, validate(crearSchema), controller.crear);
 router.patch('/:id', ...soloJefes, validate(actualizarSchema), controller.actualizar);
-router.delete('/:id', ...soloStaff, controller.eliminar);
+router.delete('/:id', ...catalogo, controller.eliminar);
 
 // Precio de la variante para un tipo de cliente.
-router.put('/:id/precios', ...soloStaff, validate(precioTipoSchema), controller.fijarPrecioTipo);
+router.put('/:id/precios', ...soloJefes, validate(precioTipoSchema), controller.fijarPrecioTipo);
 
 // Códigos de barras adicionales de una variante
 // Antes de '/:id' para que 'resolver' no se interprete como un id.
 router.get('/resolver/:codigo', ...soloStaff, controller.resolverCodigo);
 router.get('/:id/codigos', controller.listarCodigos);
-router.post('/:id/codigos', ...soloStaff, validate(codigoSchema), controller.agregarCodigo);
-router.delete('/codigos/:codigoId', ...soloStaff, controller.eliminarCodigo);
+router.post('/:id/codigos', ...catalogo, validate(codigoSchema), controller.agregarCodigo);
+router.delete('/codigos/:codigoId', ...catalogo, controller.eliminarCodigo);
 
 module.exports = router;

@@ -1,0 +1,336 @@
+@if (error()) { <p class="alert">{{ error() }}</p> }
+
+<!-- Comprobante de la última lista cargada -->
+@if (ultima(); as u) {
+  <section class="card verde">
+    <div class="card-head">
+      <div>
+        <h2>Lista cargada: {{ u.num_hilos }} {{ u.num_hilos === 1 ? 'hilo' : 'hilos' }}, {{ u.num_bultos | cantidad }} bultos</h2>
+        <p>
+          Ya está en el inventario{{ almacenUltima ? ' de ' + almacenUltima : '' }}: {{ u.kg_total | cantidad: 'kg' }}.
+          @if (u.nuevos > 0) { Se {{ u.nuevos === 1 ? 'creó 1 hilo nuevo' : 'crearon ' + u.nuevos + ' hilos nuevos' }}. }
+        </p>
+      </div>
+      <div class="acciones">
+        <button type="button" class="btn btn-ghost btn-sm" (click)="descargarPdf()" [disabled]="generandoPdf()">
+          {{ generandoPdf() ? 'Generando…' : 'Descargar PDF' }}
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="ultima.set(null)">Cerrar</button>
+      </div>
+    </div>
+
+    @if (u.sin_precio.length > 0) {
+      <div class="aviso falta-precio">
+        <span>
+          <b>{{ u.sin_precio.length === 1 ? 'Falta ponerle precio a 1 hilo' : 'Falta ponerles precio a ' + u.sin_precio.length + ' hilos' }}:</b>
+          {{ enLista(hilosSinPrecio(u)) }}. No se pueden vender hasta que tengan su precio por kilo.
+          El aviso queda en la campana mientras falte.
+        </span>
+        <a class="btn btn-sm btn-primary" routerLink="/admin/productos" [queryParams]="{ falta: 'precio' }">Poner precios</a>
+      </div>
+    }
+
+    <div class="tabla-scroll">
+      <table class="grid cargas">
+        <thead>
+          <tr>
+            <th>Hilo</th>
+            <th>Carga</th>
+            <th>Lotes</th>
+            <th class="num">Bultos</th>
+            <th class="num">Kilos</th>
+            <th>Precio</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of u.cargas; track c.id) {
+            <tr>
+              <td>
+                <b>{{ c.hilo }}</b>
+                @if (c.nuevo) { <span class="pill azul">Nuevo</span> }
+              </td>
+              <td><span class="mono" [title]="c.folio">{{ c.folio | folio }}</span></td>
+              <td class="mono">{{ c.lotes.length ? c.lotes.join(', ') : '—' }}</td>
+              <td class="num">{{ c.num_bultos | cantidad }}</td>
+              <td class="num"><b>{{ c.kg_total | cantidad: 'kg' }}</b></td>
+              <td>
+                @if (c.sin_precio) { <span class="pill ambar">Falta precio</span> }
+                @else { <span class="pill verde">Con precio</span> }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}
+
+<!-- 1 · La lista del proveedor -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>1 · La lista del proveedor</h2>
+      <p>El inventario con todos los colores. Se lee la hoja GLOBAL: un renglón por bulto.</p>
+    </div>
+  </div>
+
+  <div class="campos">
+    <label class="field">
+      Almacén donde entra
+      <select [(ngModel)]="almacenSel">
+        @for (a of almacenes(); track a.id) {
+          <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_matriz ? ' (matriz)' : '' }}</option>
+        }
+      </select>
+    </label>
+    <label class="field ancho">
+      <span>Notas <span class="muted">(opcional)</span></span>
+      <input type="text" [(ngModel)]="notas" placeholder="Ej. Factura 4821, llegó el martes" />
+    </label>
+  </div>
+
+  <input #archivoLista type="file" accept=".xlsx" class="oculto" tabindex="-1" aria-hidden="true"
+         (change)="elegirArchivo($event)" />
+
+  <div class="soltar" [class.encima]="arrastrando()"
+       (dragover)="arrastrar($event, true)" (dragleave)="arrastrar($event, false)" (drop)="soltar($event)">
+    <div class="soltar-archivo">
+      <span class="icono-archivo" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z M14 3v5h5 M9 13h6 M9 17h6"></path></svg>
+      </span>
+      <div class="soltar-texto">
+        @if (archivo) {
+          <b>{{ archivo.name }}</b>
+          <span>
+            @if (leyendo()) { Leyendo el archivo… }
+            @else if (previa(); as p) {
+              Hoja {{ p.hoja }}: {{ p.resumen.num_bultos | cantidad }} bultos de {{ p.resumen.num_hilos }}
+              {{ p.resumen.num_hilos === 1 ? 'hilo' : 'hilos' }}
+            } @else { No se pudo leer }
+          </span>
+        } @else {
+          <b>Arrastra aquí el archivo o elígelo</b>
+          <span>Se leen BOX NO, COLOR, CALIBRE, LOT, NET y CONOS; lo demás se ignora.</span>
+        }
+      </div>
+    </div>
+    <button type="button" class="btn btn-sm" [class.btn-primary]="!archivo" [class.btn-ghost]="archivo"
+            (click)="archivoLista.click()">
+      {{ archivo ? 'Cambiar archivo' : 'Elegir archivo' }}
+    </button>
+  </div>
+  <p class="nota">
+    El hilo se llama como dice la columna COLOR, tal cual: si quieres otro nombre, cámbialo en el Excel
+    antes de subirlo. El mismo color y calibre es el mismo hilo aunque sea de otra línea.
+  </p>
+</section>
+
+<!-- 2 · Revisa y confirma -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>2 · Revisa y confirma</h2>
+      <p>Nada se mueve hasta que confirmes, y entra la lista completa o nada.</p>
+    </div>
+  </div>
+
+  @if (previa(); as p) {
+    <div class="resumen">
+      <div class="caja-dato">
+        <span>Hilos</span>
+        <b>{{ p.resumen.num_hilos }}</b>
+        @if (p.resumen.nuevos > 0) { <small>{{ p.resumen.nuevos }} {{ p.resumen.nuevos === 1 ? 'nuevo' : 'nuevos' }}</small> }
+      </div>
+      <div class="caja-dato"><span>Bultos</span><b>{{ p.resumen.num_bultos | cantidad }}</b></div>
+      <div class="caja-dato"><span>Kilos netos</span><b>{{ p.resumen.kg_total | cantidad: 'kg' }}</b></div>
+      <div class="caja-dato"><span>Lotes</span><b>{{ p.resumen.lotes }}</b></div>
+      <div class="caja-dato"><span>Conos que rinden</span><b>{{ p.resumen.conos | cantidad }}</b></div>
+    </div>
+
+    <!-- De dónde viene la lista y si cuadra con el total por lote que imprimió el proveedor. -->
+    @if (p.documento || p.control) {
+      <p class="doc-linea">
+        @if (p.documento; as d) {
+          <span>
+            {{ d.proveedor }}@if (d.numero) { · lista <span class="mono">{{ d.numero }}</span> }@if (d.fecha) { del {{ d.fecha }} }
+          </span>
+        }
+        @if (p.control; as c) {
+          @if (c.cuadra) {
+            <span class="pill verde">Cuadra con el resumen de {{ c.lotes }} {{ c.lotes === 1 ? 'lote' : 'lotes' }}</span>
+          } @else {
+            <span class="pill naranja">No cuadra con el resumen por lote</span>
+          }
+        }
+      </p>
+    }
+    @if (p.control && !p.control.cuadra) {
+      <div class="aviso">
+        <b>Revisa contra la hoja RESUMEN</b> (puede ser que corregiste un dato en GLOBAL y el resumen quedó viejo):
+        <ul>@for (d of p.control.diferencias; track d) { <li>{{ d }}</li> }</ul>
+      </div>
+    }
+
+    @if (p.errores.length) {
+      <div class="alert">
+        <b>{{ p.errores.length === 1 ? '1 renglón impide' : p.errores.length + ' renglones impiden' }} cargar la lista.</b>
+        Corrígelos en el Excel y vuelve a subirlo.
+        <ul>@for (e of erroresVisibles(); track $index) { <li>{{ e.mensaje }}</li> }</ul>
+        @if (p.errores.length > erroresVisibles().length) {
+          <button type="button" class="btn-enlace" (click)="verTodosErrores.set(true)">Ver los {{ p.errores.length }}</button>
+        }
+      </div>
+    }
+
+    @if (p.avisos.length) {
+      <div class="aviso">
+        <b>Revisa {{ p.avisos.length === 1 ? 'este renglón' : 'estos ' + p.avisos.length + ' renglones' }}</b>
+        (no impiden cargar):
+        <ul>@for (a of avisosVisibles(); track $index) { <li>{{ a.mensaje }}</li> }</ul>
+        @if (p.avisos.length > avisosVisibles().length) {
+          <button type="button" class="btn-enlace" (click)="verTodosAvisos.set(true)">Ver los {{ p.avisos.length }}</button>
+        }
+      </div>
+    }
+
+    <!-- Los hilos que se van a crear: con qué material y línea, y que entran sin precio. -->
+    @if (nuevos().length > 0) {
+      <div class="nuevos">
+        <p>
+          <b>{{ nuevos().length === 1 ? 'Se va a crear 1 hilo' : 'Se van a crear ' + nuevos().length + ' hilos' }}</b>
+          con este material y esta línea. Entran <b>sin precio</b>: se lo pones después en Productos, y mientras
+          no lo tengan no se pueden vender.
+        </p>
+        <div class="campos">
+          <label class="field">
+            Material
+            <select [(ngModel)]="materialSel">
+              <option value="">— Elige el material —</option>
+              @for (m of materiales(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+            </select>
+            @if (p.articulo) { <span class="ayuda">El archivo dice: {{ p.articulo }}</span> }
+          </label>
+          <label class="field">
+            Línea
+            <select [(ngModel)]="lineaSel">
+              <option value="">Sin línea</option>
+              @for (l of lineas(); track l.id) { <option [ngValue]="l.id">{{ l.nombre }}</option> }
+            </select>
+          </label>
+        </div>
+        @if (calibresFuera().length) {
+          <p class="alert">
+            {{ nombreMaterial() }} no tiene el calibre {{ calibresFuera().join(', ') }}. Agrégalo en Materiales
+            o corrige el calibre en el Excel.
+          </p>
+        }
+      </div>
+    }
+
+    <div class="tabla-scroll">
+      <table class="grid hilos">
+        <thead>
+          <tr>
+            <th>Hilo</th>
+            <th>Lotes</th>
+            <th class="num">Bultos</th>
+            <th class="num">Kilos</th>
+            <th class="num">Peso por bulto</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (h of p.hilos; track h.clave) {
+            <tr>
+              <!-- El hilo y qué le pasa: si ya existe recibe bultos; si no, se crea sin precio. -->
+              <td>
+                <b>{{ h.nombre }} {{ h.calibre }}</b>
+                @switch (h.estado) {
+                  @case ('existe') { <span class="pill verde">Ya existe</span> }
+                  @case ('nuevo') { <span class="pill azul">Nuevo</span> }
+                  @default { <span class="pill rojo">Dos hilos iguales</span> }
+                }
+                <div class="sub">
+                  @if (h.producto; as prod) {
+                    Se le agregan bultos ·
+                    @if (prod.tiene_precio) { {{ prod.precio_kg | dinero }} por kg } @else { sin precio }
+                    · {{ prod.material }}{{ prod.linea ? ' ' + prod.linea : '' }}
+                  } @else if (h.estado === 'nuevo') {
+                    Se crea sin precio
+                    @if (h.parecidos.length) { · ya tienes {{ enLista(h.parecidos) }}, que es otro calibre }
+                  }
+                </div>
+              </td>
+              <td>
+                <span class="mono">{{ h.lotes[0]?.lote }}</span>
+                @if (h.lotes.length > 1) {
+                  <div class="sub" [title]="lotesDe(h)">y {{ h.lotes.length - 1 }} {{ h.lotes.length === 2 ? 'lote' : 'lotes' }} más</div>
+                }
+              </td>
+              <td class="num">{{ h.num_bultos | cantidad }}</td>
+              <td class="num"><b>{{ h.kg_total | cantidad: 'kg' }}</b></td>
+              <td class="num">{{ rango(h) }} kg</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (errorCarga()) { <p class="alert error-carga">{{ errorCarga() }}</p> }
+
+    <!--
+      Mientras carga, en vez de un botón apagado que dice "Cargando…" (parecía que
+      no pasaba nada), un panel con lo que el servidor va diciendo: qué hilo está
+      creando, cuántos bultos van y cuánto lleva.
+    -->
+    @if (avance(); as a) {
+      <div class="estado-carga">
+        <div class="estado-cabeza">
+          <span class="spinner" aria-hidden="true"></span>
+          <b role="status">{{ a.texto }}…</b>
+          <span class="reloj">{{ segundos() }} s</span>
+        </div>
+        <div class="avance-barra" aria-hidden="true"><span [style.width.%]="pct(a)"></span></div>
+        <p class="avance-cifra">
+          {{ a.hechos | cantidad }} de {{ a.total | cantidad }} bultos registrados · {{ pct(a) }}%
+        </p>
+        <ul class="avance-hilos">
+          @for (h of a.hilos; track h.hilo) {
+            <li [class.listo]="h.estado === 'listo'" [class.cargando]="h.estado === 'cargando'">
+              <span class="marca" aria-hidden="true">
+                @if (h.estado === 'listo') {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                       stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>
+                }
+              </span>
+              <b>{{ h.hilo }}</b>
+              <span class="muted">
+                @switch (h.estado) {
+                  @case ('listo') { Listo · carga {{ h.folio | folio }} }
+                  @case ('cargando') { {{ h.nuevo ? 'Creando el hilo y sus bultos' : 'Agregando sus bultos' }} }
+                  @default { En espera }
+                }
+              </span>
+            </li>
+          }
+        </ul>
+        <p class="nota">No cierres esta pantalla. Si algo falla no se guarda nada: entra la lista completa o nada.</p>
+      </div>
+    } @else {
+      <div class="confirmar">
+        <span class="muted">
+          @if (falta(); as f) { {{ f }} }
+          @else { Entra todo a {{ nombreAlmacen() }}. }
+        </span>
+        <button type="button" class="btn btn-primary" [disabled]="!!falta()" (click)="confirmar()">
+          Cargar {{ p.resumen.num_bultos | cantidad }} bultos en {{ p.resumen.num_hilos }}
+          {{ p.resumen.num_hilos === 1 ? 'hilo' : 'hilos' }}
+        </button>
+      </div>
+    }
+  } @else if (leyendo()) {
+    <p class="muted">Leyendo el archivo…</p>
+  } @else {
+    <p class="vacio">Cuando subas la lista, aquí aparece cada hilo con sus bultos, sus lotes y sus kilos.</p>
+  }
+</section>

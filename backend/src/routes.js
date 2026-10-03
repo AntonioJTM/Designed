@@ -21,6 +21,8 @@ const analisisRoutes = require('./modules/analisis/routes');
 const asistenteRoutes = require('./modules/asistente/routes');
 const notificacionesRoutes = require('./modules/notificaciones/routes');
 const configuracionRoutes = require('./modules/configuracion/routes');
+const permisosRoutes = require('./modules/permisos/routes');
+const hoyRoutes = require('./modules/hoy/routes');
 
 // Enrutador raíz de la API v1. Aquí se montan los módulos por dominio.
 const router = Router();
@@ -30,6 +32,8 @@ router.use('/usuarios', usuariosRoutes);
 router.use('/clientes', clientesRoutes);
 router.use('/direcciones', direccionesRoutes);
 router.use('/tipos-cliente', tiposClienteRoutes);
+// Qué ve y qué puede hacer cada puesto (solo el administrador lo cambia).
+router.use('/permisos', permisosRoutes);
 
 // Configuración de la tienda (tarifa de envío, datos para depositar).
 router.use('/configuracion', configuracionRoutes);
@@ -44,6 +48,8 @@ router.use('/opciones', opcionesRoutes);
 // Inventario
 router.use('/almacenes', almacenesRoutes);
 router.use('/inventario', inventarioRoutes);
+// Lo del día: lo vendido, por hora y las cajas abiertas (pantalla Hoy).
+router.use('/hoy', hoyRoutes);
 // Lo que está esperando a alguien (la campana del panel).
 router.use('/notificaciones', notificacionesRoutes);
 router.use('/remesas', remesasRoutes);

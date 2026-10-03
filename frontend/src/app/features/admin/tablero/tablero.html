@@ -1,347 +1,348 @@
-<div class="page-head">
-  <h1>Cómo va el negocio</h1>
-  <button class="btn btn-ghost" (click)="cargar()" [disabled]="cargando()">
-    {{ cargando() ? 'Actualizando…' : 'Actualizar' }}
-  </button>
-</div>
-
-@if (error()) { <p class="alert">{{ error() }}</p> }
-
-@if (cargando() && !datos()) {
-  <p class="muted">Cargando…</p>
-} @else if (datos(); as d) {
-  <!-- ============================================================ COBRANZA -->
-  <section class="card bloque">
-    <div class="bloque-head">
-      <div>
-        <h2>Lo que te deben</h2>
-        <p class="muted">
-          {{ d.cobranza.num_clientes }}
-          {{ d.cobranza.num_clientes === 1 ? 'cliente con saldo' : 'clientes con saldo' }}
-        </p>
-      </div>
-      <a class="btn btn-ghost btn-sm" routerLink="/admin/clientes">Ver clientes</a>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Cómo va el negocio</h1>
+      <p class="sub">
+        @if (veCostos()) { Ventas, ganancia y dinero parado. } @else { Las ventas del periodo y el hilo que no se vende. }
+        Abajo, a quién cobrarle; quién dejó de venir y el expediente de cada cliente viven en Clientes.
+      </p>
     </div>
-
-    <!-- La cifra que muchos van a ser lo único que lean. -->
-    <div class="cifras">
-      <div class="cifra hero">
-        <span class="cifra-label">Total por cobrar</span>
-        <span class="cifra-valor">{{ dinero(d.cobranza.total_por_cobrar) }}</span>
-      </div>
-      <div class="cifra">
-        <span class="cifra-label">Atrasado (más de {{ d.cobranza.dias_aviso }} días)</span>
-        <span class="cifra-valor">{{ dinero(d.cobranza.vencido) }}</span>
-        <span class="cifra-pie">
-          {{ d.cobranza.num_vencidos }}
-          {{ d.cobranza.num_vencidos === 1 ? 'cliente' : 'clientes' }}
-        </span>
-      </div>
-    </div>
-
-    @if (d.cobranza.total_por_cobrar > 0) {
-      <!-- Antigüedad: rampa ordinal de un tono. La leyenda es obligatoria. -->
-      <h3 class="sub">Desde cuándo te deben</h3>
-      <div class="viz-legend">
-        @for (t of tramosCartera(); track t.etiqueta) {
-          <span class="item">
-            <span class="swatch" [style.background]="t.color"></span>
-            {{ t.etiqueta }} · <b>{{ dinero(t.valor) }}</b>
-          </span>
-        }
-      </div>
-      <app-composicion [data]="tramosCartera()" />
-
-      <h3 class="sub">Quién debe más</h3>
-      <div class="chart-box">
-        <app-barras [data]="barrasDeudores()" prefijo="$" [gutter]="200" [decimals]="0" />
-      </div>
-
-      <table class="grid">
-        <thead>
-          <tr>
-            <th>Cliente</th><th>Teléfono</th><th>Debe</th>
-            <th>Sin abonar</th><th>Estado</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (c of d.cobranza.clientes; track c.cliente_id) {
-            <tr>
-              <td>
-                <b>{{ c.nombre_comercial || c.nombre }}</b>
-                @if (c.nombre_comercial) { <br /><span class="muted">{{ c.nombre }}</span> }
-              </td>
-              <td class="muted">{{ c.telefono || '—' }}</td>
-              <td class="num">{{ dinero(c.saldo) }}</td>
-              <td class="num">{{ c.dias_sin_abonar }} días</td>
-              <td>
-                <!-- El estado se dice con ICONO + TEXTO, no solo con color: los
-                     cuatro colores de semáforo no se distinguen bien entre sí. -->
-                <span class="pastilla" [class]="'r-' + riesgo(c.dias_sin_abonar)">
-                  <span class="pastilla-icono" aria-hidden="true">{{ iconoRiesgo(c.dias_sin_abonar) }}</span>
-                  {{ etiquetaRiesgo(c.dias_sin_abonar) }}
-                </span>
-              </td>
-              <td>
-                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.cliente_id]">Ver</a>
-              </td>
-            </tr>
+    <div class="acciones">
+      <label class="field periodo">
+        <span class="oculto">Periodo</span>
+        <select name="periodo" [ngModel]="periodoClave()" (ngModelChange)="elegirPeriodo($event)">
+          @for (p of periodos; track p.clave) {
+            <option [value]="p.clave">{{ p.opcion }}</option>
           }
-        </tbody>
-      </table>
-    } @else {
-      <p class="empty">Nadie te debe nada ahora mismo.</p>
-    }
-  </section>
-
-  <!-- ================================================== CLIENTES ENFRIADOS -->
-  <section class="card bloque">
-    <div class="bloque-head">
-      <div>
-        <h2>Clientes que dejaron de venir</h2>
-        <p class="muted">
-          Compraban al menos {{ d.clientes_enfriados.min_compras }} veces y llevan
-          {{ d.clientes_enfriados.dias }} días o más sin aparecer.
-        </p>
-      </div>
-      <label class="filtro">
-        Días sin venir
-        <input type="number" min="1" max="3650" [(ngModel)]="diasSinVenir" name="dsv"
-               (change)="cargar()" />
+        </select>
       </label>
+      <button type="button" class="btn btn-ghost" (click)="cargar()" [disabled]="cargando()">
+        {{ cargando() ? 'Actualizando…' : 'Actualizar' }}
+      </button>
     </div>
+  </header>
 
-    <div class="cifras">
-      <div class="cifra hero">
-        <span class="cifra-label">Se enfriaron</span>
-        <span class="cifra-valor">{{ d.clientes_enfriados.num_clientes }}</span>
-        <span class="cifra-pie">clientes</span>
-      </div>
-      <div class="cifra">
-        <span class="cifra-label">Compraban en total</span>
-        <span class="cifra-valor">{{ dinero(d.clientes_enfriados.venta_en_riesgo) }}</span>
-        <span class="cifra-pie">es lo que está en juego</span>
-      </div>
-    </div>
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (errorVentas()) { <p class="alert">{{ errorVentas() }}</p> }
 
-    @if (d.clientes_enfriados.num_clientes > 0) {
-      <h3 class="sub">Los que más compraban</h3>
-      <div class="chart-box">
-        <app-barras [data]="barrasEnfriados()" prefijo="$" [gutter]="200" [decimals]="0" />
+  <!-- Las cifras del periodo. La ganancia, solo con «Ver costos». -->
+  <div class="kpis">
+    @for (k of kpis(); track k.etiqueta) {
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+        <span class="kpi-valor">{{ k.valor }}</span>
+        <span class="kpi-pie">{{ k.pie }}</span>
       </div>
-
-      <table class="grid">
-        <thead>
-          <tr>
-            <th>Cliente</th><th>Teléfono</th><th>Compras</th><th>Gastó</th>
-            <th>Última vez</th><th>Sin venir</th><th>Su ritmo</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (c of d.clientes_enfriados.clientes; track c.cliente_id) {
-            <tr>
-              <td>
-                <b>{{ c.nombre_comercial || c.nombre }}</b>
-                @if (num(c.saldo) > 0) {
-                  <br /><span class="muted">y debe {{ dinero(c.saldo) }}</span>
-                }
-              </td>
-              <td class="muted">{{ c.telefono || '—' }}</td>
-              <td class="num">{{ c.num_compras }}</td>
-              <td class="num">{{ dinero(c.total_comprado) }}</td>
-              <td class="muted">{{ c.ultima_compra | fecha }}</td>
-              <td class="num">{{ c.dias_sin_venir }} días</td>
-              <td class="num">
-                <!-- Contra su propia costumbre: 3× dice más que "90 días". -->
-                @if (c.veces_su_ritmo) {
-                  {{ c.veces_su_ritmo }}×
-                  <br /><span class="muted">compraba cada {{ c.cada_cuantos_dias }} d</span>
-                } @else { — }
-              </td>
-              <td>
-                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.cliente_id]">Ver</a>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    } @else {
-      <p class="empty">Nadie se ha enfriado con ese criterio. Buena señal.</p>
     }
-  </section>
+  </div>
 
-  <!-- ========================================================= HILO MUERTO -->
-  <section class="card bloque">
-    <div class="bloque-head">
+  <!-- ===================================================== VENTAS POR SEMANA -->
+  <section class="card">
+    <div class="card-head">
       <div>
-        <h2>Hilo parado</h2>
-        <p class="muted">
-          Existencias que llevan {{ d.hilo_muerto.dias }} días o más sin venderse.
+        <h2>Ventas por semana</h2>
+        <p>
+          Las últimas 12 semanas, de domingo a sábado, en todas las tiendas. La de color fuerte
+          es la más reciente y va en curso.
         </p>
       </div>
     </div>
-
-    <div class="cifras">
-      <div class="cifra hero">
-        <span class="cifra-label">Dinero parado</span>
-        <span class="cifra-valor">{{ dinero(d.hilo_muerto.dinero_parado) }}</span>
-      </div>
-      <div class="cifra">
-        <span class="cifra-label">Kilos parados</span>
-        <span class="cifra-valor">{{ d.hilo_muerto.kilos_parados | cantidad: 'kg' }}</span>
-        <span class="cifra-pie">
-          en {{ d.hilo_muerto.num_hilos }} {{ d.hilo_muerto.num_hilos === 1 ? 'hilo' : 'hilos' }}
-        </span>
-      </div>
-      <div class="cifra">
-        <span class="cifra-label">Nunca se han vendido</span>
-        <span class="cifra-valor">{{ d.hilo_muerto.nunca_vendidos }}</span>
-        <span class="cifra-pie">comprados y sin salir</span>
-      </div>
-    </div>
-
-    @if (d.hilo_muerto.hay_sin_costo) {
-      <!-- No se puede presentar una cifra como si fuera lo que no es. -->
-      <p class="aviso-dato">
-        Parte de esto está valorado a <b>precio de venta</b>, no a costo, porque esos hilos
-        todavía no tienen precio de compra capturado. El dinero realmente inmovilizado es
-        menor. Se captura al recibir la remesa.
-      </p>
-    }
-
-    @if (d.hilo_muerto.num_hilos > 0) {
-      <h3 class="sub">Dónde está el dinero parado</h3>
-      <div class="chart-box">
-        <app-barras [data]="barrasHiloMuerto()" prefijo="$" [gutter]="190" [decimals]="0" />
-      </div>
-
-      <table class="grid">
-        <thead>
-          <tr>
-            <th>Hilo</th><th>Presentación</th><th>Kilos</th>
-            <th>Dinero</th><th>Sin venderse</th><th>Valorado a</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (h of d.hilo_muerto.hilos; track h.variante_id) {
-            <tr>
-              <td>
-                <b>{{ h.color }}</b>
-                @if (h.calibre) { <span class="ficha-hilo"> {{ h.calibre }}</span> }
-                <br />
-                <span class="muted">{{ h.material }}{{ h.linea ? ' · ' + h.linea : '' }}</span>
-              </td>
-              <td class="muted">{{ h.presentacion || h.sku }}</td>
-              <td class="num">{{ h.kilos | cantidad: 'kg' }}</td>
-              <td class="num">{{ dinero(h.dinero_parado) }}</td>
-              <td class="num">
-                @if (h.nunca_vendido) {
-                  <span class="pastilla r-critico">
-                    <span class="pastilla-icono" aria-hidden="true">✕</span> Nunca
-                  </span>
-                } @else {
-                  {{ h.dias_parado }} días
-                }
-              </td>
-              <td class="muted">
-                {{ h.valorado_a === 'costo' ? 'Costo' : 'Precio de venta' }}
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    } @else {
-      <p class="empty">Todo el hilo se está moviendo.</p>
+    @if (columnasSemanas().length > 0) {
+      <app-columnas [data]="columnasSemanas()" [alto]="220" [descripcion]="resumenSemanas()" />
+    } @else if (!errorVentas()) {
+      <p class="muted cargando">Cargando…</p>
     }
   </section>
 
-  <!-- ============================================================== MARGEN -->
-  <section class="card bloque">
-    <div class="bloque-head">
-      <div>
-        <h2>Qué colores dejan dinero</h2>
-        <p class="muted">Ganancia sobre lo vendido, con el costo congelado de cada venta.</p>
-      </div>
-    </div>
+  @if (veCostos()) {
+    <div class="fila">
+      <!-- ================================================ QUÉ COLORES DEJAN DINERO -->
+      <section class="card f-margen">
+        <div class="card-head">
+          <div>
+            <h2>Qué colores dejan dinero</h2>
+            <p>
+              Ganancia de {{ periodo().nombre }} por hilo, y su margen sobre la venta.
+              @if (hayPerdidas()) { A la izquierda de la raya, lo que se vendió perdiendo. }
+            </p>
+          </div>
+        </div>
 
-    @if (d.margen.venta_analizada > 0) {
-      <div class="cifras">
-        <div class="cifra hero">
-          <span class="cifra-label">Ganancia</span>
-          <span class="cifra-valor">{{ dinero(d.margen.ganancia) }}</span>
-        </div>
-        <div class="cifra">
-          <span class="cifra-label">Margen</span>
-          <span class="cifra-valor">
-            {{ d.margen.margen_pct !== null ? d.margen.margen_pct + '%' : '—' }}
-          </span>
-          <span class="cifra-pie">sobre la venta</span>
-        </div>
-        <div class="cifra">
-          <span class="cifra-label">Venta analizada</span>
-          <span class="cifra-valor">{{ dinero(d.margen.venta_analizada) }}</span>
-        </div>
-      </div>
-    }
+        @if (datos(); as d) {
+          @if (d.margen; as m) {
+            @if (m.sin_costo_lineas > 0) {
+              <p class="aviso">
+                <b>{{ m.sin_costo_venta | dinero }}</b> de venta
+                ({{ pctSinCosto() }}% del total) quedó fuera de este análisis porque esos hilos no
+                tenían costo capturado.
+                @if (pctSinCosto() >= 50) {
+                  Es más de la mitad, así que el margen todavía no representa al negocio.
+                }
+                Captura el precio de compra al recibir cada remesa y el análisis se irá completando.
+              </p>
+            }
 
-    @if (d.margen.sin_costo_lineas > 0) {
-      <p class="aviso-dato">
-        <b>{{ dinero(d.margen.sin_costo_venta) }}</b> de venta
-        ({{ pctSinCosto() }}% del total) quedó fuera de este análisis porque esos hilos no
-        tenían costo capturado.
-        @if (pctSinCosto() >= 50) {
-          Es más de la mitad, así que el margen de arriba todavía no representa al negocio.
+            @if (m.hilos.length > 0) {
+              <app-barras-cero [data]="barrasMargen()" />
+
+              <div>
+                <button type="button" class="btn-enlace" (click)="verTablaMargen.set(!verTablaMargen())">
+                  {{ verTablaMargen() ? 'Ocultar la tabla' : 'Ver la tabla con lo vendido y lo que costó' }}
+                </button>
+              </div>
+              @if (verTablaMargen()) {
+                <div class="tabla-scroll">
+                  <table class="grid">
+                    <thead>
+                      <tr>
+                        <th>Hilo</th><th class="num">Kilos</th><th class="num">Vendió</th>
+                        <th class="num">Costó</th><th class="num">Ganancia</th>
+                        <th class="num">Margen</th><th class="num">Ventas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (h of m.hilos; track h.producto_id) {
+                        <tr>
+                          <td>
+                            <div class="hilo">{{ nombreHilo(h) }}</div>
+                            <div class="muted chico">{{ h.material }}{{ h.linea ? ' · ' + h.linea : '' }}</div>
+                          </td>
+                          <td class="num">{{ h.kilos | cantidad: 'kg' }}</td>
+                          <td class="num">{{ h.venta | dinero }}</td>
+                          <td class="num">{{ h.costo | dinero }}</td>
+                          <td class="num" [class.neg]="num(h.ganancia) < 0"><b>{{ h.ganancia | dinero }}</b></td>
+                          <td class="num">
+                            @if (num(h.ganancia) < 0) {
+                              <span class="pill rojo"><span aria-hidden="true">✕</span> {{ pct(h.margen_pct) }}</span>
+                            } @else {
+                              {{ pct(h.margen_pct) }}
+                            }
+                          </td>
+                          <td class="num muted">{{ h.num_ventas }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            } @else {
+              <p class="vacio">
+                Todavía no se puede calcular el margen de {{ periodo().nombre }}: hace falta capturar el
+                precio de compra al recibir las remesas.
+              </p>
+            }
+          }
+        } @else if (cargando()) {
+          <p class="muted cargando">Cargando…</p>
         }
-        Captura el precio de compra al recibir cada remesa y el análisis se irá completando.
-      </p>
-    }
+      </section>
 
-    @if (d.margen.hilos.length > 0) {
-      <h3 class="sub">Ganancia por hilo</h3>
-      <div class="chart-box">
-        <app-barras [data]="barrasMargen()" prefijo="$" [gutter]="190" [decimals]="0" />
+    </div>
+  }
+
+  <!--
+    El hilo parado va FUERA del bloque de costos: valorado a precio de venta no
+    expone nada (2026-10-03: la tienda dejó de llevar el costo y el usuario pidió
+    conservarlo, "calcúlalo con el precio de venta").
+  -->
+  @if (datos()?.hilo_muerto || cargando()) {
+    <!-- ============================================================ HILO PARADO -->
+    <section class="card f-parado">
+      <div class="card-head">
+        <div>
+          <h2>Hilo parado</h2>
+          <p>
+            Lo que hay en existencia y no se ha vendido en {{ datos()?.hilo_muerto?.dias ?? 90 }} días o
+            más, valorado {{ datos()?.hilo_muerto?.valorado_a === 'costo' ? 'al costo' : 'a precio de venta' }}:
+            lo que te darían por él si se vendiera.
+          </p>
+        </div>
       </div>
 
-      <table class="grid">
-        <thead>
-          <tr>
-            <th>Hilo</th><th>Kilos</th><th>Vendió</th>
-            <th>Costó</th><th>Ganancia</th><th>Margen</th><th>Ventas</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (h of d.margen.hilos; track h.producto_id) {
-            <tr>
-              <td>
-                <b>{{ h.color }}</b>
-                @if (h.calibre) { <span class="ficha-hilo"> {{ h.calibre }}</span> }
-                <br />
-                <span class="muted">{{ h.material }}{{ h.linea ? ' · ' + h.linea : '' }}</span>
-              </td>
-              <td class="num">{{ h.kilos | cantidad: 'kg' }}</td>
-              <td class="num">{{ dinero(h.venta) }}</td>
-              <td class="num">{{ dinero(h.costo) }}</td>
-              <td class="num">{{ dinero(h.ganancia) }}</td>
-              <td class="num">
-                @if (num(h.ganancia) < 0) {
-                  <span class="pastilla r-critico">
-                    <span class="pastilla-icono" aria-hidden="true">✕</span>
-                    {{ h.margen_pct }}%
-                  </span>
-                } @else {
-                  {{ h.margen_pct }}%
+      @if (datos()?.hilo_muerto; as h) {
+        @if (h.num_hilos > 0) {
+          <p class="resumen-parado">
+            {{ h.kilos_parados | cantidad: 'kg' }} en {{ h.num_hilos }} {{ h.num_hilos === 1 ? 'hilo' : 'hilos' }}
+            @if (h.nunca_vendidos > 0) {
+              · {{ h.nunca_vendidos }} {{ h.nunca_vendidos === 1 ? 'nunca se ha vendido' : 'nunca se han vendido' }}
+            }
+          </p>
+        }
+
+        @if (h.hay_sin_costo) {
+          <!-- No se puede presentar una cifra como si fuera lo que no es. -->
+          <p class="aviso">
+            Parte de esto está valorado a <b>precio de venta</b>, no a costo, porque esos hilos
+            todavía no tienen precio de compra capturado. El dinero realmente inmovilizado es
+            menor. Se captura al recibir la remesa.
+          </p>
+        }
+
+        @if (h.num_hilos > 0) {
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>Hilo</th><th class="num">Hay</th><th class="num">Vale</th>
+                  <th class="num">Vendido</th><th class="num">Sin venderse</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (x of paradoVisible(); track x.variante_id) {
+                  <tr>
+                    <td>
+                      <div class="hilo">{{ nombreHilo(x) }}</div>
+                      <div class="muted chico">
+                        {{ presentacion(x) }}{{ x.nunca_vendido ? ' · nunca se ha vendido' : '' }}
+                      </div>
+                    </td>
+                    <td class="num">{{ x.kilos | cantidad: 'kg' }}</td>
+                    <td class="num">
+                      <b>{{ x.dinero_parado | dinero }}</b>
+                      <!-- Con costo, el que no lo tiene va a precio de venta y se dice;
+                           sin costo, todo va a precio de venta y se dice a cuánto. -->
+                      @if (h.valorado_a === 'costo' && x.valorado_a === 'precio_venta') {
+                        <div class="muted chico">a precio de venta</div>
+                      } @else if (h.valorado_a !== 'costo') {
+                        <div class="muted chico">a {{ x.precio | dinero }} el kg</div>
+                      }
+                    </td>
+                    <!-- Lo que se ha vendido de esta presentación, desde siempre. -->
+                    <td class="num">
+                      @if (num(x.kg_vendidos_historico) > 0) {
+                        {{ x.kg_vendidos_historico | cantidad: 'kg' }}
+                      } @else {
+                        <span class="muted">nada</span>
+                      }
+                    </td>
+                    <td class="num dias-parado">
+                      {{ x.dias_parado }} días{{ x.nunca_vendido ? ' desde que entró' : '' }}
+                      @if (x.ultima_salida) {
+                        <div class="muted chico">última venta {{ x.ultima_salida | fecha: true }}</div>
+                      }
+                    </td>
+                  </tr>
                 }
-              </td>
-              <td class="num muted">{{ h.num_ventas }}</td>
-            </tr>
+              </tbody>
+            </table>
+          </div>
+          @if (h.hilos.length > 8) {
+            <div>
+              <button type="button" class="btn-enlace" (click)="verTodoParado.set(!verTodoParado())">
+                {{ verTodoParado() ? 'Ver solo los primeros 8' : 'Ver los ' + h.hilos.length }}
+              </button>
+            </div>
           }
-        </tbody>
-      </table>
-    } @else {
-      <p class="empty">
-        Todavía no se puede calcular el margen: hace falta capturar el precio de compra
-        al recibir las remesas.
-      </p>
-    }
-  </section>
-}
+        } @else {
+          <p class="vacio">Todo el hilo se está moviendo.</p>
+        }
+      } @else if (cargando()) {
+        <p class="muted cargando">Cargando…</p>
+      }
+    </section>
+  }
+
+  @if (datos(); as d) {
+    <!-- ============================================================== COBRANZA -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Lo que te deben</h2>
+          <p>
+            {{ d.cobranza.num_clientes }}
+            {{ d.cobranza.num_clientes === 1 ? 'cliente con saldo' : 'clientes con saldo' }}.
+            La antigüedad se cuenta desde su último movimiento: quien abonó la semana pasada está pagando.
+          </p>
+        </div>
+        @if (veClientes()) {
+          <a class="btn btn-ghost btn-sm" routerLink="/admin/clientes">Ver clientes</a>
+        }
+      </div>
+
+      <div class="cifras-mini">
+        <div>
+          <span>Total por cobrar</span>
+          <b>{{ pesos(d.cobranza.total_por_cobrar) }}</b>
+        </div>
+        <div>
+          <span>Atrasado (más de {{ d.cobranza.dias_aviso }} días)</span>
+          <b>{{ pesos(d.cobranza.vencido) }}</b>
+          <small>
+            {{ d.cobranza.num_vencidos }} {{ d.cobranza.num_vencidos === 1 ? 'cliente' : 'clientes' }}
+          </small>
+        </div>
+      </div>
+
+      @if (d.cobranza.total_por_cobrar > 0) {
+        <!-- Una debajo de la otra: en media tarjeta la gráfica de "quién debe más"
+             se encogía y su letra quedaba ilegible. -->
+        <div class="columna">
+          <div>
+            <h3 class="subtitulo">Desde cuándo te deben</h3>
+            <!-- Antigüedad: rampa ordinal de un tono. La leyenda es obligatoria. -->
+            <div class="leyenda">
+              @for (t of tramosCartera(); track t.etiqueta) {
+                <span><i [style.background]="t.color"></i><span>{{ t.etiqueta }} · <b>{{ pesos(t.valor) }}</b></span></span>
+              }
+            </div>
+            <div class="espacio-arriba">
+              <app-composicion [data]="tramosCartera()" />
+            </div>
+          </div>
+          <div>
+            <h3 class="subtitulo">Quién debe más</h3>
+            <app-barras [data]="barrasDeudores()" prefijo="$" [gutter]="200" [decimals]="0" />
+          </div>
+        </div>
+
+        <div class="tabla-scroll">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th>Cliente</th><th>Teléfono</th><th class="num">Debe</th>
+                <th class="num">Sin abonar</th><th>Estado</th>
+                @if (veClientes()) { <th><span class="oculto">Acciones</span></th> }
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of d.cobranza.clientes; track c.cliente_id) {
+                <tr>
+                  <td>
+                    <div class="hilo">{{ c.nombre_comercial || c.nombre }}</div>
+                    @if (c.nombre_comercial) { <div class="muted chico">{{ c.nombre }}</div> }
+                  </td>
+                  <td class="muted">{{ c.telefono || '—' }}</td>
+                  <td class="num"><b>{{ c.saldo | dinero }}</b></td>
+                  <td class="num">{{ c.dias_sin_abonar }} días</td>
+                  <td>
+                    <!-- El estado se dice con ICONO + TEXTO, no solo con color: los
+                         cuatro colores de semáforo no se distinguen bien entre sí. -->
+                    <span [class]="claseRiesgo(c.dias_sin_abonar)">
+                      <span aria-hidden="true">{{ iconoRiesgo(c.dias_sin_abonar) }}</span>
+                      {{ etiquetaRiesgo(c.dias_sin_abonar) }}
+                    </span>
+                  </td>
+                  @if (veClientes()) {
+                    <td class="acciones">
+                      <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.cliente_id]">Ver</a>
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="vacio">Nadie te debe nada ahora mismo.</p>
+      }
+    </section>
+
+    <!--
+      Los clientes que dejaron de venir ya NO van aquí: viven en Clientes → Dejaron
+      de venir, que es a donde lleva el aviso de la campana (2026-10-03: "esa
+      información está en cómo va el negocio, no tiene que ir ahí").
+    -->
+  } @else if (cargando()) {
+    <p class="muted">Cargando…</p>
+  }
+</div>

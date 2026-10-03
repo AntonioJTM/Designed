@@ -1,0 +1,85 @@
+<!--
+  No se cierra al hacer clic en el fondo: se pierde lo tecleado. Sale con la ✕,
+  con "Cancelar" o con Escape.
+-->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-abono-titulo">
+    <div class="modal-head">
+      <h2 id="modal-abono-titulo">Registrar un abono</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form (ngSubmit)="registrar()">
+      <div class="modal-body">
+        @if (cargando()) {
+          <!-- El velo tapa el formulario ya dibujado, así el modal no crece. -->
+          <div class="modal-cargando"><span class="spinner"></span></div>
+        }
+        <div class="columna" style="gap: 16px">
+          <p class="muted" style="margin: 0">
+            <b style="color: var(--tinta)">{{ nombre() }}</b> debe {{ saldo() | dinero }}.
+          </p>
+          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+
+          <div class="form-grid">
+            <label class="field">
+              Cuánto abona
+              <span class="moneda">
+                <span aria-hidden="true">$</span>
+                <input type="number" min="0.01" step="0.01" [(ngModel)]="monto" name="monto" />
+              </span>
+              <span class="ayuda">No se puede abonar más de lo que debe.</span>
+            </label>
+            <label class="field">
+              Con qué paga
+              <select [(ngModel)]="metodoId" name="metodo">
+                <option [ngValue]="null">Elige…</option>
+                @for (m of metodos(); track m.id) {
+                  <option [ngValue]="m.id">{{ m.nombre }}</option>
+                }
+              </select>
+            </label>
+
+            @if (esEfectivo() && turnos().length > 1) {
+              <!-- Dos tiendas con turno abierto: el efectivo entra al cajón que lo recibió. -->
+              <label class="field">
+                A qué caja entra
+                <select [(ngModel)]="turnoId" name="turno">
+                  @for (t of turnos(); track t.id) {
+                    <option [ngValue]="t.id">{{ t.caja || 'Caja ' + t.caja_id }}{{ t.usuario ? ' · ' + t.usuario : '' }}</option>
+                  }
+                </select>
+              </label>
+            }
+
+            <label class="field" [class.full]="!(esEfectivo() && turnos().length > 1)">
+              <span>Referencia <span class="muted">(opcional)</span></span>
+              <input type="text" [(ngModel)]="referencia" name="referencia" maxlength="120"
+                     placeholder="Folio del depósito, por ejemplo" />
+            </label>
+          </div>
+
+          @if (esEfectivo()) {
+            @if (turnos().length === 1) {
+              <p class="nota-info" style="margin: 0">
+                El efectivo entra al turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>, así el corte cuadra.
+              </p>
+            } @else if (turnos().length === 0 && !cargando()) {
+              <p class="aviso" style="margin: 0">
+                No hay ningún turno de caja abierto. Un abono en efectivo tiene que entrar a un turno o
+                el corte no va a cuadrar: abre el turno en Caja, o registra el abono con otro método.
+              </p>
+            }
+          }
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando()">
+          {{ guardando() ? 'Registrando…' : 'Registrar el abono' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

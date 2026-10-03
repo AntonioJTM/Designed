@@ -54,6 +54,14 @@ export interface Pendientes {
   traspasos_por_enviar: TraspasoPendiente[];
   traspasos_por_recibir: TraspasoPendiente[];
   alertas_stock: number;
+  /**
+   * Hilos que no se pueden vender porque no tienen precio: los crea así la
+   * lista completa del proveedor. Un aviso, con los primeros a la vista.
+   */
+  sin_precio?: {
+    num: number;
+    hilos: { producto_id: number; nombre: string; calibre: string | null; llego_en: string | null }[];
+  };
   /** Quién debe y lleva tiempo sin abonar. */
   cobranza: {
     clientes: DeudorPendiente[];
@@ -72,6 +80,11 @@ export interface Pendientes {
     clientes: NuevoSinCredito[];
     num_clientes: number;
     dias: number;
+  };
+  /** Apartados ya pagados completos: falta entregarlos. */
+  apartados_listos?: {
+    num: number;
+    pedidos: { pedido_id: number; numero_pedido: string; cliente: string; liquidado_en?: string | null }[];
   };
   /**
    * El globo rojo. Cuenta UN aviso por asunto, no uno por cliente: con veinte

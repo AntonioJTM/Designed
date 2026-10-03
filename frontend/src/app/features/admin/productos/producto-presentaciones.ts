@@ -1,7 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { AuthService } from '../../../core/services/auth.service';
 import {
@@ -9,7 +10,7 @@ import {
   PreviaRemesa,
   ResultadoRemesa,
 } from '../../../core/services/inventario.service';
-import { Almacen } from '../../../core/models/inventario.models';
+import { Almacen, StockItem } from '../../../core/models/inventario.models';
 import {
   Imagen,
   LoteDeBultos,
@@ -24,34 +25,77 @@ import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
 import { DineroPipe } from '../../../shared/dinero.pipe';
+import { ProductoFormModal } from './producto-form-modal';
+import { EntradasModal } from './entradas-modal';
+import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
+import { SE_LLEVA_COSTO } from '../../../core/costos';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+
+/** Qué modal está abierto. Uno a la vez; se crea al abrirlo y se destruye al cerrarlo. */
+type ModalPresentaciones = 'producto' | 'precio' | 'bulto' | 'imagen' | 'manual' | 'entradas' | null;
+
+/** El selector de la tarjeta de bultos. */
+type FiltroBultos = 'disponibles' | 'todos' | 'vendidos' | 'desarmados';
+
+/** Un bulto con lo que hace falta para pintarlo en la tabla. */
+interface BultoFila extends VarianteCodigo {
+  sku: string;
+}
+
+/** Cuántos bultos se listan antes de pedir "ver todos": una remesa real trae 80. */
+const BULTOS_A_LA_VISTA = 30;
 
 /**
- * Presentaciones (SKU) e imágenes de un producto, en su propia pantalla.
+ * Presentaciones (SKU), bultos, precios por lista e imágenes de un producto, en
+ * su propia pantalla.
  *
  * Se separó del formulario del producto: ahí solo se capturan los datos del hilo
- * —nombre, material, calibre, precio por kilo—. Las presentaciones nuevas heredan
+ * —color, material, calibre, precio por kilo—. Las presentaciones nuevas heredan
  * el `precio_kg` del producto si no se les captura precio.
+ *
+ * La pantalla es para MIRAR: una tarjeta por presentación con lo que hay, la
+ * tabla de precios por lista, el cargador del Excel y la tabla de bultos. Las
+ * acciones (precio y peso, bulto a mano, imagen, captura manual, editar el
+ * producto) abren un modal.
  */
 @Component({
   selector: 'app-producto-presentaciones',
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe, DineroPipe],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe, DineroPipe, ProductoFormModal, EntradasModal],
   templateUrl: './producto-presentaciones.html',
+  styleUrl: './producto-presentaciones.scss',
+  host: { '(document:keydown.escape)': 'cerrarModal()' },
 })
 export class ProductoPresentaciones {
   private readonly fb = inject(FormBuilder);
+  private readonly confirmacion = inject(ConfirmacionService);
   private readonly catalogo = inject(CatalogoService);
   private readonly auth = inject(AuthService);
-
-  /** El precio que se le cobra a todos lo cambian los jefes, no la caja. */
-  readonly esJefe = computed(() => ['administrador', 'gerente'].includes(this.auth.sesion()?.rol ?? ''));
   private readonly inv = inject(InventarioService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  // ---- Permisos. El servidor también los exige (403 SIN_PERMISO); aquí solo
+  // se esconde lo que iba a fallar.
+  /** Precio público, peso y precio por lista: lo que se le cobra a todos. */
+  readonly puedeCambiarPrecios = computed(() => this.auth.puede('hacer:cambiar_precios'));
+  /** El costo es información interna: no todo el personal lo ve. */
+  readonly puedeVerCostos = computed(() => this.auth.puede('hacer:ver_costos'));
+  /** ¿Se pide el precio de compra al cargar? No: la tienda no lleva el costo (core/costos.ts). */
+  readonly seLlevaCosto = SE_LLEVA_COSTO;
+  /** Subir el Excel del proveedor da ENTRADA a mercancía: es lo de Recibir remesa. */
+  readonly puedeCargarRemesa = computed(() => this.auth.puede('ver:remesa'));
+  readonly veInventario = computed(() => this.auth.puede('ver:inventario'));
+  /** Las listas de precio se administran en su pantalla (Administración). */
+  readonly veListas = computed(() => this.auth.puede('ver:almacenes'));
 
   readonly id = signal<number | null>(null);
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
+  readonly mensaje = signal<string | null>(null);
+  readonly modal = signal<ModalPresentaciones>(null);
 
-  // Datos del producto, solo para encabezar la pantalla y heredar el precio.
+  // Datos del producto, para encabezar la pantalla y heredar el precio.
+  readonly producto = signal<ProductoDetalle | null>(null);
   readonly nombreProducto = signal('');
   /** Calibre del producto, para cotejarlo con el nombre del archivo que se sube. */
   readonly calibreProducto = signal<string | null>(null);
@@ -66,21 +110,31 @@ export class ProductoPresentaciones {
   readonly variantes = signal<Variante[]>([]);
   readonly imagenes = signal<Imagen[]>([]);
 
-  // Bultos por variante: cada código es un bulto con su peso y su lote.
+  /**
+   * Existencias de cada presentación por almacén (`null` mientras no llegan o si
+   * no se pudieron leer: la tarjeta dice "—" en vez de "nada", que sería falso).
+   */
+  readonly existencias = signal<Record<number, StockItem[]> | null>(null);
+
+  // Bultos por variante: cada código es un bulto con su peso, su lote y dónde está.
   readonly codigos = signal<Record<number, VarianteCodigo[]>>({});
-  readonly expandida = signal<number | null>(null);
+  readonly filtroBultos = signal<FiltroBultos>('disponibles');
+  readonly verTodosLosBultos = signal(false);
+
+  // ---- Bulto a mano (modal) ----
   nuevoCodigo = '';
   nuevoLote = '';
   nuevoPeso: number | null = null;
   /** Conos que rinde el bulto: varía entre bultos, así vienen de fábrica. */
   nuevoConos: number | null = null;
+  readonly avisoBulto = signal<string | null>(null);
 
   /** El SKU se tecleó a mano, así que ya no sigue al código de barras. */
   skuManual = false;
 
-  /** Precio que se está capturando por tipo de cliente. */
-  readonly editandoPrecios = signal<number | null>(null);
-  precioTipo: Record<number, number | null> = {};
+  // ---- Precio y peso (modal) ----
+  /** Presentación cuyo precio público y peso se están cambiando. */
+  readonly variantePrecio = signal<Variante | null>(null);
   /**
    * Precio público y peso de la presentación abierta. Antes no había dónde
    * cambiarlos: el precio quedaba como se heredó del producto el día del alta y
@@ -90,13 +144,23 @@ export class ProductoPresentaciones {
   pesoPaquete: number | null = null;
   readonly guardandoPublico = signal(false);
 
+  // ---- Precios por lista ----
+  /**
+   * Lo que está tecleado en la tabla de precios por lista, por `variante:tipo`.
+   * Son propiedades normales con [(ngModel)]; por eso "hay cambios" es un
+   * MÉTODO y no un `computed`, que se quedaría pegado al primer valor.
+   */
+  preciosLista: Record<string, number | null> = {};
+  readonly guardandoListas = signal(false);
+
   /** Tipos que llevan precio propio: todos menos el público. */
   readonly tiposConPrecio = computed(() => this.tiposCliente().filter((t) => !t.es_publico));
 
   /**
    * El producto ya tiene su presentación. Cuando la tiene, no se dan de alta más:
    * las remesas siguientes agregan BULTOS a esa misma presentación. Lo único que
-   * puede hacer falta después es el cono, y va en su propia sección.
+   * puede hacer falta después es el cono, y se crea solo al bajar el primer
+   * paquete a mostrador.
    */
   readonly yaTienePresentacion = computed(() =>
     this.variantes().some((v) => v.tipo_presentacion !== 'cono')
@@ -107,8 +171,71 @@ export class ProductoPresentaciones {
     this.variantes().find((v) => v.tipo_presentacion === 'paquete') ?? null
   );
 
+  /** La presentación que recibe los bultos: el paquete, o la simple si no es multipresentación. */
+  readonly principal = computed(
+    () => this.paquete() ?? this.variantes().find((v) => v.tipo_presentacion !== 'cono') ?? null
+  );
+
   /** Los conos ya dados de alta. */
   readonly conos = computed(() => this.variantes().filter((v) => v.tipo_presentacion === 'cono'));
+
+  /** Las tarjetas: primero lo que entra del proveedor, luego los conos que salen de ahí. */
+  readonly variantesOrdenadas = computed(() => [
+    ...this.variantes().filter((v) => v.tipo_presentacion !== 'cono'),
+    ...this.conos(),
+  ]);
+
+  /** Todos los bultos del producto, con el SKU de su presentación. */
+  readonly bultos = computed<BultoFila[]>(() => {
+    const porVariante = this.codigos();
+    return this.variantes().flatMap((v) =>
+      (porVariante[v.id] ?? []).map((b) => ({ ...b, sku: v.sku }))
+    );
+  });
+
+  /** Hay bultos de más de una presentación: entonces la tabla dice de cuál es cada uno. */
+  readonly bultosDeVarias = computed(() => new Set(this.bultos().map((b) => b.variante_id)).size > 1);
+
+  readonly bultosFiltrados = computed(() => {
+    const f = this.filtroBultos();
+    return this.bultos().filter((b) => {
+      if (f === 'todos') return true;
+      if (f === 'disponibles') return this.estaDisponible(b);
+      if (f === 'vendidos') return b.estado === 'vendido';
+      return b.estado === 'desarmado';
+    });
+  });
+
+  readonly bultosVisiblesTabla = computed(() => {
+    const b = this.bultosFiltrados();
+    return this.verTodosLosBultos() ? b : b.slice(0, BULTOS_A_LA_VISTA);
+  });
+
+  readonly numDisponibles = computed(() => this.bultos().filter((b) => this.estaDisponible(b)).length);
+
+  /**
+   * Los bultos agrupados por lote. Una remesa suele traer varios lotes del
+   * MISMO hilo (el archivo real trajo 80 bultos en 2 lotes), y así se ve de
+   * un golpe cuántos kilos entraron con cada uno.
+   */
+  readonly lotes = computed<LoteDeBultos[]>(() => {
+    const grupos = new Map<string, LoteDeBultos>();
+    for (const b of this.bultos()) {
+      const lote = b.lote?.trim() || 'Sin lote';
+      const g =
+        grupos.get(lote) ?? { lote, bultos: [], kg: 0, disponibles: 0, kgDisponibles: 0 };
+      g.bultos.push(b);
+      g.kg += Number(b.peso_kg ?? 0);
+      // Los consumidos siguen listados —son el histórico— pero no cuentan como
+      // existencias: ya se vendieron o se desarmaron.
+      if (this.estaDisponible(b)) {
+        g.disponibles += 1;
+        g.kgDisponibles += Number(b.peso_kg ?? 0);
+      }
+      grupos.set(lote, g);
+    }
+    return [...grupos.values()].sort((a, b) => a.lote.localeCompare(b.lote));
+  });
 
   // ---- Carga masiva desde la lista de empaque del proveedor ----
   readonly almacenes = signal<Almacen[]>([]);
@@ -116,8 +243,8 @@ export class ProductoPresentaciones {
   readonly ultimaCarga = signal<ResultadoRemesa | null>(null);
   readonly leyendo = signal(false);
   readonly cargandoRemesa = signal(false);
-  readonly mensaje = signal<string | null>(null);
   readonly verTodosBultos = signal(false);
+  readonly arrastrando = signal(false);
   almacenCarga: number | '' = '';
   /**
    * A cómo salió el kilo en esta compra. Opcional a propósito: no se frena una
@@ -142,6 +269,15 @@ export class ProductoPresentaciones {
   });
 
   /**
+   * Cómo debería llamarse el archivo de ESTE hilo, con la convención del
+   * proveedor ("ROJO 2-30.xlsx"): se le enseña al usuario para que lo busque.
+   */
+  readonly archivoEsperado = computed(() => {
+    const calibre = (this.calibreProducto() ?? '').replace(/\//g, '-');
+    return `${this.nombreProducto()}${calibre ? ' ' + calibre : ''}.xlsx`;
+  });
+
+  /**
    * Coteja el nombre del archivo contra ESTE producto. El proveedor nombra sus
    * listas "COLOR CALIBRE.xlsx", y aquí el producto ya está fijado: si el nombre
    * apunta a otro hilo, casi seguro se abrió la pantalla equivocada. Pasó de
@@ -159,12 +295,38 @@ export class ProductoPresentaciones {
   }
 
   elegirArchivo(e: Event): void {
-    this.archivo = (e.target as HTMLInputElement).files?.[0] ?? null;
+    const input = e.target as HTMLInputElement;
+    const f = input.files?.[0] ?? null;
+    // Se limpia para que volver a elegir EL MISMO archivo (tras cancelar) lo lea otra vez.
+    input.value = '';
+    if (f) this.tomarArchivo(f);
+  }
+
+  /** Soltó un archivo sobre la zona de carga. */
+  soltarArchivo(e: DragEvent): void {
+    e.preventDefault();
+    this.arrastrando.set(false);
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;
+    if (!/\.xlsx$/i.test(f.name)) {
+      this.error.set('Solo se leen listas de empaque en .xlsx.');
+      return;
+    }
+    this.tomarArchivo(f);
+  }
+
+  sobreZona(e: DragEvent): void {
+    e.preventDefault();
+    this.arrastrando.set(true);
+  }
+
+  private tomarArchivo(f: File): void {
+    this.archivo = f;
     this.previa.set(null);
     this.ultimaCarga.set(null);
     this.error.set(null);
     this.mensaje.set(null);
-    if (this.archivo) this.leerArchivo();
+    this.leerArchivo();
   }
 
   leerArchivo(): void {
@@ -183,6 +345,12 @@ export class ProductoPresentaciones {
         this.leyendo.set(false);
       },
     });
+  }
+
+  /** Descarta la vista previa sin cargar nada. */
+  descartarPrevia(): void {
+    this.previa.set(null);
+    this.archivo = null;
   }
 
   /**
@@ -215,12 +383,9 @@ export class ProductoPresentaciones {
       .subscribe({
         next: (r) => {
           this.ultimaCarga.set(r);
-          this.mensaje.set(
-            `Remesa ${r.folio}: ${r.num_bultos} bultos, ${r.kg_total} kg al inventario.` +
-              (r.costo_promedio != null
-                ? ` Costo del hilo: $${Number(r.costo_promedio).toFixed(2)} por kilo.`
-                : '')
-          );
+          this.mensaje.set(null);
+          // Cada carga deja su comprobante en PDF: se baja solo al terminar.
+          this.descargarPdfCarga(r.id, r.folio);
           this.previa.set(null);
           this.costoKg = null;
           this.archivo = null;
@@ -232,6 +397,23 @@ export class ProductoPresentaciones {
           this.cargandoRemesa.set(false);
         },
       });
+  }
+
+  /** Se está generando el PDF de la última carga. */
+  readonly generandoPdf = signal(false);
+
+  descargarPdfCarga(id: number, folio: string): void {
+    this.generandoPdf.set(true);
+    this.inv.pdfCarga(id).subscribe({
+      next: (blob) => {
+        this.generandoPdf.set(false);
+        guardarArchivo(blob, `Carga ${folio}.pdf`);
+      },
+      error: async (e) => {
+        this.generandoPdf.set(false);
+        this.error.set(await mensajeDeError(e));
+      },
+    });
   }
 
   readonly varForm = this.fb.nonNullable.group({
@@ -250,10 +432,6 @@ export class ProductoPresentaciones {
     precio_oferta: [null as number | null],
     costo: [null as number | null],
   });
-
-  readonly paquetes = computed(() =>
-    this.variantes().filter((v) => v.tipo_presentacion === 'paquete')
-  );
 
   readonly imgForm = this.fb.nonNullable.group({
     url: ['', Validators.required],
@@ -286,6 +464,7 @@ export class ProductoPresentaciones {
   }
 
   private aplicar(p: ProductoDetalle): void {
+    this.producto.set(p);
     this.nombreProducto.set(p.nombre);
     this.calibreProducto.set(p.grosor_calibre ?? null);
     this.precioProducto.set(p.precio_kg ?? null);
@@ -294,22 +473,177 @@ export class ProductoPresentaciones {
     this.esPorLotes.set(!!p.por_lotes);
     this.variantes.set(p.variantes);
     this.imagenes.set(p.imagenes);
-    // El hilo SIEMPRE entra en paquetes: el tipo no se elige.
-    this.varForm.patchValue({ tipo_presentacion: 'paquete' });
+    this.llenarPreciosLista();
+    // El hilo entra en paquetes; sin multipresentación es 'simple' (también en kilos).
+    this.varForm.patchValue({ tipo_presentacion: p.multipresentacion ? 'paquete' : 'simple' });
+    this.cargarDetalle();
+  }
+
+  /**
+   * Lo que no viene en el producto: cuánto hay de cada presentación en cada
+   * almacén y sus bultos. Cada consulta falla por su lado: si una no llega, su
+   * dato dice "—" y lo demás se sigue viendo.
+   */
+  private cargarDetalle(): void {
+    const vs = this.variantes();
+    if (vs.length === 0) {
+      this.existencias.set({});
+      this.codigos.set({});
+      return;
+    }
+    forkJoin(
+      vs.map((v) =>
+        this.inv.stock({ variante_id: v.id, limit: 100 }).pipe(map((r) => [v.id, r.items] as const))
+      )
+    )
+      .pipe(catchError(() => of(null)))
+      .subscribe((r) => this.existencias.set(r ? Object.fromEntries(r) : null));
+
+    // Los conos no tienen bultos: nacen del desarme, ya enconados.
+    const conBultos = vs.filter((v) => v.tipo_presentacion !== 'cono');
+    if (conBultos.length === 0) {
+      this.codigos.set({});
+      return;
+    }
+    forkJoin(
+      conBultos.map((v) =>
+        this.catalogo.listarCodigos(v.id).pipe(
+          map((cs) => [v.id, cs] as const),
+          catchError(() => of([v.id, [] as VarianteCodigo[]] as const))
+        )
+      )
+    ).subscribe((r) => this.codigos.set(Object.fromEntries(r)));
   }
 
   /** Vuelve a leer el producto: tras cargar la remesa cambian las presentaciones. */
   private recargar(): void {
     const id = this.id();
-    if (id) this.cargarProducto(id);
-  }
-
-  /** Recarga el producto: lo usan las altas de imagen y de precio por tipo. */
-  private cargarProducto(id: number): void {
+    if (!id) return;
     this.catalogo.obtenerProducto(id).subscribe({
       next: (p) => this.aplicar(p),
       error: (e) => this.error.set(this.msg(e)),
     });
+  }
+
+  // ---- Modales ----
+
+  cerrarModal(): void {
+    // El error que se mostró DENTRO del modal se va con él: si no, al cerrar
+    // aparecería suelto en la pantalla hablando de una captura que ya no está.
+    if (this.modal() !== null) this.error.set(null);
+    this.modal.set(null);
+    this.variantePrecio.set(null);
+  }
+
+  /** Editó el producto desde el encabezado: con precio nuevo puede nacer su presentación. */
+  alGuardarProducto(): void {
+    this.mensaje.set('Producto guardado.');
+    this.recargar();
+  }
+
+  alEliminarProducto(): void {
+    this.modal.set(null);
+    this.router.navigate(['/admin/productos']);
+  }
+
+  // ---- Lo que dicen las tarjetas de presentación ----
+
+  /**
+   * Debajo del título: material, línea, precio de lista y cómo se maneja.
+   * "Acrilán · Turco · precio de lista $128.00 por kg · se maneja en paquete y
+   * en cono, por lotes".
+   */
+  subtitulo(): string {
+    const p = this.producto();
+    if (!p) return '';
+    const partes: string[] = [];
+    if (p.categoria) partes.push(p.categoria);
+    if (p.linea) partes.push(p.linea);
+    const precio = this.precioProducto();
+    partes.push(
+      precio != null
+        ? `precio de lista ${new DineroPipe().transform(precio)} por ${this.unidadProducto()}`
+        : 'sin precio de lista'
+    );
+    let manejo = this.esMultipresentacion() ? 'se maneja en paquete y en cono' : '';
+    if (this.esPorLotes()) manejo = manejo ? manejo + ', por lotes' : 'por lotes';
+    if (manejo) partes.push(manejo);
+    return partes.join(' · ');
+  }
+
+  /** A qué almacén va a entrar la remesa, para decirlo junto al botón de cargar. */
+  nombreAlmacenCarga(): string {
+    return this.almacenes().find((a) => a.id === Number(this.almacenCarga))?.nombre ?? '—';
+  }
+
+  /** La lista no tiene precio propio en ninguna presentación: paga el público. */
+  listaSinPrecio(tipoId: number): boolean {
+    return this.variantes().every((v) => this.precioDe(v, tipoId) === null);
+  }
+
+  /** Cómo se llama la presentación en la tarjeta. */
+  nombrePres(v: Variante): string {
+    if (v.tipo_presentacion === 'cono') return 'Cono';
+    if (v.presentacion?.trim()) return v.presentacion.trim();
+    return v.tipo_presentacion === 'paquete' ? 'Paquete' : 'Presentación';
+  }
+
+  /** Renglones con existencia de la presentación, `null` si no se pudieron leer. */
+  existenciasDe(v: Variante): StockItem[] | null {
+    const e = this.existencias();
+    if (!e) return null;
+    return (e[v.id] ?? []).filter((s) => Number(s.cantidad) > 0);
+  }
+
+  /** Bultos disponibles de la presentación que están en ese almacén. */
+  bultosEn(v: Variante, almacenId: number): number {
+    return (this.codigos()[v.id] ?? []).filter(
+      (b) => this.estaDisponible(b) && b.almacen_id === almacenId
+    ).length;
+  }
+
+  /** Peso de un cono: el que trae la presentación, o el del paquete entre sus piezas. */
+  pesoCono(v: Variante): number | null {
+    if (v.peso_kg != null && Number(v.peso_kg) > 0) return Number(v.peso_kg);
+    const pk = Number(v.paquete_peso_kg ?? 0);
+    const piezas = Number(v.piezas_por_origen ?? 0);
+    return pk > 0 && piezas > 0 ? pk / piezas : null;
+  }
+
+  /** Promedio real de los bultos disponibles, para compararlo con el peso de referencia. */
+  promedioBultos(v: Variante): number | null {
+    const disp = (this.codigos()[v.id] ?? []).filter((b) => this.estaDisponible(b) && Number(b.peso_kg) > 0);
+    if (disp.length === 0) return null;
+    return disp.reduce((s, b) => s + Number(b.peso_kg), 0) / disp.length;
+  }
+
+  /** Un bulto sin estado (dato viejo) se trata como disponible. */
+  estaDisponible(b: VarianteCodigo): boolean {
+    return !b.estado || b.estado === 'disponible';
+  }
+
+  /** Lo que dice la columna "Estado" de un bulto. */
+  estadoBulto(b: VarianteCodigo): { texto: string; clase: string } {
+    if (this.estaDisponible(b)) return { texto: 'Disponible', clase: 'verde' };
+    if (b.estado === 'vendido') {
+      return { texto: 'Vendido' + (b.consumido_folio ? ' · ' + b.consumido_folio : ''), clase: 'azul' };
+    }
+    return { texto: 'Bajado a conos', clase: 'gris' };
+  }
+
+  // ---- Captura manual de la presentación (modal) ----
+
+  abrirManual(): void {
+    this.error.set(null);
+    this.skuManual = false;
+    this.varForm.reset({
+      sku: '', presentacion: '', lote: '', codigo_barras: '',
+      tipo_presentacion: this.esMultipresentacion() ? 'paquete' : 'simple',
+      peso_kg: null, origen_variante_id: null,
+      piezas_por_origen: null, modo_precio: 'calculado',
+      precio: null, precio_oferta: null, costo: null,
+    });
+    this.modal.set('manual');
   }
 
   /**
@@ -344,7 +678,7 @@ export class ProductoPresentaciones {
   /** Qué le falta a la variante, en lenguaje del usuario, o null si está lista. */
   faltaEnVariante(): string | null {
     const v = this.varForm.getRawValue();
-    if (!v.sku.trim()) return 'Ponle un SKU a la variante.';
+    if (!v.sku.trim()) return 'Ponle un SKU a la presentación.';
 
     // El precio puede venir del producto (`precio_kg`), así que solo se exige
     // cuando no hay ninguno de los dos. Mismo criterio que el backend.
@@ -381,6 +715,7 @@ export class ProductoPresentaciones {
     const esCono = v.tipo_presentacion === 'cono';
     // Con cono de precio calculado el backend lo deriva del paquete.
     const precioDerivado = esCono && v.modo_precio === 'calculado';
+    const lleva = v.tipo_presentacion === 'paquete' || v.tipo_presentacion === 'simple';
 
     this.catalogo
       .crearVariante({
@@ -390,7 +725,7 @@ export class ProductoPresentaciones {
         codigo_barras: v.codigo_barras.trim() || null,
         lote: v.lote.trim() || null,
         tipo_presentacion: v.tipo_presentacion,
-        peso_kg: v.tipo_presentacion === 'paquete' ? v.peso_kg : null,
+        peso_kg: lleva ? v.peso_kg : null,
         origen_variante_id: esCono ? v.origen_variante_id : null,
         piezas_por_origen: esCono ? v.piezas_por_origen : null,
         modo_precio: esCono ? v.modo_precio : 'manual',
@@ -398,103 +733,60 @@ export class ProductoPresentaciones {
         // lo rechaza con un 422 genérico.
         precio: precioDerivado || v.precio == null ? undefined : String(v.precio),
         precio_oferta: v.precio_oferta != null ? String(v.precio_oferta) : null,
-        costo: v.costo != null ? String(v.costo) : null,
+        // El costo solo lo captura quien puede verlo.
+        costo: this.puedeVerCostos() && v.costo != null ? String(v.costo) : null,
       })
       .subscribe({
         next: (nv) => {
-          this.variantes.update((arr) => [...arr, nv]);
-          this.varForm.reset({
-            sku: '', presentacion: '', lote: '', codigo_barras: '',
-            tipo_presentacion: this.esMultipresentacion() ? 'paquete' : 'simple',
-            peso_kg: null, origen_variante_id: null,
-            piezas_por_origen: null, modo_precio: 'calculado',
-            precio: null, precio_oferta: null, costo: null,
-          });
-          this.skuManual = false;
+          this.modal.set(null);
+          this.mensaje.set(`Presentación ${nv.sku} guardada.`);
+          this.recargar();
         },
         error: (e) => this.error.set(this.msg(e)),
       });
   }
 
-  eliminarVariante(v: Variante): void {
-    if (!confirm(`¿Eliminar la variante ${v.sku}?`)) return;
+  async eliminarVariante(v: Variante): Promise<void> {
+    const si = await this.confirmacion.pedir({
+      titulo: `¿Eliminar la presentación ${v.sku}?`,
+      mensaje: 'Se van con ella sus bultos y sus precios por lista.',
+      aceptar: 'Eliminar',
+      peligro: true,
+    });
+    if (!si) return;
+    this.error.set(null);
     this.catalogo.eliminarVariante(v.id).subscribe({
-      next: () => this.variantes.update((arr) => arr.filter((x) => x.id !== v.id)),
+      next: () => {
+        this.mensaje.set(`Presentación ${v.sku} eliminada.`);
+        this.recargar();
+      },
       error: (e) => this.error.set(this.msg(e)),
     });
   }
 
-  // ---- Códigos de barras adicionales de una variante ----
+  // ---- Bultos ----
 
-  toggleCodigos(v: Variante): void {
-    if (this.expandida() === v.id) {
-      this.expandida.set(null);
-      return;
-    }
-    this.expandida.set(v.id);
+  abrirBulto(): void {
     this.nuevoCodigo = '';
     this.nuevoLote = '';
     this.nuevoPeso = null;
     this.nuevoConos = null;
-    if (!this.codigos()[v.id]) {
-      this.catalogo.listarCodigos(v.id).subscribe({
-        next: (cs) => this.codigos.update((m) => ({ ...m, [v.id]: cs })),
-        error: (e) => this.error.set(this.msg(e)),
-      });
-    }
-  }
-
-  codigosDe(varianteId: number): VarianteCodigo[] {
-    return this.codigos()[varianteId] ?? [];
+    this.avisoBulto.set(null);
+    this.error.set(null);
+    this.modal.set('bulto');
   }
 
   /**
-   * Los bultos agrupados por lote. Una remesa suele traer varios lotes del
-   * MISMO hilo (el archivo real trajo 80 bultos en 2 lotes), y así se ve de
-   * un golpe cuántos kilos entraron con cada uno.
+   * Da de alta un bulto en la presentación principal. El modal NO se cierra:
+   * capturar varios seguidos es lo normal; avisa, se limpia y espera el siguiente.
    */
-  lotesDe(varianteId: number): LoteDeBultos[] {
-    const grupos = new Map<string, LoteDeBultos>();
-    for (const b of this.codigosDe(varianteId)) {
-      const lote = b.lote?.trim() || 'Sin lote';
-      const g =
-        grupos.get(lote) ?? { lote, bultos: [], kg: 0, disponibles: 0, kgDisponibles: 0 };
-      g.bultos.push(b);
-      g.kg += Number(b.peso_kg ?? 0);
-      // Los consumidos siguen listados —son el histórico— pero no cuentan como
-      // existencias: ya se vendieron o se desarmaron.
-      if (this.estaDisponible(b)) {
-        g.disponibles += 1;
-        g.kgDisponibles += Number(b.peso_kg ?? 0);
-      }
-      grupos.set(lote, g);
-    }
-    return [...grupos.values()].sort((a, b) => a.lote.localeCompare(b.lote));
-  }
-
-  /** Un bulto sin estado (dato viejo) se trata como disponible. */
-  estaDisponible(b: VarianteCodigo): boolean {
-    return !b.estado || b.estado === 'disponible';
-  }
-
-  /** Total de kilos de los bultos que siguen disponibles. */
-  kgDeBultos(varianteId: number): number {
-    return this.codigosDe(varianteId)
-      .filter((b) => this.estaDisponible(b))
-      .reduce((s, b) => s + Number(b.peso_kg ?? 0), 0);
-  }
-
-  /** Cuántos bultos siguen disponibles de la variante. */
-  bultosDisponibles(varianteId: number): number {
-    return this.codigosDe(varianteId).filter((b) => this.estaDisponible(b)).length;
-  }
-
-  agregarCodigoVar(varianteId: number): void {
+  agregarCodigoVar(): void {
+    const v = this.principal();
     const codigo = this.nuevoCodigo.trim();
-    if (!codigo) return;
+    if (!v || !codigo) return;
     this.error.set(null);
     this.catalogo
-      .agregarCodigo(varianteId, {
+      .agregarCodigo(v.id, {
         codigo,
         // El peso, el lote y los conos son del bulto; van a sus columnas.
         peso_kg: this.nuevoPeso != null && this.nuevoPeso > 0 ? this.nuevoPeso : undefined,
@@ -503,31 +795,50 @@ export class ProductoPresentaciones {
       })
       .subscribe({
         next: (c) => {
-          this.codigos.update((m) => ({ ...m, [varianteId]: [...(m[varianteId] ?? []), c] }));
+          this.codigos.update((m) => ({ ...m, [v.id]: [...(m[v.id] ?? []), c] }));
+          this.avisoBulto.set(`Bulto ${c.codigo} añadido.`);
           this.nuevoCodigo = '';
-          this.nuevoLote = '';
           this.nuevoPeso = null;
           this.nuevoConos = null;
+          // El lote se queda: los bultos que se capturan juntos suelen ser del mismo.
         },
-        error: (e) => this.error.set(this.msg(e)),
+        error: (e) => {
+          this.avisoBulto.set(null);
+          this.error.set(this.msg(e));
+        },
       });
   }
 
   /** Enter del lector: evita submit y agrega el código escaneado. */
-  capturarCodigoVar(ev: Event, varianteId: number): void {
+  capturarCodigoVar(ev: Event): void {
     ev.preventDefault();
-    this.agregarCodigoVar(varianteId);
+    this.agregarCodigoVar();
   }
 
-  eliminarCodigoVar(codigoId: number, varianteId: number): void {
-    this.catalogo.eliminarCodigo(codigoId).subscribe({
+  async eliminarCodigoVar(b: BultoFila): Promise<void> {
+    const si = await this.confirmacion.pedir({
+      titulo: `¿Quitar el bulto ${b.codigo}?`,
+      mensaje: 'Solo se borra su registro: quitarlo no mueve el inventario.',
+      aceptar: 'Quitar',
+      peligro: true,
+    });
+    if (!si) return;
+    this.catalogo.eliminarCodigo(b.id).subscribe({
       next: () =>
         this.codigos.update((m) => ({
           ...m,
-          [varianteId]: (m[varianteId] ?? []).filter((c) => c.id !== codigoId),
+          [b.variante_id]: (m[b.variante_id] ?? []).filter((c) => c.id !== b.id),
         })),
       error: (e) => this.error.set(this.msg(e)),
     });
+  }
+
+  // ---- Imágenes ----
+
+  abrirImagen(): void {
+    this.imgForm.reset({ url: '', es_principal: false });
+    this.error.set(null);
+    this.modal.set('imagen');
   }
 
   agregarImagen(): void {
@@ -540,49 +851,31 @@ export class ProductoPresentaciones {
       .crearImagen({ producto_id: this.id()!, url: v.url.trim(), es_principal: v.es_principal })
       .subscribe({
         next: () => {
+          this.modal.set(null);
           // Recarga para reflejar el cambio de "principal" en las demás.
-          this.cargarProducto(this.id()!);
-          this.imgForm.reset({ url: '', es_principal: false });
+          this.recargar();
         },
         error: (e) => this.error.set(this.msg(e)),
       });
   }
 
-  eliminarImagen(img: Imagen): void {
+  async eliminarImagen(img: Imagen): Promise<void> {
+    const si = await this.confirmacion.pedir({ titulo: '¿Quitar esta imagen?', aceptar: 'Quitar', peligro: true });
+    if (!si) return;
     this.catalogo.eliminarImagen(img.id).subscribe({
       next: () => this.imagenes.update((arr) => arr.filter((x) => x.id !== img.id)),
       error: (e) => this.error.set(this.msg(e)),
     });
   }
 
-  /** Abre (o cierra) la captura de precios por tipo de una variante. */
-  togglePrecios(v: Variante): void {
-    if (this.editandoPrecios() === v.id) {
-      this.editandoPrecios.set(null);
-      return;
-    }
-    this.editandoPrecios.set(v.id);
+  // ---- Precio público y peso (modal) ----
+
+  abrirPrecio(v: Variante): void {
+    this.error.set(null);
+    this.variantePrecio.set(v);
     this.precioPublico = v.precio != null ? Number(v.precio) : null;
     this.pesoPaquete = v.peso_kg != null ? Number(v.peso_kg) : null;
-    this.precioTipo = {};
-    for (const t of this.tiposConPrecio()) {
-      const p = v.precios?.find((x) => x.tipo_cliente_id === t.id);
-      this.precioTipo[t.id] = p ? Number(p.precio) : null;
-    }
-  }
-
-  /** Precio capturado de una variante para un tipo, o null si paga el público. */
-  precioDe(v: Variante, tipoId: number): number | null {
-    const p = v.precios?.find((x) => x.tipo_cliente_id === tipoId);
-    return p ? Number(p.precio) : null;
-  }
-
-  dinero(v: unknown): string {
-    return Number(v ?? 0).toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-      maximumFractionDigits: 2,
-    });
+    this.modal.set('precio');
   }
 
   /** El cono con precio calculado sigue al paquete: su precio no se edita. */
@@ -614,6 +907,7 @@ export class ProductoPresentaciones {
       if (w !== (v.peso_kg != null ? Number(v.peso_kg) : null)) body.peso_kg = w;
     }
     if (Object.keys(body).length === 0) {
+      this.cerrarModal();
       this.mensaje.set('No hubo cambios.');
       return;
     }
@@ -622,6 +916,7 @@ export class ProductoPresentaciones {
     this.catalogo.actualizarVariante(v.id, body).subscribe({
       next: () => {
         this.guardandoPublico.set(false);
+        this.cerrarModal();
         this.mensaje.set(
           v.tipo_presentacion === 'paquete' && this.conos().length > 0 && body.precio != null
             ? `Precio de ${v.sku} actualizado. Los conos de precio calculado también cambiaron.`
@@ -637,15 +932,63 @@ export class ProductoPresentaciones {
     });
   }
 
-  guardarPrecioTipo(v: Variante, tipoId: number): void {
-    const valor = this.precioTipo[tipoId];
+  // ---- Precios por lista ----
+
+  claveLista(varianteId: number, tipoId: number): string {
+    return `${varianteId}:${tipoId}`;
+  }
+
+  /** Precio capturado de una variante para un tipo, o null si paga el público. */
+  precioDe(v: Variante, tipoId: number): number | null {
+    const p = v.precios?.find((x) => x.tipo_cliente_id === tipoId);
+    return p ? Number(p.precio) : null;
+  }
+
+  private llenarPreciosLista(): void {
+    const m: Record<string, number | null> = {};
+    for (const v of this.variantes()) {
+      for (const t of this.tiposConPrecio()) m[this.claveLista(v.id, t.id)] = this.precioDe(v, t.id);
+    }
+    this.preciosLista = m;
+  }
+
+  /** Lo tecleado que difiere de lo guardado. Método, no `computed`: lee campos de ngModel. */
+  cambiosLista(): { v: Variante; tipoId: number; precio: number | null }[] {
+    const cambios: { v: Variante; tipoId: number; precio: number | null }[] = [];
+    for (const v of this.variantes()) {
+      for (const t of this.tiposConPrecio()) {
+        const crudo = this.preciosLista[this.claveLista(v.id, t.id)];
+        const nuevo = crudo == null || (crudo as unknown) === '' ? null : Number(crudo);
+        if (nuevo !== this.precioDe(v, t.id)) cambios.push({ v, tipoId: t.id, precio: nuevo });
+      }
+    }
+    return cambios;
+  }
+
+  guardarPreciosLista(): void {
+    const cambios = this.cambiosLista();
+    if (cambios.length === 0) return;
+    if (cambios.some((c) => c.precio !== null && !(c.precio >= 0))) {
+      this.error.set('Un precio no puede ser negativo. Déjalo vacío para que esa lista pague el público.');
+      return;
+    }
     this.error.set(null);
-    this.catalogo
-      .fijarPrecioTipo(v.id, tipoId, valor == null || valor === ('' as unknown) ? null : Number(valor))
-      .subscribe({
-        next: (nv) => this.variantes.update((arr) => arr.map((x) => (x.id === nv.id ? nv : x))),
-        error: (e) => this.error.set(this.msg(e)),
-      });
+    this.guardandoListas.set(true);
+    forkJoin(cambios.map((c) => this.catalogo.fijarPrecioTipo(c.v.id, c.tipoId, c.precio))).subscribe({
+      next: () => {
+        this.guardandoListas.set(false);
+        this.mensaje.set(
+          cambios.length === 1 ? 'Precio por lista guardado.' : `${cambios.length} precios por lista guardados.`
+        );
+        this.recargar();
+      },
+      error: (e) => {
+        this.guardandoListas.set(false);
+        this.error.set(this.msg(e));
+        // Lo que sí alcanzó a guardarse se ve al recargar.
+        this.recargar();
+      },
+    });
   }
 
   private msg(e: unknown): string {

@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -21,7 +21,8 @@ const actualizarSchema = crearSchema.partial();
 // Los cajeros necesitan la lista para elegir con qué precio cobrar; definirla
 // es configuración de administrador.
 const soloStaff = [authRequired, requireTipo('usuario')];
-const soloAdmin = [authRequired, requireTipo('usuario'), requireRol('administrador')];
+// Lo decide Permisos (antes: solo administradores).
+const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:almacenes')];
 
 router.get('/', ...soloStaff, controller.listar);
 router.post('/', ...soloAdmin, validate(crearSchema), controller.crear);

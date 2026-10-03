@@ -103,6 +103,8 @@ export interface HiloMuerto {
   kilos_parados: number;
   num_hilos: number;
   nunca_vendidos: number;
+  /** Con qué se valoró: al costo, o a precio de venta (sin «Ver costos», o sin llevar costo). */
+  valorado_a?: 'costo' | 'precio_venta';
   /** Si hay renglones sin costo, el total está inflado y hay que decirlo. */
   hay_sin_costo: boolean;
   hilos: HiloParado[];
@@ -136,10 +138,15 @@ export interface Margen {
   hilos: MargenHilo[];
 }
 
-/** Todo el tablero, de un solo viaje. */
+/**
+ * Todo el tablero, de un solo viaje.
+ *
+ * Hilo parado y margen exponen COSTOS: llegan en `null` a quien no tiene
+ * «Ver costos y márgenes» (`hacer:ver_costos`). El servidor ni los calcula.
+ */
 export interface Tablero {
   cobranza: Cobranza;
   clientes_enfriados: ClientesEnfriados;
-  hilo_muerto: HiloMuerto;
-  margen: Margen;
+  hilo_muerto: HiloMuerto | null;
+  margen: Margen | null;
 }

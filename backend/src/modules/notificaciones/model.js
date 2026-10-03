@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../../config/db');
+const analisisModel = require('../analisis/model');
 
 // Cuándo un pendiente empieza a doler. Van aquí, con nombre, para poder
 // ajustarlos sin buscarlos dentro de una consulta.
@@ -94,42 +95,12 @@ async function pendientes() {
     { dias: DIAS_SIN_ABONAR }
   );
 
-  // Clientes que compraban y dejaron de venir.
-  //
-  // Exige al menos 2 compras: quien vino UNA vez hace meses no es un cliente
-  // perdido, es alguien que pasó, y avisar de él sería ruido. Se ordenan por
-  // lo que gastaban, que es lo que está en juego.
-  const [enfriados] = await pool.query(
-    `SELECT c.id AS cliente_id, c.nombre, c.nombre_comercial, c.telefono,
-            v.num_compras, v.total_comprado,
-            DATEDIFF(NOW(), v.ultima_compra) AS dias_sin_venir
-       FROM clientes c
-       JOIN (
-         SELECT cliente_id, COUNT(*) AS num_compras, SUM(total) AS total_comprado,
-                MAX(creado_en) AS ultima_compra
-           FROM pedidos
-          WHERE cliente_id IS NOT NULL AND estado NOT IN ('cancelado', 'devuelto')
-          GROUP BY cliente_id
-       ) v ON v.cliente_id = c.id
-      WHERE c.activo = 1 AND v.num_compras >= 2
-        AND DATEDIFF(NOW(), v.ultima_compra) >= :dias
-      ORDER BY v.total_comprado DESC
-      LIMIT 8`,
-    { dias: DIAS_SIN_VENIR }
-  );
-  const [[enfriadosTotal]] = await pool.query(
-    `SELECT COUNT(*) AS n
-       FROM clientes c
-       JOIN (
-         SELECT cliente_id, COUNT(*) AS num_compras, MAX(creado_en) AS ultima_compra
-           FROM pedidos
-          WHERE cliente_id IS NOT NULL AND estado NOT IN ('cancelado', 'devuelto')
-          GROUP BY cliente_id
-       ) v ON v.cliente_id = c.id
-      WHERE c.activo = 1 AND v.num_compras >= 2
-        AND DATEDIFF(NOW(), v.ultima_compra) >= :dias`,
-    { dias: DIAS_SIN_VENIR }
-  );
+  // Clientes que compraban y dejaron de venir: 2 compras o más y DIAS_SIN_VENIR
+  // sin aparecer. Sale de la MISMA consulta que la pestaña Clientes → Dejaron de
+  // venir (analisis/model.js → clientesEnfriados), así el número del aviso y la
+  // lista que abre son siempre los mismos (lo pidió el usuario el 2026-10-03:
+  // "doy clic y no me dice quiénes"). Aquí solo se traen los primeros 8.
+  const frios = await analisisModel.clientesEnfriados({ dias: DIAS_SIN_VENIR, minCompras: 2, limite: 8 });
 
   // Clientes recién capturados SIN crédito autorizado.
   //
@@ -157,10 +128,37 @@ async function pendientes() {
     { dias: DIAS_CLIENTE_NUEVO }
   );
 
+  // Hilos que no se pueden vender porque no tienen precio. Los crea así la
+  // lista completa del proveedor (Recibir remesa): entra la mercancía y el
+  // precio se pone después en Productos. El aviso sigue hasta que se le ponga.
+  const [sinPrecio] = await pool.query(
+    `SELECT p.id AS producto_id, p.nombre, p.grosor_calibre AS calibre,
+            (SELECT DATE_FORMAT(MIN(r.creado_en), '%Y-%m-%d %H:%i:%s')
+               FROM remesas r JOIN producto_variantes rv ON rv.id = r.variante_id
+              WHERE rv.producto_id = p.id) AS llego_en
+       FROM productos p
+      WHERE p.activo = 1
+        AND EXISTS (SELECT 1 FROM producto_variantes pv
+                     WHERE pv.producto_id = p.id AND pv.activo = 1
+                       AND pv.tipo_presentacion <> 'cono' AND pv.precio <= 0)
+      ORDER BY p.nombre, p.grosor_calibre`
+  );
+
+  // Apartados ya pagados completos: la mercancía sigue en la bodega y el cliente
+  // ya puede llevársela. Es lo más urgente de los apartados.
+  const [listos] = await pool.query(
+    `SELECT pedido_id, numero_pedido, COALESCE(nombre_comercial, cliente) AS cliente,
+            ultimo_abono AS liquidado_en
+       FROM v_apartados WHERE pendiente <= 0 ORDER BY ultimo_abono`
+  );
+
   return {
+    apartados_listos: { num: listos.length, pedidos: listos },
     traspasos_por_enviar: porEnviar,
     traspasos_por_recibir: porRecibir,
     alertas_stock: Number(stock.n),
+    // Hilos sin precio: UN aviso, con los primeros a la vista.
+    sin_precio: { num: sinPrecio.length, hilos: sinPrecio.slice(0, 8) },
     // Cobranza atrasada: los pocos de mayor saldo, más el total.
     cobranza: {
       clientes: cobranza,
@@ -170,8 +168,8 @@ async function pendientes() {
     },
     // Clientes que dejaron de venir.
     enfriados: {
-      clientes: enfriados,
-      num_clientes: Number(enfriadosTotal.n),
+      clientes: frios.clientes,
+      num_clientes: frios.num_clientes,
       dias: DIAS_SIN_VENIR,
     },
     // Clientes nuevos a los que hay que decidir si se les fía.
@@ -186,13 +184,15 @@ async function pendientes() {
     // te debe"— aunque dentro haya varios. Contar cada cliente inflaría el
     // globo a decenas y dejaría de significar nada.
     total:
+      (listos.length > 0 ? 1 : 0) +
       porEnviar.length +
       porRecibir.length +
       (Number(stock.n) > 0 ? 1 : 0) +
+      (sinPrecio.length > 0 ? 1 : 0) +
       (Number(cobranzaTotal.n) > 0 ? 1 : 0) +
-      (Number(enfriadosTotal.n) > 0 ? 1 : 0) +
+      (frios.num_clientes > 0 ? 1 : 0) +
       (nuevosSinCredito.length > 0 ? 1 : 0),
   };
 }
 
-module.exports = { pendientes };
+module.exports = { pendientes, DIAS_SIN_VENIR };

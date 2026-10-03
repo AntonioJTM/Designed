@@ -11,7 +11,24 @@ const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 
 async function listarStock(filtros) {
   const { rows, total } = await model.listarStock(filtros);
-  return paginado(rows, total, filtros.page, filtros.limit);
+  if (!filtros.conUltimoMovimiento) return paginado(rows, total, filtros.page, filtros.limit);
+
+  // La pantalla de Inventario dice qué fue lo último que le pasó a cada
+  // renglón ("Remesa REM-0412", "Venta POS-91B0") con la MISMA etiqueta que el
+  // kardex. Es opcional para no engordar la respuesta del asistente, que pide
+  // existencias y no le sirve el documento.
+  const ultimos = await model.ultimosMovimientos(rows);
+  const porFila = new Map(ultimos.map((m) => [`${m.variante_id}-${m.almacen_id}`, m]));
+  const items = rows.map((r) => {
+    const m = porFila.get(`${r.variante_id}-${r.almacen_id}`);
+    return {
+      ...r,
+      ultimo_movimiento: m
+        ? { creado_en: m.creado_en, cantidad: m.cantidad, ..._describir(m) }
+        : null,
+    };
+  });
+  return paginado(items, total, filtros.page, filtros.limit);
 }
 
 async function resumenPorAlmacen() {
@@ -55,6 +72,8 @@ function _describir(m) {
         ? `Desarme de paquetes ${m.conversion_paquete}`
         : `Conos producidos ${m.conversion_cono}`,
       folio: null,
+      // El bulto que se abrió: es el rastro del desarme ("¿cuál se bajó?").
+      codigo_bulto: m.conversion_bulto ?? null,
       detalle_tipo: 'conversion',
       detalle_id: m.referencia_id,
     };

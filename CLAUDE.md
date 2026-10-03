@@ -69,9 +69,10 @@ tienda-hilos/
   catálogo: la presentación es una sola y los bultos son sus ejemplares, en `variante_codigos`
   (`peso_kg`, `lote`, `conos`, `remesa_id`). Se cargan con `POST /remesas` tras revisar
   `POST /remesas/previa`; el inventario recibe la SUMA en kilos. El lector de `.xlsx` es propio
-  (`utils/xlsx.js`), sin dependencias, porque el formato es fijo. Solo se leen las columnas A
-  (código), B (peso), C (lote) y F (conos): las de fecha vienen vacías y los renglones en blanco
-  se ignoran sin avisar.
+  (`utils/xlsx.js`), sin dependencias, porque el formato es fijo. En la lista de UN hilo solo se
+  leen las columnas A (código), B (peso), C (lote) y F (conos): las de fecha vienen vacías y los
+  renglones en blanco se ignoran sin avisar. (La lista con VARIOS colores va por encabezado: ver
+  "La lista completa del proveedor".)
   **Es el vaciado masivo del catálogo.** `POST /remesas` acepta `producto_id` además de
   `variante_id`: desde la pantalla de presentaciones se sube el archivo y, si el producto todavía
   no tiene presentación, SE CREA —SKU derivado del nombre, tipo `paquete` (o `simple` si no es
@@ -80,6 +81,72 @@ tienda-hilos/
   `paquete` o `simple` (ambos se llevan en kilos); sobre un `cono` da 422 `NO_ES_PAQUETE`.
   Varios lotes distintos pueden ser del MISMO hilo (el archivo real trae dos): el lote es una
   etiqueta del bulto y todos suman al mismo saldo, no se separa el inventario.
+- **La LISTA COMPLETA del proveedor: varios hilos en un archivo** (2026-10-03). Recibir remesa
+  abre en "Lista con varios colores"; "Un solo hilo" es la carga de siempre (el modo se recuerda en
+  `localStorage['remesa_modo']`). El formato es el inventario que arma la tienda a partir del PDF
+  del proveedor ("HTX 1.ARAC FFAU 721502-4 - INVENTARIO.xlsx"), leído con `utils/xlsx.js →
+  leerLibro` (todas las hojas, ubicadas por `workbook.xml.rels`: hay programas que escriben la
+  ruta absoluta). De la hoja GLOBAL —o la primera que tenga los encabezados— se lee por
+  ENCABEZADO, no por letra: BOX NO (código), COLOR, CALIBRE, LOT, NET (lo que se carga), CONOS y
+  NOTA; GROSS y TARE solo para avisar si bruto − tara ≠ neto. RESUMEN coteja bultos, kilos y conos
+  por lote (solo avisa: pudo quedar viejo si se corrigió GLOBAL); DOCUMENTO da proveedor, número y
+  fecha, que quedan en las notas de cada carga. INCIDENCIAS no se lee: lo mismo viene en NOTA.
+  `remesas/lista.js`, `POST /remesas/lista/previa` y `POST /remesas/lista`; pantalla en
+  `remesas/carga-lista.ts`.
+  · **Cada COLOR + CALIBRE es un hilo, y la LÍNEA NO separa hilos** (decisión del usuario: el
+    blanco 2/30 turco y el nacional son el mismo). El nombre es el de la columna COLOR tal cual: el
+    usuario corrige los nombres EN EL EXCEL antes de subirlo, no hay tabla de equivalencias. El
+    empate ignora mayúsculas, acentos y espacios, y "2-30" = "2/30". Dos hilos iguales en el
+    catálogo son un error que impide cargar: no se adivina a cuál.
+  · El que no existe **SE CREA SIN PRECIO** con el material y la línea que se eligen en la vista
+    previa (el material lo sugiere el ARTÍCULO: "%100 ACRYLIC" → ACRILAN) y su calibre tiene que ser
+    de ese material (422 `CALIBRE_NO_DEL_MATERIAL`). Su presentación: paquete, SKU = nombre +
+    calibre ("MARINO-2-30"), peso = promedio real de sus bultos, precio $0.
+  · Una CARGA por hilo —cada una con su folio y su PDF—, todas en UNA transacción: o entra la
+    lista entera o nada. Al confirmar baja solo el PDF de toda la lista (`GET /remesas/pdf?ids=`:
+    el resumen y una página por hilo).
+  · **Esta pantalla NO pide precio de compra** (lo quitó el usuario el 2026-10-03: "los precios
+    los asigno yo en Productos a mano"). El servidor sigue aceptando `costo_kg` por hilo, pero la
+    pantalla ya no lo manda.
+  · **La carga dice lo que está haciendo.** Con `?progreso=1` (lo usa la pantalla),
+    `POST /remesas/lista` contesta POR PARTES, un JSON por renglón (NDJSON): `hilo`, `bultos`
+    (cuántos van), `hilo_listo`, `paso` y al final `fin` (el resultado) o `error`. Lleva
+    `X-Accel-Buffering: no` para que nginx no junte las partes. La pantalla lo pinta en un panel:
+    qué hace, barra de bultos, cada hilo (en espera / cargando / listo) y los segundos; con un
+    "Cargando…" mudo parecía que no pasaba nada (lo dijo el usuario). Sin el parámetro contesta un
+    JSON normal (lo usa `e2e-carga-lista.js`). `InventarioService.cargarLista` lee los renglones
+    conforme llegan (`partialText`).
+  · **Los bultos se insertan de 100 en 100** (`TANDA_BULTOS` en `remesas/model.js`, para las dos
+    cargas): uno por uno, la lista real de 718 bultos tardó un minuto contra la base del servidor.
+  · Impiden cargar, sin omitir el renglón en silencio (en cientos de bultos uno saltado no se
+    nota): código repetido o ya registrado, sin color o calibre, neto vacío, y un código guardado
+    como NÚMERO más corto que los demás (perdió los ceros de la izquierda). Las NOTA del proveedor
+    y un bruto − tara que no da el neto solo avisan.
+- **Un hilo SIN PRECIO no se vende** (2026-10-03). `producto_variantes.precio` es NOT NULL, así que
+  "sin precio" se guarda como $0 (igual que `stock_minimo = 0` es "no configurado"). `_cotizar`
+  rechaza la línea cuyo precio final sea ≤ 0 (422 `SIN_PRECIO`) ANTES de tocar existencias, y el
+  POS ni la deja agregar ("Sin precio" en la búsqueda). Al ponerle `precio_kg` con
+  `PUT /productos/:id`, sus presentaciones en $0 lo toman (y sus conos calculados): es la ÚNICA
+  excepción a "cambiarlo no propaga". El listado trae `sin_precio` y `primera_carga`: Productos
+  marca "Falta precio · Llegó en la carga de…" con el botón "Poner precio" y el filtro
+  `?falta=precio`, y la campana y Hoy dicen "N hilos no tienen precio" (un aviso, con los primeros
+  nombres) a quien ve `ver:catalogo`.
+- **Cada carga tiene su reporte en PDF** (`remesas/reportes.js`, armado con `utils/pdf.js` sobre
+  `pdfkit`). En pantalla, la remesa se llama **"Carga de producto"** (lo pidió el usuario el
+  2026-10-03). Dos reportes:
+  · `GET /remesas/:id/pdf` — el comprobante de UNA carga: hilo, almacén, quién, cada bulto con su
+    código, peso real, lote y conos. La pantalla lo BAJA SOLO al confirmar la carga (en Recibir
+    remesa y en Presentaciones) y se vuelve a sacar cuando sea desde el historial.
+  · `GET /remesas/producto/:id/pdf?desde=&hasta=` — todas las cargas de un hilo: cuánto entró, a
+    qué almacén y cómo están hoy esos bultos. Botón "Reporte de entradas" en Presentaciones.
+  Se arman AL MOMENTO con la base; no se guardan archivos: la carga conserva su total y cada bulto
+  su `remesa_id`, así que el comprobante sale igual que el día de la carga. Solo la columna "Hoy"
+  (en existencia / vendido / bajado a conos) cambia, y por eso se rotula así. Solo cuentan las
+  CARGAS: un traspaso o un desarme no son mercancía nueva. Los pide quien tenga `ver:remesa`,
+  `ver:catalogo` o `ver:inventario` (`requirePermisoAlguno`); el precio de compra solo sale con
+  `hacer:ver_costos`. Las fuentes estándar del PDF traen acentos y ñ pero NO flechas ni "≈".
+  El frontend los pide con `HttpClient` (blob) —un `<a href>` no manda el token— y los guarda con
+  `shared/descargar.ts`.
 - **Se cobra por el peso del bulto, no por el nominal.** Los bultos pesan distinto entre sí
   (10.750 a 19.800 kg contra un nominal de 19.094). Al escanear un código en el mostrador,
   resuélvelo con `GET /variantes/resolver/:codigo`: devuelve `{ variante, bulto }`, donde `bulto`
@@ -129,7 +196,8 @@ tienda-hilos/
   (ni inventario, ni bultos, ni estado): todo o nada.
   El movimiento del dinero va ANTES de tocar inventario, para que ese 409 no deje nada movido.
 - **Retiros e ingresos de efectivo** van por `POST /caja/sesiones/:id/movimientos` (modal "Sacar
-  o meter efectivo" en la tarjeta de la caja, `pos/movimiento-caja-modal.ts`). El retiro EXIGE
+  o meter efectivo" de la pantalla Caja, `caja/movimiento-caja-modal.ts`; pide
+  `hacer:mover_efectivo`). El retiro EXIGE
   motivo —dinero que sale sin explicación es un faltante que nadie aclara— y no puede sacar más
   de lo que debería haber en el cajón (409 `EFECTIVO_INSUFICIENTE`, con la sesión bloqueada).
 - **La mercancía puede regresar en OTRA presentación.** Se entrega el paquete y el cliente devuelve
@@ -342,6 +410,21 @@ tienda-hilos/
   inexplicable. Por transferencia no toca caja.
   Cobrar más de lo que se debe se rechaza (422 `ABONO_EXCEDE_DEUDA`): un saldo negativo se leería
   como crédito a favor, y no es eso.
+- **⚠ LA TIENDA NO LLEVA EL COSTO (2026-10-03).** "No necesito lo que me costó, solo me sirve en
+  cuánto lo voy a vender" (usuario). Un solo interruptor, `SE_LLEVA_COSTO = false`, en
+  `backend/src/modules/permisos/service.js` y su gemelo `frontend/src/app/core/costos.ts`:
+  «Ver costos y márgenes» (`hacer:ver_costos`) no lo tiene NADIE, ni el administrador
+  (`permisos.puede` y `AuthService.puede`). Con eso: el costo no sale en ninguna respuesta,
+  Presentaciones no enseña "Costo promedio", el historial de cargas no tiene columna de costo ni
+  el aviso "Sin precio de compra", "Cómo va el negocio" no calcula ganancia ni margen (llegan en
+  `null`) —el HILO PARADO sí sigue, valorado a precio de venta, ver abajo—, el asistente no
+  ofrece sus herramientas de costo, los PDF no
+  imprimen el precio de compra y Permisos ya no ofrece ese permiso (al guardar se le conserva a
+  quien lo tenía). Los dos cargadores de un hilo ya NO piden "Precio de compra" y la lista con
+  varios colores tampoco. Se borraron los $50/$40/$30 que se habían capturado en CAMEL, OPTIK y
+  MARINO 2/30 (no tenían ventas). Lo de abajo —captura, promedio ponderado, costo congelado en la
+  venta— sigue en el código y en la base, intacto: para volver a llevar el costo se ponen los dos
+  interruptores en true. `e2e-costo-margen.js` sale en 0 mientras esté apagado.
 - **El COSTO se captura en la remesa y se promedia.** `remesas.costo_kg` guarda a cómo salió el
   kilo en esa compra, y con eso se recalcula `producto_variantes.costo` por **promedio ponderado
   móvil**: `(kg_previos × costo_previo + kg_remesa × costo_remesa) ÷ (kg_previos + kg_remesa)`.
@@ -369,10 +452,16 @@ tienda-hilos/
   · **Cobranza** (`cartera`): quién debe, por antigüedad. Los días se miden desde el
     ÚLTIMO MOVIMIENTO de la cuenta, no desde el cargo: quien abonó la semana pasada está pagando, y
     tratarlo como moroso llevaría a cobrarle a quien no toca.
-  · **Clientes enfriados**: exige **2 compras mínimo** —quien vino
+  · **Clientes enfriados** (ya NO se pintan en el tablero: viven en Clientes → Dejaron de venir;
+    el endpoint los sigue mandando y el asistente los usa): exige **2 compras mínimo** —quien vino
     una vez hace meses no es un cliente perdido, es alguien que pasó— y compara los días sin venir
     contra SU PROPIO ritmo (`veces_su_ritmo`), no contra un número fijo.
-  · **Hilo muerto**: existencias sin venderse. Viene un renglón por PRESENTACIÓN (el cono va
+  · **Hilo muerto** ("Hilo parado" en la pantalla): existencias sin venderse. **Lo ve todo el que
+    abre el tablero**: sin «Ver costos» llega valorado a PRECIO DE VENTA (`conCosto: false` en
+    `analisis/model.js → hiloMuerto`), que no expone nada. Lo pidió el usuario el 2026-10-03 al
+    dejar de llevar el costo: "el hilo parado sí me sirve, calcúlalo con el precio de venta y en
+    base al hilo que tenemos y que se ha vendido". Por eso cada renglón dice cuánto hay, cuánto
+    vale (a qué precio por kg), cuánto se ha VENDIDO desde siempre y la fecha de su última venta. Viene un renglón por PRESENTACIÓN (el cono va
     aparte, rotulado "· cono"), pero `num_hilos` y `nunca_vendidos` cuentan HILOS
     (`producto_id`): contar renglones decía "15 hilos" donde había 10. Se valora AL COSTO cuando
     se conoce y al precio de venta cuando no, marcándolo con `valorado_a` para no presentar una
@@ -459,8 +548,22 @@ tienda-hilos/
   paquete, los conos de precio calculado lo siguen. El CONO es la única variante extra y vive en su propia sección ("Conos para
   mostrador"), que solo aparece si ya hay paquete: existe únicamente para poder desarmar y vender
   por pieza. Su SKU se deriva del paquete (`<PAQUETE>-CONO`).
+- **Un producto solo se elimina si NO tiene nada cargado** (regla del usuario, 2026-10-03).
+  Borrar el producto se lleva en CASCADA sus presentaciones, y con ellas sus bultos y renglones de
+  inventario, sin rastro (antes un hilo con un bulto capturado a mano se borraba así). Ahora
+  `DELETE /productos/:id` revisa, en la misma transacción y con el producto bloqueado
+  (`productos/model.js → eliminarSiVacio`), que ninguna de sus presentaciones tenga bultos, cargas,
+  existencias o apartado, movimientos de kardex, ventas, traspasos, desarmes, órdenes de compra ni
+  carritos; si tiene algo, 409 `PRODUCTO_CON_MOVIMIENTOS` diciendo qué tiene. La presentación
+  VACÍA que se crea sola al dar de alta NO cuenta: un producto recién capturado sí se borra.
+  `GET /productos/:id/eliminacion` responde `{ se_puede, motivos, mensaje }` y el modal apaga
+  "Eliminar" y explica por qué junto a "Activo" (que es lo que se hace en su lugar).
 - **El formulario de producto NO captura presentaciones.** Ahí solo van los datos del hilo
-  (nombre, material, línea, calibre, precio por kilo, banderas). Los SKU y las imágenes viven en
+  (nombre, material, línea, calibre, precio por kilo, banderas). **"Se vende por" va FIJO en
+  kilogramo y deshabilitado** (decisión del usuario, 2026-10-03): se sigue mandando al guardar
+  (`getRawValue`), pero ya no se puede elegir tonelada por descuido. **El impuesto está OCULTO**
+  (comentado en la plantilla, no borrado): al editar se conserva el que tenga y al crear va sin
+  impuesto. Los SKU y las imágenes viven en
   `/admin/productos/:id/presentaciones`, y la idea es llenarlos con el vaciado masivo del Excel.
 - **Precio por tipo de cliente.** `producto_variantes.precio` es el PRECIO PÚBLICO. Los demás tipos
   llevan su precio propio en `variante_precios` (variante + tipo). Al vender, la prelación es:
@@ -515,6 +618,10 @@ tienda-hilos/
   presentación y se decidió no hacerlo: el vaciado masivo resuelve "la presentación en kilos del
   producto" y con dos calibres bajo el mismo producto eso sería ambiguo. El listado del panel
   muestra Calibre y Línea como columnas para distinguirlos.
+- **Los materiales van por NOMBRE.** El campo "Orden" se quitó de la pantalla y del modal de
+  Materiales (lo pidió el usuario el 2026-10-03) y `GET /categorias` ordena solo por nombre: si el
+  `ORDER BY` siguiera usando `orden`, un valor viejo que nadie ve decidiría el lugar. La columna
+  `categorias.orden` sigue en la base (al crear queda en 0; al editar no se toca).
 - **Categorías planas.** `categorias` NO tiene `padre_id`: la jerarquía se eliminó porque el
   catálogo filtra por `productos.categoria_id` exacto, sin recursión, así que una categoría padre
   nunca mostraba los productos de sus hijas. Es una lista simple.
@@ -578,7 +685,98 @@ tienda-hilos/
   campana avisa a los 15 días (`nuevos_sin_credito`) para que se decida si se le abre
   crédito o se le sigue cobrando todo.
 
+- **Permisos por PUESTO (2026-10).** Los asigna el administrador en Admin → Permisos ("los
+  permisos los asigna el administrador"). Viven en `permisos` + `rol_permisos` (migración
+  `2026-10_permisos_por_puesto.sql`, solo datos) y el catálogo con nombre y ayuda está en
+  `modules/permisos/catalogo.js`: una clave nueva se agrega en LOS DOS lados.
+  · `ver:*` es una pantalla: la cuida la guarda de la ruta (`core/guards/permiso.guard.ts`) y el
+    menú (`core/navegacion.ts`) solo enseña lo que se puede abrir. `hacer:*` es una acción y la
+    valida el SERVIDOR (`requirePermiso` en `middlewares/auth.js`, 403 `SIN_PERMISO`); esconder
+    el botón (`AuthService.puede`) es solo para no ofrecer lo que va a fallar.
+  · El ADMINISTRADOR no se configura: lo puede todo siempre (por código, no por filas), para que
+    nunca se quede nadie sin poder entrar a Permisos. Permisos es solo suyo.
+  · **Solo un administrador da —o toca— el puesto de administrador** (403 `SOLO_ADMINISTRADOR` en
+    `usuarios/controller.js`): Personal se puede abrir a otros puestos, y sin esto quien lo
+    tuviera podría darse el puesto que lo puede todo.
+  · Los permisos de cada puesto se cachean en memoria y se invalidan al guardar: lo que valida el
+    servidor cambia en el acto; el menú, cuando la persona vuelve a entrar.
+  · `scripts/e2e-permisos.js` prueba cada guarda sin escribir nada (ids que no existen o cuerpos
+    inválidos: 403 al que no tiene, 404/422 al que sí).
+- **El COSTO no sale en las rutas públicas ni a quien no tiene `hacer:ver_costos`.** (Hoy no lo
+  tiene nadie: la tienda no lleva el costo, ver arriba.)
+  `GET /productos/:id`, `GET /variantes` y el escáner de la caja traen presentaciones con `costo`;
+  `permisos/service.js → sinCostosSiNoVe` lo quita si quien pregunta no puede verlo (con token
+  opcional: sin sesión, no). Antes el precio de compra de cada hilo lo veía cualquiera. El tablero
+  (`GET /analisis/tablero`) tampoco calcula hilo parado ni margen para quien no los puede ver.
+- **La tienda en línea está APAGADA (2026-10)**: "el cliente por ahora no la quiere; no la elimines,
+  solo coméntala". Se COMENTÓ, no se borró: las rutas de `tienda` y `registro` en `app.routes.ts`,
+  registro/login/perfil de clientes en `clientes/routes.js`, el reintento como cliente en
+  `AuthService.login`, y en las pantallas lo que solo le servía a ella (filtro "En línea", marca
+  `es_tienda_linea`, tarifa de envío, "Destacado"). Cada comentario dice cómo regresarlo.
+  `e2e-checkout-online.js` sale en 0 salvo con `E2E_TIENDA_EN_LINEA=si`.
+- **Clientes son SEIS miradas** (`GET /clientes/analisis/:vista?dias=30|90|365|3650`,
+  `clientes/analisis.js`): frecuencia de compra (contra el ritmo de CADA cliente, y cuánto se lleva
+  en KILOS y en DINERO), dejaron de
+  venir, cuánto debe (cartera por antigüedad, igual que el tablero), qué compra (por
+  `producto_id`, con calibre), cuándo compra (día × hora) y cuánto gasta (contra el periodo
+  anterior). El expediente trae las miradas para un cliente (`habitos` en `GET /clientes/:id`).
+  El cajero las ve todas, incluida "Cuánto debe" (decisión del usuario).
+  **La frecuencia dice también cuánto se llevan** (2026-10-03: "tiene que ser igual por kg y por
+  dinero"): `ritmos()` trae de cada cliente los kilos y el dinero desde siempre y POR VISITA (por
+  día con compra, igual que el ritmo), y `frecuencia` los del periodo y la visita típica
+  (mediana). El dinero es `pedidos.total`, como en Cuánto gasta. La tabla se puede ordenar por
+  kilos o por dinero del periodo.
+  **"Dejaron de venir"** (2026-10-03, `vistas/vista-dejaron.ts`) son EXACTAMENTE los del aviso de
+  la campana "N clientes dejaron de venir": 2 compras o más y 60 días o más sin venir
+  (`DIAS_SIN_VENIR`). La campana y la pestaña salen de la MISMA consulta
+  (`analisis/model.js → clientesEnfriados`), así el número del aviso y la lista nunca se
+  contradicen. Nació porque la campana llevaba a Frecuencia de compra, que mide contra el ritmo de
+  cada quien (decía "16 se están enfriando" y no los 5 del aviso): "doy clic y no me dice quiénes".
+  No va por periodo sino por corte de días sin venir (`?sin_venir=30|60|90|180`, 60 por omisión);
+  arriba los que más compraban, con teléfono, "Ver" y "Venderle". Se QUITÓ de "Cómo va el negocio"
+  ("esa información no tiene que ir ahí").
+- **Hoy** (`GET /hoy`, `ver:hoy`) es la pantalla de entrada: los mismos pendientes vivos de la
+  campana, lo vendido hoy por hora y lo que debería haber en cada cajón. El cajero entra al punto
+  de venta (`rutaDeInicio` en `core/navegacion.ts`).
+- **Caja es su propia pantalla** (`/admin/caja`): abrir turno, sacar o meter efectivo, el corte y
+  el alta de cajas. El punto de venta solo cobra. Las dos recuerdan la caja elegida en
+  `localStorage['caja_sel']`, así abren la misma. "Venderle" en el expediente abre el punto de
+  venta con `?cliente=<id>` y el cliente ya elegido.
+
 ## Convenciones de UI
+- **La página va a TODO lo ancho** (`.pagina` sin tope): "ocupa lo más que se pueda". El lienzo
+  tenía 1,120 px y en la pantalla de la tienda (1,920) quedaban franjas vacías a los lados.
+- **El menú lateral no tiene barra de desplazamiento** (la quitó el usuario): solo la LISTA de
+  pantallas se desplaza, con la rueda, y el final se desvanece mientras haya opciones abajo
+  (`revisarMenu` en `admin-layout.ts`). El nombre, la campana y "Salir" quedan SIEMPRE abajo y a
+  la vista: antes la barra se desplazaba entera y la campana se perdía bajo el menú del
+  administrador. Las barras de la página son delgadas (`scrollbar-width: thin` en `html`).
+- **Los estilos del panel de avisos viven en `admin-avisos.scss`**, aparte de `admin-layout.scss`:
+  juntos pasaban el límite de 4 kB por hoja de `angular.json`. Separar la hoja es la salida; no
+  subas el límite.
+- **El sistema de diseño está en `styles.scss`** (rediseño aprobado el 2026-10-02, lienzo
+  "Rediseño · Menú y Clientes"): tokens (`--fondo`, `--tinta-*`, `--acento`, pares de estado
+  `--ok-f/--ok-t`…), IBM Plex Sans/Mono INSTALADAS en el proyecto (`@fontsource`, no Google: en el
+  mostrador no siempre hay buen internet) y las piezas de siempre: `.pagina`, `header.page-head`,
+  `.card` + `.card-head`, `.kpis/.kpi`, `.fila > .ancha/.angosta/.mitad`, `.filtros-barra`,
+  `.tabs`, `.seg`, `.pill.*`, `.barras`, `.columnas`, `.pendiente`, `.pila`. Antes de inventar un
+  estilo en una pantalla, búscalo ahí; lo propio de una pantalla va en su componente. No inventes
+  colores fuera de los tokens y la paleta de gráficas.
+- **El menú es UNO** (`core/navegacion.ts`): de ahí salen el menú lateral, la guarda de cada ruta
+  y la pantalla de inicio de cada puesto. Siete grupos por tarea; los nombres de pantalla son los
+  de siempre (el usuario pidió conservarlos).
+- **Nombres genéricos en `styles.scss` CHOCAN.** La revisión del rediseño encontró tres: el
+  `.linea` y el `.detalle` de la tienda en línea centraban los artículos del pedido y partían en
+  dos la tabla de Inventario, y un `.avance` viejo recortaba el de Surtir sucursal. Los de la
+  tienda ahora van dentro de `.tienda-shell` y se quitaron 91 reglas que ya nadie usaba. Si una
+  clase global no la usa ninguna plantilla, bórrala; si es de una sola pantalla, va en su componente.
+- **`.tabla-scroll` lleva `position: relative`.** Sin él, los `.oculto` (texto para lector de
+  pantalla, `position: absolute`) de las columnas de la derecha escapaban de la caja y
+  ensanchaban la página ENTERA en el celular, aunque la tabla sí se desplazaba.
+- **En las listas va el folio CORTO** (`shared/folio.pipe.ts`: "POS-1790864580000-79FA" →
+  "POS-79FA"), con el completo en el `title`. El largo partía la celda en tres renglones y sacaba
+  columnas de la tarjeta. El detalle del pedido y el ticket llevan el completo; buscar "79FA" lo
+  encuentra igual.
 - **Las notificaciones van en la barra, junto al nombre y el tipo de usuario** (la campana de
   `admin-layout`). Son pendientes VIVOS que se calculan de la base con `GET /notificaciones`
   (`modules/notificaciones`): solicitudes de traspaso por surtir, envíos por acusar recibo y
@@ -587,8 +785,18 @@ tienda-hilos/
   taparía. Los avisos de CLIENTES cuentan **uno por tema**, no uno por cliente: "5 clientes
   te deben desde hace más de 30 días" es un aviso, no cinco, o la campana marcaría 40 y
   nadie la abriría. Los umbrales tienen nombre en `notificaciones/model.js`
-  (`DIAS_SIN_ABONAR`, `DIAS_SIN_VENIR`, `DIAS_CLIENTE_NUEVO`), no van sueltos en el SQL. Se refresca cada minuto y al abrir el panel. El panel FLOTA hacia arriba sobre el menú:
-  dentro del flujo empujaba la barra (que mide 100vh) y se salía de la pantalla.
+  (`DIAS_SIN_ABONAR`, `DIAS_SIN_VENIR`, `DIAS_CLIENTE_NUEVO`), no van sueltos en el SQL. Se refresca cada minuto y al abrir el panel.
+  **El panel se abre A LA DERECHA del menú** (`position: fixed`, 460 px, pegado abajo junto a la
+  campana), sobre la página: dentro de la barra de 248 px los textos se cortaban, salía una barra
+  de desplazamiento y media pantalla quedaba vacía al lado (lo señaló el usuario el 2026-10-02).
+  Agrupa como Hoy (Mercancía, Ventas, Clientes), dice las fechas en palabras ("hoy a las 0:18") y
+  lista a quién cobrarle con su monto a la derecha. Se cierra con la ✕, con Escape o tocando
+  fuera. OJO con los nombres: vive DENTRO de `.user`, así que una clase como `.quien` (la del
+  nombre y la campana) se le hereda; por eso sus renglones son `.aviso-fila` y `.deudor`.
+  Y OJO con las capas: el panel vive dentro de la barra, que es `sticky` y por eso es su propia
+  capa; sin `z-index: 30` en `.side`, los puntos y líneas de las gráficas de la página se
+  pintaban ENCIMA del panel y parecía transparente (lo vio el usuario). Los modales (50) siguen
+  quedando arriba de la barra.
 - **Inventario contesta tres preguntas, en ese orden.** Es como las hace la tienda y por eso la
   pantalla está armada así: (1) *cuánto hay en cada almacén* → una tarjeta por almacén con su
   cifra, su parte del total y el desglose paquete/enconado; (2) *dónde está cada hilo* → gráfica
@@ -610,6 +818,10 @@ tienda-hilos/
   una convención del proveedor, no una garantía. Nació porque tres listas entraron al hilo
   equivocado —`ROJO 1-30.xlsx` a AMARILLO, `ROSA MEXICANO 2-30.xlsx` a DEV_2 y `MARINO OSCURO
   2-30.xlsx` a MARINO OSCURO **1/30**—; la del calibre es la que a ojo no se ve.
+  **Solo opina si el nombre trae CALIBRE al final** ("COLOR 2-30"): sin él no es un nombre de hilo
+  —"HTX 1.ARAC FFAU 721502-4 - INVENTARIO" es la lista con varios colores y salían sus tres cargas
+  "no cuadra" (2026-10-03)—. Y en el historial no se coteja un archivo que dejó VARIAS cargas: es
+  una lista con varios colores.
 - **En inventario, el hilo se identifica con COLOR + CALIBRE, y se agrupa por `producto_id`.**
   Nunca por el nombre: "MARINO OSCURO 1/30" y "MARINO OSCURO 2/30" son dos productos y agrupar por
   nombre los sumaría en un renglón. La pantalla muestra además material y línea (`categorias` y
@@ -659,9 +871,11 @@ tienda-hilos/
   del color del fondo entre tramos (NUNCA un borde), redondeo de 4 px solo en el extremo del dato,
   leyenda siempre que haya dos series o más, y una sola etiqueta directa (el total) — los tramos de
   en medio los explica el tooltip.
-- **Una gráfica ancha va en `.chart-box`.** El SVG se estira al ancho que le den, así que un
-  viewBox angosto dentro de una tarjeta de 1,300 px escala el texto al doble y se ve tosca. El tope
-  de `.chart-box` la deja dibujada casi a su tamaño real.
+- **Una gráfica SVG no va en media tarjeta.** El SVG se estira (o se encoge) al ancho que le den:
+  en una tarjeta de 1,300 px un viewBox angosto escala el texto al doble, y en media tarjeta la de
+  "quién debe más" dejaba su letra ilegible. En el rediseño esas van a todo lo ancho, y las
+  gráficas nuevas son de cajas HTML (`.barras`, `.columnas`), que no escalan el texto.
+  (`.chart-box` ya no existe.)
 - **La celda de acciones de una tabla sigue siendo CELDA** (`table.grid td.acciones` con
   `white-space: nowrap`). Con `display: flex` dejaba de estirarse a la altura del renglón —el
   borde quedaba desalineado— y encogía los botones hasta partir "▸ Precios" en dos líneas. El
@@ -690,6 +904,15 @@ tienda-hilos/
     asignados y el modal abre en blanco. Ya pasó con el de producto; hay pruebas que lo cubren.
   · Un modal que se usa varias veces seguidas (bajar conos, ajuste/merma, capturar colores) NO se
     cierra al confirmar: avisa, se limpia y espera el siguiente.
+- **Nada de `confirm()`, `alert()` ni `prompt()` del navegador** (lo pidió el usuario el
+  2026-10-03: el cuadro gris de "localhost:4200 dice" no se puede diseñar). Para preguntar antes
+  de algo sin vuelta: `await inject(ConfirmacionService).pedir({ titulo, mensaje, aceptar,
+  peligro })` (`core/services/confirmacion.service.ts`), que devuelve `true`/`false`. La ventana
+  (`shared/confirmacion/confirmacion.ts`) va UNA vez en `app.ts`: queda encima de cualquier modal
+  (z-index 60), no se cierra al tocar el fondo, Enter acepta y su Escape se atiende en la fase de
+  captura para que NO cierre también el modal de abajo. El botón lleva el verbo ("Eliminar",
+  "Cerrar el turno"), no "Aceptar"; `peligro` lo pinta rojo. En una prueba se provee un doble:
+  `{ provide: ConfirmacionService, useValue: { pedir: () => Promise.resolve(true) } }`.
 - **Nunca uses `computed()` para una vista previa que dependa de campos `[(ngModel)]`.** Un
   `computed` solo se invalida cuando cambia una SEÑAL; sobre propiedades normales se calcula una vez
   y se queda pegado, así que el preview miente al teclear. Ya pasó en el desarme (los "kilos reales"
@@ -708,8 +931,9 @@ tienda-hilos/
   `.form-grid` de `1fr` una columna no encoge por debajo de su contenido, y el nombre largo de la
   caja en el selector sacaba la columna de cobro de la pantalla. Un `select` nunca es más ancho
   que su campo.
-- **La campana no manda a nadie a una pantalla que no puede abrir.** La cobranza lleva a los
-  jefes al tablero y al cajero a `/admin/clientes?deben=1` (la lista ya filtrada).
+- **La campana no manda a nadie a una pantalla que no puede abrir**, y cada puesto ve solo los
+  avisos de lo que atiende (el globo cuenta solo esos). La cobranza lleva a Clientes → Cuánto debe;
+  los que dejaron de venir, a Clientes → Dejaron de venir; los apartados ya pagados, a Apartados.
 - **Cantidades sin ceros de relleno.** MySQL devuelve `DECIMAL(12,3)` siempre con tres decimales
   (`350000.000`). En pantalla usa el pipe `cantidad` (`shared/cantidad.pipe.ts`), que recorta los
   ceros sobrantes y agrupa miles: `350,000`, `2.5`, `1.25`. Acepta la unidad como argumento:
@@ -747,7 +971,7 @@ tienda-hilos/
       con eso queda pagado. Se valida por los bytes del archivo y se sirve autenticado.
 - [x] El detalle del pedido muestra calibre, material y línea de cada artículo, y los bultos
       entregados con su código de barras, peso real y lote, en su propia tabla.
-- [x] Alta y edición de cajas desde el panel (POS → Administrar cajas), solo administradores.
+- [x] Alta y edición de cajas desde el panel (Caja → Cajas de la tienda; pide `ver:almacenes`).
 - [x] Alta y edición de almacenes desde el panel (Admin → Almacenes), solo administradores.
       Incluye mover la marca de `es_tienda_linea` y ver qué cajas cuelgan de cada uno.
 - [x] Surtir sucursales: traspaso multi-producto capturado en paquetes (Admin → Surtir sucursal).
@@ -821,9 +1045,8 @@ tienda-hilos/
       límite de crédito, venta a crédito (incluso mixta), abonos que entran a la caja, estado de
       cuenta y lista de quién debe.
       Migración: `db/migrations/2026-09_clientes_expediente_credito.sql`.
-- [ ] **Falta el FRONTEND de clientes:** capturar al cliente en el POS al vender, la pantalla de
-      clientes del panel con su expediente, y la pantalla de cobranza. El backend está listo y
-      probado, pero sin pantallas no se puede usar.
+- [x] Frontend de clientes: el POS identifica al cliente, Clientes tiene sus cinco pestañas y el
+      expediente su Resumen y las mismas miradas (rediseño 2026-10).
 - [ ] Falta el asistente de preguntas predefinidas (sin IA, por decisión del usuario el
       2026-09-09).
 - [x] Costo y margen (BACKEND): el costo se captura en la remesa, se promedia ponderado y se
@@ -882,11 +1105,31 @@ tienda-hilos/
       deuda, precio y peso editables, alta de producto honesta, búsqueda por calibre, pesos con
       miles en todas partes. 17 E2E en producción y 117 unitarias. Detalle en CAMBIOS.txt.
 
+- [x] **Rediseño de TODO el panel (2026-10-02)**, aprobado en el lienzo "Rediseño · Menú y
+      Clientes": menú por tareas en siete grupos, permisos por puesto, pantallas nuevas Hoy, Caja,
+      Permisos y Clientes (cinco pestañas), y las demás rehechas con el mismo sistema de diseño.
+      Revisado en Chrome headless como administrador, gerente, cajero y almacenista, a 1280 px y
+      a 390 px (ninguna pantalla se ensancha en el celular). 215 unitarias. Detalle en CAMBIOS.txt.
+- [x] **Carga de la lista completa del proveedor (2026-10-03)**: un archivo con varios colores
+      crea los hilos que falten (sin precio), con sus lotes y todos sus bultos, una carga por hilo y
+      un PDF de toda la lista. Los hilos sin precio no se venden y la campana avisa. 50
+      comprobaciones E2E (`e2e-carga-lista.js`) y 237 unitarias. EL USUARIO YA CARGÓ LA LISTA
+      REAL (17:14): CAMEL, OPTIK y MARINO 2/30, 718 bultos. Después: sin precio de compra en la
+      pantalla, panel de avance mientras carga e inserción por tandas: 60 comprobaciones E2E
+      contra la base (incluida la carga con avance) y probada DESDE LA PANTALLA con 1,800 bultos
+      en Chrome headless (el panel se vio a media carga). Sin desplegar.
+
 ## Pendientes concretos para el usuario
-- **Propuesta de acomodo de la información, esperando decisión** (2026-10-02):
-  https://claude.ai/code/artifact/e2ab4870-b15f-44c0-9f8b-77a56fad544c — menú por tareas en siete
-  grupos y por persona, pantalla "Hoy", Cobrar y Caja por separado, ficha del hilo, un solo
-  nombre por cosa. NO está aplicada; trae cuatro preguntas para el usuario.
+- **El REDISEÑO está aplicado y SIN DESPLEGAR (2026-10-02).** El usuario pidió "no subas nada a
+  servidor hasta que yo te diga" y revisar al final lo que se agregó en la base. Lo único que tocó
+  la base fue la migración de permisos (solo datos). Esperan su visto bueno: los permisos de
+  fábrica (al cajero se le dejaron fuera "confirmar que llegó un envío" y "bajar conos", que el
+  diseño le marcaba, porque no ve Surtir ni Inventario), si se esconden también los datos de
+  depósito en Configuración (hoy solo los lee el checkout apagado), y que el almacén marcado
+  `es_tienda_linea` no se puede dar de baja mientras esa marca siga escondida.
+- **La hora de la base va en UTC** (anotado desde el 2026-10-01): después de las 18:00 de México,
+  "hoy" ya es mañana. Ahora pega en Hoy, en "Cuándo compra" (sale gente a las 20–22 h) y en
+  "Vendido hoy". Arreglarlo cambia cómo se guardan las horas: decidirlo con el usuario.
 - **El efectivo de un pedido en línea pagado en el mostrador no entra a ningún turno.** Se marca
   pagado, pero el corte no lo espera. Falta decidir si se cobra por la caja.
 - **Las E2E se pueden correr contra producción** con `E2E_ACEPTO_PRODUCCION=si` (lo autorizó
@@ -895,7 +1138,17 @@ tienda-hilos/
   Cuautepec— y borran los movimientos por turno, no por `referencia_id`. Las que limpiaban con
   `nuevos(tabla)` —TODO lo creado durante la corrida— ahora borran solo lo nuevo que es suyo:
   `scripts/_propios.js` lo reconoce por el prefijo TMP o porque cuelga de algo TMP (2026-10-02).
-  Una prueba nueva tiene que nombrar lo que crea con TMP y limpiar con `soloPropios`.
+  Una prueba nueva tiene que nombrar lo que crea con TMP y limpiar con `soloPropios`; si abre
+  caja, borra sus turnos con `borrarTurnosPropios` y sus cajas con `borrarCajasSinTurnos`, que
+  respetan el turno donde alguien más cobró: el 2026-10-03 un abono hecho desde el panel cayó en
+  la caja de una prueba, porque el modal de abono propone el primer turno abierto (era una prueba
+  del usuario; se borró). **No se corren contra producción mientras alguien use el sistema.**
+  Para correrlas TODAS contra un solo servidor hay que pasar `BASE=http://localhost:3210/api/v1`:
+  cada script trae su propio puerto por omisión (3210, 3216… 3234) y sin `BASE` la mitad sale
+  con ECONNREFUSED sin haber probado nada. La del 2026-10-02: 20 pasan (492 comprobaciones), la
+  del checkout se salta mientras la tienda esté apagada, y la base quedó idéntica.
+  **La caja de Cuautepec está DESACTIVADA con su turno 88 abierto** (desde antes del rediseño):
+  las pruebas que toman "la primera caja activa" usan la de Moroleón.
   Para comprobar que no tocaron nada: una foto de conteos y sumas de ids por tabla antes y
   después.
 - **Aplicar `db/migrations/2026-10_alertas_stock_con_minimo.sql`** en la base del servidor y

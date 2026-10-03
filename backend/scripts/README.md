@@ -232,7 +232,8 @@ node scripts/demo/generar-imagenes.js                         # fotos del catál
 backend/
   scripts/
     dump-db.js      ← genera el respaldo (.sql)
-    e2e-remesas.js  ← prueba E2E de la recepción de remesas
+    e2e-remesas.js  ← prueba E2E de la recepción de remesas (y sus PDF)
+    e2e-carga-lista.js ← prueba E2E de la lista completa del proveedor (varios hilos; arma su Excel; también la carga con avance)
     e2e-trazabilidad.js ← prueba E2E del rastro de bultos y el desarme
     e2e-bultos-estado.js ← prueba E2E del estado del bulto (no se vende 2 veces)
     e2e-cancelacion.js ← prueba E2E de la cancelación (regresa el inventario)
@@ -242,7 +243,8 @@ backend/
     e2e-bajar-a-mostrador.js ← prueba E2E de escanear el paquete y bajar conos
     e2e-traspaso-paquetes.js ← prueba E2E del traspaso por paquetes con peso real
     e2e-edicion-catalogo.js ← alta sin precio, precio y peso editables, búsqueda por calibre
-    _propios.js     ← qué puede borrar una prueba al terminar (solo lo TMP nuevo)
+    e2e-permisos.js ← cada puesto entra solo a lo suyo; el servidor niega lo demás (no escribe nada)
+    _propios.js     ← qué puede borrar una prueba al terminar (solo lo TMP nuevo; turnos sin cobros ajenos)
     generar-muestras-xlsx.js ← genera listas de empaque de prueba en muestras/
     README.md       ← este archivo
   .env              ← credenciales de conexión (no se versiona)

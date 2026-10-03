@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -17,7 +17,8 @@ const guardarSchema = z.record(
   z.string().trim().max(500).nullable()
 );
 
-const soloAdmin = [authRequired, requireTipo('usuario'), requireRol('administrador')];
+// Lo decide Permisos (antes: solo administradores).
+const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:config')];
 
 // Lo que la tienda necesita para pintar el checkout: tarifa de envío, datos
 // para depositar, dónde recoger. Público: lo lee un visitante sin cuenta.

@@ -160,13 +160,19 @@ async function clientesEnfriados({ dias = 60, minCompras = 2, limite = 50 } = {}
  * Un hilo que NUNCA se ha vendido cuenta como parado desde que entró: es el
  * caso más importante —comprado y nunca movido— y filtrarlo por "última venta"
  * lo dejaría fuera justo por no tener ninguna.
+ *
+ * Con `conCosto: false` todo se valora a PRECIO DE VENTA y el costo no sale.
+ * Es lo que se usa mientras la tienda no lleve el costo (2026-10-03: "el hilo
+ * parado sí me sirve; calcúlalo con el precio de venta"): lo que hay en
+ * existencia × lo que se cobraría por él, cruzado con lo que se ha vendido.
  */
-async function hiloMuerto({ dias = 90, limite = 50 } = {}) {
+async function hiloMuerto({ dias = 90, limite = 50, conCosto = true } = {}) {
+  const valor = conCosto ? 'COALESCE(pv.costo, pv.precio)' : 'pv.precio';
   const [rows] = await pool.query(
     `SELECT p.id AS producto_id, p.nombre AS color, p.grosor_calibre AS calibre,
             cat.nombre AS material, l.nombre AS linea,
             pv.id AS variante_id, pv.sku, pv.presentacion, pv.tipo_presentacion,
-            pv.precio, pv.costo,
+            pv.precio, ${conCosto ? 'pv.costo' : 'NULL'} AS costo,
             SUM(i.cantidad) AS kilos,
             mh.ultima_salida, mh.ultima_entrada, mh.kg_vendidos_historico,
             -- Desde cuándo está parado: desde la última venta, o desde que
@@ -179,8 +185,8 @@ async function hiloMuerto({ dias = 90, limite = 50 } = {}) {
             NOT EXISTS (SELECT 1 FROM v_movimiento_hilo mh2
                          WHERE mh2.producto_id = p.id AND mh2.ultima_salida IS NOT NULL)
               AS hilo_nunca_vendido,
-            ROUND(SUM(i.cantidad) * COALESCE(pv.costo, pv.precio), 2) AS dinero_parado,
-            CASE WHEN pv.costo IS NULL THEN 'precio_venta' ELSE 'costo' END AS valorado_a
+            ROUND(SUM(i.cantidad) * ${valor}, 2) AS dinero_parado,
+            ${conCosto ? "CASE WHEN pv.costo IS NULL THEN 'precio_venta' ELSE 'costo' END" : "'precio_venta'"} AS valorado_a
        FROM inventario i
        JOIN producto_variantes pv  ON pv.id = i.variante_id
        JOIN productos p            ON p.id = pv.producto_id
@@ -208,9 +214,12 @@ async function hiloMuerto({ dias = 90, limite = 50 } = {}) {
     // Contar renglones decía "15 hilos" donde había 13.
     num_hilos: new Set(rows.map((r) => r.producto_id)).size,
     nunca_vendidos: new Set(rows.filter((r) => Number(r.hilo_nunca_vendido)).map((r) => r.producto_id)).size,
+    // Con qué se valoró todo: al costo (cuando se conoce) o a precio de venta.
+    valorado_a: conCosto ? 'costo' : 'precio_venta',
     // Si algún renglón se valoró a precio de venta, la cifra total está
-    // inflada respecto al costo real y la pantalla tiene que decirlo.
-    hay_sin_costo: rows.some((r) => r.valorado_a === 'precio_venta'),
+    // inflada respecto al costo real y la pantalla tiene que decirlo. Sin
+    // llevar costo no hay nada que avisar: todo va a precio de venta.
+    hay_sin_costo: conCosto && rows.some((r) => r.valorado_a === 'precio_venta'),
     hilos: rows.slice(0, limite),
   };
 }

@@ -1,37 +1,69 @@
-<div class="page-head">
-  <h1>Pedido</h1>
-  <a class="btn btn-ghost" routerLink="/admin/pedidos">← Volver</a>
-</div>
+<div class="pagina">
+  <a class="volver" routerLink="/admin/pedidos">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+    Pedidos
+  </a>
 
-@if (error()) { <p class="alert">{{ error() }}</p> }
-@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
 
-@if (cargando()) {
-  <p class="muted">Cargando…</p>
-} @else if (pedido(); as p) {
-  <div class="card">
-    <div class="form-grid">
-      <div><span class="muted">Número</span><br /><b>{{ p.numero_pedido }}</b></div>
-      <div><span class="muted">Canal</span><br />{{ p.canal === 'punto_venta' ? 'Punto de venta' : 'Tienda en línea' }}</div>
-      <div><span class="muted">Cliente</span><br />{{ p.cliente || '—' }}</div>
-      <div><span class="muted">Atendió</span><br />{{ p.usuario || '—' }}</div>
-      <div><span class="muted">Almacén</span><br />{{ p.almacen || '—' }}</div>
-      <div><span class="muted">Fecha</span><br />{{ p.creado_en | fecha }}</div>
-      <div>
-        <span class="muted">Entrega</span><br />
-        {{ p.metodo_entrega === 'envio' ? 'Envío a domicilio' : 'Recoge en tienda' }}
+  @if (cargando() && !pedido()) {
+    <p class="muted">Cargando…</p>
+  } @else if (pedido(); as p) {
+    <!-- La franja: qué pedido es, en qué estado está, y qué se le puede hacer. -->
+    <section class="card franja">
+      <div class="franja-top">
+        <div class="franja-titulo">
+          <div class="folio-fila">
+            <h1 class="folio">{{ p.numero_pedido }}</h1>
+            <span [class]="'pill grande ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal) }}</span>
+          </div>
+          <p class="sub">{{ fechaLarga(p.creado_en) }} · {{ dondeYQuien(p) }}</p>
+        </div>
+        <div class="acciones">
+          <button type="button" class="btn btn-ghost" (click)="imprimirTicket()">Imprimir ticket</button>
+          @if (p.estado === 'apartado' && veApartados()) {
+            <a class="btn btn-ghost" routerLink="/admin/apartados">Abonar o entregar</a>
+          }
+          @if (puedeDevolverEste(p)) {
+            <button type="button" class="btn btn-ghost" (click)="abrirDevolver()">Devolver mercancía</button>
+          }
+          @if (puedeCancelarEste(p)) {
+            <button type="button" class="btn btn-danger" (click)="abrirCancelar()">
+              {{ esApartadoSinEntregar(p) ? 'Cancelar apartado' : 'Cancelar venta' }}
+            </button>
+          }
+        </div>
       </div>
-    </div>
+      <div class="franja-cifras">
+        <div>
+          <span>Cliente</span>
+          @if (p.cliente_id && veClientes()) {
+            <a class="cliente" [routerLink]="['/admin/clientes', p.cliente_id]">{{ p.cliente_nombre_comercial || p.cliente }}</a>
+          } @else {
+            <b class="cliente">{{ p.cliente_nombre_comercial || p.cliente || 'Cliente de paso' }}</b>
+          }
+        </div>
+        @for (c of cifras(); track c.etiqueta) {
+          <div>
+            <span>{{ c.etiqueta }}</span>
+            <b class="cifra" [class.alerta]="c.alerta">{{ c.valor | dinero }}</b>
+          </div>
+        }
+      </div>
+    </section>
 
     <!--
-      La dirección completa va aquí, no en un enlace: quien prepara el pedido
-      tiene que poder leerla sin salir de esta pantalla.
-    -->
+      TIENDA EN LÍNEA APAGADA (2026-10): la dirección de envío solo existe en
+      los pedidos de la tienda en línea. Para volver a abrirla, descomentar este
+      bloque (los datos siguen llegando en `p.direccion_envio`). Va aquí, no en
+      un enlace: quien prepara el pedido tiene que poder leerla sin salir.
     @if (p.metodo_entrega === 'envio') {
-      <div class="envio-a">
-        <h3>Se envía a</h3>
+      <section class="card">
+        <div class="card-head"><div><h2>Se envía a</h2></div></div>
         @if (p.direccion_envio; as d) {
-          <p>
+          <p class="direccion">
             @if (d.nombre_receptor) { <b>{{ d.nombre_receptor }}</b><br /> }
             {{ d.calle }}{{ d.numero_ext ? ' ' + d.numero_ext : '' }}@if (d.numero_int) {, int. {{ d.numero_int }}}<br />
             @if (d.colonia) { {{ d.colonia }}<br /> }
@@ -40,280 +72,284 @@
             @if (d.referencias) { <br /><span class="muted">{{ d.referencias }}</span> }
           </p>
         } @else {
-          <p class="muted">
-            La dirección que se capturó ya no existe. Comunícate con el cliente antes de
-            surtirlo.
-          </p>
+          <p class="muted">La dirección que se capturó ya no existe. Comunícate con el cliente antes de surtirlo.</p>
         }
-      </div>
+      </section>
     }
-  </div>
+    -->
 
-  <div class="card">
-    <h3 style="margin-top:0">Artículos</h3>
-    <table class="grid articulos">
-      <thead>
-        <tr>
-          <th>Hilo</th><th>Presentación</th><th>Cant.</th>
-          <th>P. unit.</th><th>Impuesto</th><th>Subtotal</th>
-        </tr>
-      </thead>
-      <tbody>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Artículos</h2>
+          <p>Cada línea dice qué hilo es, y debajo los bultos que se entregaron con su peso real.</p>
+        </div>
+      </div>
+      <div class="lineas">
         @for (d of p.detalle; track d.id) {
-          <tr>
-            <td>
-              <!-- El color solo no basta: el mismo color en dos calibres son
-                   dos productos distintos. -->
-              <b>{{ d.producto || d.descripcion }}</b>
-              @if (fichaDelHilo(d); as ficha) {
-                <br /><span class="ficha-hilo">{{ ficha }}</span>
-              }
-            </td>
-            <td>
-              {{ d.presentacion || '—' }}
-              <br />
-              <span class="muted mono">{{ d.sku }}</span>
-              @if (d.peso_kg) {
-                <br /><span class="muted">{{ d.peso_kg | cantidad: 'kg' }} {{ d.tipo_presentacion === 'cono' ? 'por cono' : 'por paquete' }}</span>
-              }
-            </td>
-            <td>{{ d.cantidad | cantidad: 'kg' }}</td>
-            <td>{{ dinero(d.precio_unitario) }}</td>
-            <td>{{ dinero(d.impuesto) }}</td>
-            <td>{{ dinero(d.subtotal) }}</td>
-          </tr>
-
-          <!--
-            De qué bultos salió. Va en su propio renglón y no apretado dentro de
-            la celda: son el código de barras, el peso real y el lote de CADA
-            paquete físico, y es lo que se consulta cuando el cliente reclama.
-          -->
-          <tr class="bultos-de">
-            <td colspan="6">
-              @if (d.bultos?.length) {
-                <div class="bultos-titulo">
-                  Se entregaron {{ d.bultos!.length }}
-                  {{ d.bultos!.length === 1 ? 'paquete' : 'paquetes' }}:
-                </div>
-                <table class="bultos">
-                  <thead>
-                    <tr><th>Código de barras</th><th>Peso real</th><th>Lote</th></tr>
-                  </thead>
+          <div class="linea">
+            <div class="linea-top">
+              <div class="linea-hilo">
+                <!-- El color solo no basta: el mismo color en dos calibres son
+                     dos productos distintos. -->
+                <b>{{ nombreDelHilo(d) }}</b>
+                <span class="muted">
+                  @if (fichaDelHilo(d); as ficha) { {{ ficha }} · }
+                  <span class="mono">{{ d.sku }}</span>
+                  @if (d.peso_kg) {
+                    · {{ d.peso_kg | cantidad: 'kg' }} {{ d.tipo_presentacion === 'cono' ? 'por cono' : 'por paquete' }}
+                  }
+                </span>
+              </div>
+              <span class="num">{{ d.cantidad | cantidad: 'kg' }}</span>
+              <span class="num tenue">{{ d.precio_unitario | dinero }} / kg</span>
+              <b class="num">{{ d.subtotal | dinero }}</b>
+            </div>
+            <!--
+              De qué bultos salió. Es el código de barras, el peso real y el lote
+              de CADA paquete físico, y es lo que se consulta cuando el cliente
+              reclama: por eso va en su propia tabla y no apretado en la celda.
+            -->
+            @if (d.bultos?.length) {
+              <div class="bultos">
+                <span class="bultos-titulo">
+                  Se entregaron {{ d.bultos!.length }} {{ d.bultos!.length === 1 ? 'paquete' : 'paquetes' }}:
+                </span>
+                <table>
+                  <thead><tr><th>Código de barras</th><th class="num">Peso real</th><th>Lote</th></tr></thead>
                   <tbody>
                     @for (b of d.bultos; track b.codigo) {
                       <tr>
                         <td class="mono">{{ b.codigo }}</td>
-                        <td>{{ b.peso_kg | cantidad: 'kg' }}</td>
+                        <td class="num">{{ b.peso_kg | cantidad: 'kg' }}</td>
                         <td>{{ b.lote || '—' }}</td>
                       </tr>
                     }
                   </tbody>
                 </table>
-              } @else {
-                <span class="muted">{{ porQueSinBultos() }}</span>
-              }
-            </td>
-          </tr>
+              </div>
+            } @else {
+              <span class="muted sin-bultos">{{ porQueSinBultos() }}</span>
+            }
+          </div>
         }
-      </tbody>
-    </table>
-    <div style="text-align:right; margin-top:1rem; line-height:1.8">
-      <div>Subtotal: <b>{{ dinero(p.subtotal) }}</b></div>
-      @if (+p.descuento > 0) { <div>Descuento: −{{ dinero(p.descuento) }}</div> }
-      <div>Impuestos: <b>{{ dinero(p.impuestos) }}</b></div>
-      @if (+p.costo_envio > 0) { <div>Envío: {{ dinero(p.costo_envio) }}</div> }
-      <div style="font-size:1.2rem">Total: <b>{{ dinero(p.total) }}</b></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3 style="margin-top:0">Pagos</h3>
-
-    @if (p.pagos?.length) {
-      <table class="grid">
-        <thead><tr><th>Método</th><th>Monto</th><th>Estado</th><th>Referencia</th></tr></thead>
-        <tbody>
-          @for (pg of p.pagos; track pg.id) {
-            <tr>
-              <td>{{ pg.metodo }}</td>
-              <td>{{ dinero(pg.monto) }}</td>
-              <td>
-                <span class="pill" [class.ok]="pg.estado === 'completado'">{{ pg.estado }}</span>
-              </td>
-              <td class="muted">{{ pg.referencia_transaccion || '—' }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    } @else {
-      <p class="muted">Este pedido no tiene pagos registrados.</p>
-    }
-
-    <!--
-      La captura del depósito. El cliente la manda por fuera (WhatsApp, correo)
-      y aquí se guarda: subirla deja el pedido PAGADO en un paso.
-    -->
-    <!-- Solo donde aplica: no en un apartado ni en una venta ya cobrada en efectivo. -->
-    @if (pagoConComprobante() || aceptaComprobante()) {
-    <div class="comprobante">
-      <h4>Comprobante del depósito</h4>
-
-      @if (errorComprobante()) { <p class="alert">{{ errorComprobante() }}</p> }
-
-      @if (pagoConComprobante(); as pg) {
-        <p class="muted">
-          {{ pg.comprobante_nombre }}
-          @if (pg.comprobante_subido_por) {
-            · lo subió {{ pg.comprobante_subido_por }}
-          }
-          @if (pg.comprobante_subido_en) { el {{ pg.comprobante_subido_en | fecha }} }
-        </p>
-
-        @if (comprobanteUrl(); as url) {
-          @if (comprobanteEsPdf()) {
-            <!-- Un PDF no se pinta con <img>: se abre aparte. -->
-            <p>
-              <button class="btn btn-ghost btn-sm" (click)="abrirComprobante()">
-                Abrir el PDF en otra pestaña
-              </button>
-            </p>
-          } @else {
-            <img [src]="url" alt="Comprobante del depósito" class="comprobante-img" />
-          }
-        } @else {
-          <button
-            class="btn btn-ghost btn-sm"
-            (click)="verComprobante()"
-            [disabled]="cargandoComprobante()"
-          >
-            {{ cargandoComprobante() ? 'Abriendo…' : 'Ver comprobante' }}
-          </button>
-        }
-
-        <div class="comprobante-acciones">
-          <label class="btn btn-ghost btn-sm">
-            Reemplazar
-            <input type="file" accept="image/*,.pdf" hidden (change)="elegirArchivo($event)" />
-          </label>
-          <button class="btn btn-danger btn-sm" (click)="quitarComprobante()">Quitar</button>
+        <div class="totales">
+          <span class="muted">
+            Subtotal {{ p.subtotal | dinero }}
+            @if (+p.descuento > 0) { · descuento −{{ p.descuento | dinero }} }
+            · IVA {{ p.impuestos | dinero }}
+            <!-- El envío se queda aunque la tienda en línea esté apagada: solo
+                 sale en sus pedidos viejos, y sin él el total no cuadraría. -->
+            @if (+p.costo_envio > 0) { · envío {{ p.costo_envio | dinero }} }
+          </span>
+          <span class="total">Total {{ p.total | dinero }}</span>
         </div>
-      } @else {
-        <p class="muted">
-          Todavía no hay captura. Al subirla, el pedido queda marcado como
-          <b>pagado</b>.
-        </p>
-        <label class="btn btn-primary btn-sm">
-          {{ subiendoComprobante() ? 'Subiendo…' : 'Subir captura' }}
-          <input
-            type="file"
-            accept="image/*,.pdf"
-            hidden
-            [disabled]="subiendoComprobante()"
-            (change)="elegirArchivo($event)"
-          />
-        </label>
-        <p class="muted" style="font-size: 0.75rem">
-          Imagen (JPG, PNG o WEBP) o PDF, hasta 8 MB.
-        </p>
-      }
-    </div>
-    }
-  </div>
+      </div>
+    </section>
 
-  <div class="card">
-    <h3 style="margin-top:0">Estado</h3>
-    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap">
-      <span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">{{ p.estado }}</span>
-      <select [(ngModel)]="nuevoEstado" style="padding:0.5rem; border:1px solid #d1d5db; border-radius:8px">
-        @for (e of estados(); track e) { <option [value]="e">{{ e }}</option> }
-      </select>
-      <button class="btn btn-primary btn-sm" (click)="cambiarEstado()" [disabled]="aplicando()">
-        {{ aplicando() ? 'Aplicando…' : 'Actualizar estado' }}
-      </button>
-    </div>
-    @if (p.estado === 'apartado') {
-      <p class="muted" style="margin:0.5rem 0 0; font-size:0.8rem">
-        Un apartado se entrega desde <a routerLink="/admin/apartados">Apartados</a>: ahí se
-        cobra lo que falta y se descuenta del inventario.
-      </p>
-    }
+    <div class="fila">
+      <section class="card mitad">
+        <div class="card-head"><div><h2>Pagos</h2></div></div>
+        @if (filasPago().length) {
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead><tr><th>Cómo</th><th class="num">Monto</th><th>Estado</th></tr></thead>
+              <tbody>
+                @for (f of filasPago(); track $index) {
+                  <tr>
+                    <td>
+                      {{ f.como }}
+                      @if (f.referencia) { <div class="muted ref">{{ f.referencia }}</div> }
+                    </td>
+                    <td class="num"><b>{{ f.monto | dinero }}</b></td>
+                    <td><span [class]="'pill ' + f.tono">{{ f.estado }}</span></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="muted" style="margin: 0">Este pedido no tiene pagos registrados.</p>
+        }
 
-    <!-- Cancelar o devolver mueve mercancía y dinero: se confirma antes -->
-    @if (confirmando()) {
-      <div class="previa-calculo" style="margin-top:1rem">
-        <h4 style="margin:0 0 0.5rem">
-          {{ nuevoEstado === 'devuelto' ? 'Confirmar devolución' : 'Confirmar cancelación' }}
-        </h4>
+        <!--
+          La captura del depósito. El cliente la manda por fuera (WhatsApp, correo)
+          y aquí se guarda: subirla deja el pedido PAGADO en un paso.
+          Solo donde aplica: no en un apartado ni en una venta ya cobrada en efectivo.
+        -->
+        @if (pagoConComprobante() || aceptaComprobante()) {
+          <div class="comprobante">
+            <h3>Comprobante del depósito</h3>
+
+            @if (errorComprobante()) { <p class="alert" style="margin: 0">{{ errorComprobante() }}</p> }
+
+            @if (pagoConComprobante(); as pg) {
+              <p class="muted" style="margin: 0">
+                {{ pg.comprobante_nombre }}
+                @if (pg.comprobante_subido_por) { · lo subió {{ pg.comprobante_subido_por }} }
+                @if (pg.comprobante_subido_en) { el {{ pg.comprobante_subido_en | fecha }} }
+              </p>
+
+              @if (comprobanteUrl(); as url) {
+                @if (comprobanteEsPdf()) {
+                  <!-- Un PDF no se pinta con <img>: se abre aparte. -->
+                  <div>
+                    <button class="btn btn-ghost btn-sm" (click)="abrirComprobante()">Abrir el PDF en otra pestaña</button>
+                  </div>
+                } @else {
+                  <img [src]="url" alt="Comprobante del depósito" class="comprobante-img" />
+                }
+              } @else {
+                <div>
+                  <button class="btn btn-ghost btn-sm" (click)="verComprobante()" [disabled]="cargandoComprobante()">
+                    {{ cargandoComprobante() ? 'Abriendo…' : 'Ver comprobante' }}
+                  </button>
+                </div>
+              }
+
+              <div class="acciones">
+                <label class="btn btn-ghost btn-sm">
+                  Reemplazar
+                  <input type="file" accept="image/*,.pdf" hidden (change)="elegirArchivo($event)" />
+                </label>
+                <button class="btn btn-danger btn-sm" (click)="quitarComprobante()">Quitar</button>
+              </div>
+            } @else {
+              <p class="muted" style="margin: 0">
+                Todavía no hay captura. Al subirla, el pedido queda marcado como <b>pagado</b>.
+              </p>
+              <div>
+                <label class="btn btn-primary btn-sm">
+                  {{ subiendoComprobante() ? 'Subiendo…' : 'Subir captura' }}
+                  <input type="file" accept="image/*,.pdf" hidden [disabled]="subiendoComprobante()"
+                         (change)="elegirArchivo($event)" />
+                </label>
+              </div>
+              <p class="muted ayuda">Imagen (JPG, PNG o WEBP) o PDF, hasta 8 MB.</p>
+            }
+          </div>
+        }
+      </section>
+
+      <section class="card mitad">
+        <div class="card-head"><div><h2>Lo que ha pasado</h2></div></div>
+        <ol class="historia">
+          @for (h of historia(); track $index) {
+            <li><span class="cuando">{{ fechaCorta(h.t) }}</span><span>{{ h.que }}</span></li>
+          }
+        </ol>
+
+        <!-- El cambio de estado a mano (marcar entregado, reactivar…). Solo
+             ofrece lo que se puede: un apartado tiene su propio camino. -->
+        <div class="cambiar-estado">
+          <label class="field">
+            Cambiar el estado
+            <select [(ngModel)]="nuevoEstado" name="estado">
+              @for (e of opcionesEstado(); track e) { <option [value]="e">{{ etiquetaEstado(e, p.canal) }}</option> }
+            </select>
+          </label>
+          <button type="button" class="btn btn-ghost" (click)="cambiarEstado()"
+                  [disabled]="aplicando() || !nuevoEstado || nuevoEstado === p.estado">
+            {{ aplicando() ? 'Aplicando…' : 'Actualizar' }}
+          </button>
+        </div>
+        @if (p.estado === 'apartado') {
+          <p class="muted ayuda">
+            Un apartado se entrega desde
+            @if (veApartados()) { <a routerLink="/admin/apartados">Apartados</a> } @else { Apartados }:
+            ahí se cobra lo que falta y se descuenta del inventario.
+          </p>
+        }
+      </section>
+    </div>
+  }
+</div>
+
+<!--
+  Cancelar o devolver mueve mercancía y dinero: se confirma antes, diciendo
+  exactamente qué va a pasar. No cierra al hacer clic en el fondo; sale con la
+  ✕, con "No, regresar" o con Escape.
+-->
+@if (confirmando() && pedido(); as p) {
+  <div class="modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmar-titulo">
+      <div class="modal-head">
+        <h2 id="confirmar-titulo">
+          @if (esApartadoSinEntregar(p)) { Cancelar el apartado {{ p.numero_pedido }} }
+          @else if (nuevoEstado === 'devuelto') { Devolver la mercancía de {{ p.numero_pedido }} }
+          @else { Cancelar la venta {{ p.numero_pedido }} }
+        </h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarDevolucion()" [disabled]="aplicando()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body columna" style="gap: 16px">
+        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
         @if (esApartadoSinEntregar(p)) {
-          <p class="muted" style="margin:0 0 0.75rem; font-size:0.82rem">
-            Se libera lo apartado en <b>{{ p.almacen || 'su almacén' }}</b>. La mercancía nunca
-            salió de ahí, así que no hay nada que reponer.
+          <p style="margin: 0">
+            Se libera lo apartado en <b>{{ p.almacen || 'su almacén' }}</b>. La mercancía nunca salió de
+            ahí, así que no hay nada que reponer.
           </p>
         } @else {
-          <p class="muted" style="margin:0 0 0.75rem; font-size:0.82rem">
-            La mercancía regresa al inventario de <b>{{ p.almacen || 'su almacén' }}</b>, que es de
-            donde salió. Si el cliente la devuelve en otra presentación —te llevaste el paquete y
-            regresa coneado— cámbiala aquí.
+          <p style="margin: 0">
+            La mercancía regresa al inventario de <b>{{ p.almacen || 'su almacén' }}</b>, que es de donde
+            salió. Si el cliente la devuelve en otra presentación —se llevó el paquete y regresa
+            coneado— cámbiala aquí.
           </p>
-
-          <table class="grid" style="margin-bottom:0.75rem">
-            <thead>
-              <tr><th>Se vendió</th><th>Regresa como</th><th>Cantidad</th></tr>
-            </thead>
-            <tbody>
-              @for (d of p.detalle; track d.id) {
-                <tr>
-                  <td>
-                    <!-- Con el calibre: "ROJO · Paquete" no dice cuál de los dos ROJO
-                         regresa a la bodega. -->
-                    {{ d.producto || d.descripcion }}{{ d.calibre ? ' ' + d.calibre : '' }}
-                    <br /><span class="muted" style="font-size:0.74rem">{{ d.cantidad | cantidad: 'kg' }}</span>
-                  </td>
-                  <td>
-                    @if (d.alternativas_devolucion?.length) {
-                      <select [(ngModel)]="retornoPresentacion[d.id]"
-                              (ngModelChange)="alCambiarPresentacion(d)"
-                              style="padding:0.35rem; border:1px solid #d1d5db; border-radius:6px">
-                        <option [ngValue]="d.variante_id">Lo mismo ({{ d.sku }})</option>
-                        @for (a of d.alternativas_devolucion; track a.variante_id) {
-                          <option [ngValue]="a.variante_id">{{ a.sku }}{{ a.presentacion ? ' · ' + a.presentacion : '' }}</option>
-                        }
-                      </select>
-                    } @else {
-                      <span class="muted">{{ d.sku }}</span>
-                    }
-                  </td>
-                  <td style="white-space:nowrap">
-                    <input type="number" step="0.001" min="0.001"
-                           [(ngModel)]="retornoCantidad[d.id]"
-                           style="width:90px; padding:0.35rem; border:1px solid #d1d5db; border-radius:6px" />
-                    <span class="muted" style="font-size:0.74rem"> {{ unidadRetorno(d) }}</span>
-                    @if (hayCambio(d)) {
-                      <br /><span class="muted" style="font-size:0.72rem">cambio de presentación</span>
-                    }
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead><tr><th>Se vendió</th><th>Regresa como</th><th class="num">Cantidad</th></tr></thead>
+              <tbody>
+                @for (d of p.detalle; track d.id) {
+                  <tr>
+                    <td>
+                      <!-- Con el calibre: "ROJO · Paquete" no dice cuál de los dos ROJO
+                           regresa a la bodega. -->
+                      <div><b>{{ nombreDelHilo(d) }}</b></div>
+                      <div class="muted">{{ d.cantidad | cantidad: 'kg' }}</div>
+                    </td>
+                    <td>
+                      @if (d.alternativas_devolucion?.length) {
+                        <label class="field">
+                          <span class="oculto">Regresa como</span>
+                          <select [(ngModel)]="retornoPresentacion[d.id]" (ngModelChange)="alCambiarPresentacion(d)"
+                                  [name]="'pres-' + d.id">
+                            <option [ngValue]="d.variante_id">Lo mismo ({{ d.sku }})</option>
+                            @for (a of d.alternativas_devolucion; track a.variante_id) {
+                              <option [ngValue]="a.variante_id">{{ a.sku }}{{ a.presentacion ? ' · ' + a.presentacion : '' }}</option>
+                            }
+                          </select>
+                        </label>
+                      } @else {
+                        <span class="muted mono">{{ d.sku }}</span>
+                      }
+                    </td>
+                    <td class="num">
+                      <span class="cant">
+                        <input type="number" step="0.001" min="0.001" [(ngModel)]="retornoCantidad[d.id]"
+                               [name]="'cant-' + d.id" [attr.aria-label]="'Cantidad que regresa de ' + nombreDelHilo(d)" />
+                        <span class="muted">{{ unidadRetorno(d) || 'kg' }}</span>
+                      </span>
+                      @if (hayCambio(d)) { <div class="muted ayuda">cambio de presentación</div> }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
         }
 
         @if (efectivoADevolver() > 0) {
-          <p style="margin:0 0 0.75rem; font-size:0.85rem">
-            Salen <b>{{ dinero(efectivoADevolver()) }}</b> en efectivo de la caja, para que el
-            corte cuadre. Si el turno de la venta ya cerró, se registra en el turno abierto.
+          <p class="aviso" style="margin: 0">
+            Salen <b>{{ efectivoADevolver() | dinero }}</b> en efectivo de la caja, para que el corte cuadre.
+            Si el turno de la venta ya cerró, se registra en el turno abierto.
           </p>
         }
-
-        <div style="display:flex; gap:0.5rem">
-          <button class="btn btn-danger btn-sm" (click)="confirmarDevolucion()" [disabled]="aplicando()">
-            {{ aplicando() ? 'Aplicando…' : (nuevoEstado === 'devuelto' ? 'Confirmar devolución' : 'Confirmar cancelación') }}
-          </button>
-          <button class="btn btn-ghost btn-sm" (click)="cerrarDevolucion()" [disabled]="aplicando()">
-            Cancelar
-          </button>
-        </div>
       </div>
-    }
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrarDevolucion()" [disabled]="aplicando()">No, regresar</button>
+        <button type="button" class="btn btn-danger" (click)="confirmarDevolucion()" [disabled]="aplicando()">
+          {{ aplicando() ? 'Aplicando…' : (nuevoEstado === 'devuelto' ? 'Confirmar devolución' : 'Confirmar cancelación') }}
+        </button>
+      </div>
+    </div>
   </div>
 }

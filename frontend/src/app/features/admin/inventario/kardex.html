@@ -1,136 +1,170 @@
-<div class="page-head">
-  <h1>Kardex <span class="muted" style="font-size:0.9rem">({{ total() }} movimientos)</span></h1>
-  <a class="btn btn-ghost" routerLink="/admin/inventario">← Inventario</a>
-</div>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Kardex</h1>
+      <p class="sub">
+        Cada entrada y salida de mercancía, con el documento que la explica.
+        {{ total() | cantidad }} {{ total() === 1 ? 'movimiento' : 'movimientos' }}.
+      </p>
+    </div>
+  </header>
 
-@if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (error()) { <p class="alert">{{ error() }}</p> }
 
-<div class="card">
-  <div class="form-grid">
+  <div class="filtros-barra">
+    <label class="buscador crece">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
+      </svg>
+      <span class="oculto">Buscar</span>
+      <input type="search" [(ngModel)]="filtroQ" (ngModelChange)="alTeclear()"
+             (keydown.enter)="buscarYa()" placeholder="Color, calibre o código" />
+    </label>
     <label class="field">
       Almacén
       <select [(ngModel)]="filtroAlmacen" (ngModelChange)="cargar()">
-        <option value="">— Todos —</option>
+        <option value="">Todos</option>
         @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
       </select>
     </label>
     <label class="field">
-      Tipo de movimiento
+      Movimiento
       <select [(ngModel)]="filtroConcepto" (ngModelChange)="cargar()">
         @for (c of conceptos; track c.valor) {
           <option [value]="c.valor">{{ c.etiqueta }}</option>
         }
       </select>
     </label>
+    <label class="field fecha">
+      Desde
+      <input type="date" [(ngModel)]="desde" (ngModelChange)="cargar()" [max]="hasta || null" />
+    </label>
+    <label class="field fecha">
+      Hasta
+      <input type="date" [(ngModel)]="hasta" (ngModelChange)="cargar()" [min]="desde || null" />
+    </label>
   </div>
-</div>
 
-@if (cargando()) {
-  <p class="muted">Cargando…</p>
-} @else if (movimientos().length === 0) {
-  <p class="empty">Sin movimientos.</p>
-} @else {
-  <table class="grid nomina-tabla">
-    <thead>
-      <tr>
-        <th>Fecha</th>
-        <th>Producto</th>
-        <th>Almacén</th>
-        <th>Concepto</th>
-        <th class="num">Cantidad</th>
-        <th>Quién</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (m of movimientos(); track m.id) {
-        <tr [class.abierta]="abierto() === m.id">
-          <td class="muted">{{ m.creado_en | fecha }}</td>
-          <td>
-            <!-- Con el color solo no se sabe qué hilo es: ROJO 1/30 y ROJO 2/30
-                 son dos productos. -->
-            {{ m.producto }}@if (m.calibre) { <span> {{ m.calibre }}</span> }
-            <div class="muted" style="font-size:0.75rem">{{ m.sku }}</div>
-          </td>
-          <td>{{ m.almacen }}</td>
-          <td>
-            <span class="pill" [class.ok]="esEntrada(m)" [class.off]="!esEntrada(m)">
-              {{ m.concepto }}
-            </span>
-            @if (m.folio) {
-              <div class="muted" style="font-size:0.75rem">{{ m.folio }}</div>
-            } @else if (m.motivo) {
-              <div class="muted" style="font-size:0.75rem">{{ m.motivo }}</div>
-            }
-          </td>
-          <td class="num">
-            <b [class.neg]="!esEntrada(m)">
-              {{ esEntrada(m) ? '+' : '' }}{{ m.cantidad | cantidad }}
-            </b>
-            <span class="muted" style="font-size:0.75rem"> {{ m.unidad }}</span>
-            @if (m.tipo_presentacion === 'paquete' && m.peso_kg) {
-              <div class="muted" style="font-size:0.72rem">
-                {{ paquetesDe(m) | cantidad }} paq
-              </div>
-            }
-          </td>
-          <td class="muted">{{ m.usuario || '—' }}</td>
-          <td style="width:1%">
-            @if (tieneDetalle(m)) {
-              <button class="btn btn-ghost btn-sm" (click)="verDetalle(m)">
-                {{ abierto() === m.id ? 'Cerrar' : 'Ver envío' }}
-              </button>
-            }
-          </td>
-        </tr>
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Movimientos</h2>
+        <p>Los más recientes primero.</p>
+      </div>
+    </div>
 
-        @if (abierto() === m.id) {
-          <tr class="detalle-row">
-            <td colspan="7">
-              <div style="padding:1.25rem">
-                @if (traspaso(); as t) {
-                  <h4 style="margin:0 0 0.6rem; font-size:0.9rem">
-                    Traspaso {{ t.folio }} · {{ t.almacen_origen }} → {{ t.almacen_destino }}
-                  </h4>
-                  <table class="grid mini">
-                    <thead>
-                      <tr><th>Producto</th><th class="num">Se mandó</th><th class="num">Equivale a</th></tr>
-                    </thead>
-                    <tbody>
-                      @for (l of t.lineas; track l.variante_id) {
-                        <tr>
-                          <td>
-                            {{ l.producto }}
-                            <span class="muted">· {{ l.sku }}</span>
-                          </td>
-                          <td class="num">
-                            @if (l.paquetes) {
-                              {{ l.paquetes | cantidad }} paquetes
-                            } @else {
-                              {{ l.cantidad | cantidad }}
-                            }
-                          </td>
-                          <td class="num muted">
-                            @if (l.paquetes) { {{ l.cantidad | cantidad: 'kg' }} } @else { — }
-                          </td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
-                  @if (t.notas) {
-                    <p class="muted" style="margin:0.6rem 0 0; font-size:0.8rem">{{ t.notas }}</p>
+    @if (cargando() && movimientos().length === 0) {
+      <p class="muted">Cargando…</p>
+    } @else if (movimientos().length === 0) {
+      <p class="vacio">Sin movimientos para el filtro.</p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid kardex">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Hilo</th>
+              <th>Almacén</th>
+              <th>Qué pasó</th>
+              <th class="num">Cantidad</th>
+              <th>Quién</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of movimientos(); track m.id) {
+              <tr [class.abierta]="abierto() === m.id">
+                <td class="fecha" [title]="m.creado_en | fecha">{{ m.creado_en | cuando }}</td>
+                <td>
+                  <!-- Con el color solo no se sabe qué hilo es: ROJO 1/30 y ROJO 2/30
+                       son dos productos. -->
+                  <span class="hilo">{{ m.producto }}{{ m.calibre ? ' ' + m.calibre : '' }}</span>
+                  <div class="sub mono">{{ m.sku }}</div>
+                </td>
+                <td>{{ m.almacen }}</td>
+                <td>
+                  <span class="pill" [class]="'pill ' + tono(m)">{{ m.concepto }}</span>
+                  @if (m.folio) {
+                    <div class="sub mono" [title]="m.folio">{{ m.folio | folio }}</div>
+                  } @else if (m.codigo_bulto) {
+                    <div class="sub mono">bulto {{ m.codigo_bulto }}</div>
                   }
-                  <p class="muted" style="margin:0.4rem 0 0; font-size:0.78rem">
-                    Enviado por {{ t.usuario || '—' }} el {{ t.creado_en | fecha }}.
-                  </p>
-                } @else {
-                  <p class="muted" style="margin:0">Cargando el envío…</p>
-                }
-              </div>
-            </td>
-          </tr>
+                  @if (m.motivo) {
+                    <div class="sub">{{ m.motivo }}</div>
+                  }
+                </td>
+                <td class="num">
+                  <b [class.entra]="esEntrada(m)" [class.sale]="!esEntrada(m)">
+                    {{ esEntrada(m) ? '+' : '−' }}{{ abs(m.cantidad) | cantidad: (m.unidad || 'kg') }}
+                  </b>
+                  @if (m.tipo_presentacion === 'paquete' && m.peso_kg) {
+                    <div class="sub">≈ {{ paquetesDe(m) | cantidad }} paquetes</div>
+                  }
+                </td>
+                <td class="quien">{{ m.usuario || '—' }}</td>
+                <td class="acciones">
+                  @if (enlaceVenta(m); as ruta) {
+                    <a class="btn btn-ghost btn-sm" [routerLink]="ruta">Ver venta</a>
+                  } @else if (tieneDetalle(m)) {
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="verDetalle(m)"
+                            [attr.aria-expanded]="abierto() === m.id">
+                      {{ abierto() === m.id ? 'Cerrar' : 'Ver envío' }}
+                    </button>
+                  }
+                </td>
+              </tr>
+
+              @if (abierto() === m.id) {
+                <tr class="detalle-envio">
+                  <td colspan="7">
+                    @if (traspaso(); as t) {
+                      <div class="envio">
+                        <b>Traspaso {{ t.folio }} · {{ t.almacen_origen }} → {{ t.almacen_destino }}</b>
+                        <table class="grid">
+                          <thead>
+                            <tr><th>Hilo</th><th class="num">Se mandó</th><th class="num">Equivale a</th></tr>
+                          </thead>
+                          <tbody>
+                            @for (l of t.lineas; track l.variante_id) {
+                              <tr>
+                                <td>{{ l.producto }} <span class="muted mono">· {{ l.sku }}</span></td>
+                                <td class="num">
+                                  @if (l.paquetes) {
+                                    {{ l.paquetes | cantidad }} paquetes
+                                  } @else {
+                                    {{ l.cantidad | cantidad: 'kg' }}
+                                  }
+                                </td>
+                                <td class="num muted">
+                                  @if (l.paquetes) { {{ l.cantidad | cantidad: 'kg' }} } @else { — }
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                        @if (t.notas) { <p class="muted">{{ t.notas }}</p> }
+                        <p class="muted">Lo pidió {{ t.usuario || '—' }} el {{ t.creado_en | fecha }}.</p>
+                      </div>
+                    } @else {
+                      <p class="muted envio">Cargando el envío…</p>
+                    }
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pie-tabla">
+        <span class="muted">{{ movimientos().length | cantidad }} de {{ total() | cantidad }} movimientos</span>
+        @if (hayMas()) {
+          <button type="button" class="btn btn-ghost btn-sm" (click)="cargarMas()" [disabled]="cargando()">
+            {{ cargando() ? 'Cargando…' : 'Cargar más' }}
+          </button>
         }
-      }
-    </tbody>
-  </table>
-}
+      </div>
+    }
+  </section>
+</div>

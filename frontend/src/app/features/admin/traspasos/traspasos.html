@@ -1,399 +1,423 @@
-<div class="page-head">
-  <h1>Surtir sucursal</h1>
-  @if (pendientes().length > 0) {
-    <span class="pill warn">
-      {{ pendientes().length }} {{ pendientes().length === 1 ? 'pendiente' : 'pendientes' }}
-    </span>
-  }
-</div>
-
-@if (error()) { <p class="alert">{{ error() }}</p> }
-@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
-
-<p class="muted" style="margin-bottom:1.25rem">
-  Un traspaso pasa por tres pasos: se <b>solicita</b> —se revisa que haya existencia y la mercancía
-  queda apartada—, se <b>envía</b> desde el origen y queda <b>en tránsito</b>, y la sucursal
-  <b>acepta</b> lo que le llegó. Se pide en <b>kilos</b>, que es como pide la sucursal: al lado se
-  muestra a cuántos paquetes equivale, con el peso real de los bultos que hay. Solo se mandan
-  <b>paquetes</b> cerrados; los conos se hacen allá, al desarmarlos.
-</p>
-
-<!-- Lo que está esperando algo: es lo primero que hay que ver -->
-@if (pendientes().length > 0) {
-  <div class="card">
-    <h3 style="margin-top:0">Pendientes</h3>
-    <table class="grid">
-      <thead>
-        <tr>
-          <th>Folio</th><th>Ruta</th><th>Qué lleva</th><th>Estado</th><th>Quién lo pidió</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (t of pendientes(); track t.id) {
-          <tr>
-            <td>
-              <b>{{ t.folio }}</b>
-              <div class="muted th-sub">{{ t.creado_en | fecha }}</div>
-            </td>
-            <td class="muted">{{ t.almacen_origen }} → {{ t.almacen_destino }}</td>
-            <td>
-              @for (l of t.lineas; track l.variante_id) {
-                <div style="font-size:0.82rem">
-                  <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
-                  @if (l.paquetes) {
-                    <span class="muted">({{ l.paquetes | cantidad }} paq)</span>
-                  }
-                </div>
-              }
-              @if (t.notas) {
-                <div class="muted th-sub">{{ t.notas }}</div>
-              }
-            </td>
-            <td>
-              <span class="pill" [class]="'pill ' + claseEstado(t.estado)">
-                {{ textoEstado(t.estado) }}
-              </span>
-              <div class="muted th-sub">{{ siguientePaso(t) }}</div>
-              @if (t.enviado_en) {
-                <div class="muted th-sub">
-                  Salió el {{ t.enviado_en | fecha }}
-                  @if (t.enviado_por) { · {{ t.enviado_por }} }
-                </div>
-              }
-            </td>
-            <td class="muted">{{ t.usuario || '—' }}</td>
-            <td class="acciones">
-              @if (t.estado === 'solicitado') {
-                <button class="btn btn-primary btn-sm" (click)="enviarTraspaso(t)">Enviar</button>
-              } @else if (t.estado === 'en_transito') {
-                <button class="btn btn-primary btn-sm" (click)="abrirRecepcion(t)">
-                  Acusar recibo
-                </button>
-              }
-              <button class="btn btn-danger btn-sm" (click)="cancelar(t)">Cancelar</button>
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  </div>
-}
-
-<!-- Comprobante de la última solicitud -->
-@if (ultimo(); as u) {
-  <div class="card" style="border-color:#bbf7d0; background:#f0fdf4">
-    <h3 style="margin-top:0">✅ Solicitud {{ u.folio }}</h3>
-    <p class="muted" style="margin-top:0; font-size:0.85rem">
-      Apartada en el origen. Todavía no se movió nada: aparece arriba, en Pendientes, para enviarla.
-    </p>
-    <table class="grid mini">
-      <thead>
-        <tr><th>Hilo</th><th class="num">Se pidió</th><th class="num">Hay en origen</th></tr>
-      </thead>
-      <tbody>
-        @for (l of u.lineas; track l.variante_id) {
-          <tr>
-            <td>{{ l.producto }} <span class="muted">· {{ l.sku }}</span></td>
-            <td class="num">
-              {{ l.cantidad | cantidad: 'kg' }}
-              @if (l.paquetes) {
-                <div class="muted" style="font-size:0.75rem">{{ l.paquetes | cantidad }} paquetes</div>
-              }
-            </td>
-            <td class="num muted">{{ l.saldo_origen | cantidad: 'kg' }}</td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  </div>
-}
-
-<div class="card">
-  <h3 style="margin-top:0">1 · A dónde va</h3>
-  <div class="form-grid">
-    <label class="field">
-      Sale de
-      <select [(ngModel)]="origen" (ngModelChange)="alCambiarOrigen()">
-        @for (a of almacenes(); track a.id) {
-          <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_matriz ? ' · matriz' : '' }}</option>
-        }
-      </select>
-      @if (matriz(); as m) {
-        <span class="muted" style="font-size:0.72rem">Se propone la matriz: {{ m.nombre }}.</span>
-      }
-    </label>
-    <label class="field">
-      Llega a
-      <select [(ngModel)]="destino">
-        @for (a of destinos(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
-      </select>
-    </label>
-    <label class="field full">
-      Notas <span class="muted">(opcional)</span>
-      <input type="text" [(ngModel)]="notas" placeholder="Ej. Envío semanal en la camioneta" />
-    </label>
-  </div>
-</div>
-
-<div class="card">
-  <h3 style="margin-top:0">2 · Qué se pide</h3>
-  <div class="input-scan" style="max-width:560px">
-    <input type="text" #bq [(ngModel)]="q" (keydown.enter)="$event.preventDefault(); buscar()"
-           placeholder="Escanea o teclea el color, el calibre o el SKU" />
-    <button type="button" class="btn btn-ghost btn-sm" (click)="buscar()">Buscar</button>
-  </div>
-
-  @if (resultados().length > 0) {
-    <table class="grid mini" style="margin-top:0.75rem">
-      <tbody>
-        @for (v of resultados(); track v.id) {
-          <tr>
-            <td>
-              <!-- El hilo con todos sus datos: el color solo no distingue calibres. -->
-              <b>{{ v.producto }}{{ v.calibre ? ' ' + v.calibre : '' }}</b>
-              <span class="muted">· {{ v.sku }}</span>
-              <div class="muted th-sub">
-                {{ v.material || '—' }}{{ v.linea ? ' · ' + v.linea : '' }}
-                @if (v.tipo_presentacion === 'paquete') {
-                  · paquete de {{ v.peso_kg }} kg
-                }
-              </div>
-            </td>
-            <td style="width:1%">
-              <button class="btn btn-primary btn-sm" (click)="agregar(v)">Agregar</button>
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  }
-
-  @if (lineas().length === 0) {
-    <p class="muted" style="margin-top:1rem">Todavía no has agregado nada a la solicitud.</p>
-  } @else {
-    <table class="grid" style="margin-top:1rem">
-      <thead>
-        <tr>
-          <th>Hilo</th><th class="num">Kilos que se piden</th><th class="num">Equivale a</th>
-          <th class="num">Hay libre</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (l of lineas(); track l.variante.id) {
-          <!--
-            La fila se tiñe de fondo, NO de texto: `neg` en el <tr> pintaba de
-            rojo hasta el nombre del hilo y el rojo debe marcar el dato que falla.
-          -->
-          <tr [class.fila-alerta]="insuficiente(l)">
-            <td>
-              <b>{{ l.variante.producto }}{{ l.variante.calibre ? ' ' + l.variante.calibre : '' }}</b>
-              <div class="muted th-sub">
-                {{ l.variante.sku }}
-                @if (l.variante.material) { · {{ l.variante.material }} }
-                @if (l.variante.linea) { · {{ l.variante.linea }} }
-              </div>
-            </td>
-            <!-- Se pide en KILOS: es como pide la sucursal y es la unidad del inventario. -->
-            <td class="num">
-              <span class="cant-unidad" style="justify-content:flex-end">
-                <input type="number" step="0.001" min="0" [ngModel]="l.kg"
-                       (ngModelChange)="cambiarKg(l, $event)" placeholder="0"
-                       style="width:100px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px; text-align:right" />
-                <span class="muted">kg</span>
-              </span>
-            </td>
-            <!-- Los paquetes son solo referencia, para leerlo como lo cuenta la tienda. -->
-            <td class="num muted">
-              @if (enPaquetes(l); as paq) {
-                ≈ {{ paq }} paquetes
-                @if (rangoPeso(l); as r) {
-                  <div class="muted" style="font-size:0.7rem">{{ r }}</div>
-                }
-              } @else { — }
-              @if (disponibles(l); as hay) {
-                <div class="muted" style="font-size:0.7rem">hay {{ hay }} bultos en el origen</div>
-              }
-            </td>
-            <!--
-              La comparación va en KILOS aunque se capture en paquetes: el
-              inventario se lleva en kilos y es lo que de verdad decide si alcanza.
-            -->
-            <td class="num">
-              @if (kilosLibres(l) !== null) {
-                <span [class.neg]="insuficiente(l)">{{ kilosLibres(l) | cantidad: 'kg' }}</span>
-                @if (kilosApartados(l) > 0) {
-                  <div class="muted" style="font-size:0.7rem">
-                    {{ kilosApartados(l) | cantidad: 'kg' }} ya apartados
-                  </div>
-                }
-                @if (insuficiente(l)) {
-                  <div class="neg" style="font-size:0.72rem">⚠ inventario insuficiente</div>
-                }
-              } @else {
-                <span class="muted">—</span>
-              }
-            </td>
-            <td style="width:1%">
-              <button class="btn btn-danger btn-sm" (click)="quitar(l)">✕</button>
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
-
-    @if (hayInsuficientes()) {
-      <p class="alert" style="margin-top:1rem">
-        ⚠ Hay líneas que piden más de lo que hay libre en {{ nombreAlmacen(origen) }}. Ajusta las
-        cantidades o quítalas: la solicitud no se puede mandar así.
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Surtir sucursal</h1>
+      <p class="sub">
+        Las sucursales piden en kilos; la bodega envía, y quien recibe confirma lo que de verdad llegó.
       </p>
-    }
+    </div>
+    <div class="acciones">
+      <button type="button" class="btn btn-primary" (click)="irANueva()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+        Nueva solicitud
+      </button>
+    </div>
+  </header>
 
-    <div class="previa-calculo">
-      <div class="renglon total">
-        <span>
-          {{ lineas().length }} producto(s) de <b>{{ nombreAlmacen(origen) }}</b>
-          a <b>{{ nombreAlmacen(destino) }}</b>
-        </span>
-        @if (totalKg() > 0) {
-          <b>{{ totalKg() | cantidad: 'kg' }}</b>
+  @if (error() && !recibiendo() && !cancelando()) { <p class="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+  <div class="kpis">
+    @for (k of kpis(); track k.etiqueta) {
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+        <span class="kpi-valor">{{ k.valor }}</span>
+        <span class="kpi-pie">{{ k.pie }}</span>
+      </div>
+    }
+  </div>
+
+  <!--
+    Lo que está esperando algo: es lo primero que hay que ver. Cada uno dice en
+    qué paso va y qué le falta. Enviar es de la bodega (hacer:enviar_traspaso) y
+    confirmar que llegó, de quien recibe (hacer:recibir_traspaso): sin el permiso
+    no se ofrece el botón, pero sí se ve qué le falta.
+  -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Pendientes</h2>
+        <p>Pedido → en camino → recibido. Cada uno dice qué le falta.</p>
+      </div>
+    </div>
+
+    @if (pendientes().length === 0) {
+      <p class="vacio">No hay traspasos pendientes.</p>
+    } @else {
+      <div class="pendientes">
+        @for (t of pendientes(); track t.id) {
+          <div class="traspaso">
+            <div class="traspaso-fila">
+              <div class="traspaso-que">
+                <span class="mono muted" [title]="t.folio">{{ t.folio | folio }}</span>
+                <b>{{ t.almacen_origen }} → {{ t.almacen_destino }}</b>
+                <span class="lleva">{{ resumenLleva(t) }}</span>
+              </div>
+              <ol class="avance" aria-label="Avance del traspaso">
+                @for (p of pasos(t); track p.texto) {
+                  <li [class.hecho]="p.hecho" [class.actual]="p.actual">
+                    <span class="punto" aria-hidden="true"></span>{{ p.texto }}
+                    @if (p.actual) { <span class="oculto">(aquí va)</span> }
+                  </li>
+                }
+              </ol>
+              <div class="traspaso-quien">
+                <span>{{ quien(t) }}</span>
+                <span>{{ siguientePaso(t) }}</span>
+              </div>
+              <div class="traspaso-acciones">
+                @if (t.estado === 'solicitado' && puedeEnviar()) {
+                  <button type="button" class="btn btn-primary btn-sm" [disabled]="ocupado() === t.id"
+                          (click)="enviarTraspaso(t)">
+                    {{ ocupado() === t.id ? 'Enviando…' : 'Enviar' }}
+                  </button>
+                } @else if (t.estado === 'en_transito' && puedeRecibir()) {
+                  <button type="button" class="btn btn-primary btn-sm" (click)="abrirRecepcion(t)">
+                    Confirmar que llegó
+                  </button>
+                }
+                <button type="button" class="btn btn-ghost btn-sm" (click)="cancelar(t)">Cancelar</button>
+              </div>
+            </div>
+            <!-- Qué lleva, línea por línea: es lo que hay que subir a la camioneta. -->
+            <ul class="lineas">
+              @for (l of t.lineas; track l.variante_id) {
+                <li>
+                  <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
+                  @if (l.paquetes) { <span class="muted">({{ l.paquetes | cantidad }} paq)</span> }
+                </li>
+              }
+            </ul>
+            @if (t.notas) { <p class="notas muted">{{ t.notas }}</p> }
+          </div>
         }
       </div>
-    </div>
+    }
+  </section>
 
-    <div style="margin-top:1rem">
-      <button class="btn btn-primary" [disabled]="enviando() || hayInsuficientes()"
-              (click)="solicitar()">
-        {{ enviando() ? 'Guardando…' : 'Crear solicitud' }}
-      </button>
-      <span class="muted" style="font-size:0.78rem; margin-left:0.6rem">
-        Aparta la mercancía. El envío es el paso siguiente.
-      </span>
-    </div>
-  }
-</div>
-
-<!-- Historial de los que ya se cerraron -->
-@if (cerrados().length > 0) {
-  <div class="page-head" style="margin-top:2rem">
-    <h2 style="font-size:1.1rem; margin:0">Traspasos cerrados</h2>
-  </div>
-  <table class="grid">
-    <thead>
-      <tr>
-        <th>Folio</th><th>Ruta</th><th>Qué llevó</th><th>Estado</th>
-        <th>Quién firmó de recibido</th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (t of cerrados(); track t.id) {
-        <tr>
-          <td>
-            <b>{{ t.folio }}</b>
-            <div class="muted th-sub">{{ t.creado_en | fecha }}</div>
-          </td>
-          <td class="muted">{{ t.almacen_origen }} → {{ t.almacen_destino }}</td>
-          <td>
-            @for (l of t.lineas; track l.variante_id) {
-              <div style="font-size:0.82rem">
-                <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
-                @if (recibidoDe(l); as r) {
-                  <span class="muted">— {{ r }}</span>
-                }
-              </div>
-            }
-            @if (t.notas) { <div class="muted th-sub">{{ t.notas }}</div> }
-            @if (t.recepcion_notas) {
-              <div class="muted th-sub">Al recibir: {{ t.recepcion_notas }}</div>
-            }
-            @if (t.motivo_cancelacion) {
-              <div class="muted th-sub">Cancelado: {{ t.motivo_cancelacion }}</div>
-            }
-          </td>
-          <td>
-            <span class="pill" [class]="'pill ' + claseEstado(t.estado)">
-              {{ textoEstado(t.estado) }}
-            </span>
-          </td>
-          <td class="muted">
-            @if (t.estado === 'recibido') {
-              {{ t.recibido_por || '—' }}
-              @if (t.recibido_en) {
-                <div class="th-sub">{{ t.recibido_en | fecha }}</div>
-              }
-            } @else {
-              {{ t.cancelado_por || '—' }}
-            }
-          </td>
-        </tr>
-      }
-    </tbody>
-  </table>
-}
-
-<!--
-  Acuse de recibo. Es el punto de todo el flujo: alguien de la sucursal dice qué
-  llegó y queda su nombre. Por omisión viene precargado con todo lo enviado.
--->
-@if (recibiendo(); as t) {
-  <div class="modal-overlay">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-recibir-titulo">
-      <div class="modal-head">
-        <h2 id="modal-recibir-titulo">Acusar recibo · {{ t.folio }}</h2>
-        <button type="button" class="modal-cerrar" (click)="cerrarRecepcion()" aria-label="Cerrar">
-          ✕
-        </button>
+  <!-- Comprobante de la última solicitud -->
+  @if (ultimo(); as u) {
+    <section class="card verde">
+      <div class="card-head">
+        <div>
+          <h2>Solicitud {{ u.folio }} creada</h2>
+          <p>Apartada en el origen. Todavía no se movió nada: aparece arriba, en Pendientes, para enviarla.</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="ultimo.set(null)">Cerrar</button>
       </div>
-
-      <div class="modal-body">
-        <p class="muted" style="margin-top:0; font-size:0.85rem">
-          Llegó de <b>{{ t.almacen_origen }}</b> a <b>{{ t.almacen_destino }}</b>. Revisa lo que de
-          verdad bajaron de la camioneta y corrige lo que falte: entra al inventario solo lo que
-          aceptes, y la diferencia queda asentada como faltante con tu nombre.
-        </p>
-
-        @if (error()) { <p class="alert" style="margin-top:0">{{ error() }}</p> }
-
-        <table class="grid mini">
+      <div class="tabla-scroll">
+        <table class="grid">
           <thead>
-            <tr><th>Hilo</th><th class="num">Se envió</th><th class="num">Llegó</th></tr>
+            <tr><th>Hilo</th><th class="num">Se pidió</th><th class="num">Hay en origen</th></tr>
           </thead>
           <tbody>
-            @for (l of lineasRecepcion(); track l.detalle_id) {
+            @for (l of u.lineas; track l.variante_id) {
               <tr>
-                <td>{{ l.etiqueta }}</td>
-                <td class="num muted">
-                  {{ l.enviado }} {{ l.enPaquetes ? 'paq' : 'kg' }}
-                </td>
+                <td>{{ etiquetaHilo(l) }} <span class="muted mono">· {{ l.sku }}</span></td>
                 <td class="num">
-                  <span class="cant-unidad" style="justify-content:flex-end">
-                    <input type="number" [step]="l.enPaquetes ? 1 : 0.001" min="0" [max]="l.enviado"
-                           [ngModel]="l.recibido"
-                           (ngModelChange)="cambiarRecibido(l.detalle_id, $event)"
-                           style="width:90px; padding:0.3rem; border:1px solid #d1d5db; border-radius:6px; text-align:right" />
-                    <span class="muted">{{ l.enPaquetes ? 'paq' : 'kg' }}</span>
+                  {{ l.cantidad | cantidad: 'kg' }}
+                  @if (l.paquetes) { <div class="sub">{{ l.paquetes | cantidad }} paquetes</div> }
+                </td>
+                <td class="num muted">{{ l.saldo_origen | cantidad: 'kg' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  <!--
+    Nueva solicitud. Se pide en KILOS —"cuando me hacen un pedido no me dicen
+    cuántos paquetes, yo mando por kilos"—; los paquetes son solo referencia,
+    con el peso promedio REAL de los bultos que hay en el origen.
+  -->
+  <section class="card" id="nueva">
+    <div class="card-head">
+      <div>
+        <h2>Nueva solicitud</h2>
+        <p>Se pide en kilos. Los paquetes son solo para leerlo como lo cuenta la tienda.</p>
+      </div>
+    </div>
+
+    <div class="campos">
+      <label class="field">
+        Sale de
+        <select [(ngModel)]="origen" (ngModelChange)="alCambiarOrigen()">
+          @for (a of almacenes(); track a.id) {
+            <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_matriz ? ' (matriz)' : '' }}</option>
+          }
+        </select>
+      </label>
+      <label class="field">
+        Va a
+        <select [(ngModel)]="destino">
+          @for (a of destinos(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+        </select>
+      </label>
+      <div class="field ancho">
+        <label for="traspaso-buscar">Agregar hilo</label>
+        <span class="buscador">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
+          </svg>
+          <input #buscador id="traspaso-buscar" type="search" [(ngModel)]="q"
+                 (keydown.enter)="$event.preventDefault(); buscar()"
+                 placeholder="Color, calibre o código" />
+          <button type="button" class="btn btn-ghost btn-sm" (click)="buscar()">Buscar</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- A la sucursal se le mandan PAQUETES cerrados: los conos no salen en la búsqueda. -->
+    @if (resultados().length > 0) {
+      <div class="resultados">
+        @for (v of resultados(); track v.id) {
+          <div class="resultado">
+            <div>
+              <!-- El hilo con todos sus datos: el color solo no distingue calibres. -->
+              <b>{{ v.producto }}{{ v.calibre ? ' ' + v.calibre : '' }}</b>
+              <div class="sub">
+                {{ v.material || '—' }}{{ v.linea ? ' · ' + v.linea : '' }} · <span class="mono">{{ v.sku }}</span>
+                @if (v.tipo_presentacion === 'paquete' && v.peso_kg) {
+                  · paquete de {{ v.peso_kg | cantidad: 'kg' }}
+                }
+              </div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" (click)="agregar(v)">Agregar</button>
+          </div>
+        }
+      </div>
+    }
+
+    @if (lineas().length === 0) {
+      <p class="vacio">Todavía no has agregado nada a la solicitud. Busca el hilo arriba.</p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid lineas-solicitud">
+          <thead>
+            <tr>
+              <th>Hilo</th>
+              <th class="num">Kilos que se piden</th>
+              <th class="num">Equivale a</th>
+              <th class="num">Hay libre</th>
+              <th><span class="oculto">Quitar</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lineas(); track l.variante.id) {
+              <!--
+                La fila se tiñe de fondo, NO de texto: `neg` en el <tr> pintaba de
+                rojo hasta el nombre del hilo y el rojo debe marcar el dato que falla.
+              -->
+              <tr [class.fila-alerta]="insuficiente(l)">
+                <td>
+                  <span class="hilo">{{ l.variante.producto }}{{ l.variante.calibre ? ' ' + l.variante.calibre : '' }}</span>
+                  <div class="sub">
+                    {{ l.variante.material || '—' }}{{ l.variante.linea ? ' · ' + l.variante.linea : '' }}
+                    · <span class="mono">{{ l.variante.sku }}</span>
+                  </div>
+                </td>
+                <!-- Se pide en KILOS: es como pide la sucursal y es la unidad del inventario. -->
+                <td class="num">
+                  <span class="cant-kg">
+                    <input type="number" step="0.001" min="0" [ngModel]="l.kg"
+                           (ngModelChange)="cambiarKg(l, $event)" placeholder="0"
+                           [attr.aria-label]="'Kilos de ' + etiquetaHilo(l.variante)" />
+                    <span class="muted">kg</span>
                   </span>
-                  @if (l.recibido < l.enviado) {
-                    <div class="neg" style="font-size:0.72rem">
-                      faltan {{ l.enviado - l.recibido }}
+                </td>
+                <!-- Los paquetes son solo referencia, para leerlo como lo cuenta la tienda. -->
+                <td class="num">
+                  @if (enPaquetes(l); as paq) {
+                    ≈ {{ paq | cantidad }} paquetes
+                    @if (rangoPeso(l); as r) { <div class="sub">{{ r }}</div> }
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                  @if (disponibles(l); as hay) {
+                    <div class="sub">hay {{ hay }} bultos en el origen</div>
+                  }
+                </td>
+                <!--
+                  La comparación va en KILOS contra lo LIBRE (existencia menos lo
+                  apartado), que es contra lo que valida el servidor.
+                -->
+                <td class="num">
+                  @if (kilosLibres(l) !== null) {
+                    <b [class.neg]="insuficiente(l)">{{ kilosLibres(l) | cantidad: 'kg' }}</b>
+                    @if (kilosApartados(l) > 0) {
+                      <div class="sub">{{ kilosApartados(l) | cantidad: 'kg' }} ya apartados</div>
+                    }
+                    @if (insuficiente(l)) {
+                      <div class="sub neg">inventario insuficiente</div>
+                    }
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                </td>
+                <td class="acciones">
+                  <button type="button" class="btn btn-danger btn-icono" (click)="quitar(l)"
+                          [attr.aria-label]="'Quitar ' + etiquetaHilo(l.variante)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18"></path></svg>
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (hayInsuficientes()) {
+        <p class="alert">
+          Hay líneas que piden más de lo que hay libre en {{ nombreAlmacen(origen) }}. Ajusta las
+          cantidades o quítalas: la solicitud no se puede mandar así.
+        </p>
+      }
+
+      <label class="field">
+        <span>Notas <span class="muted">(opcional)</span></span>
+        <input type="text" [(ngModel)]="notas" placeholder="Ej. Envío semanal en la camioneta" />
+      </label>
+
+      <div class="total-solicitud">
+        <span>
+          {{ lineas().length }} {{ lineas().length === 1 ? 'hilo' : 'hilos' }} ·
+          <b>{{ totalKg() | cantidad: 'kg' }}</b> de {{ nombreAlmacen(origen) }} a
+          {{ nombreAlmacen(destino) }}. Se aparta en {{ nombreAlmacen(origen) }}; el envío es el paso siguiente.
+        </span>
+        <button type="button" class="btn btn-primary" [disabled]="enviando() || hayInsuficientes()"
+                (click)="solicitar()">
+          {{ enviando() ? 'Guardando…' : 'Crear solicitud' }}
+        </button>
+      </div>
+    }
+  </section>
+
+  <!-- Los que ya se cerraron: recibidos (completos o con faltante) y cancelados. -->
+  <section class="card">
+    <div class="card-head">
+      <div><h2>Traspasos cerrados</h2></div>
+    </div>
+    @if (cerrados().length === 0) {
+      <p class="vacio">Todavía no se ha cerrado ningún traspaso.</p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid cerrados">
+          <thead>
+            <tr>
+              <th>Folio</th>
+              <th>Ruta</th>
+              <th>Qué llevó</th>
+              <th>Estado</th>
+              <th>Firmó de recibido</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of cerrados(); track t.id) {
+              <tr>
+                <td>
+                  <span class="mono" [title]="t.folio">{{ t.folio | folio }}</span>
+                  <div class="sub" [title]="t.creado_en | fecha">pedido {{ t.creado_en | cuando }}</div>
+                </td>
+                <td>{{ t.almacen_origen }} → {{ t.almacen_destino }}</td>
+                <td class="llevo">
+                  @for (l of t.lineas; track l.variante_id) {
+                    <div>
+                      {{ etiquetaHilo(l) }} · <b>{{ l.cantidad | cantidad: 'kg' }}</b>
+                      @if (recibidoDe(l); as r) { <span class="muted">— {{ r }}</span> }
                     </div>
+                  }
+                  @if (t.notas) { <div class="sub">{{ t.notas }}</div> }
+                  @if (t.recepcion_notas) { <div class="sub">Al recibir: {{ t.recepcion_notas }}</div> }
+                  @if (t.motivo_cancelacion) { <div class="sub">Cancelado: {{ t.motivo_cancelacion }}</div> }
+                </td>
+                <td>
+                  @if (estadoCerrado(t); as e) {
+                    <span class="pill" [class]="'pill ' + e.clase">{{ e.texto }}</span>
+                  }
+                </td>
+                <td>
+                  @if (t.estado === 'recibido') {
+                    {{ t.recibido_por || '—' }}
+                    @if (t.recibido_en) { <div class="sub" [title]="t.recibido_en | fecha">{{ t.recibido_en | cuando }}</div> }
+                  } @else {
+                    <span class="muted">—</span>
+                    @if (t.cancelado_por) { <div class="sub">canceló {{ t.cancelado_por }}</div> }
                   }
                 </td>
               </tr>
             }
           </tbody>
         </table>
+      </div>
+    }
+  </section>
+</div>
 
-        <label class="field" style="margin-top:1rem">
-          Notas de la recepción <span class="muted">(opcional)</span>
-          <input type="text" [(ngModel)]="notasRecepcion"
-                 placeholder="Ej. Un paquete venía mojado" />
+<!--
+  Acuse de recibo. Es el punto de todo el flujo: alguien de la sucursal dice qué
+  llegó y queda su nombre. Por omisión viene precargado con todo lo enviado.
+  No cierra al tocar el fondo: se sale con la ✕, "Cancelar" o Escape.
+-->
+@if (recibiendo(); as t) {
+  <div class="modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-recibir-titulo">
+      <div class="modal-head">
+        <h2 id="modal-recibir-titulo">Confirmar que llegó · {{ t.folio }}</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarRecepcion()" aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="explica">
+          Llegó de <b>{{ t.almacen_origen }}</b> a <b>{{ t.almacen_destino }}</b>. Revisa lo que de
+          verdad bajaron de la camioneta y corrige lo que falte: entra al inventario solo lo que
+          aceptes, y la diferencia queda asentada como merma con tu nombre.
+        </p>
+
+        @if (error()) { <p class="alert">{{ error() }}</p> }
+
+        <div class="tabla-scroll">
+          <table class="grid">
+            <thead>
+              <tr><th>Hilo</th><th class="num">Se envió</th><th class="num">Llegó</th></tr>
+            </thead>
+            <tbody>
+              @for (l of lineasRecepcion(); track l.detalle_id) {
+                <tr>
+                  <td>{{ l.etiqueta }}</td>
+                  <td class="num muted">{{ l.enviado | cantidad: (l.enPaquetes ? 'paq' : 'kg') }}</td>
+                  <td class="num">
+                    <span class="cant-kg">
+                      <input type="number" [step]="l.enPaquetes ? 1 : 0.001" min="0" [max]="l.enviado"
+                             [ngModel]="l.recibido"
+                             (ngModelChange)="cambiarRecibido(l.detalle_id, $event)"
+                             [attr.aria-label]="'Lo que llegó de ' + l.etiqueta" />
+                      <span class="muted">{{ l.enPaquetes ? 'paq' : 'kg' }}</span>
+                    </span>
+                    @if (l.recibido < l.enviado) {
+                      <div class="sub neg">faltan {{ l.enviado - l.recibido | cantidad }}</div>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <label class="field notas-recepcion">
+          <span>Notas de la recepción <span class="muted">(opcional)</span></span>
+          <input type="text" [(ngModel)]="notasRecepcion" placeholder="Ej. Un paquete venía mojado" />
         </label>
 
         @if (faltantesRecepcion().length > 0) {
-          <p class="aviso" style="margin-top:1rem">
-            ⚠ {{ faltantesRecepcion().length }}
-            {{ faltantesRecepcion().length === 1 ? 'línea llega' : 'líneas llegan' }} incompletas.
-            La diferencia se va a dar de baja como faltante, con el folio del traspaso y tu nombre.
+          <p class="aviso">
+            {{ faltantesRecepcion().length }}
+            {{ faltantesRecepcion().length === 1 ? 'línea llega incompleta' : 'líneas llegan incompletas' }}.
+            La diferencia se va a dar de baja como merma, con el folio del traspaso y tu nombre.
           </p>
         }
       </div>
@@ -401,9 +425,44 @@
       <div class="modal-foot">
         <span class="nota">Al aceptar, la mercancía entra al inventario de la sucursal.</span>
         <button type="button" class="btn btn-ghost" (click)="cerrarRecepcion()">Cancelar</button>
-        <button type="button" class="btn btn-primary" [disabled]="enviando()"
-                (click)="confirmarRecepcion()">
+        <button type="button" class="btn btn-primary" [disabled]="enviando()" (click)="confirmarRecepcion()">
           {{ enviando() ? 'Guardando…' : 'Acepto que recibí esto' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Cancelar un traspaso. Cerrar sin confirmar NO cancela nada. -->
+@if (cancelando(); as t) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-cancelar-titulo">
+      <div class="modal-head">
+        <h2 id="modal-cancelar-titulo">Cancelar el traspaso {{ t.folio }}</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarCancelacion()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="explica">
+          {{ t.almacen_origen }} → {{ t.almacen_destino }} · {{ resumenLleva(t) }}.
+        </p>
+        <p class="aviso">
+          @if (t.estado === 'en_transito') {
+            Ya salió: la mercancía <b>regresa a {{ t.almacen_origen }}</b> y sus bultos vuelven allá.
+          } @else {
+            Todavía no sale: se <b>libera lo apartado</b> en {{ t.almacen_origen }}.
+          }
+        </p>
+        @if (error()) { <p class="alert">{{ error() }}</p> }
+        <label class="field">
+          ¿Por qué se cancela? <span class="muted">(opcional)</span>
+          <input type="text" [(ngModel)]="motivoCancelacion" (keydown.enter)="confirmarCancelacion()"
+                 placeholder="Ej. La sucursal ya no lo necesita" />
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrarCancelacion()">No cancelar</button>
+        <button type="button" class="btn btn-danger" [disabled]="enviando()" (click)="confirmarCancelacion()">
+          {{ enviando() ? 'Cancelando…' : 'Cancelar el traspaso' }}
         </button>
       </div>
     </div>

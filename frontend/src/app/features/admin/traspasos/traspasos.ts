@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   EquivalenciaPaquetes,
@@ -9,11 +9,14 @@ import {
   TraspasoItemInput,
   TraspasoLinea,
 } from '../../../core/services/inventario.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
+import { CuandoPipe } from '../inventario/cuando.pipe';
+import { FolioPipe } from '../../../shared/folio.pipe';
 
 /**
  * Línea en captura. La cantidad va en KILOS, siempre: así es como pide la
@@ -37,6 +40,17 @@ interface LineaRecepcion {
   recibido: number;
 }
 
+/** Un paso del avance (Pedido → En camino → Recibido) y si ya se dio. */
+interface Paso {
+  texto: string;
+  hecho: boolean;
+  /** El último que se dio: es donde está el traspaso ahora. */
+  actual: boolean;
+}
+
+/** Cuántos traspasos se traen: los pendientes y lo del mes para las cifras. */
+const HISTORIAL = 100;
+
 /**
  * Surtir sucursales. El traspaso tiene TRES pasos, no uno:
  *   1. Se SOLICITA — se valida que haya existencia y se aparta en el origen.
@@ -55,11 +69,27 @@ interface LineaRecepcion {
  */
 @Component({
   selector: 'app-traspasos',
-  imports: [FormsModule, CantidadPipe, FechaPipe],
+  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe],
   templateUrl: './traspasos.html',
+  styleUrl: './traspasos.scss',
+  // Los dos modales (acuse y cancelación) se cierran con Escape, nunca al
+  // tocar el fondo: se perdería lo capturado.
+  host: { '(document:keydown.escape)': 'alEscape()' },
 })
 export class Traspasos {
   private readonly inv = inject(InventarioService);
+  private readonly auth = inject(AuthService);
+  private readonly cuando = new CuandoPipe();
+
+  /**
+   * Enviar y recibir son permisos aparte: la bodega envía y la sucursal firma.
+   * Sin el permiso no se ofrece el botón (el servidor lo rechazaría con 403).
+   */
+  readonly puedeEnviar = computed(() => this.auth.puede('hacer:enviar_traspaso'));
+  readonly puedeRecibir = computed(() => this.auth.puede('hacer:recibir_traspaso'));
+
+  /** El buscador de "Nueva solicitud", para llevar ahí el foco desde el encabezado. */
+  private readonly buscador = viewChild<ElementRef<HTMLInputElement>>('buscador');
 
   readonly almacenes = signal<Almacen[]>([]);
   readonly historial = signal<Traspaso[]>([]);
@@ -69,6 +99,13 @@ export class Traspasos {
   readonly enviando = signal(false);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+
+  /** Traspaso al que se le está dando un paso (enviar), para no mandarlo dos veces. */
+  readonly ocupado = signal<number | null>(null);
+
+  /** Traspaso que se está cancelando, con su motivo. */
+  readonly cancelando = signal<Traspaso | null>(null);
+  motivoCancelacion = '';
 
   /** Traspaso cuya recepción se está capturando, con lo que se declara. */
   readonly recibiendo = signal<Traspaso | null>(null);
@@ -101,6 +138,34 @@ export class Traspasos {
     this.historial().filter((t) => t.estado === 'recibido' || t.estado === 'cancelado')
   );
 
+  /** Los recibidos de este mes: de ahí salen las cifras de "Recibidos" y "Faltó". */
+  private readonly recibidosDelMes = computed(() => {
+    const hoy = new Date();
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+    return this.historial().filter(
+      (t) => t.estado === 'recibido' && String(t.recibido_en ?? '').startsWith(mes)
+    );
+  });
+
+  /** Las cuatro cifras de arriba: qué espera a la bodega, qué va en camino y cómo llegó. */
+  readonly kpis = computed(() => {
+    const porEnviar = this.historial().filter((t) => t.estado === 'solicitado').length;
+    const enCamino = this.historial().filter((t) => t.estado === 'en_transito').length;
+    const recibidos = this.recibidosDelMes();
+    const falto = Math.round(recibidos.reduce((s, t) => s + this.faltanteDe(t), 0) * 1000) / 1000;
+    return [
+      { etiqueta: 'Por enviar', valor: String(porEnviar), pie: 'solicitudes esperando a la bodega', punto: '#2457C5' },
+      { etiqueta: 'En camino', valor: String(enCamino), pie: 'falta que confirmen que llegó', punto: '#E9A23B' },
+      { etiqueta: 'Recibidos', valor: String(recibidos.length), pie: 'este mes', punto: '#1baf7a' },
+      {
+        etiqueta: 'Faltó al recibir',
+        valor: `${falto.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`,
+        pie: 'este mes · se asentó como merma',
+        punto: '#C2410C',
+      },
+    ];
+  });
+
   constructor() {
     this.inv.almacenes().subscribe({
       next: (a) => {
@@ -118,7 +183,7 @@ export class Traspasos {
   }
 
   private cargarHistorial(): void {
-    this.inv.traspasos(undefined, 50).subscribe({
+    this.inv.traspasos(undefined, HISTORIAL).subscribe({
       next: (p) => this.historial.set(p.items),
       error: () => {},
     });
@@ -307,10 +372,13 @@ export class Traspasos {
   // ---- Paso 2 · Enviar ----
 
   enviarTraspaso(t: Traspaso): void {
+    if (this.ocupado()) return;
     this.error.set(null);
     this.mensaje.set(null);
+    this.ocupado.set(t.id);
     this.inv.enviarTraspaso(t.id).subscribe({
       next: (r) => {
+        this.ocupado.set(null);
         const ajustadas = r.lineas.filter((l) => l.ajustado).length;
         this.mensaje.set(
           `Traspaso ${r.folio} en camino.` +
@@ -320,7 +388,10 @@ export class Traspasos {
         );
         this.cargarHistorial();
       },
-      error: (e) => this.error.set(this.msg(e)),
+      error: (e) => {
+        this.ocupado.set(null);
+        this.error.set(this.msg(e));
+      },
     });
   }
 
@@ -401,24 +472,59 @@ export class Traspasos {
       });
   }
 
+  /**
+   * Pregunta por qué se cancela, en un modal. Cerrarlo (✕, "No cancelar" o
+   * Escape) quiere decir "no cancelo el traspaso"; confirmar sin escribir nada
+   * sí cancela, sin motivo. Antes era un `prompt()` y un `?? ''` convertía el
+   * "Cancelar" del navegador en motivo vacío: se cancelaba justo lo que se pidió
+   * no cancelar.
+   */
   cancelar(t: Traspaso): void {
-    // "Cancelar" en la pregunta devuelve null y quiere decir "no cancelo el
-    // traspaso". Con un `?? ''` se convertía en motivo vacío y se cancelaba
-    // igual: justo lo contrario de lo que se pidió. Aceptar sin escribir nada sí
-    // cancela, sin motivo.
-    const motivo = prompt(`¿Por qué se cancela el traspaso ${t.folio}?`);
-    if (motivo === null) return;
     this.error.set(null);
-    this.inv.cancelarTraspaso(t.id, motivo.trim() || undefined).subscribe({
+    this.mensaje.set(null);
+    this.motivoCancelacion = '';
+    this.cancelando.set(t);
+  }
+
+  cerrarCancelacion(): void {
+    this.cancelando.set(null);
+    this.motivoCancelacion = '';
+  }
+
+  confirmarCancelacion(): void {
+    const t = this.cancelando();
+    if (!t) return;
+    this.enviando.set(true);
+    this.error.set(null);
+    this.inv.cancelarTraspaso(t.id, this.motivoCancelacion.trim() || undefined).subscribe({
       next: (r) => {
+        this.enviando.set(false);
         this.mensaje.set(
           `Traspaso ${r.folio} cancelado.` +
             (t.estado === 'en_transito' ? ' La mercancía regresó al origen.' : ' Se liberó lo apartado.')
         );
+        this.cerrarCancelacion();
         this.cargarHistorial();
       },
-      error: (e) => this.error.set(this.msg(e)),
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(this.msg(e));
+      },
     });
+  }
+
+  /** Escape cierra el modal que esté abierto, sin hacer nada. */
+  alEscape(): void {
+    if (this.enviando()) return;
+    if (this.cancelando()) this.cerrarCancelacion();
+    else if (this.recibiendo()) this.cerrarRecepcion();
+  }
+
+  /** "Nueva solicitud" del encabezado: lleva a la tarjeta y deja listo el buscador. */
+  irANueva(): void {
+    const input = this.buscador()?.nativeElement;
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus({ preventScroll: true });
   }
 
   // ---- Etiquetas de estado ----
@@ -432,16 +538,71 @@ export class Traspasos {
     }[e];
   }
 
-  /** Clase de la pastilla: verde recibido, ámbar en camino, rojo cancelado. */
-  claseEstado(e: EstadoTraspaso): string {
-    return { solicitado: 'warn', en_transito: 'warn', recibido: 'ok', cancelado: 'off' }[e];
-  }
-
   /** Lo que le falta a este traspaso, dicho en una frase. */
   siguientePaso(t: Traspaso): string {
     if (t.estado === 'solicitado') return 'Falta enviarlo desde el origen.';
     if (t.estado === 'en_transito') return 'Falta que la sucursal acepte que lo recibió.';
     return '';
+  }
+
+  /** Pedido → En camino → Recibido, con lo que ya pasó marcado. */
+  pasos(t: Traspaso): Paso[] {
+    const n = t.estado === 'solicitado' ? 1 : t.estado === 'en_transito' ? 2 : 3;
+    return ['Pedido', 'En camino', 'Recibido'].map((texto, i) => ({
+      texto,
+      hecho: i < n,
+      actual: i === n - 1,
+    }));
+  }
+
+  /** Lo que lleva, dicho en una línea: cuántos hilos, cuántos kilos y dónde está. */
+  resumenLleva(t: Traspaso): string {
+    const lineas = t.lineas ?? [];
+    const kg = Math.round(lineas.reduce((s, l) => s + Number(l.cantidad), 0) * 1000) / 1000;
+    const partes = [
+      `${lineas.length} ${lineas.length === 1 ? 'hilo' : 'hilos'}`,
+      `${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`,
+    ];
+    if (t.estado === 'solicitado') partes.push(`apartados en ${t.almacen_origen}`);
+    const paq = lineas.reduce((s, l) => s + Number(l.paquetes ?? 0), 0);
+    if (t.estado === 'en_transito' && paq > 0) {
+      partes.push(
+        `${paq.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${paq === 1 ? 'paquete' : 'paquetes'}`
+      );
+    }
+    return partes.join(' · ');
+  }
+
+  /** Quién lo movió por última vez y cuándo. */
+  quien(t: Traspaso): string {
+    if (t.estado === 'en_transito') {
+      return (
+        `Salió ${this.cuando.transform(t.enviado_en)}` + (t.enviado_por ? ` · lo envió ${t.enviado_por}` : '')
+      );
+    }
+    return `Pidió ${t.usuario || '—'} · ${this.cuando.transform(t.creado_en)}`;
+  }
+
+  /** Kilos que no llegaron de un traspaso recibido: se asentaron como merma. */
+  faltanteDe(t: Traspaso): number {
+    const kg = (t.lineas ?? []).reduce((s, l) => {
+      if (l.cantidad_recibida == null) return s;
+      return s + Math.max(0, Number(l.cantidad) - Number(l.cantidad_recibida));
+    }, 0);
+    return Math.round(kg * 1000) / 1000;
+  }
+
+  /** La pastilla de un traspaso cerrado: si llegó completo, si faltó algo, o si se canceló. */
+  estadoCerrado(t: Traspaso): { texto: string; clase: string } {
+    if (t.estado === 'cancelado') return { texto: 'Cancelado', clase: 'gris' };
+    const falto = this.faltanteDe(t);
+    if (falto > 0) {
+      return {
+        texto: `Faltaron ${falto.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`,
+        clase: 'ambar',
+      };
+    }
+    return { texto: 'Recibido', clase: 'verde' };
   }
 
   /** Lo recibido de una línea ya cerrada, para el historial. */

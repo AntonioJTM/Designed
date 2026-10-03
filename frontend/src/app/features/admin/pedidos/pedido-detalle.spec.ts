@@ -1,18 +1,23 @@
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { PedidoDetalle } from './pedido-detalle';
 import { VentasService } from '../../../core/services/ventas.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Pedido } from '../../../core/models/ventas.models';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 /**
  * Lo que importa del detalle del pedido:
  *   · el artículo dice QUÉ hilo es (calibre, material, línea), no solo el color;
  *   · subir la captura deja el pedido pagado y lo avisa;
  *   · quitarla NO descobra el pedido;
- *   · el object URL de la captura se libera, o el archivo se queda en memoria.
+ *   · el object URL de la captura se libera, o el archivo se queda en memoria;
+ *   · cancelar y devolver solo se ofrecen con el permiso del puesto.
  */
 describe('PedidoDetalle', () => {
+  /** Lo que contesta la ventana de confirmación en la prueba. */
+  let respuesta = true;
   function pedidoBase(): Pedido {
     return {
       id: 5, numero_pedido: 'WEB-1', canal: 'tienda_linea', metodo_entrega: 'recoger',
@@ -42,6 +47,7 @@ describe('PedidoDetalle', () => {
   let subido: { id: number; archivo: File } | null = null;
   let revocadas: string[] = [];
   let fallaLaBajada = false;
+  let permisos: Set<string>;
 
   const ventasFalso = {
     obtenerPedido: () => of(actual),
@@ -72,8 +78,12 @@ describe('PedidoDetalle', () => {
     await TestBed.configureTestingModule({
       imports: [PedidoDetalle],
       providers: [
+        provideRouter([]),
         { provide: VentasService, useValue: ventasFalso },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '5' } } } },
+        { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k) } },
+        // La ventana de confirmación del sistema: contesta lo que diga `respuesta`.
+        { provide: ConfirmacionService, useValue: { pedir: () => Promise.resolve(respuesta) } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(PedidoDetalle);
@@ -86,6 +96,7 @@ describe('PedidoDetalle', () => {
     subido = null;
     revocadas = [];
     fallaLaBajada = false;
+    permisos = new Set(['hacer:cancelar_venta', 'ver:clientes', 'ver:apartados']);
     spyOn(URL, 'createObjectURL').and.returnValue('blob:falsa');
     spyOn(URL, 'revokeObjectURL').and.callFake((u: string) => void revocadas.push(u));
   });
@@ -95,15 +106,19 @@ describe('PedidoDetalle', () => {
     const c = (await montar()).componentInstance;
     const linea = c.pedido()!.detalle![0];
 
-    expect(c.fichaDelHilo(linea)).toBe('2/30 · ACRILAN · Turco');
+    // El calibre va en el nombre; material y línea, debajo.
+    expect(c.nombreDelHilo(linea)).toBe('BLANCO 2/30 · Paquete');
+    expect(c.fichaDelHilo(linea)).toBe('ACRILAN · Turco');
   });
 
   it('la ficha no deja guiones sueltos cuando falta un dato', async () => {
     const c = (await montar()).componentInstance;
 
-    expect(c.fichaDelHilo({ calibre: '1/30' } as never)).toBe('1/30');
-    expect(c.fichaDelHilo({ calibre: '1/30', linea: 'Turco' } as never)).toBe('1/30 · Turco');
+    expect(c.fichaDelHilo({ material: 'ACRILAN' } as never)).toBe('ACRILAN');
+    expect(c.fichaDelHilo({ linea: 'Turco' } as never)).toBe('Turco');
     expect(c.fichaDelHilo({} as never)).toBe('');
+    // Sin producto en el catálogo queda lo que se congeló en la venta.
+    expect(c.nombreDelHilo({ descripcion: 'ROJO · Paquete' } as never)).toBe('ROJO · Paquete');
   });
 
   it('explica por qué una venta en línea no trae bultos', async () => {
@@ -173,8 +188,8 @@ describe('PedidoDetalle', () => {
     c.elegirArchivo({ target: { files: [new File(['x'], 'a.png')], value: '' } } as never);
     expect(c.pedido()!.estado).toBe('pagado');
 
-    spyOn(window, 'confirm').and.returnValue(true);
-    c.quitarComprobante();
+    respuesta = true;
+    await c.quitarComprobante();
 
     expect(c.pagoConComprobante()).toBeNull();
     // El dinero entró: que se borre la captura no significa que no se cobró.
@@ -185,8 +200,8 @@ describe('PedidoDetalle', () => {
     const c = (await montar()).componentInstance;
     c.elegirArchivo({ target: { files: [new File(['x'], 'a.png')], value: '' } } as never);
 
-    spyOn(window, 'confirm').and.returnValue(false);
-    c.quitarComprobante();
+    respuesta = false;
+    await c.quitarComprobante();
 
     expect(c.pagoConComprobante()).not.toBeNull();
   });
@@ -260,5 +275,56 @@ describe('PedidoDetalle', () => {
 
     // Sin revocarlo, el archivo se queda en memoria del navegador.
     expect(revocadas).toContain('blob:falsa');
+  });
+
+  // ---- Permisos y la franja de arriba ----
+
+  it('sin el permiso no ofrece cancelar ni devolver, ni en el selector', async () => {
+    permisos = new Set();
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1 };
+    const c = (await montar()).componentInstance;
+    const p = c.pedido()!;
+
+    expect(c.puedeCancelarEste(p)).toBe(false);
+    expect(c.puedeDevolverEste(p)).toBe(false);
+    expect(c.opcionesEstado()).not.toContain('cancelado');
+    expect(c.opcionesEstado()).not.toContain('devuelto');
+  });
+
+  it('a un apartado vigente se le puede cancelar pero no devolver: nunca salió', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'apartado', inventario_descontado: 0 };
+    const c = (await montar()).componentInstance;
+    const p = c.pedido()!;
+
+    expect(c.puedeCancelarEste(p)).toBe(true);
+    expect(c.puedeDevolverEste(p)).toBe(false);
+  });
+
+  it('el botón de cancelar abre la confirmación, no cancela de un golpe', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1 };
+    const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
+    const c = (await montar()).componentInstance;
+
+    c.abrirCancelar();
+    expect(c.confirmando()).toBe(true);
+    expect(c.nuevoEstado).toBe('cancelado');
+    expect(llamada).not.toHaveBeenCalled();
+  });
+
+  it('una venta fiada dice cuánto pagó y cuánto se fió a su cuenta', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pendiente', inventario_descontado: 1,
+      cliente_id: 7, cliente: 'Tejidos JC',
+      pagos: [{ id: 9, metodo_pago_id: 1, metodo: 'Efectivo', monto: '48.00',
+                estado: 'completado', creado_en: '2026-09-05 10:00:00' }],
+      credito: [{ tipo: 'cargo', monto: '300.00', notas: 'Venta a crédito WEB-1', creado_en: '2026-09-05 10:00:00' }],
+    } as Pedido;
+    const c = (await montar()).componentInstance;
+
+    expect(c.cifras().map((x) => x.etiqueta)).toEqual(['Total', 'Pagó al comprar', 'Se fió a su cuenta']);
+    expect(c.cifras()[2].valor).toBe(300);
+    // Lo fiado aparece como un pago más, en su cuenta.
+    expect(c.filasPago().some((f) => f.estado === 'En su cuenta' && f.monto === 300)).toBe(true);
+    expect(c.historia().some((h) => h.que.includes('a la cuenta de Tejidos JC'))).toBe(true);
   });
 });

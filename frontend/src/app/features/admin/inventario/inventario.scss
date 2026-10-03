@@ -1,0 +1,67 @@
+/* Inventario: lo propio de esta pantalla. Las piezas comunes (tarjeta, tabla,
+   leyenda, barras, filtros) vienen del sistema de diseño en styles.scss. */
+
+/* ---- 1 · Una tarjeta por almacén ---- */
+.almacenes { display: flex; flex-wrap: wrap; gap: 16px; }
+.almacen {
+  flex: 1 1 300px; min-width: 0;
+  background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;
+}
+.almacen-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.almacen-nombre { font-size: 15px; font-weight: 600; }
+.almacen-tipo { font-size: 12px; color: var(--tinta-3); white-space: nowrap; }
+.almacen-cifra { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
+.almacen-cifra .cifra { font-size: 28px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.almacen-cifra .cifra.vacia { font-size: 18px; font-weight: 500; color: var(--tinta-3); }
+
+/* Desglose paquete / enconado: hueco de 2 px entre tramos, nunca un borde. */
+.desglose-barra { display: flex; gap: 2px; height: 10px; }
+.desglose-barra > span { flex: 1 1 0; min-width: 2px; }
+.desglose-barra > span:first-child { border-radius: 3px 0 0 3px; }
+.desglose-barra > span:last-child { border-radius: 0 3px 3px 0; }
+.desglose-barra > span:only-child { border-radius: 3px; }
+.desglose-barra.vacia { background: var(--borde-suave); border-radius: 3px; }
+.paq { background: var(--viz-series-1); }
+.cono { background: var(--viz-series-2); }
+
+.almacen-pie { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 13px; color: var(--tinta-2); }
+.desglose-texto { display: inline-flex; align-items: center; gap: 6px; }
+.desglose-texto i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.almacen-pie .alerta { color: var(--aviso-t); font-weight: 600; }
+
+/* ---- 2 · Dónde está cada hilo ---- */
+.leyenda { margin-bottom: 16px; }
+.barras.hilos { --etiqueta: 200px; }
+/* Tramos de la barra: hueco de 2 px y redondeo de 4 px SOLO en el extremo del
+   dato (el último por la derecha); el arranque va a escuadra, anclado al eje. */
+.apilada { display: flex; gap: 2px; height: 20px; flex: 0 0 auto; min-width: 2px; }
+.apilada > span { flex: 1 1 0; min-width: 2px; }
+.apilada > span:last-child { border-radius: 0 4px 4px 0; }
+.nota { margin: 14px 0 0; font-size: 13px; }
+.aviso { margin: 12px 0 0; }
+
+@media (max-width: 640px) {
+  .barras.hilos { --etiqueta: 120px; }
+}
+
+/* ---- 3 · Detalle por hilo ---- */
+.filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+.filtros > * { flex: 1 1 200px; min-width: 0; }
+.filtros > .crece { flex: 2 1 280px; }
+.filtros > .field.check { flex: 0 1 auto; }
+
+table.grid.detalle { min-width: 900px; }
+table.grid.detalle .hilo { font-size: 15px; }
+table.grid.detalle .sub { font-size: 12px; color: var(--tinta-3); margin-top: 2px; }
+table.grid.detalle .sub.mono { font-family: var(--mono); }
+table.grid.detalle .en-minimo { color: var(--aviso-t); }
+table.grid.detalle .pill { margin-top: 4px; }
+table.grid.detalle td.minimo { white-space: nowrap; }
+.minimo-celda { display: inline-flex; align-items: center; gap: 8px; }
+table.grid.detalle td.ultimo { color: var(--tinta-2); }
+
+.pie-tabla {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 14px; font-size: 13px;
+}

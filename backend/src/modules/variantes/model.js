@@ -105,13 +105,18 @@ async function codigosDe(varianteId) {
   // Cada renglón es un BULTO: trae su peso real, su lote y cuántos conos rinde.
   // Se incluye el folio de la remesa que lo trajo para poder rastrear de dónde
   // salió (los que se capturaron a mano no tienen remesa).
+  // El almacén es APROXIMADO —lo pone la remesa y lo corrigen el traspaso y el
+  // escaneo al vender—, pero es lo que permite decir "dónde está" cada bulto en
+  // la pantalla de presentaciones. Los capturados a mano quedan en NULL.
   const [rows] = await pool.query(
     `SELECT vc.id, vc.variante_id, vc.codigo, vc.peso_kg, vc.lote, vc.conos,
             vc.estado, vc.consumido_en, vc.consumido_tipo, vc.consumido_id,
             ped.numero_pedido AS consumido_folio,
-            vc.remesa_id, r.folio AS remesa_folio, vc.etiqueta, vc.creado_en
+            vc.remesa_id, r.folio AS remesa_folio, vc.etiqueta, vc.creado_en,
+            vc.almacen_id, alm.nombre AS almacen
        FROM variante_codigos vc
        LEFT JOIN remesas r ON r.id = vc.remesa_id
+       LEFT JOIN almacenes alm ON alm.id = vc.almacen_id
        LEFT JOIN pedidos ped ON vc.consumido_tipo = 'pedido' AND ped.id = vc.consumido_id
       WHERE vc.variante_id = :id
       ORDER BY vc.estado, vc.lote, vc.id`,

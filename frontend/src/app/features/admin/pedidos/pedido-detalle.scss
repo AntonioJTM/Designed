@@ -1,0 +1,76 @@
+/* Detalle del pedido (rediseño 2026-10). Lo común sale de styles.scss. */
+
+.card { display: flex; flex-direction: column; gap: 14px; }
+.card-head { margin-bottom: 0; }
+
+/* ---- La franja de arriba ---- */
+.franja { padding: 24px; border-radius: 12px; gap: 20px; }
+.franja-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.franja-titulo { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.folio-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.folio { margin: 0; font-family: var(--mono); font-size: 26px; font-weight: 600; letter-spacing: 0; }
+.pill.grande { font-size: 13px; padding: 5px 12px; }
+.sub { margin: 0; font-size: 14px; color: var(--tinta-3); }
+.franja-cifras {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;
+  border-top: 1px solid var(--borde-suave); padding-top: 18px;
+}
+.franja-cifras > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.franja-cifras span { font-size: 13px; color: var(--tinta-3); }
+.franja-cifras .cliente { font-size: 16px; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.franja-cifras .cifra { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.franja-cifras .cifra.alerta { color: var(--alerta-t); }
+@media (max-width: 720px) { .franja-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- Artículos ---- */
+.lineas { display: flex; flex-direction: column; }
+.linea { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 14px 0; border-top: 1px solid var(--borde-suave); }
+/* `align-items: stretch` a propósito: hay un `.linea` global de la tienda en línea (centrado) que se colaba aquí. */
+.linea-top { display: grid; grid-template-columns: minmax(0, 1fr) 110px 130px 130px; gap: 14px; align-items: center; }
+.linea-top > .num { text-align: right; font-variant-numeric: tabular-nums; }
+.linea-hilo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.linea-hilo b { font-size: 15px; font-weight: 600; }
+.linea-hilo .muted { font-size: 13px; }
+.tenue { color: var(--tinta-2); }
+@media (max-width: 720px) {
+  .linea-top { grid-template-columns: minmax(0, 1fr) auto; }
+  .linea-top > .linea-hilo { grid-column: 1 / -1; }
+}
+
+/* Los bultos de la línea: una tabla chica, debajo y con sangría. */
+.bultos { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--superficie-2); border-radius: 8px; }
+.bultos-titulo { font-size: 13px; color: var(--tinta-2); font-weight: 500; }
+.bultos table { border-collapse: collapse; width: 100%; max-width: 520px; font-size: 13px; }
+.bultos th { text-align: left; font-weight: 600; color: var(--tinta-3); font-size: 12px; padding: 4px 8px 4px 0; }
+.bultos td { padding: 4px 8px 4px 0; border-top: 1px solid var(--borde-suave); }
+.bultos .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sin-bultos { font-size: 13px; }
+
+.totales {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  border-top: 1px solid var(--borde); padding-top: 14px; font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.totales .total { font-size: 18px; font-weight: 600; }
+
+/* ---- Pagos y comprobante ---- */
+.ref { font-size: 12px; }
+.comprobante { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--borde-suave); padding-top: 14px; }
+.comprobante h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.comprobante-img { max-width: 100%; max-height: 420px; border: 1px solid var(--borde); border-radius: 8px; object-fit: contain; align-self: flex-start; }
+.comprobante label.btn { cursor: pointer; }
+.ayuda { font-size: 12px; margin: 0; }
+
+/* ---- Lo que ha pasado ---- */
+.historia { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.historia li { display: flex; gap: 12px; align-items: baseline; font-size: 14px; }
+.historia .cuando { flex: 0 0 104px; font-size: 13px; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+.cambiar-estado { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; border-top: 1px solid var(--borde-suave); padding-top: 14px; }
+.cambiar-estado .field { flex: 1 1 200px; }
+
+/* ---- Modal de cancelación ---- */
+.cant { display: inline-flex; align-items: center; gap: 6px; }
+.cant input {
+  width: 100px; height: 36px; padding: 0 8px; border: 1px solid var(--borde-campo); border-radius: 6px;
+  font: inherit; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; background: #fff; color: var(--tinta);
+}
+.cant input:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533; }

@@ -23,11 +23,19 @@ function rango(desdeStr, hastaStr) {
 
 async function ventas(desdeStr, hastaStr) {
   const { desde, hastaExcl, etiqueta } = rango(desdeStr, hastaStr);
-  const [resumen, porDia] = await Promise.all([
+  const [{ resumen, porCanal }, porDia] = await Promise.all([
     model.ventasResumen(desde, hastaExcl),
     model.ventasPorDia(desde, hastaExcl),
   ]);
-  return { rango: etiqueta, ...resumen, porDia };
+  // Los kilos del periodo son la suma de los de cada día: la tienda piensa en
+  // kilos ("cuánto hilo salió"), no solo en pesos.
+  const suma = (campo) => Math.round(porDia.reduce((s, d) => s + Number(d[campo]), 0) * 1000) / 1000;
+  return {
+    rango: etiqueta,
+    resumen: { ...resumen, kilos: suma('kilos'), kilos_paquete: suma('kilos_paquete') },
+    porCanal,
+    porDia,
+  };
 }
 
 async function masVendidos(limite) {

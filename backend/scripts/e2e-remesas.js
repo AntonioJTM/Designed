@@ -166,6 +166,26 @@ async function subir() {
     ck('y sale en el filtro "Entradas de mercancía"',
       r.data.items.some((x) => x.referencia_tipo === 'remesa'), `${r.data.items.length} movimientos`);
 
+    console.log('\n=== 3b. El reporte en PDF de la carga y del producto ===');
+    const pdfDe = async (ruta, tk = token) => {
+      const x = await fetch(BASE + ruta, { headers: { Authorization: 'Bearer ' + tk } });
+      const bytes = Buffer.from(await x.arrayBuffer());
+      return { status: x.status, tipo: x.headers.get('content-type'), bytes };
+    };
+    let pd = await pdfDe(`/remesas/${remesa}/pdf`);
+    ck('la carga tiene su PDF', pd.status === 200 && /application\/pdf/.test(pd.tipo ?? ''), `${pd.status} ${pd.tipo}`);
+    ck('y es un PDF de verdad', pd.bytes.subarray(0, 5).toString() === '%PDF-', pd.bytes.subarray(0, 8).toString());
+    pd = await pdfDe(`/remesas/producto/${prod}/pdf`);
+    ck('el producto tiene su reporte de entradas', pd.status === 200 && pd.bytes.subarray(0, 5).toString() === '%PDF-', pd.status);
+    pd = await pdfDe(`/remesas/producto/${prod}/pdf?desde=2000-01-01&hasta=2000-01-31`);
+    ck('con un periodo sin cargas también sale (dice que no hay)', pd.status === 200, pd.status);
+    const tCajero = jwt.sign({ sub: 3, tipo: 'usuario', rol_id: 3, rol: 'cajero' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    pd = await pdfDe(`/remesas/${remesa}/pdf`, tCajero);
+    ck('el cajero no lo puede pedir (403)', pd.status === 403, pd.status);
+    r = await api('GET', `/remesas?producto_id=${prod}&limit=10`);
+    ck('las cargas se filtran por producto', r.data.items.length >= 1 && r.data.items.every((x) => x.sku.startsWith('TMP-')),
+      `${r.data.items.length} carga(s)`);
+
     console.log('\n=== 4. Escanear un bulto encuentra su presentación ===');
     r = await api('GET', `/variantes?q=${cod('00548087')}`);
     ck('el código resuelve a la presentación', r.data.items.some((v) => v.id === paq), r.data.items[0]?.sku);

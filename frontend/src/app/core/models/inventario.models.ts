@@ -26,6 +26,8 @@ export interface StockItem {
   id: number;
   variante_id: number;
   sku: string;
+  /** Para agrupar por hilo: el mismo color en otro calibre es otro producto. */
+  producto_id?: number;
   producto: string;
   /** Presentación, para no tener que adivinarla desde el SKU. */
   presentacion?: string | null;
@@ -44,6 +46,19 @@ export interface StockItem {
   stock_maximo?: string | null;
   ubicacion_fisica?: string | null;
   actualizado_en: string;
+  /**
+   * Lo último que le pasó en el kardex, con la misma etiqueta que el kardex. Solo
+   * viene si se pide (`ultimo_movimiento`); null si nunca se ha movido.
+   */
+  ultimo_movimiento?: {
+    creado_en: string;
+    cantidad: string;
+    concepto: string;
+    folio?: string | null;
+    codigo_bulto?: string | null;
+    detalle_tipo?: string | null;
+    detalle_id?: number | null;
+  } | null;
 }
 
 export type TipoMovimiento = 'entrada' | 'salida' | 'ajuste' | 'devolucion' | 'merma' | 'transferencia';
@@ -73,6 +88,8 @@ export interface Movimiento {
   concepto?: string;
   /** Folio del documento que lo originó (venta o traspaso). */
   folio?: string | null;
+  /** En un desarme: el bulto que se abrió. */
+  codigo_bulto?: string | null;
   /** Documento que se puede abrir desde el kardex. */
   detalle_tipo?: 'pedido' | 'traspaso' | 'conversion' | 'remesa' | null;
   detalle_id?: number | null;

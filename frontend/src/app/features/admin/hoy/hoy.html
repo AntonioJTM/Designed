@@ -1,0 +1,122 @@
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Hoy</h1>
+      <p class="sub">{{ fecha }} · lo que está esperando a alguien en la tienda</p>
+    </div>
+    @if (vePos()) {
+      <div class="acciones">
+        <a class="btn btn-ghost" routerLink="/admin/pos">Ir al punto de venta</a>
+      </div>
+    }
+  </header>
+
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+
+  @if (kpis().length > 0) {
+    <div class="kpis">
+      @for (k of kpis(); track k.etiqueta) {
+        <div class="kpi">
+          <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+          <span class="kpi-valor">{{ k.valor }}</span>
+          <span class="kpi-pie">{{ k.pie }}</span>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="fila">
+    <section class="card ancha">
+      <div class="card-head">
+        <div>
+          <h2>Pendientes</h2>
+          <p>Se quitan solos cuando se resuelven: no hay que marcarlos como leídos.</p>
+        </div>
+      </div>
+
+      @if (!pendientes()) {
+        <p class="muted">Cargando…</p>
+      } @else if (grupos().length === 0) {
+        <p class="vacio">Nada pendiente por ahora.</p>
+      } @else {
+        <div class="columna" style="gap: 18px">
+          @for (g of grupos(); track g.titulo) {
+            <div>
+              <div class="grupo-titulo">{{ g.titulo }}</div>
+              @for (i of g.items; track $index) {
+                <div class="pendiente">
+                  <span [class]="'icono tono-' + i.tono" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                         stroke-linecap="round" stroke-linejoin="round"><path [attr.d]="i.icono"></path></svg>
+                  </span>
+                  <div class="que">
+                    <b>{{ i.titulo }}</b>
+                    @if (i.detalle) { <span>{{ i.detalle }}</span> }
+                  </div>
+                  <a class="btn btn-ghost btn-sm" [routerLink]="i.ruta" [queryParams]="i.query ?? null">{{ i.accion }}</a>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <div class="columna angosta">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Cajas abiertas</h2>
+            <p>Lo que debería haber en cada cajón ahora mismo.</p>
+          </div>
+          @if (veCaja()) { <a class="btn-enlace" routerLink="/admin/caja">Ir a Caja</a> }
+        </div>
+        @if (datos(); as d) {
+          @if (d.cajas.length === 0) {
+            <p class="muted" style="margin: 0">No hay ningún turno abierto.</p>
+          }
+          @for (c of d.cajas; track c.id) {
+            <div class="caja-fila">
+              <div>
+                <b>{{ c.caja }} · {{ c.almacen }}</b>
+                <span class="muted">{{ c.usuario }} · abrió {{ cuando(c.fecha_apertura) }}</span>
+              </div>
+              <div class="der">
+                <b class="num">{{ pesos(c.esperado) }}</b>
+                <span class="muted">{{ c.ventas }} {{ c.ventas === 1 ? 'venta' : 'ventas' }}</span>
+              </div>
+            </div>
+          }
+        } @else {
+          <p class="muted" style="margin: 0">Cargando…</p>
+        }
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Ventas de hoy por hora</h2>
+            <p>
+              Ventas cobradas en todas las tiendas.
+              @if (datos(); as d) { Van {{ d.vendido_hoy.ventas }}. }
+            </p>
+          </div>
+        </div>
+        @if (datos()?.vendido_hoy?.ventas === 0) {
+          <p class="muted" style="margin: 0 0 8px">Todavía no hay ventas hoy.</p>
+        }
+        <div class="columnas" role="img" [attr.aria-label]="resumenHoras()" style="height: 130px">
+          @for (h of horas(); track h.etiqueta) {
+            <div>
+              <span>{{ h.n || '' }}</span>
+              <i [class.fuerte]="h.fuerte" [style.height.px]="h.alto"></i>
+            </div>
+          }
+        </div>
+        <div class="columnas-pie">
+          @for (h of horas(); track h.etiqueta) { <span>{{ h.etiqueta }}</span> }
+        </div>
+      </section>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,66 @@
+// Pregúntame. Todo en una sola tarjeta: sugerencias, la charla y el cuadro de
+// preguntar, como en el diseño. Las clases viejas globales del asistente
+// (.chat, .burbuja, .ejemplo…) ya no se usan: estas son de esta pantalla.
+
+.conversacion { display: flex; flex-direction: column; gap: 20px; }
+
+// Preguntas de ejemplo: botones grandes, porque con un cuadro vacío nadie sabe
+// qué preguntar.
+.sugerencias { display: flex; flex-wrap: wrap; gap: 8px; }
+.sugerencia {
+  min-height: 40px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid var(--borde-campo); background: #fff; color: var(--tinta);
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+.sugerencia:hover:not(:disabled) { background: var(--superficie-2); border-color: var(--acento); }
+.sugerencia:disabled { opacity: 0.55; cursor: default; }
+
+.que-puede { margin-top: -8px; }
+.lista-que-puede { margin: 10px 0 6px; padding-left: 20px; font-size: 14px; color: var(--tinta-2); line-height: 1.5; }
+.chico { font-size: 13px; margin: 0; }
+.invitacion { margin: 0; font-size: 15px; }
+
+// El hilo de la conversación. Alto acotado y con scroll propio: así el cuadro
+// de preguntar no se va de la pantalla al crecer la charla.
+.charla { max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.mensaje { display: flex; justify-content: flex-start; }
+.mensaje.mio { justify-content: flex-end; }
+.globo {
+  max-width: min(720px, 88%); padding: 14px 16px; border-radius: 12px;
+  background: var(--fondo); color: var(--tinta);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.globo .texto { font-size: 15px; line-height: 1.55; white-space: pre-line; }
+.mensaje.mio .globo { background: var(--acento); color: #fff; }
+.globo.fallo { background: var(--peligro-f); color: var(--peligro-t); }
+
+// De dónde salió la cifra. Discreto pero siempre presente: sin esto no hay
+// forma de saber si el dato es real o inventado.
+.globo .nota { font-size: 12px; color: var(--tinta-3); }
+.mensaje.mio .globo .nota { color: #DCE6FA; }
+
+// Los tres puntos de "pensando" y el aviso de que se está tardando: aparece a
+// los 6 s junto a los puntitos. La capa gratuita de Gemini tarda ~30 s en una
+// respuesta con datos.
+.globo.pensando { flex-direction: row; align-items: center; gap: 10px; }
+.latidos { display: inline-flex; gap: 5px; }
+.latidos i { width: 6px; height: 6px; border-radius: 50%; background: var(--tinta-3); animation: latir 1.2s infinite; }
+.latidos i:nth-child(2) { animation-delay: 0.2s; }
+.latidos i:nth-child(3) { animation-delay: 0.4s; }
+.tardanza { font-size: 14px; color: var(--tinta-2); }
+@keyframes latir { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+// Respeta a quien pidió menos movimiento en su sistema.
+@media (prefers-reduced-motion: reduce) { .latidos i { animation: none; opacity: 0.6; } }
+
+.caja-pregunta {
+  display: flex; gap: 10px; align-items: flex-end;
+  border-top: 1px solid var(--borde-suave); padding-top: 16px;
+}
+.caja-pregunta .field { flex: 1; }
+.caja-pregunta textarea { min-height: 52px; font-size: 15px; resize: vertical; }
+.caja-pregunta .btn { min-height: 52px; }
+.pie { margin: -8px 0 0; font-size: 13px; color: var(--tinta-3); line-height: 1.45; }
+
+@media (max-width: 560px) {
+  .caja-pregunta { flex-direction: column; align-items: stretch; }
+}

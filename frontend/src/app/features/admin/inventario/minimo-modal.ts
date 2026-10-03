@@ -24,6 +24,7 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
   selector: 'app-minimo-modal',
   imports: [FormsModule, CantidadPipe],
   templateUrl: './minimo-modal.html',
+  styleUrl: './modales.scss',
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class MinimoModal implements OnInit {
@@ -58,6 +59,12 @@ export class MinimoModal implements OnInit {
         error: () => this.equivalencia.set(null),
       });
     }
+  }
+
+  /** Material y línea: con el color y el calibre solos no se sabe qué hilo es. */
+  clasificacion(): string {
+    const f = this.fila();
+    return [f.material, f.linea].filter(Boolean).join(' · ');
   }
 
   esPaquete(): boolean {

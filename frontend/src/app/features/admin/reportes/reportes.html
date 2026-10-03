@@ -1,145 +1,288 @@
-<div class="page-head">
-  <h1>Reportes</h1>
-</div>
-
-@if (error()) { <p class="alert">{{ error() }}</p> }
-
-<!-- Rango de fechas -->
-<div class="card">
-  <div class="form-grid">
-    <label class="field">Desde <input type="date" [(ngModel)]="desde" /></label>
-    <label class="field">Hasta <input type="date" [(ngModel)]="hasta" /></label>
-  </div>
-  <div style="margin-top:0.75rem">
-    <button class="btn btn-primary btn-sm" (click)="cargar()">Aplicar</button>
-    <span class="muted" style="margin-left:0.5rem">Sin fechas = hoy.</span>
-  </div>
-</div>
-
-<!-- KPIs de ventas -->
-@if (ventas(); as v) {
-  <div class="kpis">
-    <div class="card kpi"><span class="muted">Pedidos</span><b>{{ v.resumen.num_pedidos }}</b></div>
-    <div class="card kpi"><span class="muted">Subtotal</span><b>{{ dinero(v.resumen.subtotal) }}</b></div>
-    <div class="card kpi"><span class="muted">Impuestos</span><b>{{ dinero(v.resumen.impuestos) }}</b></div>
-    <div class="card kpi total"><span class="muted">Total vendido</span><b>{{ dinero(v.resumen.total) }}</b></div>
-  </div>
-
-  <div class="form-grid" style="align-items:start">
-    <div class="card">
-      <h3 style="margin-top:0">Ventas por día</h3>
-      @if (chartPorDia().length === 0) { <p class="empty">Sin datos en el rango.</p> }
-      @else {
-        <app-vertical-bars [data]="chartPorDia()" prefix="$" [decimals]="0" />
-        <details style="margin-top:0.75rem">
-          <summary class="muted" style="cursor:pointer; font-size:0.85rem">Ver tabla</summary>
-          <table class="grid" style="margin-top:0.5rem">
-            <thead><tr><th>Día</th><th>Pedidos</th><th>Total</th></tr></thead>
-            <tbody>
-              @for (d of v.porDia; track d.dia) {
-                <tr><td>{{ d.dia }}</td><td>{{ d.num_pedidos }}</td><td>{{ dinero(d.total) }}</td></tr>
-              }
-            </tbody>
-          </table>
-        </details>
-      }
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Reportes</h1>
+      <p class="sub">Los números del periodo, para revisar o llevarte en un archivo.</p>
     </div>
-    <div class="card">
-      <h3 style="margin-top:0">Ventas por canal</h3>
-      @if (chartPorCanal().length === 0) { <p class="empty">Sin ventas en el rango.</p> }
-      @else {
-        <div class="viz-legend">
-          <span class="item"><span class="swatch" style="background:var(--viz-series-1)"></span> Punto de venta</span>
-          <span class="item"><span class="swatch" style="background:var(--viz-series-2)"></span> Tienda en línea</span>
-        </div>
-        <app-vertical-bars [data]="chartPorCanal()" prefix="$" [decimals]="0" />
-        <details style="margin-top:0.75rem">
-          <summary class="muted" style="cursor:pointer; font-size:0.85rem">Ver tabla</summary>
-          <table class="grid" style="margin-top:0.5rem">
-            <thead><tr><th>Canal</th><th>Pedidos</th><th>Total</th></tr></thead>
-            <tbody>
-              @for (c of v.porCanal; track c.canal) {
-                <tr><td>{{ c.canal === 'punto_venta' ? 'Punto de venta' : 'Tienda en línea' }}</td><td>{{ c.num_pedidos }}</td><td>{{ dinero(c.total) }}</td></tr>
-              }
-            </tbody>
-          </table>
-        </details>
-      }
+    <div class="acciones">
+      <label class="rango-fecha">
+        Desde
+        <input type="date" name="desde" [(ngModel)]="desde" [max]="hoy" (change)="cargar()" />
+      </label>
+      <label class="rango-fecha">
+        Hasta
+        <input type="date" name="hasta" [(ngModel)]="hasta" [max]="hoy" (change)="cargar()" />
+      </label>
+      <button type="button" class="btn btn-ghost" (click)="descargar()"
+              title="Descarga en CSV (se abre en Excel) lo que está en la pestaña">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12 M8 11l4 4 4-4 M4 19h16"></path></svg>
+        Descargar
+      </button>
     </div>
-  </div>
-}
+  </header>
 
-<!-- Más vendidos + por reabastecer -->
-<div class="form-grid" style="align-items:start">
-  <div class="card">
-    <!-- Es el acumulado de SIEMPRE, no del rango de arriba: así lo calcula la vista. -->
-    <h3 style="margin-top:0">Más vendidos <span class="muted" style="font-size:0.8rem">(kilos, desde siempre)</span></h3>
-    @if (masVendidos().length === 0) { <p class="empty">Aún sin ventas.</p> }
-    @else {
-      <app-horizontal-bars [data]="chartMasVendidos()" [decimals]="0" sufijo=" kg" />
-      <details style="margin-top:0.75rem">
-        <summary class="muted" style="cursor:pointer; font-size:0.85rem">Ver tabla</summary>
-        <table class="grid" style="margin-top:0.5rem">
-          <thead><tr><th>Hilo</th><th>SKU</th><th>Kilos</th><th>Ingresos</th></tr></thead>
-          <tbody>
-            @for (m of masVendidos(); track m.variante_id) {
-              <tr><td>{{ nombreHilo(m) }}</td><td class="muted">{{ m.sku }}</td><td>{{ m.unidades_vendidas | cantidad: 'kg' }}</td><td>{{ dinero(m.ingresos) }}</td></tr>
-            }
-          </tbody>
-        </table>
-      </details>
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+
+  <nav class="tabs" aria-label="Reportes">
+    @for (t of pestanas; track t.clave) {
+      <button type="button" [class.on]="pestana() === t.clave"
+              [attr.aria-current]="pestana() === t.clave ? 'page' : null"
+              (click)="pestana.set(t.clave)">
+        {{ t.nombre }}
+      </button>
     }
-  </div>
+  </nav>
 
-  <div class="card">
-    <h3 style="margin-top:0">Por reabastecer <span class="pill off">{{ porReabastecer().length }}</span></h3>
-    @if (porReabastecer().length === 0) { <p class="empty">Todo con stock suficiente. 🎉</p> }
-    @else {
-      <table class="grid">
-        <thead><tr><th>SKU</th><th>Producto</th><th>Almacén</th><th>Disp.</th><th>Mín.</th></tr></thead>
-        <tbody>
-          @for (p of porReabastecer(); track p.variante_id + '-' + p.almacen) {
-            <tr>
-              <td>{{ p.sku }}</td>
-              <td>{{ p.producto }}</td>
-              <td>{{ p.almacen }}</td>
-              <td><span class="pill off">{{ p.disponible | cantidad: 'kg' }}</span></td>
-              <td class="muted">{{ p.stock_minimo | cantidad: 'kg' }}</td>
-            </tr>
+  @switch (pestana()) {
+    <!-- ============================================================== VENTAS -->
+    @case ('ventas') {
+      @if (ventas(); as v) {
+        <div class="kpis">
+          @for (k of kpis(); track k.etiqueta) {
+            <div class="kpi">
+              <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+              <span class="kpi-valor">{{ k.valor }}</span>
+              <span class="kpi-pie">{{ k.pie }}</span>
+            </div>
           }
-        </tbody>
-      </table>
-    }
-  </div>
-</div>
+        </div>
 
-<!-- Cortes de caja -->
-<div class="card">
-  <h3 style="margin-top:0">Cortes de caja</h3>
-  @if (cortes().length === 0) { <p class="empty">Sin sesiones en el rango.</p> }
-  @else {
-    <table class="grid">
-      <thead>
-        <tr><th>Caja</th><th>Cajero</th><th>Estado</th><th>Inicial</th><th>Ventas efectivo</th><th>Esperado</th><th>Final</th><th>Diferencia</th></tr>
-      </thead>
-      <tbody>
-        @for (c of cortes(); track c.id) {
-          <tr>
-            <td>{{ c.caja }}</td>
-            <td>{{ c.usuario }}</td>
-            <td><span class="pill" [class.ok]="c.estado === 'cerrada'">{{ c.estado }}</span></td>
-            <td>{{ dinero(c.monto_inicial) }}</td>
-            <td>{{ dinero(c.ventas_efectivo) }}</td>
-            <td>{{ c.monto_esperado ? dinero(c.monto_esperado) : '—' }}</td>
-            <td>{{ c.monto_final ? dinero(c.monto_final) : '—' }}</td>
-            <td>
-              @if (c.diferencia != null) {
-                <span class="pill" [class.ok]="+c.diferencia === 0" [class.off]="+c.diferencia !== 0">{{ dinero(c.diferencia) }}</span>
-              } @else { — }
-            </td>
-          </tr>
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>{{ porSemanas() ? 'Ventas por semana' : 'Ventas por día' }}</h2>
+              <p>
+                {{ rangoTexto() }}.
+                @if (porSemanas()) {
+                  El periodo es largo, así que se agrupa por semana, de domingo a sábado.
+                } @else {
+                  El color fuerte marca los sábados.
+                }
+              </p>
+            </div>
+          </div>
+
+          @if (totales().ventas === 0) {
+            <p class="vacio">No hubo ventas en estas fechas.</p>
+          } @else {
+            <app-columnas [data]="columnas()" [alto]="200" [descripcion]="resumenGrafica()" />
+          }
+
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>{{ porSemanas() ? 'Semana' : 'Día' }}</th>
+                  <th class="num">Ventas</th><th class="num">Kilos</th>
+                  <th class="num">Total</th><th class="num">Por venta</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (f of filas(); track f.desde) {
+                  <tr [class.sin-ventas]="f.ventas === 0">
+                    <td class="num" style="text-align: left">{{ f.etiqueta }}</td>
+                    <td class="num">{{ f.ventas || '—' }}</td>
+                    <td class="num">{{ f.ventas ? (f.kilos | cantidad: 'kg') : '—' }}</td>
+                    <td class="num">
+                      @if (f.ventas) { <b>{{ f.total | dinero }}</b> } @else { <span class="muted">sin ventas</span> }
+                    </td>
+                    <td class="num">{{ f.ventas ? (f.total / f.ventas | dinero) : '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+              @if (filas().length > 1) {
+                <tfoot>
+                  <tr>
+                    <td>Total</td>
+                    <td class="num">{{ totales().ventas }}</td>
+                    <td class="num">{{ totales().kilos | cantidad: 'kg' }}</td>
+                    <td class="num">{{ totales().total | dinero }}</td>
+                    <td class="num">{{ totales().porVenta === null ? '—' : (totales().porVenta | dinero) }}</td>
+                  </tr>
+                </tfoot>
+              }
+            </table>
+          </div>
+
+          <!-- Lo que antes eran las cifras de arriba: el total se parte en lo que
+               es venta, lo que se descontó y lo que es IVA. -->
+          <div class="desglose">
+            <span>Sin IVA <b>{{ v.resumen.subtotal | dinero }}</b></span>
+            <span>Descuentos <b>{{ v.resumen.descuento | dinero }}</b></span>
+            <span>IVA <b>{{ v.resumen.impuestos | dinero }}</b></span>
+            <span>Total <b>{{ v.resumen.total | dinero }}</b></span>
+          </div>
+        </section>
+
+        <!--
+          TIENDA EN LÍNEA APAGADA (2026-10): "Ventas por canal" comparaba el punto de
+          venta contra la tienda en línea. Con la tienda apagada todo es mostrador y
+          la gráfica tendría una sola barra. El backend sigue mandando `porCanal`;
+          para regresarla, descomentar esta tarjeta.
+
+        <section class="card">
+          <div class="card-head"><div><h2>Ventas por canal</h2></div></div>
+          <div class="leyenda">
+            <span><i style="background: var(--viz-series-1)"></i>Punto de venta</span>
+            <span><i style="background: var(--viz-series-2)"></i>Tienda en línea</span>
+          </div>
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead><tr><th>Canal</th><th class="num">Ventas</th><th class="num">Total</th></tr></thead>
+              <tbody>
+                @for (c of v.porCanal; track c.canal) {
+                  <tr>
+                    <td>{{ c.canal === 'punto_venta' ? 'Punto de venta' : 'Tienda en línea' }}</td>
+                    <td class="num">{{ c.num_pedidos }}</td>
+                    <td class="num">{{ c.total | dinero }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+        -->
+      } @else {
+        <p class="muted">Cargando…</p>
+      }
+    }
+
+    <!-- ======================================================== MÁS VENDIDOS -->
+    @case ('mas') {
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Más vendidos</h2>
+            <!-- Es el acumulado de SIEMPRE, no del rango de arriba: así lo calcula la vista. -->
+            <p>
+              Los hilos que más kilos han vendido desde siempre: no depende de las fechas de arriba.
+              La barra más larga es el que más ha vendido; las demás se miden contra él.
+            </p>
+          </div>
+        </div>
+        @if (barrasMas().length === 0) {
+          <p class="vacio">Aún sin ventas.</p>
+        } @else {
+          <div class="barras" style="--etiqueta: 220px; --cola: 130px">
+            @for (m of barrasMas(); track m.variante_id) {
+              <div class="barra-fila con-cola" [attr.title]="m.nombre + ' · ' + m.sku">
+                <div class="barra-etiqueta">
+                  <span>{{ m.nombre }}</span>
+                  <span class="muted">{{ m.sku }}</span>
+                </div>
+                <div class="barra-valor">
+                  <span class="relleno" [style.width.%]="m.pct"></span>
+                  <b>{{ m.unidades_vendidas | cantidad: 'kg' }}</b>
+                </div>
+                <span class="cola num">{{ m.ingresos | dinero }}</span>
+              </div>
+            }
+          </div>
         }
-      </tbody>
-    </table>
+      </section>
+    }
+
+    <!-- ===================================================== POR REABASTECER -->
+    @case ('reabastecer') {
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Por reabastecer</h2>
+            <p>
+              Lo que ya está en su mínimo o debajo, en cada almacén, ahora mismo. Lo disponible
+              descuenta lo apartado. Solo cuenta lo que tiene un mínimo capturado.
+            </p>
+          </div>
+          @if (veInventario()) {
+            <a class="btn btn-ghost btn-sm" routerLink="/admin/inventario">Capturar mínimos en Inventario</a>
+          }
+        </div>
+        @if (porReabastecer().length === 0) {
+          <p class="vacio">Todo está por arriba de su mínimo.</p>
+        } @else {
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>Hilo</th><th>Almacén</th><th class="num">Disponible</th>
+                  <th class="num">Mínimo</th><th class="num">Faltan</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (p of porReabastecer(); track p.variante_id + '-' + p.almacen) {
+                  <tr>
+                    <td>
+                      <div class="hilo">{{ nombreHilo(p) }}</div>
+                      <div class="muted chico mono">{{ p.sku }}</div>
+                    </td>
+                    <td>{{ p.almacen }}</td>
+                    <td class="num"><span class="pill rojo">{{ p.disponible | cantidad: 'kg' }}</span></td>
+                    <td class="num muted">{{ p.stock_minimo | cantidad: 'kg' }}</td>
+                    <td class="num"><b>{{ faltan(p) | cantidad: 'kg' }}</b></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    }
+
+    <!-- ====================================================== CORTES DE CAJA -->
+    @case ('cortes') {
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Cortes de caja</h2>
+            <p>
+              Los turnos que se abrieron {{ rangoTexto().charAt(0).toLowerCase() + rangoTexto().slice(1) }}.
+              @if (cortes().length > 0) {
+                {{ conDiferencia() === 0 ? 'Todos cuadraron.' : conDiferencia() + (conDiferencia() === 1 ? ' tuvo diferencia.' : ' tuvieron diferencia.') }}
+              }
+            </p>
+          </div>
+        </div>
+        @if (cortes().length === 0) {
+          <p class="vacio">No se abrió ningún turno en estas fechas.</p>
+        } @else {
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>Caja</th><th>Cajero</th><th>Abrió</th><th>Cerró</th><th>Estado</th>
+                  <th class="num">Inicial</th><th class="num">Ventas en efectivo</th>
+                  <th class="num">Esperado</th><th class="num">Contado</th><th>Diferencia</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of cortes(); track c.id) {
+                  <tr>
+                    <td>{{ c.caja }}</td>
+                    <td>{{ c.usuario }}</td>
+                    <td class="muted nowrap">{{ c.fecha_apertura | fecha }}</td>
+                    <td class="muted nowrap">{{ c.fecha_cierre | fecha }}</td>
+                    <td>
+                      <span class="pill" [class.azul]="c.estado === 'abierta'" [class.gris]="c.estado !== 'abierta'">
+                        {{ c.estado === 'abierta' ? 'Abierta' : 'Cerrada' }}
+                      </span>
+                    </td>
+                    <td class="num">{{ c.monto_inicial | dinero }}</td>
+                    <td class="num">{{ c.ventas_efectivo | dinero }}</td>
+                    <td class="num">{{ c.monto_esperado | dinero }}</td>
+                    <td class="num">{{ c.monto_final | dinero }}</td>
+                    <td>
+                      @if (diferencia(c); as dif) {
+                        <span [class]="dif.clase">{{ dif.texto }}</span>
+                      } @else { <span class="muted">—</span> }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    }
   }
 </div>

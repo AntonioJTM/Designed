@@ -1,58 +1,137 @@
-<div class="page-head">
-  <h1>Pedidos <span class="muted" style="font-size:0.9rem">({{ total() }})</span></h1>
-</div>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Pedidos</h1>
+      <p class="sub">Las ventas del mostrador, con su estado y lo que falta por cobrar.</p>
+    </div>
+  </header>
 
-@if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (kpis().length > 0) {
+    <div class="kpis">
+      @for (k of kpis(); track k.etiqueta) {
+        <div class="kpi">
+          <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+          <span class="kpi-valor">{{ k.valor }}</span>
+          <span class="kpi-pie">{{ k.pie }}</span>
+        </div>
+      }
+    </div>
+  }
 
-<div class="card">
-  <div class="form-grid">
+  <div class="filtros-barra">
+    <label class="crece">
+      <span class="oculto">Buscar</span>
+      <span class="buscador">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
+        </svg>
+        <input type="search" [(ngModel)]="q" name="q" (ngModelChange)="buscarAlTeclear()"
+               placeholder="Folio o cliente" autocomplete="off" />
+      </span>
+    </label>
+    <!--
+      TIENDA EN LÍNEA APAGADA (2026-10): sin tienda, todo es mostrador y el canal
+      no filtra nada. Para volver a abrirla, descomentar este campo (la lógica
+      de `canal` sigue en el componente y el backend lo acepta).
     <label class="field">
       Canal
       <select [(ngModel)]="canal" (ngModelChange)="buscar()">
-        <option value="">— Todos —</option>
+        <option value="">Todos</option>
         <option value="punto_venta">Punto de venta</option>
-        <option value="tienda_linea">Tienda en línea</option>
+        <option value="tienda_linea">En línea</option>
       </select>
     </label>
+    -->
     <label class="field">
       Estado
-      <select [(ngModel)]="estado" (ngModelChange)="buscar()">
-        <option value="">— Todos —</option>
-        <option value="pendiente">Pendiente</option>
+      <select [(ngModel)]="estado" name="estado" (ngModelChange)="buscar()">
+        <option value="">Todos</option>
         <option value="pagado">Pagado</option>
+        <option value="pendiente">Pendiente · a crédito</option>
+        <option value="apartado">Apartado</option>
+        <option value="entregado">Entregado</option>
+        <!-- TIENDA EN LÍNEA APAGADA (2026-10): estos dos solo los usa el envío de la
+             tienda en línea. Descomentarlos al volver a abrirla.
         <option value="en_preparacion">En preparación</option>
         <option value="enviado">Enviado</option>
-        <option value="entregado">Entregado</option>
+        -->
         <option value="cancelado">Cancelado</option>
         <option value="devuelto">Devuelto</option>
       </select>
     </label>
+    @if (cajas().length > 1) {
+      <label class="field">
+        Caja
+        <select [(ngModel)]="cajaId" name="caja" (ngModelChange)="buscar()">
+          <option value="">Todas</option>
+          @for (c of cajas(); track c.id) { <option [ngValue]="c.id">{{ c.nombre }}</option> }
+        </select>
+      </label>
+    }
+    <label class="field">
+      Desde
+      <input type="date" [(ngModel)]="desde" name="desde" (ngModelChange)="buscar()" />
+    </label>
+    <label class="field">
+      Hasta
+      <input type="date" [(ngModel)]="hasta" name="hasta" (ngModelChange)="buscar()" />
+    </label>
   </div>
-</div>
 
-@if (cargando()) {
-  <p class="muted">Cargando…</p>
-} @else if (pedidos().length === 0) {
-  <p class="empty">Sin pedidos.</p>
-} @else {
-  <table class="grid">
-    <thead>
-      <tr><th>Número</th><th>Canal</th><th>Cliente</th><th>Entrega</th><th>Estado</th><th>Total</th><th>Fecha</th><th></th></tr>
-    </thead>
-    <tbody>
-      @for (p of pedidos(); track p.id) {
-        <tr>
-          <td>{{ p.numero_pedido }}</td>
-          <td>{{ p.canal === 'punto_venta' ? 'POS' : 'Online' }}</td>
-          <td>{{ p.cliente || '—' }}</td>
-          <!-- Cuáles hay que enviar y cuáles esperan a que pasen por ellos. -->
-          <td class="muted">{{ p.metodo_entrega === 'envio' ? 'Envío' : 'Recoge' }}</td>
-          <td><span class="pill" [class.ok]="p.estado === 'pagado' || p.estado === 'entregado'">{{ p.estado }}</span></td>
-          <td>{{ p.total | dinero }}</td>
-          <td class="muted">{{ p.creado_en | fecha }}</td>
-          <td><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/pedidos', p.id]">Ver</a></td>
-        </tr>
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>{{ tituloLista() }}</h2>
+        <p>
+          @if (cargando()) { Cargando… }
+          @else { {{ total() }} {{ total() === 1 ? 'venta' : 'ventas' }} · las más recientes primero }
+        </p>
+      </div>
+    </div>
+
+    @if (!cargando() && pedidos().length === 0) {
+      <p class="vacio">No hay ventas con esos filtros.</p>
+    } @else if (!cargando()) {
+      <div class="tabla-scroll">
+        <table class="grid" style="min-width: 880px">
+          <thead>
+            <tr>
+              <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Atendió</th><th>Qué se llevó</th>
+              <th class="num">Total</th><th class="num">Falta</th><th>Estado</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of pedidos(); track p.id) {
+              <tr>
+                <td class="folio"><a [routerLink]="['/admin/pedidos', p.id]" [title]="p.numero_pedido">{{ p.numero_pedido | folio }}</a></td>
+                <td class="num" style="text-align: left; white-space: nowrap">{{ cuando(p.creado_en) }}</td>
+                <td class="cliente">{{ cliente(p) }}</td>
+                <td class="tenue">{{ p.usuario || '—' }}</td>
+                <td class="tenue" [attr.title]="(p.hilos ?? []).join(', ')">{{ queSeLlevo(p) }}</td>
+                <td class="num"><b>{{ p.total | dinero }}</b></td>
+                <!-- Lo que no se ha cobrado de esta venta. En una fiada es lo que
+                     se cargó a la cuenta: los abonos van a la cuenta, no a la venta. -->
+                <td class="num">
+                  @if ((p.falta ?? 0) > 0) { <span class="falta">{{ p.falta | dinero }}</span> }
+                </td>
+                <td><span [class]="'pill ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal) }}</span></td>
+                <td class="acciones"><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/pedidos', p.id]">Ver</a></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (pedidos().length < total()) {
+        <div class="mas">
+          <button type="button" class="btn btn-ghost" (click)="verMas()" [disabled]="cargandoMas()">
+            {{ cargandoMas() ? 'Cargando…' : 'Ver más (' + (total() - pedidos().length) + ' más)' }}
+          </button>
+        </div>
       }
-    </tbody>
-  </table>
-}
+    }
+  </section>
+</div>

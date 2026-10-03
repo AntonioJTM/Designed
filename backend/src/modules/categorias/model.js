@@ -17,12 +17,18 @@ async function listar({ q, activo, limit, offset }) {
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
+  // `num_productos` es de solo lectura: la pantalla de Materiales dice cuántos
+  // hilos cuelgan de cada uno, que es lo que hay que saber antes de cambiarle
+  // los calibres o de intentar borrarlo.
+  // Van por NOMBRE: el "orden" se quitó de la pantalla (2026-10-03) y, si se
+  // quedara aquí, un valor viejo que nadie ve decidiría en qué lugar sale cada uno.
   const [rows] = await pool.query(
     `SELECT c.id, c.nombre, c.calibres,
-            c.descripcion, c.imagen_url, c.orden, c.activo
+            c.descripcion, c.imagen_url, c.orden, c.activo,
+            (SELECT COUNT(*) FROM productos p WHERE p.categoria_id = c.id) AS num_productos
        FROM categorias c
        ${whereSql}
-      ORDER BY c.orden, c.nombre
+      ORDER BY c.nombre
       LIMIT :limit OFFSET :offset`,
     { ...params, limit, offset }
   );

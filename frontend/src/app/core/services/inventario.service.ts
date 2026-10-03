@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpDownloadProgressEvent, HttpEventType, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
@@ -24,8 +24,22 @@ export interface FiltroStock {
   variante_id?: number;
   q?: string;
   bajo_stock?: boolean;
+  /** Solo los renglones con algo apartado (cliente o solicitud de traspaso). */
+  apartado?: boolean;
+  /** Que cada renglón traiga su último movimiento del kardex, con su documento. */
+  ultimo_movimiento?: boolean;
   page?: number;
   limit?: number;
+}
+
+/** Filtros del kardex además del almacén, la variante y el concepto. */
+export interface FiltroKardex {
+  /** Color, calibre, SKU, folio o código de bulto. */
+  q?: string;
+  /** Días 'YYYY-MM-DD', los dos inclusive. */
+  desde?: string;
+  hasta?: string;
+  page?: number;
 }
 
 export interface MovimientoInput {
@@ -168,6 +182,85 @@ export interface ResultadoRemesa {
   costo_promedio?: string | number | null;
 }
 
+/** Un renglón del archivo que impide cargar, o que solo hay que revisar. */
+export interface RenglonLista {
+  fila: number;
+  mensaje: string;
+}
+
+/**
+ * Un hilo (color + calibre) de la lista completa del proveedor, ya empatado
+ * contra el catálogo: `existe` = se le agregan bultos; `nuevo` = se crea sin
+ * precio; `ambiguo` = hay dos hilos iguales en el catálogo y no se adivina.
+ */
+export interface HiloLista {
+  clave: string;
+  nombre: string;
+  calibre: string;
+  estado: 'existe' | 'nuevo' | 'ambiguo';
+  producto: {
+    id: number;
+    nombre: string;
+    calibre: string | null;
+    material: string | null;
+    linea: string | null;
+    activo: boolean;
+    precio_kg: number | null;
+    sku: string | null;
+    tiene_precio: boolean;
+  } | null;
+  /** El mismo color en otro calibre, para que se note un error de dedo. */
+  parecidos: string[];
+  num_bultos: number;
+  kg_total: number;
+  conos: number;
+  peso_min: number;
+  peso_max: number;
+  peso_promedio: number;
+  lotes: { lote: string; bultos: number; kg: number }[];
+  bultos: BultoRemesa[];
+}
+
+/** La vista previa de la lista completa (varios hilos en un archivo). */
+export interface PreviaLista {
+  archivo: string | null;
+  hoja: string;
+  documento: { proveedor: string | null; numero: string | null; fecha: string | null } | null;
+  articulo: string | null;
+  hilos: HiloLista[];
+  /** Contra el resumen por lote del proveedor; null si el archivo no lo trae. */
+  control: { lotes: number; cuadra: boolean; diferencias: string[] } | null;
+  errores: RenglonLista[];
+  avisos: RenglonLista[];
+  resumen: { num_hilos: number; nuevos: number; num_bultos: number; kg_total: number; conos: number; lotes: number };
+  material_sugerido_id: number | null;
+  se_puede_cargar: boolean;
+}
+
+/** Lo que dejó la lista: una carga por hilo. */
+export interface ResultadoLista {
+  cargas: (ResultadoRemesa & { producto_id: number; hilo: string; nuevo: boolean; sin_precio: boolean })[];
+  ids: number[];
+  num_hilos: number;
+  nuevos: number;
+  num_bultos: number;
+  kg_total: number;
+  /** Los hilos que quedaron en $0: no se venden hasta ponerles precio. */
+  sin_precio: { producto_id: number; hilo: string }[];
+}
+
+/**
+ * Lo que va avisando el servidor mientras carga la lista completa: qué hilo
+ * está creando, cuántos bultos van, y al final el resultado o el error.
+ */
+export type EventoCarga =
+  | { tipo: 'paso'; texto: string }
+  | { tipo: 'hilo'; i: number; n: number; hilo: string; nuevo: boolean }
+  | { tipo: 'bultos'; hilo: string; hechos: number; total: number }
+  | { tipo: 'hilo_listo'; i: number; hilo: string; folio: string }
+  | { tipo: 'fin'; data: ResultadoLista }
+  | { tipo: 'error'; status: number; error: { code: string; message: string } };
+
 /**
  * Lo que devuelve el lector al escanear. `bulto` viene en null cuando el código
  * es el principal de la presentación: no es un bulto y no tiene peso propio.
@@ -201,6 +294,8 @@ export interface Remesa {
   kg_total: string;
   lotes?: string | null;
   archivo?: string | null;
+  /** A cómo salió el kilo en esa compra; null si no se capturó. */
+  costo_kg?: string | null;
   creado_en: string;
 }
 
@@ -391,11 +486,117 @@ export class InventarioService {
       .pipe(map(data));
   }
 
-  remesas(limit = 20): Observable<Paginado<Remesa>> {
-    const params = new HttpParams().set('limit', limit);
+  /** La lista completa del proveedor (varios hilos): vista previa, sin guardar nada. */
+  previaLista(archivo: File): Observable<PreviaLista> {
+    return this.http
+      .post<ApiResponse<PreviaLista>>(`${this.base}/remesas/lista/previa`, archivo, {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Nombre-Archivo': archivo.name,
+        },
+      })
+      .pipe(map(data));
+  }
+
+  /**
+   * Carga la lista completa: crea los hilos que falten (sin precio) y deja una
+   * carga por hilo. Todo o nada.
+   *
+   * El servidor contesta POR PARTES (un JSON por renglón) y aquí se va leyendo
+   * conforme llega: cada renglón completo sale como un `EventoCarga`. Así la
+   * pantalla dice qué está haciendo mientras carga. Un error de validación
+   * llega como siempre, como error HTTP.
+   */
+  cargarLista(body: {
+    almacen_id: number;
+    archivo?: string | null;
+    notas?: string;
+    categoria_id?: number | null;
+    linea_id?: number | null;
+    documento?: PreviaLista['documento'];
+    hilos: { nombre: string; calibre: string; bultos: BultoRemesa[] }[];
+  }): Observable<EventoCarga> {
+    return new Observable<EventoCarga>((obs) => {
+      let leido = 0;
+      // Saca los renglones completos que no se han leído. Al final también el
+      // último, aunque no traiga salto de línea.
+      const leer = (texto: string, final: boolean) => {
+        const nuevos = texto.slice(leido).split('\n');
+        const completos = final ? nuevos : nuevos.slice(0, -1);
+        for (const r of completos) {
+          leido += r.length + 1;
+          if (!r.trim()) continue;
+          const obj = JSON.parse(r);
+          // Un servidor sin reiniciar contesta como antes, un solo
+          // `{ data, error }`: se toma como el final, no como un corte.
+          if (obj.tipo) obs.next(obj as EventoCarga);
+          else if (obj.error) obs.next({ tipo: 'error', status: 500, error: obj.error });
+          else obs.next({ tipo: 'fin', data: obj.data });
+        }
+      };
+      const sub = this.http
+        .post(`${this.base}/remesas/lista`, body, {
+          params: { progreso: '1' },
+          observe: 'events',
+          reportProgress: true,
+          responseType: 'text',
+        })
+        .subscribe({
+          next: (ev) => {
+            try {
+              if (ev.type === HttpEventType.DownloadProgress) {
+                leer((ev as HttpDownloadProgressEvent).partialText ?? '', false);
+              } else if (ev.type === HttpEventType.Response) {
+                leer(ev.body ?? '', true);
+                obs.complete();
+              }
+            } catch (e) {
+              obs.error(e);
+            }
+          },
+          // Con responseType 'text' el cuerpo del error llega como texto.
+          error: (e) => {
+            let cuerpo = e?.error;
+            if (typeof cuerpo === 'string') {
+              try {
+                cuerpo = JSON.parse(cuerpo);
+              } catch {
+                /* se queda como texto */
+              }
+            }
+            obs.error({ ...e, error: cuerpo });
+          },
+        });
+      return () => sub.unsubscribe();
+    });
+  }
+
+  /** Varias cargas en un PDF: el resumen de la lista y luego cada hilo. */
+  pdfCargas(ids: number[]): Observable<Blob> {
+    const params = new HttpParams().set('ids', ids.join(','));
+    return this.http.get(`${this.base}/remesas/pdf`, { params, responseType: 'blob' });
+  }
+
+  /** Las cargas más recientes; con `productoId`, solo las de ese hilo. */
+  remesas(limit = 20, productoId?: number): Observable<Paginado<Remesa>> {
+    let params = new HttpParams().set('limit', limit);
+    if (productoId) params = params.set('producto_id', productoId);
     return this.http
       .get<ApiResponse<Paginado<Remesa>>>(`${this.base}/remesas`, { params })
       .pipe(map(data));
+  }
+
+  /** El PDF de UNA carga: el hilo, el almacén y cada bulto con su peso real. */
+  pdfCarga(remesaId: number): Observable<Blob> {
+    return this.http.get(`${this.base}/remesas/${remesaId}/pdf`, { responseType: 'blob' });
+  }
+
+  /** El PDF de todas las entradas (cargas) de un hilo, con periodo opcional. */
+  pdfEntradasProducto(productoId: number, desde?: string, hasta?: string): Observable<Blob> {
+    let params = new HttpParams();
+    if (desde) params = params.set('desde', desde);
+    if (hasta) params = params.set('hasta', hasta);
+    return this.http.get(`${this.base}/remesas/producto/${productoId}/pdf`, { params, responseType: 'blob' });
   }
 
   /** Panorama de qué hay en cada almacén: totales + matriz producto × almacén. */
@@ -466,6 +667,8 @@ export class InventarioService {
     if (f.variante_id) params = params.set('variante_id', f.variante_id);
     if (f.q) params = params.set('q', f.q);
     if (f.bajo_stock) params = params.set('bajo_stock', true);
+    if (f.apartado) params = params.set('apartado', true);
+    if (f.ultimo_movimiento) params = params.set('ultimo_movimiento', true);
     params = params.set('page', f.page ?? 1).set('limit', f.limit ?? 50);
     return this.http
       .get<ApiResponse<Paginado<StockItem>>>(`${this.base}/inventario`, { params })
@@ -480,12 +683,16 @@ export class InventarioService {
   movimientos(
     almacen_id?: number,
     variante_id?: number,
-    concepto?: string
+    concepto?: string,
+    extra: FiltroKardex = {}
   ): Observable<Paginado<Movimiento>> {
-    let params = new HttpParams().set('limit', 100);
+    let params = new HttpParams().set('limit', 100).set('page', extra.page ?? 1);
     if (almacen_id) params = params.set('almacen_id', almacen_id);
     if (variante_id) params = params.set('variante_id', variante_id);
     if (concepto) params = params.set('concepto', concepto);
+    if (extra.q) params = params.set('q', extra.q);
+    if (extra.desde) params = params.set('desde', extra.desde);
+    if (extra.hasta) params = params.set('hasta', extra.hasta);
     return this.http
       .get<ApiResponse<Paginado<Movimiento>>>(`${this.base}/inventario/movimientos`, { params })
       .pipe(map(data));

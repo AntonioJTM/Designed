@@ -104,16 +104,22 @@ async function listarClientes(filtros) {
   return paginado(rows, total, filtros.page, filtros.limit);
 }
 
-/** El expediente completo: datos, estadísticas, colores y saldo. */
-async function expediente(id) {
+/**
+ * El expediente completo: datos, estadísticas, colores y saldo.
+ *
+ * `limitePedidos`: cuántas compras trae. Por omisión las 20 más recientes; la
+ * pantalla pide todas ("Ver las 47 compras") solo cuando se las piden.
+ */
+async function expediente(id, { limitePedidos = 20 } = {}) {
   const cliente = await model.obtener(id);
   if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
 
-  const [stats, colores, pedidos, credito] = await Promise.all([
+  const [stats, colores, pedidos, credito, habitos] = await Promise.all([
     model.estadisticas(id),
     model.coloresMasComprados(id),
-    model.pedidos(id, { limit: 20 }),
+    model.pedidos(id, { limit: limitePedidos }),
     model.movimientosCredito(id, { limit: 20 }),
+    model.habitos(id),
   ]);
 
   return {
@@ -124,6 +130,9 @@ async function expediente(id) {
     total_pedidos: pedidos.total,
     credito_movimientos: credito.rows,
     total_movimientos: credito.total,
+    // Su costumbre: cada cuánto viene, qué día, a qué hora, sus visitas de los
+    // últimos 90 días y cuánto gasta por mes. Es la vista Resumen del expediente.
+    habitos,
   };
 }
 

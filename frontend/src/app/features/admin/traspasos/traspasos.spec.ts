@@ -8,14 +8,15 @@ import {
   Traspaso,
   TraspasoInput,
 } from '../../../core/services/inventario.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 
 /**
  * Lo que se comprueba es lo que pidió el usuario: que se vea de qué hilo se trata
  * (color, calibre, material y línea), que se pida en KILOS y no deje pedir más de
- * lo que hay, que los conos no se traspasen, y que el acuse de recibo declare lo
- * que de verdad llegó.
+ * lo que hay, que los conos no se traspasen, que el acuse de recibo declare lo
+ * que de verdad llegó, y que enviar y recibir solo se ofrezcan a quien puede.
  */
 describe('Traspasos', () => {
   const almacenes = [
@@ -115,14 +116,28 @@ describe('Traspasos', () => {
     },
   };
 
-  async function montar() {
+  /** Los permisos del puesto; null = todos (el administrador). */
+  let permisos: string[] | null = null;
+  const authFalso = { puede: (p: string) => permisos === null || permisos.includes(p) };
+
+  /** El historial que contesta el servidor; una prueba lo cambia. */
+  let historial: Traspaso[] = [enTransito];
+
+  async function montarFixture() {
     await TestBed.configureTestingModule({
       imports: [Traspasos],
-      providers: [{ provide: InventarioService, useValue: invFalso }],
+      providers: [
+        { provide: InventarioService, useValue: { ...invFalso, traspasos: () => of({ items: historial, total: historial.length, page: 1, limit: 100, paginas: 1 }) } },
+        { provide: AuthService, useValue: authFalso },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Traspasos);
     fixture.detectChanges();
-    return fixture.componentInstance;
+    return fixture;
+  }
+
+  async function montar() {
+    return (await montarFixture()).componentInstance;
   }
 
   beforeEach(() => {
@@ -130,6 +145,8 @@ describe('Traspasos', () => {
     recibido = null;
     cancelado = null;
     eqActual = equivalencia;
+    permisos = null;
+    historial = [enTransito];
   });
   afterEach(() => TestBed.resetTestingModule());
 
@@ -265,17 +282,85 @@ describe('Traspasos', () => {
     expect(c.insuficiente(c.lineas()[0])).toBe(true);
   });
 
-  it('"Cancelar" en la pregunta del motivo NO cancela el traspaso', async () => {
+  it('cerrar la pregunta del motivo NO cancela el traspaso', async () => {
     const c = await montar();
-    spyOn(window, 'prompt').and.returnValue(null);
     c.cancelar(enTransito);
+    expect(c.cancelando()?.id).toBe(77);
+    // Cerrar con la ✕, "No cancelar" o Escape es "no cancelo".
+    c.alEscape();
+    expect(c.cancelando()).toBeNull();
     expect(cancelado).toBeNull();
   });
 
-  it('aceptar sin motivo sí cancela', async () => {
+  it('confirmar sin motivo sí cancela', async () => {
     const c = await montar();
-    spyOn(window, 'prompt').and.returnValue('');
     c.cancelar(enTransito);
+    c.confirmarCancelacion();
     expect(cancelado).toBe(77);
+    expect(c.cancelando()).toBeNull();
+    expect(c.mensaje()).toContain('regresó al origen');
+  });
+
+  it('dice en qué paso va y qué lleva', async () => {
+    const c = await montar();
+    expect(c.pasos(enTransito).map((p) => [p.texto, p.hecho, p.actual])).toEqual([
+      ['Pedido', true, false],
+      ['En camino', true, true],
+      ['Recibido', false, false],
+    ]);
+    expect(c.resumenLleva(enTransito)).toBe('1 hilo · 57.033 kg · 3 paquetes');
+  });
+
+  it('lo que faltó al recibir se cuenta en kilos y se marca en el historial', async () => {
+    const hoy = new Date();
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+    const recibidoIncompleto: Traspaso = {
+      ...enTransito,
+      id: 78,
+      folio: 'TRA-78',
+      estado: 'recibido',
+      recibido_en: `${mes}-01 12:00:00`,
+      lineas: [{ ...enTransito.lineas[0], cantidad: '57.033', cantidad_recibida: '54.633' }],
+    };
+    historial = [enTransito, recibidoIncompleto];
+    const c = await montar();
+
+    expect(c.faltanteDe(recibidoIncompleto)).toBe(2.4);
+    expect(c.estadoCerrado(recibidoIncompleto)).toEqual({ texto: 'Faltaron 2.4 kg', clase: 'ambar' });
+    const kpis = c.kpis();
+    expect(kpis.find((k) => k.etiqueta === 'En camino')!.valor).toBe('1');
+    expect(kpis.find((k) => k.etiqueta === 'Recibidos')!.valor).toBe('1');
+    expect(kpis.find((k) => k.etiqueta === 'Faltó al recibir')!.valor).toBe('2.4 kg');
+  });
+
+  it('"Confirmar que llegó" solo se ofrece a quien puede recibir', async () => {
+    let fixture = await montarFixture();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Confirmar que llegó');
+    TestBed.resetTestingModule();
+
+    permisos = ['ver:surtir'];
+    fixture = await montarFixture();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).not.toContain('Confirmar que llegó');
+    // Pero sí se ve qué le falta.
+    expect(el.textContent).toContain('acepte que lo recibió');
+  });
+
+  it('"Enviar" solo se ofrece a quien puede enviar', async () => {
+    const solicitud: Traspaso = { ...enTransito, id: 79, folio: 'TRA-79', estado: 'solicitado' };
+    historial = [solicitud];
+    permisos = ['ver:surtir', 'hacer:enviar_traspaso'];
+    let fixture = await montarFixture();
+    const boton = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll('.traspaso-acciones button')].map(
+        (b) => b.textContent!.trim()
+      );
+    expect(boton()).toContain('Enviar');
+    TestBed.resetTestingModule();
+
+    permisos = ['ver:surtir'];
+    fixture = await montarFixture();
+    expect(boton()).not.toContain('Enviar');
+    expect(boton()).toContain('Cancelar');
   });
 });

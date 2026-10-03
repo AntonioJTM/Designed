@@ -1,0 +1,25 @@
+/* Kardex: lo propio de esta pantalla. */
+.filtros-barra > .field.fecha { flex: 1 1 150px; }
+
+table.grid.kardex { min-width: 980px; }
+table.grid.kardex td.fecha { color: var(--tinta-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.grid.kardex .hilo { font-weight: 500; }
+table.grid.kardex .sub { font-size: 12px; color: var(--tinta-3); margin-top: 4px; }
+table.grid.kardex .sub.mono { font-family: var(--mono); }
+table.grid.kardex td.quien { color: var(--tinta-2); }
+/* El signo y el color dicen si entra o sale; el texto no depende solo del color. */
+table.grid.kardex b.entra { color: var(--ok-t); font-variant-numeric: tabular-nums; }
+table.grid.kardex b.sale { color: var(--alerta-t); font-variant-numeric: tabular-nums; }
+table.grid.kardex tr.abierta > td { background: var(--superficie-2); }
+
+/* El envío desplegado debajo del movimiento. */
+table.grid.kardex tr.detalle-envio > td { background: var(--superficie-2); padding: 0; }
+.envio { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.envio p { margin: 0; font-size: 13px; }
+.envio table.grid { background: var(--superficie); border: 1px solid var(--borde); border-radius: 8px; }
+.envio table.grid th, .envio table.grid td { padding: 8px 12px; font-size: 13px; }
+
+.pie-tabla {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 14px; font-size: 13px;
+}

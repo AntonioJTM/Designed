@@ -1,0 +1,41 @@
+// "Cómo va el negocio". Lo común (tarjetas, KPIs, tablas, píldoras, leyenda,
+// columnas) sale de styles.scss; aquí solo lo propio de esta pantalla.
+
+// El selector del periodo, en el encabezado: angosto, sin etiqueta visible
+// (el lector de pantalla sí la tiene).
+.periodo { min-width: 200px; }
+.periodo select { width: auto; min-width: 200px; }
+
+// Las dos tarjetas de en medio: el margen un poco más ancho que el hilo parado,
+// y las dos bajan a una columna cuando no caben juntas.
+.fila > .f-margen { flex: 1 1 480px; min-width: 0; }
+.fila > .f-parado { flex: 1 1 100%; min-width: 0; }
+/* El hilo parado va a todo lo ancho: su tabla tiene cinco columnas y en media
+   pantalla se cortaba la de "sin venderse". */
+
+// Dentro de una tarjeta los bloques van con aire entre sí.
+.card > * + * { margin-top: 14px; }
+.card > .card-head + * { margin-top: 0; }
+.card-head { margin-bottom: 16px; }
+.card > p.aviso, .card > p.vacio { margin-bottom: 0; }
+
+.cargando { margin: 0; }
+
+// Las cifras de cada bloque de clientes: chicas al lado de los KPIs de arriba,
+// pero todavía lo primero que se lee de la tarjeta.
+.cifras-mini { display: flex; flex-wrap: wrap; gap: 12px 40px; }
+.cifras-mini > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cifras-mini span { font-size: 13px; color: var(--tinta-3); }
+.cifras-mini b { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.cifras-mini small { font-size: 13px; color: var(--tinta-3); }
+
+.subtitulo { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--tinta-2); }
+.espacio-arriba { margin-top: 12px; }
+
+// Celdas de dos renglones: el nombre arriba y su detalle abajo.
+.hilo { font-weight: 500; }
+.chico { font-size: 12px; }
+.resumen-parado { margin: 0; font-size: 14px; color: var(--tinta-2); }
+// Lo que lleva meses parado se dice en la tinta de alerta (texto, no color de serie).
+.dias-parado { color: var(--alerta-t); white-space: nowrap; }
+

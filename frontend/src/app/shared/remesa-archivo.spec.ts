@@ -23,17 +23,19 @@ describe('cotejo del nombre del archivo de la remesa', () => {
     });
   });
 
-  it('sin calibre en el nombre, al menos saca el color', () => {
-    expect(hiloDelArchivo('ROSA MEXICANO.xlsx')).toEqual({
-      color: 'ROSA MEXICANO',
-      calibre: null,
-    });
+  it('sin calibre al final no es un nombre de hilo: no opina', () => {
+    expect(hiloDelArchivo('ROSA MEXICANO.xlsx')).toBeNull();
   });
 
   it('un nombre que no sigue la convención no opina nada', () => {
     expect(hiloDelArchivo('.xlsx')).toBeNull();
-    expect(cotejarArchivo('lista de empaque final.xlsx', { producto: 'NEGRO', calibre: '2/30' })
-      .map((a) => a.campo)).toEqual(['color']);
+    expect(cotejarArchivo('lista de empaque final.xlsx', { producto: 'NEGRO', calibre: '2/30' })).toEqual([]);
+  });
+
+  it('la lista con varios colores no "no cuadra" con ninguno de sus hilos', () => {
+    const lista = 'HTX 1.ARAC FFAU 721502-4 - INVENTARIO.xlsx';
+    expect(hiloDelArchivo(lista)).toBeNull();
+    expect(cotejarArchivo(lista, { producto: 'MARINO', calibre: '2/30' })).toEqual([]);
   });
 
   it('cuando cuadra, no avisa nada', () => {

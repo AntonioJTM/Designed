@@ -1,0 +1,215 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+<div class="fila estirar">
+  <!-- ============================================================ Quién gasta más -->
+  <section class="card ancha">
+    <div class="card-head">
+      <div>
+        <h2>Quién gasta más</h2>
+        <p>
+          Lo que compró cada uno {{ enPeriodo(dias()) }}. A la derecha, cuánto de lo que te compran los
+          clientes suman hasta ese renglón.
+        </p>
+      </div>
+      <span class="muted" style="font-size: 13px">acumulado</span>
+    </div>
+    @if (ranking().length === 0) {
+      <p class="vacio">Ningún cliente identificado compró {{ enPeriodo(dias()) }}.</p>
+    } @else {
+      <div class="barras" style="--etiqueta: 190px; --cola: 56px">
+        @for (f of ranking(); track f.c.cliente_id) {
+          <div class="barra-fila con-cola">
+            <span class="barra-etiqueta">
+              <span [title]="f.c.nombre_comercial || f.c.nombre"><span class="pos-num">{{ f.c.pos }}.</span> {{ f.c.nombre }}</span>
+            </span>
+            <span class="barra-valor">
+              <span class="relleno" [style.width.%]="f.ancho"></span>
+              <b>{{ pesos(f.c.total) }}</b>
+            </span>
+            <span class="num" style="font-size: 13px; color: var(--tinta-2); text-align: right">
+              {{ f.c.acumulado_pct === null ? '' : f.c.acumulado_pct + '%' }}
+            </span>
+          </div>
+        }
+      </div>
+    }
+  </section>
+
+  <div class="columna angosta">
+    <!-- ======================================================= Por lista de precio -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Por lista de precio</h2>
+          <p>De cada 100 pesos que te compran los clientes.</p>
+        </div>
+      </div>
+      @if (datos().por_lista.length === 0) {
+        <p class="muted" style="margin: 0">Sin compras {{ enPeriodo(dias()) }}.</p>
+      } @else {
+        <div class="columna" style="gap: 14px">
+          @for (l of datos().por_lista; track l.lista) {
+            <div class="reparto">
+              <div class="linea">
+                <span style="font-weight: 500">{{ l.lista }}</span>
+                <span>{{ pesos(l.total) }} · <b style="color: var(--tinta)">{{ l.pct }}%</b></span>
+              </div>
+              <div class="carril"><span [style.width.%]="l.pct"></span></div>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <!-- ====================================================== Contra lo de antes -->
+    @if (hayAnterior()) {
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>{{ contraAnterior(dias()) }}</h2>
+            <p>Cuántos te compran más y cuántos menos que antes.</p>
+          </div>
+        </div>
+        <div class="contra">
+          <div class="tono-azul"><b>{{ datos().compran_mas }}</b><span>compran más</span></div>
+          <div class="tono-naranja"><b>{{ datos().compran_menos }}</b><span>compran menos</span></div>
+          <div class="tono-gris"><b>{{ datos().nuevos }}</b><span>son nuevos</span></div>
+        </div>
+      </section>
+    }
+  </div>
+</div>
+
+<!-- =================================================== Todos: también el directorio -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Todos los clientes, del que más gasta al que menos</h2>
+      <p>También es el directorio: desde aquí se abre el expediente de cualquiera.</p>
+    </div>
+    <div class="filtros-tabla">
+      <label>
+        Lista de precio
+        <select [ngModel]="lista()" (ngModelChange)="lista.set($event)" name="lista">
+          <option value="">Todas</option>
+          @for (l of listas(); track l) { <option [value]="l">{{ l }}</option> }
+        </select>
+      </label>
+      <label>
+        Ordenar
+        <select [ngModel]="orden()" (ngModelChange)="orden.set($event)" name="orden">
+          <option value="gasto">Del que más gasta</option>
+          <option value="nombre">Por nombre</option>
+          <option value="nuevo">Los más nuevos</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  @if (tabla().length === 0) {
+    <p class="vacio">
+      @if (lista()) { Ningún cliente tiene esa lista de precio. }
+      @else { Todavía no hay clientes capturados. Empieza con «Nuevo cliente», arriba. }
+    </p>
+  } @else {
+    <div class="tabla-scroll">
+      <table class="grid" style="min-width: 900px">
+        <thead>
+          <tr>
+            <th class="num">#</th>
+            <th>Cliente</th>
+            <th>Lista de precio</th>
+            <th class="num">Compras</th>
+            <th class="num">Gastó {{ enPeriodo(dias()) }}</th>
+            <th class="num">Por compra</th>
+            @if (hayAnterior()) { <th class="num">Contra antes</th> }
+            <th><span class="oculto">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of tabla(); track r.cliente_id) {
+            <tr>
+              <td class="num pos-num">{{ r.pos }}</td>
+              <td>
+                <div style="font-weight: 500">{{ r.nombre }}</div>
+                @if (r.nombre_comercial || r.telefono) {
+                  <div class="muted" style="font-size: 13px">
+                    {{ r.nombre_comercial }}{{ r.nombre_comercial && r.telefono ? ' · ' : '' }}<span class="mono">{{ r.telefono }}</span>
+                  </div>
+                }
+              </td>
+              <td>{{ r.lista || 'Público' }}</td>
+              <td class="num">{{ r.compras }}</td>
+              <td class="num" style="font-weight: 600">{{ r.total | dinero }}</td>
+              <td class="num">{{ r.ticket === null ? '—' : (r.ticket | dinero) }}</td>
+              @if (hayAnterior()) {
+                <td class="num">
+                  @if (r.cambio_pct !== null) {
+                    <span class="cambio" [class.sube]="r.cambio_pct >= 0" [class.baja]="r.cambio_pct < 0">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path [attr.d]="r.cambio_pct >= 0 ? 'M12 19V5 M6 11l6-6 6 6' : 'M12 5v14 M6 13l6 6 6-6'"></path>
+                      </svg>
+                      {{ r.cambio_pct >= 0 ? '+' : '−' }}{{ r.cambio_pct < 0 ? -r.cambio_pct : r.cambio_pct }}%
+                    </span>
+                  } @else if (r.total > 0) {
+                    <span class="pill gris">nuevo</span>
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                </td>
+              }
+              <td class="acciones">
+                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', r.cliente_id]" [queryParams]="{ ver: 'gasto' }">Ver expediente</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>
+
+<!-- ================================================================ Dados de baja -->
+@if (bajas().length > 0) {
+  <section class="card suave">
+    <div class="card-head">
+      <div>
+        <h2>Dados de baja</h2>
+        <p>
+          {{ totalBajas() }} {{ totalBajas() === 1 ? 'cliente dado de baja' : 'clientes dados de baja' }}: no
+          salen en las pestañas ni en el punto de venta. Para reactivarlo, ábrelo y edítalo.
+        </p>
+      </div>
+    </div>
+    <div class="tabla-scroll">
+      <table class="grid">
+        <thead>
+          <tr><th>Cliente</th><th>Teléfono</th><th>Cliente desde</th><th><span class="oculto">Acciones</span></th></tr>
+        </thead>
+        <tbody>
+          @for (c of bajas(); track c.id) {
+            <tr>
+              <td>
+                <div style="font-weight: 500">{{ c.nombre }}</div>
+                @if (c.nombre_comercial) { <div class="muted" style="font-size: 13px">{{ c.nombre_comercial }}</div> }
+              </td>
+              <td class="mono">{{ c.telefono || '—' }}</td>
+              <td>{{ c.cliente_desde ? fechaCorta(c.cliente_desde) : '—' }}</td>
+              <td class="acciones">
+                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.id]">Ver expediente</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}

@@ -10,45 +10,65 @@
       <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
     </div>
 
-    <form [formGroup]="form" (ngSubmit)="guardar()">
-      <div class="modal-body">
-        @if (error()) {
-          <p class="alert" style="margin-top:0">{{ error() }}</p>
-        }
-
-        <div class="form-grid">
-          <label class="field">
-            Nombre
-            <input type="text" formControlName="nombre" placeholder="Ej. Acrilán" />
-          </label>
-          <label class="field">
-            Orden
-            <input type="number" formControlName="orden" />
-          </label>
-          <label class="field full">
-            Calibres de este material
-            <input type="text" formControlName="calibres" placeholder="Ej. 1/30, 2/30" />
-            <span class="muted" style="font-size:0.72rem">
-              Separados por coma. Son los únicos que se ofrecerán al dar de alta un
-              producto de este material.
-            </span>
-          </label>
-          <label class="field full">
-            Descripción
-            <textarea formControlName="descripcion" rows="2"></textarea>
-          </label>
-          <label class="field check">
-            <input type="checkbox" formControlName="activo" /> Activo
-          </label>
-        </div>
+    @if (confirmandoBorrado()) {
+      <div class="modal-body columna" style="gap: 12px">
+        <p style="margin: 0">¿Eliminar el material <b>{{ material()?.nombre }}</b>?</p>
+        <p class="muted" style="margin: 0; font-size: 14px">
+          Solo se puede si ningún producto lo usa. Si ya tiene productos, desmárcalo como
+          activo en vez de borrarlo.
+        </p>
       </div>
-
       <div class="modal-foot">
-        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
-        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
-          {{ guardando() ? 'Guardando…' : (esEdicion() ? 'Guardar cambios' : 'Crear material') }}
+        <button type="button" class="btn btn-ghost" (click)="confirmandoBorrado.set(false)">No, regresar</button>
+        <button type="button" class="btn btn-danger" (click)="eliminar()" [disabled]="guardando()">
+          {{ guardando() ? 'Eliminando…' : 'Sí, eliminar' }}
         </button>
       </div>
-    </form>
+    } @else {
+      <form [formGroup]="form" (ngSubmit)="guardar()">
+        <div class="modal-body">
+          @if (error()) {
+            <p class="alert" style="margin: 0 0 16px">{{ error() }}</p>
+          }
+
+          <div class="form-grid">
+            <!-- Sin "Orden" (lo quitó el usuario el 2026-10-03): los materiales van
+                 por nombre en todas las listas. -->
+            <label class="field full">
+              Nombre
+              <input type="text" formControlName="nombre" placeholder="Ej. Acrilán" />
+            </label>
+            <label class="field full">
+              Calibres de este material
+              <input type="text" formControlName="calibres" placeholder="Ej. 1/30, 2/30" />
+              <span class="ayuda">
+                Separados por coma. Son los únicos que se ofrecerán al dar de alta un
+                producto de este material.
+              </span>
+            </label>
+            <label class="field full">
+              Descripción
+              <textarea formControlName="descripcion" rows="2"></textarea>
+            </label>
+            <label class="field check">
+              <input type="checkbox" formControlName="activo" /> Activo
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          @if (esEdicion()) {
+            <button type="button" class="btn btn-danger" style="margin-right: auto"
+                    (click)="confirmandoBorrado.set(true)">
+              Eliminar
+            </button>
+          }
+          <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+            {{ guardando() ? 'Guardando…' : (esEdicion() ? 'Guardar cambios' : 'Crear material') }}
+          </button>
+        </div>
+      </form>
+    }
   </div>
 </div>

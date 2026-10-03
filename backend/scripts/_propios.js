@@ -72,4 +72,61 @@ function soloPropios(db, foto, prefijo = 'TMP') {
   };
 }
 
-module.exports = { soloPropios };
+/**
+ * Borra los TURNOS de las cajas de una prueba, con sus movimientos de caja,
+ * PERO solo los que nadie más usó.
+ *
+ * Existe por el incidente del 2026-10-03: mientras e2e-apartados tenía abierta
+ * su caja TMP, alguien registró desde el panel un abono REAL en efectivo (el
+ * modal de abono propone el primer turno abierto que encuentra, y era el de la
+ * prueba). La limpieza borraba los movimientos "por turno" y se llevó la
+ * entrada de ese dinero.
+ *
+ * Un turno tiene algo AJENO si en él hay un abono de crédito de un cliente que
+ * no es de la prueba, o un pedido que no es de un cliente de la prueba ni lleva
+ * un hilo de la prueba. Ese turno NO se borra (ni su caja): se avisa fuerte y se
+ * deja para revisarlo a mano. Devuelve los turnos que se respetaron.
+ */
+async function borrarTurnosPropios(db, sesionIds, prefijo = 'TMP') {
+  const pat = prefijo + '%';
+  const respetados = [];
+  for (const id of sesionIds) {
+    const [[ajeno]] = await db.query(
+      `SELECT (SELECT COUNT(*) FROM credito_movimientos cm JOIN clientes c ON c.id = cm.cliente_id
+                WHERE cm.sesion_caja_id = ? AND c.nombre NOT LIKE ?)
+            + (SELECT COUNT(*) FROM pedidos p LEFT JOIN clientes c ON c.id = p.cliente_id
+                WHERE p.sesion_caja_id = ? AND (c.id IS NULL OR c.nombre NOT LIKE ?)
+                  AND NOT EXISTS (SELECT 1 FROM pedido_detalle d
+                                    JOIN producto_variantes pv ON pv.id = d.variante_id
+                                    JOIN productos pr          ON pr.id = pv.producto_id
+                                   WHERE d.pedido_id = p.id AND pr.nombre LIKE ?)) AS n`,
+      [id, pat, id, pat, pat]
+    );
+    if (Number(ajeno.n) > 0) {
+      respetados.push(id);
+      continue;
+    }
+    await db.query('DELETE FROM movimientos_caja WHERE sesion_caja_id = ?', [id]);
+    await db.query('DELETE FROM sesiones_caja WHERE id = ?', [id]);
+  }
+  if (respetados.length) {
+    console.warn(
+      `\n  ⚠  ${respetados.length} turno(s) de la caja de prueba tienen movimientos AJENOS ` +
+        `(alguien cobró o vendió en ella mientras corría la prueba). NO se borraron, ni su caja: ` +
+        `turno(s) ${respetados.join(', ')}. Revísalos a mano.\n`
+    );
+  }
+  return respetados;
+}
+
+/** Borra las cajas de la prueba que ya no tengan turnos (los ajenos las sostienen). */
+async function borrarCajasSinTurnos(db, cajaIds) {
+  for (const id of cajaIds) {
+    await db.query(
+      'DELETE FROM cajas WHERE id = ? AND NOT EXISTS (SELECT 1 FROM sesiones_caja s WHERE s.caja_id = ?)',
+      [id, id]
+    );
+  }
+}
+
+module.exports = { soloPropios, borrarTurnosPropios, borrarCajasSinTurnos };

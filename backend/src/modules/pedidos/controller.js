@@ -3,6 +3,7 @@
 const service = require('./service');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
+const permisos = require('../permisos/service');
 
 async function cotizar(req, res, next) {
   try {
@@ -14,6 +15,12 @@ async function cotizar(req, res, next) {
 
 async function crear(req, res, next) {
   try {
+    // Fiar es un permiso del puesto: el botón se esconde, pero quien no lo tiene
+    // tampoco puede mandarlo a mano.
+    if (req.auth?.tipo === 'usuario' && Number(req.body.a_credito ?? 0) > 0
+        && !(await permisos.puede(req.auth, 'hacer:fiar'))) {
+      throw new AppError(403, 'SIN_PERMISO', 'Tu puesto no tiene permiso para «Fiar». Pídeselo al administrador.');
+    }
     // Una venta POS solo la registra el personal (staff).
     if (req.body.canal === 'punto_venta' && req.auth?.tipo !== 'usuario') {
       throw new AppError(403, 'PROHIBIDO', 'Solo el personal puede registrar ventas de punto de venta');
@@ -41,10 +48,18 @@ async function obtener(req, res, next) {
 async function listar(req, res, next) {
   try {
     const { page, limit, offset } = parsePagination(req.query);
+    // Las fechas llegan tecleadas en un <input type="date">: lo que no tenga
+    // forma de fecha se ignora en vez de llegar a la consulta.
+    const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
     const data = await service.listar({
       canal: req.query.canal,
       estado: req.query.estado,
       cliente_id: req.query.cliente_id ? Number(req.query.cliente_id) : undefined,
+      q: q || undefined,
+      caja_id: Number(req.query.caja_id) > 0 ? Number(req.query.caja_id) : undefined,
+      desde: fecha(req.query.desde),
+      hasta: fecha(req.query.hasta),
       page, limit, offset,
     });
     res.json({ data, error: null });
@@ -65,6 +80,11 @@ async function misPedidos(req, res, next) {
 
 async function cambiarEstado(req, res, next) {
   try {
+    if (['cancelado', 'devuelto'].includes(req.body.estado)
+        && !(await permisos.puede(req.auth, 'hacer:cancelar_venta'))) {
+      throw new AppError(403, 'SIN_PERMISO',
+        'Tu puesto no tiene permiso para «Cancelar o devolver una venta». Pídeselo al administrador.');
+    }
     // El usuario queda en el kardex del movimiento que repone o vuelve a
     // descontar la mercancía.
     const data = await service.cambiarEstado(
@@ -138,7 +158,14 @@ async function entregarApartado(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function resumen(req, res, next) {
+  try {
+    res.json({ data: await service.resumen(), error: null });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
+  resumen,
   crear, obtener, listar, misPedidos, cambiarEstado, cotizar,
   subirComprobante, verComprobante, eliminarComprobante,
   apartados, abonarApartado, entregarApartado,

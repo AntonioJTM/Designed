@@ -13,6 +13,13 @@ export interface Caja {
   almacen?: string;
   nombre: string;
   activo: boolean | number;
+  /** El turno abierto de la caja, si tiene (lo trae el listado). */
+  turno_id?: number | null;
+  turno_desde?: string | null;
+  turno_usuario?: string | null;
+  /** Su último corte y cuánto se descuadró (positivo sobró, negativo faltó). */
+  ultimo_corte?: string | null;
+  ultimo_corte_diferencia?: string | null;
 }
 
 export interface MovimientoCaja {
@@ -22,6 +29,9 @@ export interface MovimientoCaja {
   referencia_id?: number | null;
   motivo?: string | null;
   creado_en: string;
+  /** Venta y devolución: el folio y el cliente del pedido. */
+  numero_pedido?: string | null;
+  cliente?: string | null;
 }
 
 export interface SesionCaja {
@@ -151,6 +161,18 @@ export interface Apartado {
   dias_apartado: number;
   ultimo_abono?: string | null;
   aparto_con?: string | null;
+  /** Qué se guardó, con el calibre (rediseño 2026-10). */
+  hilos?: HiloApartado[];
+  /** Cuántos kilos están apartados en este pedido. */
+  kg?: number;
+}
+
+/** Un hilo dentro de un apartado. `paquetes` es aproximado: cada bulto pesa distinto. */
+export interface HiloApartado {
+  hilo: string;
+  tipo_presentacion?: 'paquete' | 'cono' | 'simple';
+  kg: number;
+  paquetes: number | null;
 }
 
 /** El resumen de los apartados vigentes. */
@@ -160,6 +182,8 @@ export interface Apartados {
   /** Cuánto dinero de la tienda está comprometido en mercancía guardada. */
   total_apartado: number;
   total_abonado: number;
+  /** Kilos de la bodega que ya tienen dueño. */
+  kg_apartado?: number;
 }
 
 /** Lo que devuelve un abono a un apartado. */
@@ -183,10 +207,25 @@ export interface Pedido {
   /** Si ya salió del inventario. Un apartado vigente está en 0. */
   inventario_descontado?: number | boolean;
   entregado_en?: string | null;
+  cliente_id?: number | null;
   cliente?: string | null;
+  /** Como le dicen al cliente ("Doña Chela"): con eso lo reconoce el mostrador. */
+  cliente_nombre_comercial?: string | null;
   usuario?: string | null;
   almacen?: string | null;
   sesion_caja_id?: number | null;
+  /** La caja donde se vendió (por el turno). */
+  caja?: string | null;
+  /** Listado: lo cobrado (pagos completados) y lo que falta de esta venta. */
+  pagado?: string | number;
+  falta?: number;
+  /** Listado: qué se llevó, con su calibre ("ROJO 2/30 · cono"). */
+  hilos?: string[];
+  /** Detalle: lo que se fió con esta venta (cargo y, si se canceló, su ajuste). */
+  credito?: MovimientoCreditoPedido[];
+  /** Detalle: abonos a la cuenta del cliente después de la venta (no son de este pedido). */
+  abonos_cuenta?: { monto: string; creado_en: string }[];
+  actualizado_en?: string;
   subtotal: string;
   descuento: string;
   impuestos: string;
@@ -204,6 +243,14 @@ export interface Pedido {
    * —no es dinero de la tienda— pero el ticket lo muestra.
    */
   cambio?: number;
+}
+
+/** Un movimiento del libro de crédito ligado a un pedido. */
+export interface MovimientoCreditoPedido {
+  tipo: 'cargo' | 'abono' | 'ajuste';
+  monto: string;
+  notas?: string | null;
+  creado_en: string;
 }
 
 /** Ítem del carrito POS (estado local en el navegador). */

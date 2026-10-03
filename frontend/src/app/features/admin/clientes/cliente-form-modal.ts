@@ -5,6 +5,7 @@ import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Cliente } from '../../../core/models/clientes.models';
 import { TipoCliente } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { hoyLocal } from '../../../shared/fecha.pipe';
 
 /**
  * Alta y edición del cliente, en modal sobre el listado.
@@ -17,12 +18,25 @@ import { ApiError } from '../../../core/models/auth.models';
  * Las listas de precio SÍ se piden al servidor, así que el formulario se dibuja
  * completo desde el primer cuadro y se tapa con el velo mientras cargan, en vez
  * de pintar un "Cargando…" chico que luego crece.
+ *
+ * Al dar de ALTA no se cierra solo: ofrece capturar otro (el usuario va a
+ * capturar sus clientes de años uno tras otro, y reabrir el modal cada vez
+ * sobra) o ir a su expediente. Al editar, sí se cierra al guardar.
  */
 @Component({
   selector: 'app-cliente-form-modal',
   imports: [ReactiveFormsModule],
   templateUrl: './cliente-form-modal.html',
   host: { '(document:keydown.escape)': 'cerrar()' },
+  styles: `
+    .grupo { grid-column: 1 / -1; margin: 6px 0 -4px; }
+    .grupo:first-child { margin-top: 0; }
+    .req { color: var(--peligro-t); font-weight: 700; }
+    .moneda { position: relative; display: block; }
+    .moneda > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--tinta-3); font-weight: 600; }
+    .moneda > input { padding-left: 26px; }
+    .field .error-campo { font-size: 12px; font-weight: 400; color: var(--peligro-t); }
+  `,
 })
 export class ClienteFormModal implements OnInit {
   private readonly fb = inject(FormBuilder);
@@ -34,6 +48,11 @@ export class ClienteFormModal implements OnInit {
 
   readonly cerrado = output<void>();
   readonly guardado = output<Cliente>();
+  /** "Ver su expediente" después de un alta. */
+  readonly irAExpediente = output<number>();
+
+  /** Cliente recién creado: mientras está puesto, el modal ofrece el paso siguiente. */
+  readonly creado = signal<Cliente | null>(null);
 
   readonly esEdicion = computed(() => this.cliente() !== null);
 
@@ -94,8 +113,10 @@ export class ClienteFormModal implements OnInit {
         activo: !!c.activo,
       });
     } else {
-      // Un cliente nuevo es cliente desde hoy; si es de años, se corrige.
-      this.form.patchValue({ cliente_desde: new Date().toISOString().slice(0, 10) });
+      // Un cliente nuevo es cliente desde hoy; si es de años, se corrige. En
+      // hora LOCAL: `toISOString()` da el día en UTC y después de las 18:00 ya
+      // decía mañana.
+      this.form.patchValue({ cliente_desde: hoyLocal() });
     }
 
     this.catalogo.tiposCliente().subscribe({
@@ -150,8 +171,11 @@ export class ClienteFormModal implements OnInit {
     obs.subscribe({
       next: (r) => {
         this.guardando.set(false);
+        // La pantalla de atrás se recarga en los dos casos. Al editar no hay
+        // nada más que decir; al crear se ofrece el siguiente paso.
         this.guardado.emit(r);
-        this.cerrar();
+        if (c) this.cerrar();
+        else this.creado.set(r);
       },
       error: (e) => {
         this.error.set(this.msg(e));
@@ -160,8 +184,24 @@ export class ClienteFormModal implements OnInit {
     });
   }
 
+  /** Guardó uno y quiere capturar el siguiente sin cerrar el modal. */
+  otro(): void {
+    this.creado.set(null);
+    this.error.set(null);
+    // Se conserva la lista de precios y el "cómo llegó": al capturar de corrido
+    // suelen repetirse. Lo demás arranca vacío, y "cliente desde" en hoy.
+    const { tipo_cliente_id, como_llego } = this.form.getRawValue();
+    this.form.reset();
+    this.form.patchValue({ tipo_cliente_id, como_llego, cliente_desde: hoyLocal() });
+  }
+
   cerrar(): void {
     this.cerrado.emit();
+  }
+
+  /** Los DECIMAL llegan como texto. */
+  num(v: unknown): number {
+    return Number(v ?? 0);
   }
 
   private msg(e: unknown): string {

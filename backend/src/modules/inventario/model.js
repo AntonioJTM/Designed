@@ -18,6 +18,9 @@ const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 
 const SELECT_STOCK = `
   SELECT i.id, i.variante_id, pv.sku, p.nombre AS producto,
+         -- La pantalla agrupa las presentaciones por PRODUCTO, no por el nombre:
+         -- "MARINO OSCURO 1/30" y "MARINO OSCURO 2/30" se llaman igual y son dos.
+         pv.producto_id,
          pv.presentacion, pv.tipo_presentacion, pv.peso_kg,
          -- Cómo se clasifica el hilo: material, línea de procedencia y calibre.
          -- Sin esto la pantalla solo mostraba el COLOR, y el mismo color en otro
@@ -43,7 +46,7 @@ const SELECT_STOCK = `
  */
 const COND_ALERTA = '(i.stock_minimo > 0 AND (i.cantidad - i.cantidad_reservada) <= i.stock_minimo)';
 
-async function listarStock({ almacen_id, variante_id, q, bajo_stock, limit, offset }) {
+async function listarStock({ almacen_id, variante_id, q, bajo_stock, apartado, limit, offset }) {
   const where = [];
   const params = {};
   if (almacen_id !== undefined) {
@@ -54,14 +57,26 @@ async function listarStock({ almacen_id, variante_id, q, bajo_stock, limit, offs
     where.push('i.variante_id = :variante_id');
     params.variante_id = variante_id;
   }
-  // Color, calibre o SKU, palabra por palabra ("marino 2/30").
-  const busca = porPalabras(q, ['pv.sku', 'p.nombre', { col: 'p.grosor_calibre', calibre: true }]);
+  // Color, calibre, SKU o código, palabra por palabra ("marino 2/30"). El
+  // código del bulto también cuenta: con el lector en la mano se escanea el
+  // paquete para saber de qué hilo es y cuánto queda.
+  const busca = porPalabras(q, [
+    'pv.sku', 'pv.codigo_barras', 'p.nombre',
+    { col: 'p.grosor_calibre', calibre: true },
+    // EXISTS y no GROUP_CONCAT: GROUP_CONCAT se corta a 1,024 caracteres.
+    (c) => `EXISTS (SELECT 1 FROM variante_codigos vc WHERE vc.variante_id = pv.id AND vc.codigo LIKE ${c})`,
+  ]);
   if (busca) {
     where.push(busca.sql);
     Object.assign(params, busca.params);
   }
   if (bajo_stock) {
     where.push(COND_ALERTA);
+  }
+  // Solo lo que tiene algo apartado (por un cliente o por una solicitud de
+  // traspaso): es lo que ya tiene dueño aunque siga en el estante.
+  if (apartado) {
+    where.push('i.cantidad_reservada > 0');
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -189,7 +204,43 @@ const FILTROS_CONCEPTO = {
   manuales: 'm.referencia_tipo IS NULL',
 };
 
-async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limit, offset }) {
+/**
+ * El documento que originó un movimiento (venta, traspaso, desarme o remesa).
+ * Lo comparten el kardex y el "último movimiento" de cada renglón de
+ * existencias, para que los dos digan lo mismo de un mismo movimiento.
+ */
+const CAMPOS_DOCUMENTO = `
+            ped.numero_pedido, ped.canal AS pedido_canal,
+            tr.folio AS traspaso_folio,
+            tao.nombre AS traspaso_origen, tad.nombre AS traspaso_destino,
+            cvo.sku AS conversion_paquete, cvd.sku AS conversion_cono,
+            cv.codigo_bulto AS conversion_bulto,
+            rem.folio AS remesa_folio`;
+
+const JOINS_DOCUMENTO = `
+       LEFT JOIN pedidos ped      ON m.referencia_tipo = 'pedido'
+                                 AND ped.id = m.referencia_id
+       LEFT JOIN traspasos tr     ON m.referencia_tipo = 'traspaso'
+                                 AND tr.id = m.referencia_id
+       LEFT JOIN almacenes tao    ON tao.id = tr.almacen_origen_id
+       LEFT JOIN almacenes tad    ON tad.id = tr.almacen_destino_id
+       LEFT JOIN variante_conversiones cv ON m.referencia_tipo = 'conversion'
+                                         AND cv.id = m.referencia_id
+       LEFT JOIN producto_variantes cvo ON cvo.id = cv.variante_origen_id
+       LEFT JOIN producto_variantes cvd ON cvd.id = cv.variante_destino_id
+       LEFT JOIN remesas rem      ON m.referencia_tipo = 'remesa'
+                                 AND rem.id = m.referencia_id`;
+
+const FROM_KARDEX = `
+       FROM movimientos_inventario m
+       JOIN producto_variantes pv ON pv.id = m.variante_id
+       JOIN productos prod        ON prod.id = pv.producto_id
+       JOIN unidades_medida um    ON um.id = prod.unidad_medida_id
+       JOIN almacenes a           ON a.id = m.almacen_id
+       LEFT JOIN usuarios u       ON u.id = m.usuario_id
+       ${JOINS_DOCUMENTO}`;
+
+async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, q, desde, hasta, limit, offset }) {
   const where = [];
   const params = {};
   if (concepto && FILTROS_CONCEPTO[concepto]) {
@@ -207,6 +258,28 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limi
     where.push('m.tipo = :tipo');
     params.tipo = tipo;
   }
+  // Color, calibre o código, palabra por palabra. "Código" es lo que la tienda
+  // tiene en la mano: el SKU, el folio del documento (POS-…, TRA-…, REM-…) o
+  // el código del bulto que se bajó a conos.
+  const busca = porPalabras(q, [
+    'pv.sku', 'prod.nombre',
+    { col: 'prod.grosor_calibre', calibre: true },
+    'ped.numero_pedido', 'tr.folio', 'rem.folio', 'cv.codigo_bulto',
+  ]);
+  if (busca) {
+    where.push(busca.sql);
+    Object.assign(params, busca.params);
+  }
+  // Rango de días, los dos inclusive. `hasta` se compara contra el día
+  // siguiente para no perder lo que pasó ese mismo día después de las 00:00.
+  if (desde) {
+    where.push('m.creado_en >= :desde');
+    params.desde = desde;
+  }
+  if (hasta) {
+    where.push('m.creado_en < DATE_ADD(:hasta, INTERVAL 1 DAY)');
+    params.hasta = hasta;
+  }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   // Se traen los datos del documento que originó el movimiento (venta,
@@ -217,45 +290,54 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, limi
             m.almacen_id, a.nombre AS almacen,
             m.tipo, m.cantidad, m.costo_unitario, m.referencia_tipo, m.referencia_id,
             m.usuario_id, u.nombre AS usuario, m.motivo, m.creado_en,
-            ped.numero_pedido, ped.canal AS pedido_canal,
-            tr.folio AS traspaso_folio,
-            tao.nombre AS traspaso_origen, tad.nombre AS traspaso_destino,
-            cvo.sku AS conversion_paquete, cvd.sku AS conversion_cono,
-            rem.folio AS remesa_folio,
+            ${CAMPOS_DOCUMENTO},
             CASE pv.tipo_presentacion
               WHEN 'paquete' THEN 'kg'
               WHEN 'cono'    THEN 'kg'
               ELSE um.abreviatura
             END AS unidad,
             pv.tipo_presentacion, pv.peso_kg
-       FROM movimientos_inventario m
-       JOIN producto_variantes pv ON pv.id = m.variante_id
-       JOIN productos prod        ON prod.id = pv.producto_id
-       JOIN unidades_medida um    ON um.id = prod.unidad_medida_id
-       JOIN almacenes a           ON a.id = m.almacen_id
-       LEFT JOIN usuarios u       ON u.id = m.usuario_id
-       LEFT JOIN pedidos ped      ON m.referencia_tipo = 'pedido'
-                                 AND ped.id = m.referencia_id
-       LEFT JOIN traspasos tr     ON m.referencia_tipo = 'traspaso'
-                                 AND tr.id = m.referencia_id
-       LEFT JOIN almacenes tao    ON tao.id = tr.almacen_origen_id
-       LEFT JOIN almacenes tad    ON tad.id = tr.almacen_destino_id
-       LEFT JOIN variante_conversiones cv ON m.referencia_tipo = 'conversion'
-                                         AND cv.id = m.referencia_id
-       LEFT JOIN producto_variantes cvo ON cvo.id = cv.variante_origen_id
-       LEFT JOIN producto_variantes cvd ON cvd.id = cv.variante_destino_id
-       LEFT JOIN remesas rem      ON m.referencia_tipo = 'remesa'
-                                 AND rem.id = m.referencia_id
+       ${FROM_KARDEX}
        ${whereSql}
       ORDER BY m.creado_en DESC, m.id DESC
       LIMIT :limit OFFSET :offset`,
     { ...params, limit, offset }
   );
+  // El conteo lleva las mismas uniones: la búsqueda mira el folio del
+  // documento, que vive en otra tabla. Son uniones de uno a uno, no multiplican.
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM movimientos_inventario m ${whereSql}`,
+    `SELECT COUNT(*) AS total ${FROM_KARDEX} ${whereSql}`,
     params
   );
   return { rows, total };
+}
+
+/**
+ * El ÚLTIMO movimiento del kardex de cada renglón de existencias (variante +
+ * almacén), con su documento. `inventario.actualizado_en` no sirve para esto:
+ * cambia también al apartar o al fijar el mínimo, y la pantalla diría
+ * "último movimiento: hoy" de un hilo que nadie movió.
+ *
+ * Una sola consulta para toda la página: el IN por las dos columnas trae de
+ * más (otras combinaciones de variante y almacén) y el service se queda solo
+ * con las parejas que pidió.
+ */
+async function ultimosMovimientos(filas) {
+  if (!filas.length) return [];
+  const variantes = [...new Set(filas.map((f) => f.variante_id))];
+  const almacenes = [...new Set(filas.map((f) => f.almacen_id))];
+  const [rows] = await pool.query(
+    `SELECT m.id, m.variante_id, m.almacen_id, m.tipo, m.cantidad, m.motivo, m.creado_en,
+            m.referencia_tipo, m.referencia_id,
+            ${CAMPOS_DOCUMENTO}
+       FROM movimientos_inventario m
+       JOIN (SELECT MAX(id) AS id FROM movimientos_inventario
+              WHERE variante_id IN (:variantes) AND almacen_id IN (:almacenes)
+              GROUP BY variante_id, almacen_id) ult ON ult.id = m.id
+       ${JOINS_DOCUMENTO}`,
+    { variantes, almacenes }
+  );
+  return rows;
 }
 
 /** Lee existencias de una variante en un almacén (0 si no hay fila). */
@@ -1232,6 +1314,7 @@ module.exports = {
   resumenPorAlmacen,
   alertas,
   listarMovimientos,
+  ultimosMovimientos,
   registrarMovimiento,
   desarmar,
   conoDe,

@@ -4,6 +4,7 @@ import { EquivalenciaPaquetes, InventarioService } from '../../../core/services/
 import { Almacen, TipoMovimiento } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { CantidadPipe } from '../../../shared/cantidad.pipe';
 
 /**
  * AJUSTE Y MERMA en un modal. Antes eran dos tarjetas desplegadas ("1 · Elige la
@@ -21,8 +22,9 @@ import { ApiError } from '../../../core/models/auth.models';
  */
 @Component({
   selector: 'app-movimiento-modal',
-  imports: [FormsModule],
+  imports: [FormsModule, CantidadPipe],
   templateUrl: './movimiento-modal.html',
+  styleUrl: './modales.scss',
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class MovimientoModal implements OnInit {
@@ -87,6 +89,19 @@ export class MovimientoModal implements OnInit {
       },
       error: (e) => this.error.set(this.msg(e)),
     });
+  }
+
+  /**
+   * Cómo se nombra la opción: color, calibre, material y línea, y luego la
+   * presentación y su SKU. Con "SKU · color" no se distinguía el mismo color en
+   * dos calibres.
+   */
+  etiquetaVariante(v: Variante): string {
+    const hilo = [v.producto, v.calibre].filter(Boolean).join(' ');
+    const clas = [v.material, v.linea].filter(Boolean).join(' · ');
+    const pres =
+      v.tipo_presentacion === 'cono' ? 'Cono' : v.tipo_presentacion === 'paquete' ? 'Paquete' : v.presentacion || '';
+    return [clas ? `${hilo} — ${clas}` : hilo, pres, v.sku].filter(Boolean).join(' · ');
   }
 
   esAjuste(): boolean {

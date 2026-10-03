@@ -7,10 +7,28 @@ const { pool } = require('../../config/db');
 
 const CAMPOS = 'id, nombre, es_publico, orden, activo, creado_en';
 
+/**
+ * El listado trae además, de SOLO LECTURA, cuántos clientes la usan y en
+ * cuántas presentaciones tiene precio propio: es lo que la pantalla de Listas
+ * de precio necesita para saber si una lista se usa antes de apagarla o
+ * borrarla. Un cliente sin lista (`tipo_cliente_id` NULL) paga el público —así
+ * lo aplica el punto de venta—, por eso cuenta en la del público. Solo se
+ * cuentan clientes activos y presentaciones activas.
+ */
 async function listar({ activo } = {}) {
-  const where = activo !== undefined ? 'WHERE activo = :activo' : '';
+  const where = activo !== undefined ? 'WHERE t.activo = :activo' : '';
   const [rows] = await pool.query(
-    `SELECT ${CAMPOS} FROM tipos_cliente ${where} ORDER BY orden, nombre`,
+    `SELECT t.id, t.nombre, t.es_publico, t.orden, t.activo, t.creado_en,
+            (SELECT COUNT(*) FROM clientes c
+              WHERE c.activo = 1
+                AND (c.tipo_cliente_id = t.id OR (t.es_publico = 1 AND c.tipo_cliente_id IS NULL))
+            ) AS num_clientes,
+            (SELECT COUNT(*) FROM variante_precios vp
+               JOIN producto_variantes pv ON pv.id = vp.variante_id
+              WHERE vp.tipo_cliente_id = t.id AND pv.activo = 1
+            ) AS num_precios
+       FROM tipos_cliente t ${where}
+      ORDER BY t.orden, t.nombre`,
     { activo: activo ? 1 : 0 }
   );
   return rows;

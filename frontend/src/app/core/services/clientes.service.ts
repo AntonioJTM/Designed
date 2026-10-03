@@ -47,9 +47,13 @@ export class ClientesService {
     return this.http.get<ApiResponse<Paginado<Cliente>>>(this.base, { params: p }).pipe(map(data));
   }
 
-  /** El expediente completo: datos, compras, colores, pedidos y crédito. */
-  expediente(id: number): Observable<Expediente> {
-    return this.http.get<ApiResponse<Expediente>>(`${this.base}/${id}`).pipe(map(data));
+  /**
+   * El expediente completo: datos, compras, colores, pedidos y crédito. Trae
+   * las 20 compras más recientes; con `todasLasCompras`, todas.
+   */
+  expediente(id: number, todasLasCompras = false): Observable<Expediente> {
+    const params = todasLasCompras ? new HttpParams().set('pedidos', 'todos') : undefined;
+    return this.http.get<ApiResponse<Expediente>>(`${this.base}/${id}`, { params }).pipe(map(data));
   }
 
   /**

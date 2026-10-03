@@ -80,7 +80,12 @@ async function entregarApartado(id, usuarioId) {
   return model.entregarApartado(id, usuarioId);
 }
 
+async function resumen() {
+  return model.resumen();
+}
+
 module.exports = {
+  resumen,
   crear, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,
   apartados, abonarApartado, entregarApartado,

@@ -1,54 +1,88 @@
-<div class="page-head">
-  <h1>Materiales</h1>
-  <button class="btn btn-primary" (click)="abrirNuevo()">+ Nuevo material</button>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Materiales</h1>
+      <p class="sub">
+        De qué está hecho el hilo. Cada material dice qué calibres se le pueden dar a sus productos.
+      </p>
+    </div>
+    <div class="acciones">
+      <button type="button" class="btn btn-primary" (click)="abrirNuevo()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+        Nuevo material
+      </button>
+    </div>
+  </header>
+
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>{{ categorias().length }} {{ categorias().length === 1 ? 'material' : 'materiales' }}</h2>
+        <p>Al dar de alta un producto solo se ofrecen los calibres de su material.</p>
+      </div>
+    </div>
+
+    @if (cargando()) {
+      <p class="muted" style="margin: 0">Cargando…</p>
+    } @else if (categorias().length === 0) {
+      <p class="vacio">Aún no hay materiales.</p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid" style="min-width: 680px">
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th>Calibres</th>
+              <th class="num">Productos</th>
+              <th>Estado</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of categorias(); track c.id) {
+              <tr>
+                <td><b style="font-weight: 600">{{ c.nombre }}</b></td>
+                <td>
+                  @if (calibresDe(c).length) {
+                    <div class="calibres">
+                      @for (cal of calibresDe(c); track cal) { <span class="ficha num">{{ cal }}</span> }
+                    </div>
+                  } @else {
+                    <span class="muted">sin calibres</span>
+                  }
+                </td>
+                <td class="num">{{ c.num_productos ?? '—' }}</td>
+                <td>
+                  <span class="pill" [class.verde]="c.activo" [class.gris]="!c.activo">
+                    {{ c.activo ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+                <td class="acciones">
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="abrirEdicion(c)">Editar</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
 </div>
-
-@if (error()) {
-  <p class="alert">{{ error() }}</p>
-}
-
-@if (mensaje()) {
-  <p class="ok-msg">{{ mensaje() }}</p>
-}
-
-@if (cargando()) {
-  <p class="muted">Cargando…</p>
-} @else if (categorias().length === 0) {
-  <p class="empty">Aún no hay materiales.</p>
-} @else {
-  <table class="grid">
-    <thead>
-      <tr><th>Material</th><th>Calibres</th><th>Orden</th><th>Estado</th><th></th></tr>
-    </thead>
-    <tbody>
-      @for (c of categorias(); track c.id) {
-        <tr>
-          <td>{{ c.nombre }}</td>
-          <td class="muted">{{ c.calibres || '—' }}</td>
-          <td>{{ c.orden }}</td>
-          <td>
-            <span class="pill" [class.ok]="c.activo" [class.off]="!c.activo">
-              {{ c.activo ? 'Activo' : 'Inactivo' }}
-            </span>
-          </td>
-          <td class="acciones">
-            <button class="btn btn-ghost btn-sm" (click)="abrirEdicion(c)">Editar</button>
-            <button class="btn btn-danger btn-sm" (click)="eliminar(c)">Eliminar</button>
-          </td>
-        </tr>
-      }
-    </tbody>
-  </table>
-}
 
 <!--
   Alta y edición sobre el listado. Se crea al abrirlo y se destruye al cerrarlo,
-  así el formulario arranca limpio cada vez.
+  así el formulario arranca limpio cada vez. Eliminar vive dentro del modal de
+  edición, igual que en productos.
 -->
 @if (modal() !== null) {
   <app-material-form-modal
     [material]="materialModal()"
     (cerrado)="modal.set(null)"
     (guardado)="alGuardar($event)"
+    (eliminado)="alEliminar($event)"
   />
 }

@@ -140,10 +140,26 @@ export class VentasService {
   crearPedido(body: CrearPedidoInput): Observable<Pedido> {
     return this.http.post<ApiResponse<Pedido>>(`${this.base}/pedidos`, body).pipe(map(data));
   }
-  listarPedidos(f: { canal?: CanalVenta; estado?: EstadoPedido; page?: number } = {}): Observable<Paginado<Pedido>> {
+  listarPedidos(
+    f: {
+      canal?: CanalVenta;
+      estado?: EstadoPedido;
+      /** Folio o cliente (nombre o como le dicen). */
+      q?: string;
+      caja_id?: number;
+      /** 'YYYY-MM-DD', los dos inclusivos. */
+      desde?: string;
+      hasta?: string;
+      page?: number;
+    } = {}
+  ): Observable<Paginado<Pedido>> {
     let params = new HttpParams();
     if (f.canal) params = params.set('canal', f.canal);
     if (f.estado) params = params.set('estado', f.estado);
+    if (f.q) params = params.set('q', f.q);
+    if (f.caja_id) params = params.set('caja_id', f.caja_id);
+    if (f.desde) params = params.set('desde', f.desde);
+    if (f.hasta) params = params.set('hasta', f.hasta);
     params = params.set('page', f.page ?? 1).set('limit', 50);
     return this.http.get<ApiResponse<Paginado<Pedido>>>(`${this.base}/pedidos`, { params }).pipe(map(data));
   }

@@ -2,13 +2,14 @@
 
 const { Router } = require('express');
 const controller = require('./controller');
-const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 
 // El tablero muestra saldos de clientes, costos y márgenes: es información
 // sensible del negocio, solo para administradores y gerentes.
-const soloJefes = [authRequired, requireTipo('usuario'), requireRol('administrador', 'gerente')];
+// Lo ve quien tenga "Cómo va el negocio" en Permisos (antes: administrador y gerente).
+const soloJefes = [authRequired, requireTipo('usuario'), requirePermiso('ver:negocio')];
 
 // Las cuatro preguntas de un viaje: cobranza, clientes enfriados, hilo muerto y
 // margen. Tenían una ruta cada una, pero la pantalla siempre pide las cuatro y

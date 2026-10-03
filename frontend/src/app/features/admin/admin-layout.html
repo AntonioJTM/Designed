@@ -1,36 +1,41 @@
 <div class="admin">
-  <aside class="side">
-    <div class="brand">🧵 Tienda de hilos</div>
-    <nav>
-      <!-- Arriba de todo: es la puerta más rápida a cualquier dato. -->
-      <a routerLink="/admin/asistente" routerLinkActive="on">Pregúntame</a>
-      <a routerLink="/admin/categorias" routerLinkActive="on">Materiales</a>
-      <a routerLink="/admin/productos" routerLinkActive="on">Productos</a>
-      <a routerLink="/admin/inventario" routerLinkActive="on">Inventario</a>
-      <a routerLink="/admin/remesas" routerLinkActive="on">Recibir remesa</a>
-      <a routerLink="/admin/traspasos" routerLinkActive="on">Surtir sucursal</a>
-      <a routerLink="/admin/kardex" routerLinkActive="on">Kardex</a>
-      <a routerLink="/admin/pos" routerLinkActive="on">Punto de venta</a>
-      <a routerLink="/admin/pedidos" routerLinkActive="on">Pedidos</a>
-      <a routerLink="/admin/clientes" routerLinkActive="on">Clientes</a>
-      <a routerLink="/admin/apartados" routerLinkActive="on">Apartados</a>
-      <a routerLink="/admin/reportes" routerLinkActive="on">Reportes</a>
-      @if (esJefe()) {
-        <!-- Muestra costos y márgenes: administradores y gerentes. -->
-        <a routerLink="/admin/tablero" routerLinkActive="on">Cómo va el negocio</a>
-      }
-      @if (esAdmin()) {
-        <a routerLink="/admin/almacenes" routerLinkActive="on">Almacenes</a>
-        <a routerLink="/admin/tipos-cliente" routerLinkActive="on">Listas de precio</a>
-        <a routerLink="/admin/usuarios" routerLinkActive="on">Personal</a>
-        <a routerLink="/admin/nomina" routerLinkActive="on">Nómina</a>
-        <a routerLink="/admin/configuracion" routerLinkActive="on">Configuración</a>
+  <aside class="side" [class.abierta]="menuAbierto()">
+    <div class="side-top">
+      <a class="brand" routerLink="/admin">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8FB2F2" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 3h10 M7 21h10 M8.5 3v18 M15.5 3v18 M8.5 8l7 3 M8.5 12l7 3 M8.5 16l7 3"></path>
+        </svg>
+        <span>Tienda de hilos</span>
+      </a>
+      <!-- Solo en el celular: el menú se despliega con este botón. -->
+      <button type="button" class="btn-menu" (click)="alternarMenu()"
+              [attr.aria-expanded]="menuAbierto()" aria-controls="menu-principal">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true"><path d="M4 7h16 M4 12h16 M4 17h16"></path></svg>
+        <span class="oculto">Menú</span>
+      </button>
+    </div>
+
+    <nav #menu id="menu-principal" aria-label="Menú principal" [class.mas-abajo]="masAbajo()" (scroll)="revisarMenu()">
+      @for (g of grupos(); track g.titulo) {
+        <div class="grupo">
+          @if (g.titulo) { <div class="grupo-titulo">{{ g.titulo }}</div> }
+          @for (o of g.opciones; track o.clave) {
+            <a [routerLink]="o.ruta" routerLinkActive="on" ariaCurrentWhenActive="page">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path [attr.d]="o.icono"></path></svg>
+              <span>{{ o.nombre }}</span>
+            </a>
+          }
+        </div>
       }
     </nav>
+
     <div class="user">
       @if (sesion(); as s) {
         <div class="quien">
-          <div>
+          <div class="nombre-rol">
             <span class="nombre">{{ s.nombre }}</span>
             <span class="rol">{{ s.rol }}</span>
           </div>
@@ -42,7 +47,10 @@
                   [attr.aria-expanded]="abierto()"
                   [attr.aria-label]="total() > 0 ? total() + ' pendientes' : 'Sin pendientes'"
                   [title]="total() > 0 ? total() + ' cosas esperan atención' : 'Nada pendiente'">
-            🔔
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"></path>
+            </svg>
             @if (total() > 0) {
               <span class="badge">{{ total() }}</span>
             }
@@ -50,111 +58,168 @@
         </div>
       }
 
+      <!--
+        El panel de avisos FLOTA a la derecha del menú, sobre la página: adentro
+        de la barra (248 px) los textos se cortaban y aparecía una barra de
+        desplazamiento, con media pantalla vacía a un lado.
+      -->
       @if (abierto()) {
-        <div class="avisos">
+        <section class="avisos" role="dialog" aria-label="Pendientes">
+          <header class="avisos-head">
+            <div>
+              <h2>Pendientes</h2>
+              <p>
+                @if (!pendientes()) { Cargando… }
+                @else if (total() === 0) { Nada pendiente por ahora. }
+                @else { {{ total() }} {{ total() === 1 ? 'asunto espera' : 'asuntos esperan' }} a alguien. Se quitan solos al resolverse. }
+              </p>
+            </div>
+            <button type="button" class="avisos-cerrar" (click)="abierto.set(false)" aria-label="Cerrar avisos">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18"></path></svg>
+            </button>
+          </header>
+
           @if (pendientes(); as p) {
-            @if (p.total === 0) {
-              <p class="vacio">Nada pendiente por ahora.</p>
-            }
-
-            @if (p.traspasos_por_enviar.length > 0) {
-              <h4>Piden mercancía</h4>
-              @for (t of p.traspasos_por_enviar; track t.id) {
-                <button type="button" class="aviso-item" (click)="irA('/admin/traspasos')">
-                  <b>{{ t.almacen_destino }}</b> pide
-                  {{ t.num_lineas }} {{ +t.num_lineas === 1 ? 'producto' : 'productos' }}
-                  <span class="kg">({{ t.kg | cantidad: 'kg' }})</span>
-                  <span class="cuando">{{ t.creado_en | fecha }} · falta enviarlo</span>
-                </button>
-              }
-            }
-
-            @if (p.traspasos_por_recibir.length > 0) {
-              <h4>Van en camino</h4>
-              @for (t of p.traspasos_por_recibir; track t.id) {
-                <button type="button" class="aviso-item" (click)="irA('/admin/traspasos')">
-                  A <b>{{ t.almacen_destino }}</b>, {{ t.kg | cantidad: 'kg' }}
-                  <span class="cuando">
-                    salió el {{ t.enviado_en | fecha }} · falta que acusen recibo
-                  </span>
-                </button>
-              }
-            }
-
-            @if (p.alertas_stock > 0) {
-              <h4>Inventario</h4>
-              <button type="button" class="aviso-item" (click)="irA('/admin/inventario')">
-                {{ p.alertas_stock }}
-                {{ p.alertas_stock === 1 ? 'presentación' : 'presentaciones' }} bajo su mínimo
-                <span class="cuando">Revisar existencias</span>
-              </button>
-            }
-
-            @if (p.cobranza && p.cobranza.num_clientes > 0) {
-              <h4>Por cobrar</h4>
-              <button type="button" class="aviso-item"
-                      (click)="irA(esJefe() ? '/admin/tablero' : '/admin/clientes?deben=1')">
-                <b>{{ p.cobranza.num_clientes }}</b>
-                {{ p.cobranza.num_clientes === 1 ? 'cliente debe' : 'clientes deben' }}
-                {{ dinero(p.cobranza.monto) }}
-                <span class="cuando">
-                  sin abonar en {{ p.cobranza.dias }} días o más
-                </span>
-              </button>
-              @for (c of p.cobranza.clientes; track c.cliente_id) {
-                <button type="button" class="aviso-item sub"
-                        (click)="irA('/admin/clientes/' + c.cliente_id)">
-                  <b>{{ c.nombre_comercial || c.nombre }}</b> debe {{ dinero(c.saldo) }}
-                  <span class="cuando">
-                    {{ c.dias_sin_abonar }} días sin abonar{{ c.telefono ? ' · ' + c.telefono : '' }}
-                  </span>
-                </button>
-              }
-            }
-
-            @if (p.nuevos_sin_credito && p.nuevos_sin_credito.num_clientes > 0) {
-              <!--
-                Un cliente nuevo nace sin crédito y se le cobra completo, que es
-                lo correcto: todavía no se sabe si paga. El aviso existe para
-                que alguien DECIDA — o le autoriza un límite, o lo deja así a
-                propósito. Sin el aviso la decisión no se toma nunca y el cajero
-                se topa con un "no tiene crédito" sin saber a quién pedírselo.
-              -->
-              <h4>Clientes nuevos</h4>
-              @for (c of p.nuevos_sin_credito.clientes; track c.cliente_id) {
-                <button type="button" class="aviso-item"
-                        (click)="irA('/admin/clientes/' + c.cliente_id)">
-                  <b>{{ c.nombre_comercial || c.nombre }}</b> sin crédito autorizado
-                  <span class="cuando">
-                    capturado hace {{ c.dias }} {{ c.dias === 1 ? 'día' : 'días' }}
-                    @if (+c.compras > 0) {
-                      · ya te compró {{ c.compras }}
-                      {{ +c.compras === 1 ? 'vez' : 'veces' }}
+            <div class="avisos-cuerpo">
+              @if ((veMercancia() && (p.traspasos_por_enviar.length > 0 || p.traspasos_por_recibir.length > 0))
+                   || (veInventario() && p.alertas_stock > 0)
+                   || (veCatalogo() && (p.sin_precio?.num ?? 0) > 0)) {
+                <div class="avisos-grupo">
+                  <h3>Mercancía</h3>
+                  @if (veMercancia()) {
+                    @for (t of p.traspasos_por_enviar; track t.id) {
+                      <button type="button" class="aviso-fila" (click)="irA('/admin/traspasos')">
+                        <span class="icono tono-azul" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.envio"></path></svg></span>
+                        <span class="que">
+                          <b>{{ t.almacen_destino }} pide {{ t.num_lineas }} {{ +t.num_lineas === 1 ? 'hilo' : 'hilos' }} · {{ t.kg | cantidad: 'kg' }}</b>
+                          <span>Lo pidió {{ cuando(t.creado_en) }} · falta enviarlo</span>
+                        </span>
+                        <span class="ir" aria-hidden="true">Surtir ›</span>
+                      </button>
                     }
-                  </span>
-                </button>
+                    @for (t of p.traspasos_por_recibir; track t.id) {
+                      <button type="button" class="aviso-fila" (click)="irA('/admin/traspasos')">
+                        <span class="icono tono-gris" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.envio"></path></svg></span>
+                        <span class="que">
+                          <b>Va en camino a {{ t.almacen_destino }} · {{ t.kg | cantidad: 'kg' }}</b>
+                          <span>Salió {{ cuando(t.enviado_en) }} · falta que confirmen que llegó</span>
+                        </span>
+                        <span class="ir" aria-hidden="true">Ver ›</span>
+                      </button>
+                    }
+                  }
+                  @if (veInventario() && p.alertas_stock > 0) {
+                    <button type="button" class="aviso-fila" (click)="irA('/admin/inventario')">
+                      <span class="icono tono-ambar" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.existencias"></path></svg></span>
+                      <span class="que">
+                        <b>{{ p.alertas_stock }} {{ p.alertas_stock === 1 ? 'presentación está' : 'presentaciones están' }} en su mínimo o debajo</b>
+                        <span>En Inventario se ve cuáles y en qué almacén</span>
+                      </span>
+                      <span class="ir" aria-hidden="true">Inventario ›</span>
+                    </button>
+                  }
+                  <!-- Hilos que entraron con la lista del proveedor y todavía no tienen precio. -->
+                  @if (veCatalogo() && p.sin_precio && p.sin_precio.num > 0) {
+                    <button type="button" class="aviso-fila" (click)="irA('/admin/productos?falta=precio')">
+                      <span class="icono tono-ambar" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.precio"></path></svg></span>
+                      <span class="que">
+                        <b>{{ p.sin_precio.num === 1 ? '1 hilo no tiene precio' : p.sin_precio.num + ' hilos no tienen precio' }}</b>
+                        <span>{{ hilosSinPrecio(p.sin_precio) }} · no se pueden vender hasta ponérselo</span>
+                      </span>
+                      <span class="ir" aria-hidden="true">Poner precio ›</span>
+                    </button>
+                  }
+                </div>
               }
-            }
 
-            @if (p.enfriados && p.enfriados.num_clientes > 0) {
-              <h4>Dejaron de venir</h4>
-              <button type="button" class="aviso-item"
-                      (click)="irA(esJefe() ? '/admin/tablero' : '/admin/clientes')">
-                <b>{{ p.enfriados.num_clientes }}</b>
-                {{ p.enfriados.num_clientes === 1 ? 'cliente' : 'clientes' }}
-                sin aparecer
-                <span class="cuando">
-                  {{ p.enfriados.dias }} días o más · vale la pena llamarles
-                </span>
-              </button>
+              @if (veApartados() && (p.apartados_listos?.num ?? 0) > 0) {
+                <div class="avisos-grupo">
+                  <h3>Ventas</h3>
+                  <button type="button" class="aviso-fila" (click)="irA('/admin/apartados')">
+                    <span class="icono tono-verde" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.apartado"></path></svg></span>
+                    <span class="que">
+                      <b>{{ p.apartados_listos!.num }} {{ p.apartados_listos!.num === 1 ? 'apartado ya está pagado' : 'apartados ya están pagados' }}</b>
+                      <span>Falta entregarlos: a ellos no se les cobra</span>
+                    </span>
+                    <span class="ir" aria-hidden="true">Entregar ›</span>
+                  </button>
+                </div>
+              }
+
+              @if (veClientes() && (p.cobranza.num_clientes > 0 || p.nuevos_sin_credito.num_clientes > 0
+                   || p.enfriados.num_clientes > 0)) {
+                <div class="avisos-grupo">
+                  <h3>Clientes</h3>
+                  @if (p.cobranza && p.cobranza.num_clientes > 0) {
+                    <button type="button" class="aviso-fila" (click)="irA('/admin/clientes/deuda')">
+                      <span class="icono tono-naranja" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.cobro"></path></svg></span>
+                      <span class="que">
+                        <b>{{ p.cobranza.num_clientes }} {{ p.cobranza.num_clientes === 1 ? 'cliente debe' : 'clientes deben' }} {{ dinero(p.cobranza.monto) }}</b>
+                        <span>{{ p.cobranza.dias }} días o más sin abonar</span>
+                      </span>
+                      <span class="ir" aria-hidden="true">Cobrar ›</span>
+                    </button>
+                    <!-- Quiénes son, para llamarles desde aquí: nombre, días y teléfono. -->
+                    <ul class="deudores">
+                      @for (c of p.cobranza.clientes; track c.cliente_id) {
+                        <li>
+                          <button type="button" (click)="irA('/admin/clientes/' + c.cliente_id)">
+                            <span class="deudor">
+                              <b>{{ c.nombre_comercial || c.nombre }}</b>
+                              <span>{{ c.dias_sin_abonar }} días sin abonar{{ c.telefono ? ' · ' + c.telefono : '' }}</span>
+                            </span>
+                            <b class="monto">{{ dinero(c.saldo) }}</b>
+                          </button>
+                        </li>
+                      }
+                    </ul>
+                  }
+                  @if (p.nuevos_sin_credito && p.nuevos_sin_credito.num_clientes > 0) {
+                    <!--
+                      Un cliente nuevo nace sin crédito y se le cobra completo, que es
+                      lo correcto: todavía no se sabe si paga. El aviso existe para
+                      que alguien DECIDA — o le autoriza un límite, o lo deja así a
+                      propósito.
+                    -->
+                    @for (c of p.nuevos_sin_credito.clientes; track c.cliente_id) {
+                      <button type="button" class="aviso-fila" (click)="irA('/admin/clientes/' + c.cliente_id)">
+                        <span class="icono tono-gris" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.gente"></path></svg></span>
+                        <span class="que">
+                          <b>{{ c.nombre_comercial || c.nombre }}: falta decidir su crédito</b>
+                          <span>
+                            Capturado hace {{ c.dias }} {{ c.dias === 1 ? 'día' : 'días' }}
+                            @if (+c.compras > 0) { · ya te compró {{ c.compras }} {{ +c.compras === 1 ? 'vez' : 'veces' }} }
+                          </span>
+                        </span>
+                        <span class="ir" aria-hidden="true">Decidir ›</span>
+                      </button>
+                    }
+                  }
+                  @if (p.enfriados && p.enfriados.num_clientes > 0) {
+                    <button type="button" class="aviso-fila" (click)="irA('/admin/clientes/dejaron')">
+                      <span class="icono tono-ambar" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.gente"></path></svg></span>
+                      <span class="que">
+                        <b>{{ p.enfriados.num_clientes }} {{ p.enfriados.num_clientes === 1 ? 'cliente dejó' : 'clientes dejaron' }} de venir</b>
+                        <span>{{ p.enfriados.dias }} días o más sin comprar · vale la pena llamarles</span>
+                      </span>
+                      <span class="ir" aria-hidden="true">Ver quiénes ›</span>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+
+            @if (veHoy()) {
+              <footer class="avisos-pie">
+                <button type="button" class="btn-enlace" (click)="irA('/admin/hoy')">Ver el día completo en Hoy</button>
+              </footer>
             }
-          } @else {
-            <p class="vacio">Cargando…</p>
           }
-        </div>
+        </section>
       }
 
-      <button type="button" (click)="salir()">Salir</button>
+      <button type="button" class="salir" (click)="salir()">Salir</button>
     </div>
   </aside>
 
