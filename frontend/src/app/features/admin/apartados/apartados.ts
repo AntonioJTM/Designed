@@ -2,10 +2,26 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
-import { Apartado, Apartados as Datos, MetodoPago, SesionCaja } from '../../../core/models/ventas.models';
+import { AuthService } from '../../../core/services/auth.service';
+import { Apartado, Apartados as Datos, Caja, MetodoPago } from '../../../core/models/ventas.models';
 import { ApiError } from '../../../core/models/auth.models';
-import { Barras, Barra } from '../../../shared/charts/barras';
-import { FechaPipe } from '../../../shared/fecha.pipe';
+import { DineroPipe } from '../../../shared/dinero.pipe';
+import { CantidadPipe } from '../../../shared/cantidad.pipe';
+import { hoyLocal } from '../../../shared/fecha.pipe';
+import { FolioPipe } from '../../../shared/folio.pipe';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+
+/** La caja que se eligió la última vez (la comparten Caja y Punto de venta). */
+function cajaGuardada(): number | null {
+  try {
+    const v = Number(localStorage.getItem('caja_sel'));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 /**
  * Los apartados vigentes: mercancía guardada que todavía no se entrega.
@@ -21,11 +37,18 @@ import { FechaPipe } from '../../../shared/fecha.pipe';
 @Component({
   selector: 'app-apartados',
   host: { '(document:keydown.escape)': 'cerrarAbono()' },
-  imports: [FormsModule, RouterLink, Barras, FechaPipe],
+  imports: [FolioPipe, FormsModule, RouterLink, DineroPipe, CantidadPipe],
   templateUrl: './apartados.html',
+  styleUrl: './apartados.scss',
 })
 export class ApartadosPantalla {
   private readonly ventas = inject(VentasService);
+  private readonly confirmacion = inject(ConfirmacionService);
+  private readonly auth = inject(AuthService);
+
+  readonly vePos = computed(() => this.auth.puede('ver:pos'));
+  readonly veCaja = computed(() => this.auth.puede('ver:caja'));
+  readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
 
   readonly datos = signal<Datos | null>(null);
   readonly cargando = signal(true);
@@ -47,7 +70,8 @@ export class ApartadosPantalla {
   readonly abonando = signal<Apartado | null>(null);
   readonly registrando = signal(false);
   readonly metodos = signal<MetodoPago[]>([]);
-  readonly sesion = signal<SesionCaja | null>(null);
+  /** El turno abierto al que entra un abono en efectivo: su id y el nombre de la caja. */
+  readonly sesion = signal<{ id: number; caja: string } | null>(null);
   montoAbono: number | null = null;
   metodoAbono: number | '' = '';
   referenciaAbono = '';
@@ -82,21 +106,23 @@ export class ApartadosPantalla {
    * Busca un turno de caja abierto. Hace falta para los abonos en efectivo, y
    * se busca AL ABRIR la pantalla para poder avisar antes de que teclee el
    * monto, no al confirmar.
+   *
+   * El listado de cajas ya trae su turno abierto, así que no hace falta
+   * preguntar caja por caja. Se prefiere la que se eligió en Caja o en Punto de
+   * venta: es donde está trabajando quien cobra.
    */
   private buscarTurno(): void {
     this.ventas.cajas().subscribe({
-      next: (cajas) => {
-        for (const caja of cajas.filter((c) => c.activo)) {
-          this.ventas.sesionAbierta(caja.id).subscribe({
-            next: (s) => {
-              if (s && !this.sesion()) this.sesion.set(s);
-            },
-            error: () => {},
-          });
-        }
-      },
+      next: (cajas) => this.sesion.set(this.turnoPreferido(cajas)),
       error: () => this.sesion.set(null),
     });
+  }
+
+  private turnoPreferido(cajas: Caja[]): { id: number; caja: string } | null {
+    const abiertas = cajas.filter((c) => c.turno_id);
+    const guardada = cajaGuardada();
+    const c = abiertas.find((x) => x.id === guardada) ?? abiertas[0];
+    return c ? { id: Number(c.turno_id), caja: c.nombre } : null;
   }
 
   /**
@@ -114,25 +140,46 @@ export class ApartadosPantalla {
     (this.datos()?.items ?? []).filter((a) => Number(a.pendiente) > 0.001)
   );
 
+  /** Lo que falta de los que no se han liquidado: lo que hay que perseguir. */
+  readonly porCobrar = computed(() =>
+    Math.round(this.pendientes().reduce((s, a) => s + Number(a.pendiente), 0) * 100) / 100
+  );
+
   /**
-   * Cuánto falta por cobrar de cada uno. La barra mide el PENDIENTE porque es
-   * lo que hay que perseguir.
-   *
-   * Los liquidados se quedan FUERA: una barra de $0 no dice nada y solo estorba
-   * en una gráfica que se titula "cuánto falta por cobrar".
+   * "TURQUESA 1/30 · 2 paquetes", "CARAMEL 1/30, HUESO 2/48". Los paquetes
+   * son aproximados (cada bulto pesa distinto); sin presentación de paquete se
+   * dicen los kilos.
    */
-  readonly barrasApartados = computed<Barra[]>(() => {
-    const d = this.datos();
-    if (!d) return [];
-    return this.pendientes().slice(0, 12).map((a) => ({
-      label: a.nombre_comercial || a.cliente || 'Sin cliente',
-      value: Number(a.pendiente),
-      detalle:
-        `lleva ${Number(a.pct_pagado).toFixed(0)}% pagado · ` +
-        `${a.dias_apartado} ${a.dias_apartado === 1 ? 'día' : 'días'} apartado`,
-      title: `${a.numero_pedido} · total ${this.dinero(a.total)}`,
-    }));
-  });
+  queSeAparto(a: Apartado): string {
+    const h = a.hilos ?? [];
+    if (h.length === 0) return '';
+    if (h.length === 1) {
+      const x = h[0];
+      const cuanto = x.paquetes
+        ? `${x.paquetes} ${x.paquetes === 1 ? 'paquete' : 'paquetes'}`
+        : `${x.kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg${x.tipo_presentacion === 'cono' ? ' en cono' : ''}`;
+      return `${x.hilo} · ${cuanto}`;
+    }
+    const nombres = [...new Set(h.map((x) => x.hilo))];
+    return nombres.length <= 2 ? nombres.join(', ') : `${nombres[0]} y ${nombres.length - 1} más`;
+  }
+
+  /** "Liquidado el 30 sep", "Liquidado hoy". La fecha del último pago es la de liquidación. */
+  cuandoLiquido(a: Apartado): string {
+    const dia = String(a.ultimo_abono ?? a.creado_en ?? '').replace('T', ' ').split(' ')[0];
+    if (!dia) return 'Ya pagado';
+    if (dia === hoyLocal()) return 'Liquidado hoy';
+    const [, m, d] = dia.split('-').map(Number);
+    return m && d ? `Liquidado el ${d} ${MESES[m - 1]}` : 'Ya pagado';
+  }
+
+  /** "1 oct": desde cuándo está apartado. */
+  desde(a: Apartado): string {
+    const dia = String(a.creado_en ?? '').replace('T', ' ').split(' ')[0];
+    const [y, m, d] = dia.split('-').map(Number);
+    if (!m || !d) return '—';
+    return `${d} ${MESES[m - 1]}${String(y) === hoyLocal().slice(0, 4) ? '' : ' ' + y}`;
+  }
 
   readonly abonoEsEfectivo = computed(() => {
     const m = this.metodos().find((x) => x.id === Number(this.metodoAbono));
@@ -169,7 +216,7 @@ export class ApartadosPantalla {
     if (this.abonoEsEfectivo() && !this.sesion()) {
       this.error.set(
         'Un abono en efectivo tiene que entrar en un turno de caja abierto, o el corte no ' +
-          'va a cuadrar. Abre el turno en Punto de venta, o registra el abono con otro método.'
+          'va a cuadrar. Abre el turno en Caja, o registra el abono con otro método.'
       );
       return;
     }
@@ -208,12 +255,15 @@ export class ApartadosPantalla {
     return Number(a.pendiente) <= 0.001;
   }
 
-  entregar(a: Apartado): void {
+  async entregar(a: Apartado): Promise<void> {
     if (!this.puedeEntregar(a)) return;
     const quien = a.nombre_comercial || a.cliente || 'el cliente';
-    if (!confirm(`¿Entregar la mercancía de ${a.numero_pedido} a ${quien}? Sale del inventario.`)) {
-      return;
-    }
+    const si = await this.confirmacion.pedir({
+      titulo: `¿Entregar la mercancía a ${quien}?`,
+      mensaje: `Apartado ${a.numero_pedido}. Al entregarla sale del inventario.`,
+      aceptar: 'Entregar',
+    });
+    if (!si) return;
     this.entregando.set(true);
     this.error.set(null);
     this.ventas.entregarApartado(a.pedido_id).subscribe({

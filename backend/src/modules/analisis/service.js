@@ -25,10 +25,12 @@ async function clientesEnfriados(q = {}) {
   });
 }
 
-async function hiloMuerto(q = {}) {
+/** `conCosto: false` lo valora todo a precio de venta y no enseña el costo. */
+async function hiloMuerto(q = {}, { conCosto = true } = {}) {
   return model.hiloMuerto({
     dias: entero(q.dias, 90, 1, 3650),
     limite: entero(q.limite, 50, 1, 500),
+    conCosto,
   });
 }
 

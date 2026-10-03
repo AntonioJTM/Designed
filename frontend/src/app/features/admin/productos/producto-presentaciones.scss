@@ -1,0 +1,145 @@
+// Lo propio de la pantalla de presentaciones. Lo común (tarjetas, tablas,
+// botones, .dato, .pill) viene de styles.scss.
+
+// Una tarjeta por presentación, lado a lado: paquete y cono.
+.presentaciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.presentaciones > .card {
+  flex: 1 1 420px;
+  min-width: 0;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pres-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pres-titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.pres-titulo h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.pres-titulo .mono { color: var(--tinta-3); font-size: 12px; }
+.datos { display: flex; flex-direction: column; }
+.datos .dato:last-child { border-bottom: 0; }
+// El valor de "Hay" puede traer varios almacenes, uno por renglón.
+.dato .lineas { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+.dato .lineas .muted { font-weight: 400; font-size: 13px; }
+.pres-pie { display: flex; justify-content: flex-end; margin-top: auto; }
+.btn-enlace.peligro { color: var(--peligro-t); font-size: 13px; }
+
+// Zona para soltar la lista de empaque del proveedor.
+.zona-carga {
+  position: relative; // ancla del input de archivo, que va oculto adentro
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 150px;
+  padding: 18px;
+  border: 2px dashed var(--borde-campo);
+  border-radius: 10px;
+  background: var(--superficie-2);
+  text-align: center;
+  font-size: 14px;
+  color: var(--tinta-2);
+}
+.zona-carga.encima { border-color: var(--acento); background: var(--acento-suave); }
+.zona-carga > svg { color: var(--tinta-3); }
+.zona-carga .archivo { font-size: 13px; color: var(--tinta-3); }
+
+// Precio con su símbolo y su unidad pegados al número.
+.campo-moneda {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tinta-3);
+  font-size: 14px;
+  font-weight: 400;
+}
+.campo-moneda input { flex: 1; min-width: 0; }
+.campo-moneda .unidad { white-space: nowrap; }
+
+// Precio por lista capturado dentro de la tabla.
+.input-lista {
+  width: 120px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--borde-campo);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 14px;
+  text-align: right;
+  color: var(--tinta);
+  background: #fff;
+}
+.input-lista:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533; }
+
+.pie-tarjeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+// Resumen de la vista previa y de los lotes.
+.resumen-previa {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  font-size: 14px;
+  margin-bottom: 14px;
+}
+.resumen-previa b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; display: block; }
+.resumen-previa span { color: var(--tinta-3); font-size: 13px; }
+.lotes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.avisos-lista { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--tinta-3); }
+
+.card-head .derecha { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.card-head select {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--borde-campo);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  background: #fff;
+  color: var(--tinta);
+  min-width: 180px;
+}
+
+// Imágenes: miniaturas con su dirección.
+.imagenes { display: flex; flex-wrap: wrap; gap: 16px; }
+.imagen {
+  width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tinta-3);
+}
+.imagen img, .imagen .sin-foto {
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--borde);
+  background: var(--superficie-2);
+}
+.imagen .url { word-break: break-all; }
+.imagen .pie { display: flex; align-items: center; justify-content: space-between; gap: 6px; }

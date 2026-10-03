@@ -21,3 +21,8 @@ db/dump_*.sql
 # Capturas de los comprobantes de pago que sube el personal. Son documentos
 # bancarios de clientes reales: no van al repo. Se respaldan aparte del código.
 backend/uploads/
+
+# Listas reales del proveedor con el inventario del negocio. El repositorio es
+# PÚBLICO: no se suben. Las pruebas arman su propio Excel en memoria.
+/HTX 1.ARAC FFAU 721502-4 - INVENTARIO.xlsx
+/carga de productos.xlsx

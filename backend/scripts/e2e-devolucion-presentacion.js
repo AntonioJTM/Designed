@@ -16,7 +16,7 @@ const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Se niega a correr contra la base del servidor. Ver el módulo.
 require('./_no-en-produccion');
-const { soloPropios } = require('./_propios');
+const { soloPropios, borrarTurnosPropios, borrarCajasSinTurnos } = require('./_propios');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
@@ -130,8 +130,9 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
       await db.query('DELETE FROM pagos WHERE pedido_id=?', [id]);
       await db.query('DELETE FROM pedidos WHERE id=?', [id]);
     }
-    for (const id of await nuevos('sesiones_caja')) { await db.query('DELETE FROM movimientos_caja WHERE sesion_caja_id=?', [id]); await db.query('DELETE FROM sesiones_caja WHERE id=?', [id]); }
-    for (const id of await nuevos('cajas')) await db.query('DELETE FROM cajas WHERE id=?', [id]);
+    // Solo los turnos que nadie más usó: un cobro real en la caja de la prueba no se borra.
+    await borrarTurnosPropios(db, await nuevos('sesiones_caja'));
+    await borrarCajasSinTurnos(db, await nuevos('cajas'));
     for (const id of await nuevos('productos')) {
       const sub = '(SELECT id FROM producto_variantes WHERE producto_id=?)';
       for (const tb of ['variante_codigos', 'movimientos_inventario', 'inventario']) await db.query('DELETE FROM ' + tb + ' WHERE variante_id IN ' + sub, [id]);

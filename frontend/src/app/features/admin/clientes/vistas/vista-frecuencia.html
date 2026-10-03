@@ -1,0 +1,170 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+<!-- ======================================================== Cada cuánto vienen -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Cada cuánto vienen</h2>
+      <p>
+        Los {{ datos().total_clientes }} clientes que te han comprado, según su costumbre de compra.
+      </p>
+    </div>
+  </div>
+  @if (tramos().length === 0) {
+    <p class="vacio">Todavía no hay compras de clientes identificados.</p>
+  } @else {
+    <div class="leyenda" style="margin-bottom: 16px">
+      @for (t of tramos(); track t.etiqueta) {
+        <span><i [style.background]="t.color"></i>{{ t.etiqueta }} · <b class="num" style="color: var(--tinta)">{{ t.n }}</b></span>
+      }
+    </div>
+    <div class="tramos tramos-frec" role="img" [attr.aria-label]="resumenTramos()">
+      @for (t of tramos(); track t.etiqueta) {
+        <span [style.flex-grow]="t.n" [style.background]="t.color" [style.color]="t.tinta">{{ t.texto }}</span>
+      }
+    </div>
+  }
+</section>
+
+<!-- ===================================================== A quién le toca venir -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>A quién le toca venir</h2>
+      <p>
+        Cada quien contra SU propio ritmo: 20 días sin venir es mucho para quien viene cada semana y
+        nada para quien viene cada mes.
+      </p>
+    </div>
+    <div class="ritmo-leyenda">
+      <span><span class="marca-ej"></span>Su ritmo de siempre</span>
+      <span><span class="punto-ej"></span>Lleva sin venir</span>
+    </div>
+  </div>
+
+  @if (toca().filas.length === 0) {
+    <p class="vacio">Nadie se ha pasado de su ritmo: todos vinieron cuando acostumbran.</p>
+  } @else {
+    <div>
+      @for (f of toca().filas; track f.c.cliente_id) {
+        <div class="ritmo-fila">
+          <div class="quien">
+            <a [routerLink]="['/admin/clientes', f.c.cliente_id]" [title]="f.c.nombre_comercial || f.c.nombre">{{ f.c.nombre }}</a>
+            <span>compra cada {{ f.c.ritmo }} días</span>
+            <!-- Y cuánto se lleva cada vez: es lo que se pierde si no vuelve. -->
+            <span>unos {{ kg1(f.c.kg_por_visita) }} · {{ pesos(f.c.dinero_por_visita) }} por visita</span>
+          </div>
+          <div class="pista" role="img"
+               [attr.aria-label]="'Compra cada ' + f.c.ritmo + ' días y lleva ' + f.c.dias_sin_venir + ' sin venir'">
+            <div class="base"></div>
+            <div class="tramo" [style.left.%]="f.desde" [style.width.%]="f.ancho" [style.background]="f.suave"></div>
+            <div class="marca" [style.left.%]="f.posRitmo"></div>
+            <div class="punto" [style.left.%]="f.posSin" [style.background]="f.color"></div>
+          </div>
+          <div class="cola">
+            <span class="num">{{ f.c.dias_sin_venir }} días</span>
+            <span [class]="'pill ' + f.pill">{{ veces(f.c.veces) }} su ritmo</span>
+          </div>
+        </div>
+      }
+      <div class="eje" aria-hidden="true">
+        <span></span>
+        <div class="marcas">
+          @for (m of toca().marcas; track m.pos) {
+            <span [style.left.%]="m.pos">{{ m.texto }}</span>
+          }
+        </div>
+        <span></span>
+      </div>
+    </div>
+  }
+</section>
+
+<!-- ======================================================== Todos, con teléfono -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Todos, del que más se tardó al que vino hace poco</h2>
+      <p>Para hacer la ronda de llamadas: el teléfono va en el renglón.</p>
+    </div>
+    <div class="filtros-tabla">
+      <label>
+        Mostrar
+        <select [ngModel]="mostrar()" (ngModelChange)="mostrar.set($event)" name="mostrar">
+          <option value="toca">A los que ya les toca</option>
+          <option value="todos">Todos</option>
+          <option value="frio">Solo los que se están enfriando</option>
+          <option value="perdido">Los que llevan 90 días o más sin venir</option>
+        </select>
+      </label>
+      <label>
+        Orden
+        <select [ngModel]="orden()" (ngModelChange)="orden.set($event)" name="orden">
+          <option value="tardo">Del que más se tardó</option>
+          <option value="reciente">El que vino más reciente</option>
+          <option value="kg">El que más kilos se lleva</option>
+          <option value="dinero">El que más dinero deja</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  @if (tabla().length === 0) {
+    <p class="vacio">No hay clientes en esta lista.</p>
+  } @else {
+    <div class="tabla-scroll">
+      <table class="grid" style="min-width: 1040px">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th class="num">Compras {{ enPeriodo(dias()) }}</th>
+            <th class="num">Kilos {{ enPeriodo(dias()) }}</th>
+            <th class="num">Dinero {{ enPeriodo(dias()) }}</th>
+            <th class="num">Compra cada</th>
+            <th>Última compra</th>
+            <th class="num">Sin venir</th>
+            <th>Cómo va</th>
+            <th>Teléfono</th>
+            <th><span class="oculto">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of tabla(); track r.cliente_id) {
+            <tr>
+              <td>
+                <div style="font-weight: 500">{{ r.nombre }}</div>
+                @if (r.nombre_comercial) { <div class="muted" style="font-size: 13px">{{ r.nombre_comercial }}</div> }
+              </td>
+              <td class="num">{{ r.compras_periodo }}</td>
+              <!-- Lo del periodo, y abajo lo que se lleva cada vez que viene. -->
+              <td class="num">
+                {{ kilos(r.kg_periodo) }}
+                <div class="muted" style="font-size: 12px">{{ kg1(r.kg_por_visita) }} por visita</div>
+              </td>
+              <td class="num">
+                {{ pesos(r.dinero_periodo) }}
+                <div class="muted" style="font-size: 12px">{{ pesos(r.dinero_por_visita) }} por visita</div>
+              </td>
+              <td class="num">{{ r.ritmo ? r.ritmo + ' días' : '—' }}</td>
+              <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ fechaCorta(r.ultima) }}</td>
+              <td class="num" style="font-weight: 600">{{ r.dias_sin_venir }} días</td>
+              <td><span [class]="'pill ' + ESTADO[r.estado].pill">{{ ESTADO[r.estado].texto }}</span></td>
+              <td class="mono" style="white-space: nowrap">{{ r.telefono || '—' }}</td>
+              <td class="acciones">
+                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', r.cliente_id]">Ver expediente</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

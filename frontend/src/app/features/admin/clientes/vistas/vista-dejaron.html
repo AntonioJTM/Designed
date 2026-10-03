@@ -1,0 +1,91 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Quiénes dejaron de venir</h2>
+      <p>
+        Te compraron {{ datos().min_compras }} veces o más y llevan {{ datos().dias }} días o más sin venir.
+        Arriba los que más te compraban: con ellos vale más la llamada.
+        @if (sinVenir() === 60) { Son los mismos del aviso de la campana. }
+      </p>
+    </div>
+    <label class="field corte">
+      Llevan sin venir
+      <select name="sin_venir" [value]="sinVenir()" (change)="elegirCorte($any($event.target).value)">
+        @for (c of CORTES; track c) {
+          <option [value]="c" [selected]="c === sinVenir()">{{ c }} días o más{{ c === 60 ? ' (el aviso)' : '' }}</option>
+        }
+      </select>
+    </label>
+  </div>
+
+  @if (lista().length === 0) {
+    <p class="vacio">
+      Nadie ha dejado de venir: todos los que te compraban seguido han vuelto en los últimos
+      {{ datos().dias }} días.
+    </p>
+  } @else {
+    <div class="tabla-scroll">
+      <table class="grid dejaron">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th class="num">Te compraba</th>
+            <th>Última compra</th>
+            <th class="num">Lleva sin venir</th>
+            <th class="num">Debe</th>
+            <th><span class="oculto">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of lista(); track c.cliente_id) {
+            <tr>
+              <td>
+                <b>{{ c.nombre }}</b>
+                @if (c.nombre_comercial) { <div class="muted chico">le dicen {{ c.nombre_comercial }}</div> }
+                <!-- Como texto, para poder copiarlo y marcarle. -->
+                <div class="tel">{{ c.telefono ? 'Tel. ' + c.telefono : 'Sin teléfono' }}</div>
+              </td>
+              <td class="num">
+                <b>{{ c.total_comprado | dinero }}</b>
+                <div class="muted chico">
+                  {{ c.num_compras }} {{ num(c.num_compras) === 1 ? 'compra' : 'compras' }}
+                  @if (c.cada_cuantos_dias) { · venía cada {{ c.cada_cuantos_dias }} días }
+                </div>
+              </td>
+              <td>{{ fechaCorta(c.ultima_compra) }}</td>
+              <td class="num">
+                {{ c.dias_sin_venir }} días
+                @if (c.veces_su_ritmo) {
+                  <div><span class="pill naranja">{{ c.veces_su_ritmo }}× su ritmo</span></div>
+                }
+              </td>
+              <td class="num">
+                @if (num(c.saldo) > 0) { {{ c.saldo | dinero }} } @else { <span class="muted">—</span> }
+              </td>
+              <td class="acciones">
+                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.cliente_id]">Ver</a>
+                @if (vePos()) {
+                  <a class="btn btn-ghost btn-sm" routerLink="/admin/pos" [queryParams]="{ cliente: c.cliente_id }">Venderle</a>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="muted nota-corte">
+      En Frecuencia de compra se mide distinto: a cada quien contra su propio ritmo. Aquí el corte es
+      parejo para todos.
+    </p>
+  }
+</section>

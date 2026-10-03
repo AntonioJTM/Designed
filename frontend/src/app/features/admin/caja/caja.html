@@ -1,0 +1,266 @@
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Caja</h1>
+      <p class="sub">El turno, el efectivo y el corte. Las ventas se cobran en Punto de venta.</p>
+    </div>
+    <div class="acciones">
+      @if (cajas().length > 1) {
+        <label class="field" style="min-width: 380px">
+          <span class="oculto">Caja</span>
+          <select [ngModel]="cajaSel()" (ngModelChange)="elegir($event)">
+            @for (c of cajas(); track c.id) {
+              <option [ngValue]="c.id">{{ c.nombre }} · {{ c.almacen }}</option>
+            }
+          </select>
+        </label>
+      }
+      @if (abierta()) {
+        @if (puedeMoverEfectivo()) {
+          <button type="button" class="btn btn-ghost" (click)="movAbierto.set(true)">Sacar o meter efectivo</button>
+        }
+        <button type="button" class="btn btn-primary" (click)="irAlCorte()">Cerrar caja (corte)</button>
+      }
+    </div>
+  </header>
+
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+  <!-- El corte recién hecho. La pantalla regresa a "abrir turno", que no
+       muestra la sesión: el resultado va en su propia tarjeta para que no se pierda. -->
+  @if (ultimoCorte(); as c) {
+    <section class="card" [class.verde]="diferencia(c) === 0">
+      <div class="card-head">
+        <div>
+          <h2>Corte de {{ c.caja }}</h2>
+          <p>
+            @if (diferencia(c) === 0) {
+              El cajón cuadra.
+            } @else {
+              La diferencia queda guardada en el corte; se ve después en Reportes → Cortes de caja.
+            }
+          </p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="ultimoCorte.set(null)">Entendido</button>
+      </div>
+      <div class="resultado-corte">
+        <div><span>Debía haber</span><b>{{ pesos2(c.monto_esperado) }}</b></div>
+        <div><span>Se contó</span><b>{{ pesos2(c.monto_final) }}</b></div>
+        <div>
+          <span>{{ diferencia(c) < 0 ? 'Faltó' : diferencia(c) > 0 ? 'Sobró' : 'Diferencia' }}</span>
+          <b [class.neg]="diferencia(c) < 0">{{ pesos2(diferencia(c) < 0 ? -diferencia(c) : diferencia(c)) }}</b>
+        </div>
+      </div>
+    </section>
+  }
+
+  @if (cargando()) {
+    <p class="muted">Cargando…</p>
+  } @else if (cajas().length === 0) {
+    <section class="card">
+      <h2>No hay cajas registradas</h2>
+      @if (administraCajas()) {
+        <p class="muted">Da de alta la primera para poder abrir un turno.</p>
+        <button type="button" class="btn btn-primary" (click)="nuevaCaja()">Nueva caja</button>
+      } @else {
+        <p class="muted">Pídele a un administrador que dé de alta la tuya.</p>
+      }
+    </section>
+  } @else {
+    @if (abierta()) {
+      <div class="kpis">
+        @for (k of kpis(); track k.etiqueta) {
+          <div class="kpi">
+            <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+            <span class="kpi-valor">{{ k.valor }}</span>
+            <span class="kpi-pie">{{ k.pie }}</span>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="fila">
+      @if (abierta() && sesion(); as s) {
+        <section class="card ancha">
+          <div class="card-head">
+            <div>
+              <h2>Movimientos del turno</h2>
+              <p>
+                Turno #{{ s.id }} · abrió {{ s.usuario }} {{ cuando(s.fecha_apertura) }}
+                con {{ pesos2(s.monto_inicial) }} de fondo.
+              </p>
+            </div>
+            @if (vePos()) { <a class="btn-enlace" routerLink="/admin/pos">Ir a cobrar</a> }
+          </div>
+          @if (movimientos().length === 0) {
+            <p class="vacio">Todavía no hay movimientos en este turno.</p>
+          } @else {
+            <div class="tabla-scroll">
+              <table class="grid" style="min-width: 520px">
+                <thead>
+                  <tr><th>Hora</th><th>Qué fue</th><th>Folio o motivo</th><th class="num">Monto</th></tr>
+                </thead>
+                <tbody>
+                  @for (m of movimientos(); track m.id) {
+                    <tr>
+                      <td class="num muted">{{ m.hora }}</td>
+                      <td><span class="pill" [class]="'pill ' + m.tono">{{ m.tipo }}</span></td>
+                      <td>{{ m.detalle }}</td>
+                      <td class="num">
+                        <b [style.color]="m.entra ? null : 'var(--alerta-t)'">{{ m.entra ? '+' : '−' }}{{ pesos2(m.monto) }}</b>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      } @else {
+        <section class="card ancha">
+          <div class="card-head">
+            <div>
+              <h2>Abrir turno</h2>
+              <p>
+                {{ caja()?.nombre }} no tiene turno abierto. Cuenta el fondo con que arranca el cajón
+                —el cambio que se deja para dar— y ábrelo para poder cobrar.
+              </p>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label class="field">
+              Fondo inicial
+              <input type="number" min="0" step="0.01" [(ngModel)]="montoInicial" name="fondo" />
+              <span class="ayuda">Puede ser cero.</span>
+            </label>
+          </div>
+          <div class="acciones" style="margin-top: 16px">
+            <button type="button" class="btn btn-primary" (click)="abrirTurno()" [disabled]="!caja()?.activo">
+              Abrir turno
+            </button>
+            @if (caja() && !caja()!.activo) {
+              <span class="muted">Esta caja está desactivada.</span>
+            }
+          </div>
+        </section>
+      }
+
+      <div class="columna angosta">
+        @if (abierta() && sesion(); as s) {
+          <section class="card" id="corte">
+            <div class="card-head">
+              <div>
+                <h2>Cerrar caja (corte)</h2>
+                <p>Cuenta el efectivo del cajón y escríbelo. Al cerrar, la diferencia queda guardada.</p>
+              </div>
+            </div>
+            <div class="columna" style="gap: 14px">
+              <label class="field">
+                Efectivo contado
+                <input type="number" min="0" step="0.01" [(ngModel)]="montoFinal" name="contado" />
+              </label>
+              <div class="corte-resumen">
+                <div><span>Debería haber</span><span class="num">{{ pesos2(s.esperado_actual) }}</span></div>
+                <div><span>Contaste</span><span class="num">{{ montoFinal == null ? '—' : pesos2(montoFinal) }}</span></div>
+                @if (diferenciaPrevia(); as d) {
+                  <div class="total">
+                    <span>{{ d < 0 ? 'Falta' : 'Sobra' }}</span>
+                    <b class="num" [style.color]="d < 0 ? 'var(--alerta-t)' : 'var(--ok-t)'">{{ pesos2(d < 0 ? -d : d) }}</b>
+                  </div>
+                } @else if (diferenciaPrevia() === 0) {
+                  <div class="total"><span>Cuadra</span><b class="num pos">{{ pesos2(0) }}</b></div>
+                }
+              </div>
+              <button type="button" class="btn btn-primary" (click)="cerrarTurno()" [disabled]="cerrando()">
+                {{ cerrando() ? 'Cerrando…' : 'Cerrar el turno' }}
+              </button>
+            </div>
+          </section>
+        }
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Cajas de la tienda</h2>
+              @if (cajas().length > 1) { <p>Toca una para trabajar con ella.</p> }
+            </div>
+            @if (administraCajas()) {
+              <button type="button" class="btn btn-ghost btn-sm" (click)="nuevaCaja()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+                Nueva caja
+              </button>
+            }
+          </div>
+          <div class="cajas-lista">
+            @for (c of cajas(); track c.id) {
+              <div class="caja-fila" [class.elegida]="c.id === cajaSel()">
+                <button type="button" class="que" (click)="elegir(c.id)" [attr.aria-pressed]="c.id === cajaSel()">
+                  <b>{{ c.nombre }} · {{ c.almacen }}</b>
+                  <span>{{ textoCorte(c) }}</span>
+                  <!-- Un turno abierto manda aunque la caja esté desactivada: hay
+                       efectivo en ese cajón y alguien tiene que hacerle su corte. -->
+                  @if (c.turno_id) {
+                    <span class="pill verde">Abierta · {{ c.turno_usuario }}</span>
+                  } @else if (!c.activo) {
+                    <span class="pill rojo">Desactivada</span>
+                  } @else {
+                    <span class="pill gris">Cerrada</span>
+                  }
+                </button>
+                @if (administraCajas()) {
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="editarCaja(c)">Editar</button>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+    </div>
+  }
+</div>
+
+@if (movAbierto() && sesion(); as s) {
+  <app-movimiento-caja-modal [sesion]="s" (guardado)="movimientoRegistrado($event)" (cerrado)="movAbierto.set(false)" />
+}
+
+<!-- Alta / edición de una caja. No se cierra al tocar el fondo: se perdería la captura. -->
+@if (modalCaja() !== null) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="titulo-caja">
+      <div class="modal-head">
+        <h2 id="titulo-caja">{{ modalCaja() ? 'Editar caja' : 'Nueva caja' }}</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarModalCaja()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        @if (errorCaja()) { <p class="alert">{{ errorCaja() }}</p> }
+        <div class="form-grid">
+          <label class="field full">
+            Nombre
+            <input type="text" [(ngModel)]="formCaja.nombre" name="nombreCaja" placeholder="Ej. Caja Cuautepec" />
+          </label>
+          <label class="field full">
+            Almacén del que descuenta
+            <select [(ngModel)]="formCaja.almacen_id" name="almacenCaja">
+              @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+            </select>
+            <span class="ayuda">Las ventas de esta caja salen de las existencias de ese almacén.</span>
+          </label>
+          <label class="field check">
+            <input type="checkbox" [(ngModel)]="formCaja.activo" name="activaCaja" /> Activa
+          </label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        @if (modalCaja()) {
+          <button type="button" class="btn btn-danger" (click)="eliminarCajaForm()" style="margin-right: auto">Eliminar</button>
+        }
+        <button type="button" class="btn btn-ghost" (click)="cerrarModalCaja()">Cancelar</button>
+        <button type="button" class="btn btn-primary" (click)="guardarCajaForm()" [disabled]="guardandoCaja()">
+          {{ guardandoCaja() ? 'Guardando…' : modalCaja() ? 'Guardar cambios' : 'Dar de alta' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

@@ -1,0 +1,146 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <!-- El nombre de un hilo es largo: va más chico que una cifra. -->
+      <span class="kpi-valor" [style.font-size.px]="k.chico ? 22 : null">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+@if (datos().total_kg === 0) {
+  <section class="card">
+    <p class="vacio">Ningún cliente identificado compró {{ enPeriodo(dias()) }}. Prueba con un periodo más largo.</p>
+  </section>
+} @else {
+  <div class="fila estirar">
+    <!-- ================================================= Los 10 hilos que más se llevan -->
+    <section class="card ancha">
+      <div class="card-head">
+        <div>
+          <h2>Los {{ top().length }} hilos que más se llevan tus clientes</h2>
+          <p>
+            Kilos {{ enPeriodo(dias()) }}. Cada hilo es un color en un calibre: ROJO 1/30 y ROJO 2/30 van
+            por separado.
+          </p>
+        </div>
+      </div>
+      <div class="barras" style="--etiqueta: 210px; gap: 12px">
+        @for (t of top(); track t.h.producto_id) {
+          <div class="barra-fila">
+            <span class="barra-etiqueta">
+              <span>{{ t.hilo }}</span>
+              <span class="muted">{{ t.ficha }}{{ t.ficha ? ' · ' : '' }}{{ t.h.clientes }} {{ t.h.clientes === 1 ? 'cliente' : 'clientes' }}</span>
+            </span>
+            <span class="barra-valor">
+              <span class="relleno" [style.width.%]="t.ancho"></span>
+              <b>{{ t.h.kg | cantidad: 'kg' }}</b>
+            </span>
+          </div>
+        }
+      </div>
+    </section>
+
+    <div class="columna angosta">
+      <!-- =================================================== Por material y calibre -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Por material y calibre</h2>
+            <p>De cada 100 kilos que se llevan.</p>
+          </div>
+        </div>
+        <div class="columna" style="gap: 14px">
+          @for (m of datos().por_material; track m.material + (m.calibre ?? '')) {
+            <div class="reparto">
+              <div class="linea">
+                <span><b style="font-weight: 600">{{ m.material }}</b> {{ m.calibre }}</span>
+                <span>{{ m.kg | cantidad: 'kg' }} · <b style="color: var(--tinta)">{{ m.pct }}%</b></span>
+              </div>
+              <div class="carril"><span [style.width.%]="m.pct"></span></div>
+            </div>
+          }
+        </div>
+      </section>
+
+      <!-- ======================================================= Cómo se lo llevan -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Cómo se lo llevan</h2>
+            <p>El paquete cerrado o el cono ya bajado a mostrador.</p>
+          </div>
+        </div>
+        <div class="leyenda" style="margin-bottom: 14px; font-size: 14px">
+          <span><i [style.background]="COLOR.serie1"></i>En paquete · <b style="color: var(--tinta)">{{ pctPaquete() }}%</b></span>
+          <span><i [style.background]="COLOR.serie2"></i>En cono · <b style="color: var(--tinta)">{{ datos().pct_cono }}%</b></span>
+        </div>
+        <div class="tramos" style="height: 32px" role="img"
+             [attr.aria-label]="pctPaquete() + ' por ciento en paquete, ' + datos().pct_cono + ' por ciento en cono'">
+          @if (pctPaquete() > 0) { <span [style.flex-grow]="pctPaquete()" style="flex-basis: 0" [style.background]="COLOR.serie1"></span> }
+          @if (datos().pct_cono > 0) { <span [style.flex-grow]="datos().pct_cono" style="flex-basis: 0" [style.background]="COLOR.serie2"></span> }
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================================================== Qué se lleva cada cliente -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Qué se lleva cada cliente</h2>
+        <p>
+          Su hilo de siempre, lo demás que suele llevar y cómo se lo lleva. Sirve para tener listo su
+          pedido antes de que llegue.
+        </p>
+      </div>
+    </div>
+    <div class="tabla-scroll">
+      <table class="grid" style="min-width: 900px">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Su hilo de siempre</th>
+            <th>También lleva</th>
+            <th class="num">Kilos {{ enPeriodo(dias()) }}</th>
+            <th>Cómo se lo lleva</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of datos().clientes; track r.cliente_id) {
+            <tr>
+              <td>
+                <a [routerLink]="['/admin/clientes', r.cliente_id]" [queryParams]="{ ver: 'que' }"
+                   style="font-weight: 500; color: var(--tinta); text-decoration: none">{{ r.nombre }}</a>
+                @if (r.nombre_comercial) { <div class="muted" style="font-size: 13px">{{ r.nombre_comercial }}</div> }
+              </td>
+              <td>
+                @if (r.favorito; as f) {
+                  <div style="font-weight: 500">{{ f.hilo }}</div>
+                  <div class="muted num" style="font-size: 13px">{{ f.kg | cantidad: 'kg' }} de ese hilo</div>
+                } @else { — }
+              </td>
+              <td>
+                <div class="fichas">
+                  @for (o of r.otros; track o) { <span class="ficha">{{ o }}</span> }
+                  @if (r.otros.length === 0) { <span class="muted">—</span> }
+                </div>
+              </td>
+              <td class="num" style="font-weight: 600">{{ r.kg | cantidad: 'kg' }}</td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span class="mini" aria-hidden="true">
+                    @if (r.pct_paquete > 0) { <span [style.flex]="r.pct_paquete + ' 1 0'" [style.background]="COLOR.serie1"></span> }
+                    @if (r.pct_paquete < 100) { <span [style.flex]="(100 - r.pct_paquete) + ' 1 0'" [style.background]="COLOR.serie2"></span> }
+                  </span>
+                  <span style="font-size: 13px; color: var(--tinta-2); white-space: nowrap">{{ como(r.pct_paquete) }}</span>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}

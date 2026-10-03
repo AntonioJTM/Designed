@@ -316,13 +316,23 @@ async function coloresMasComprados(id, limite = 10) {
   return rows;
 }
 
-/** Sus pedidos, lo más reciente primero. */
+/**
+ * Sus pedidos, lo más reciente primero.
+ *
+ * Cada pedido trae además QUÉ se llevó (los hilos, nombrados con su calibre),
+ * cuántos kilos y CÓMO pagó (los métodos y la parte que quedó a deber): es lo
+ * que la tabla "Sus compras" del expediente necesita para contestar una duda
+ * sin abrir el pedido. Van en consultas aparte sobre los ids de la página —y no
+ * con GROUP_CONCAT en la principal— para no depender del tope de 1,024
+ * caracteres ni de subconsultas correlacionadas que MariaDB no acepta.
+ */
 async function pedidos(id, { limit = 20, offset = 0 } = {}) {
   const [rows] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.canal, p.metodo_entrega, p.estado,
             p.subtotal, p.descuento, p.impuestos, p.costo_envio, p.total,
             p.creado_en, u.nombre AS atendio,
-            (SELECT COUNT(*) FROM pedido_detalle d WHERE d.pedido_id = p.id) AS num_lineas
+            (SELECT COUNT(*) FROM pedido_detalle d WHERE d.pedido_id = p.id) AS num_lineas,
+            (SELECT COALESCE(SUM(d.cantidad), 0) FROM pedido_detalle d WHERE d.pedido_id = p.id) AS kilos
        FROM pedidos p
        LEFT JOIN usuarios u ON u.id = p.usuario_id
       WHERE p.cliente_id = :id
@@ -334,6 +344,56 @@ async function pedidos(id, { limit = 20, offset = 0 } = {}) {
     'SELECT COUNT(*) AS total FROM pedidos WHERE cliente_id = :id',
     { id }
   );
+
+  const ids = rows.map((r) => r.id);
+  if (ids.length) {
+    // Por HILO (producto_id), no por nombre: el mismo color en dos calibres
+    // son dos productos.
+    const [hilos] = await pool.query(
+      `SELECT d.pedido_id, pr.id AS producto_id, pr.nombre AS color,
+              pr.grosor_calibre AS calibre, SUM(d.cantidad) AS kg
+         FROM pedido_detalle d
+         JOIN producto_variantes pv ON pv.id = d.variante_id
+         JOIN productos pr          ON pr.id = pv.producto_id
+        WHERE d.pedido_id IN (:ids)
+        GROUP BY d.pedido_id, pr.id, pr.nombre, pr.grosor_calibre
+        ORDER BY kg DESC`,
+      { ids }
+    );
+    // Los pagos reembolsados también cuentan aquí: dicen con qué pagó un
+    // pedido que después se canceló.
+    const [pagos] = await pool.query(
+      `SELECT pg.pedido_id, mp.nombre AS metodo, SUM(pg.monto) AS monto
+         FROM pagos pg
+         JOIN metodos_pago mp ON mp.id = pg.metodo_pago_id
+        WHERE pg.pedido_id IN (:ids) AND pg.estado IN ('completado', 'pendiente', 'reembolsado')
+        GROUP BY pg.pedido_id, mp.nombre
+        ORDER BY monto DESC`,
+      { ids }
+    );
+    // Lo que se llevó a crédito es el CARGO original: aunque después se
+    // cancele, el cargo se queda en el libro (se corrige con un ajuste).
+    const [fiado] = await pool.query(
+      `SELECT pedido_id, SUM(monto) AS monto FROM credito_movimientos
+        WHERE tipo = 'cargo' AND pedido_id IN (:ids)
+        GROUP BY pedido_id`,
+      { ids }
+    );
+    for (const r of rows) {
+      r.hilos = hilos
+        .filter((h) => h.pedido_id === r.id)
+        .map((h) => ({
+          producto_id: h.producto_id,
+          hilo: [h.color, h.calibre].filter(Boolean).join(' '),
+          kg: h.kg,
+        }));
+      r.pagado_con = pagos
+        .filter((p) => p.pedido_id === r.id)
+        .map((p) => ({ metodo: p.metodo, monto: p.monto }));
+      const f = fiado.find((x) => x.pedido_id === r.id);
+      r.a_credito = f ? f.monto : '0.00';
+    }
+  }
   return { rows, total: Number(total) };
 }
 
@@ -602,7 +662,118 @@ async function ajustarCreditoPorPedido(conn, { pedidoId, numeroPedido, usuarioId
   }, conn);
 }
 
+/**
+ * La costumbre de un cliente, para la vista Resumen de su expediente.
+ * El ritmo se mide en DÍAS con compra (dos tickets el mismo día son una visita),
+ * igual que en la pestaña Frecuencia de compra.
+ */
+async function habitos(clienteId) {
+  const vivo = "estado NOT IN ('cancelado', 'devuelto')";
+  const [[v]] = await pool.query(
+    `SELECT COUNT(DISTINCT DATE(creado_en)) AS dias_con_compra,
+            DATE_FORMAT(MIN(creado_en), '%Y-%m-%d') AS primera,
+            DATE_FORMAT(MAX(creado_en), '%Y-%m-%d') AS ultima,
+            DATEDIFF(CURDATE(), DATE(MAX(creado_en))) AS dias_sin_venir,
+            DATEDIFF(DATE(MAX(creado_en)), DATE(MIN(creado_en))) AS lapso
+       FROM pedidos WHERE cliente_id = :id AND ${vivo}`,
+    { id: clienteId }
+  );
+  const [visitas] = await pool.query(
+    `SELECT DISTINCT DATE_FORMAT(creado_en, '%Y-%m-%d') AS dia, DATEDIFF(CURDATE(), DATE(creado_en)) AS hace
+       FROM pedidos
+      WHERE cliente_id = :id AND ${vivo} AND creado_en >= CURDATE() - INTERVAL 90 DAY
+      ORDER BY dia`,
+    { id: clienteId }
+  );
+  const [porDia] = await pool.query(
+    `SELECT DAYOFWEEK(creado_en) AS dow, COUNT(*) AS n FROM pedidos
+      WHERE cliente_id = :id AND ${vivo} GROUP BY dow`,
+    { id: clienteId }
+  );
+  // Todas las horas, no solo la de costumbre: la pestaña "Cuándo compra" del
+  // expediente dibuja cómo se reparten. La primera sigue siendo la que más.
+  const [porHora] = await pool.query(
+    `SELECT HOUR(creado_en) AS hora, COUNT(*) AS n FROM pedidos
+      WHERE cliente_id = :id AND ${vivo} GROUP BY hora ORDER BY n DESC, hora`,
+    { id: clienteId }
+  );
+  // Los últimos 90 días contra los 90 anteriores, con la MISMA ventana que la
+  // pestaña Cuánto gasta (NOW() - INTERVAL): así el expediente y la pestaña
+  // dicen la misma cifra de lo que gastó.
+  const [[p90]] = await pool.query(
+    `SELECT COUNT(CASE WHEN creado_en >= NOW() - INTERVAL 90 DAY THEN 1 END) AS compras,
+            COALESCE(SUM(CASE WHEN creado_en >= NOW() - INTERVAL 90 DAY THEN total END), 0) AS total,
+            COUNT(CASE WHEN creado_en < NOW() - INTERVAL 90 DAY THEN 1 END) AS compras_antes,
+            COALESCE(SUM(CASE WHEN creado_en < NOW() - INTERVAL 90 DAY THEN total END), 0) AS total_antes
+       FROM pedidos
+      WHERE cliente_id = :id AND ${vivo} AND creado_en >= NOW() - INTERVAL 180 DAY`,
+    { id: clienteId }
+  );
+  // Qué se llevó en esos 90 días: kilos, cuántos en cono y de cuántos HILOS
+  // distintos (producto_id: el mismo color en dos calibres son dos hilos).
+  const [[k90]] = await pool.query(
+    `SELECT COALESCE(SUM(d.cantidad), 0) AS kg,
+            COALESCE(SUM(CASE WHEN pv.tipo_presentacion = 'cono' THEN d.cantidad ELSE 0 END), 0) AS kg_cono,
+            COUNT(DISTINCT pv.producto_id) AS hilos
+       FROM pedido_detalle d
+       JOIN pedidos p             ON p.id = d.pedido_id
+       JOIN producto_variantes pv ON pv.id = d.variante_id
+      WHERE p.cliente_id = :id AND p.estado NOT IN ('cancelado', 'devuelto')
+        AND p.creado_en >= NOW() - INTERVAL 90 DAY`,
+    { id: clienteId }
+  );
+  // Contra qué se compara su compra promedio: la de TODOS los clientes
+  // identificados en el mismo periodo (el "Por compra" de Cuánto gasta).
+  const [[tienda]] = await pool.query(
+    `SELECT COUNT(*) AS compras, COALESCE(SUM(total), 0) AS total FROM pedidos
+      WHERE cliente_id IS NOT NULL AND estado NOT IN ('cancelado', 'devuelto')
+        AND creado_en >= NOW() - INTERVAL 90 DAY`
+  );
+  const [porMes] = await pool.query(
+    `SELECT DATE_FORMAT(creado_en, '%Y-%m') AS mes, COUNT(*) AS compras, SUM(total) AS total
+       FROM pedidos
+      WHERE cliente_id = :id AND ${vivo}
+        AND creado_en >= DATE_FORMAT(CURDATE() - INTERVAL 5 MONTH, '%Y-%m-01')
+      GROUP BY mes ORDER BY mes`,
+    { id: clienteId }
+  );
+  const n = Number(v.dias_con_compra ?? 0);
+  const ritmo = n > 1 && Number(v.lapso) > 0 ? Math.max(1, Math.round(Number(v.lapso) / (n - 1))) : null;
+  const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const dia = porDia.sort((a, b) => Number(b.n) - Number(a.n))[0];
+  return {
+    ritmo,
+    primera: v.primera,
+    ultima: v.ultima,
+    dias_sin_venir: v.dias_sin_venir == null ? null : Number(v.dias_sin_venir),
+    veces_su_ritmo: ritmo && v.dias_sin_venir != null ? Math.round((Number(v.dias_sin_venir) / ritmo) * 10) / 10 : null,
+    dia_de_costumbre: dia ? DIAS[Number(dia.dow) - 1] : null,
+    hora_de_costumbre: porHora[0] ? Number(porHora[0].hora) : null,
+    visitas_90: visitas.map((x) => ({ dia: x.dia, hace: Number(x.hace) })),
+    por_dia_semana: DIAS.map((d, i) => ({ dia: d, n: Number(porDia.find((x) => Number(x.dow) === i + 1)?.n ?? 0) })),
+    por_mes: porMes.map((m) => ({ mes: m.mes, compras: Number(m.compras), total: Math.round(Number(m.total) * 100) / 100 })),
+    por_hora: porHora
+      .map((h) => ({ hora: Number(h.hora), n: Number(h.n) }))
+      .sort((a, b) => a.hora - b.hora),
+    ultimos_90: {
+      compras: Number(p90.compras),
+      total: Math.round(Number(p90.total) * 100) / 100,
+      kg: Math.round(Number(k90.kg) * 1000) / 1000,
+      kg_cono: Math.round(Number(k90.kg_cono) * 1000) / 1000,
+      hilos: Number(k90.hilos),
+    },
+    anteriores_90: {
+      compras: Number(p90.compras_antes),
+      total: Math.round(Number(p90.total_antes) * 100) / 100,
+    },
+    ticket_tienda_90: Number(tienda.compras)
+      ? Math.round((Number(tienda.total) / Number(tienda.compras)) * 100) / 100
+      : null,
+  };
+}
+
 module.exports = {
+  habitos,
   // Cuenta de la tienda en línea
   buscarPorCorreoConHash,
   buscarPorId,

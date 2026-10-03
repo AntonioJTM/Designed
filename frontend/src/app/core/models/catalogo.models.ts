@@ -17,6 +17,8 @@ export interface Categoria {
   imagen_url?: string | null;
   orden: number;
   activo: boolean | number;
+  /** Cuántos productos (hilos) son de este material. Solo lectura, del listado. */
+  num_productos?: number | string;
 }
 
 /**
@@ -40,6 +42,12 @@ export interface VarianteCodigo {
   consumido_folio?: string | null;
   remesa_id?: number | null;
   remesa_folio?: string | null;
+  /**
+   * Almacén donde está el bulto. APROXIMADO: lo pone la remesa y lo corrigen el
+   * traspaso y el escaneo al vender. NULL en los capturados a mano.
+   */
+  almacen_id?: number | null;
+  almacen?: string | null;
   etiqueta?: string | null;
   creado_en?: string;
 }
@@ -181,6 +189,13 @@ export interface Producto {
   imagen?: string | null;
   /** Suma de existencias vendibles en línea de todas sus variantes activas. */
   disponible?: string | null;
+  /**
+   * No se puede vender: su presentación en kilos está en $0. Así entran los
+   * hilos que crea la lista completa del proveedor (Recibir remesa).
+   */
+  sin_precio?: boolean | number;
+  /** Cuándo entró su primera carga de mercancía; null si nunca ha entrado. */
+  primera_carga?: string | null;
 }
 
 /** Detalle: producto + colecciones anidadas. */

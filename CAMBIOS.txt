@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-02
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-03
 ===============================================================================
 
 ⚠ LA BASE DE PRODUCCIÓN TIENE UNA MUESTRA SEMBRADA (2026-10-01)
@@ -20,14 +20,60 @@
   Ver la entrada "2026-10-01 · Muestra para enseñar el sistema".
 
 LO ÚLTIMO QUE SE TERMINÓ
-  SIETE FALLAS Y LOS DETALLES DE DISEÑO (2026-10-02). La más seria: la caja
+  FRECUENCIA EN KILOS Y DINERO (2026-10-03, entrada 12): cada cliente dice
+  cuánto se lleva por visita y en el periodo; la tabla ordena por kilos o
+  dinero.
+  Antes: CLIENTES → "DEJARON DE VENIR" (2026-10-03, entrada 11): la campana ya lleva a
+  una pestaña con exactamente los clientes del aviso; se quitó del tablero.
+  Antes: REGRESA EL HILO PARADO (2026-10-03, entrada 10): en "Cómo va el negocio",
+  valorado a precio de venta, con lo vendido y la última venta de cada hilo.
+  Antes: LA TIENDA NO LLEVA EL COSTO (2026-10-03, entrada 9): un interruptor
+  (SE_LLEVA_COSTO, backend y frontend) esconde todo lo del costo para todos,
+  ya no se pide precio de compra y se borraron los $50/$40/$30 de hoy. Sin
+  desplegar.
+  Antes: PROBADO CONTRA LA BASE Y DESDE LA PANTALLA (2026-10-03, entrada 8): la carga
+  con avance funciona (1,800 bultos en segundos, panel visto a media carga). El
+  abono de prueba de la caja TMPAP se borró (era prueba del usuario).
+  Antes: LA LISTA, PULIDA (2026-10-03, entrada 7): sin precio de compra en la
+  pantalla, panel de avance real mientras carga (el servidor contesta por
+  partes) y bultos de cien en cien; las cargas de una lista ya no salen "no
+  cuadra". El usuario YA cargó la lista real (CAMEL, OPTIK, MARINO 2/30).
+  Antes: CARGA DE LA LISTA COMPLETA DEL PROVEEDOR (2026-10-03): Recibir remesa lee el
+  inventario HTX con varios colores, crea los hilos que falten SIN PRECIO, con
+  sus lotes y bultos, y avisa en Productos, la campana y Hoy hasta que se les
+  ponga precio (sin precio no se venden). Sin desplegar.
+  (El abono que cayó en la caja de una prueba era prueba del usuario y ya se
+  borró: entrada 8.)
+  Antes: CONFIRMACIONES CON EL DISEÑO DEL SISTEMA (2026-10-03): las 14 que usaban el
+  cuadro del navegador. Sin desplegar. Pendiente de decidir: eliminar una
+  presentación todavía se lleva sus bultos.
+  Antes: UN PRODUCTO SOLO SE ELIMINA SI NO TIENE NADA CARGADO (2026-10-03). Sin
+  desplegar.
+  Antes: REPORTES EN PDF DE LAS ENTRADAS (2026-10-03): cada carga baja su PDF al
+  terminar y se puede sacar cuando sea; cada producto, el de todas sus cargas.
+  "Cargar del Excel del proveedor" ahora es "Carga de producto". Sin desplegar
+  (al desplegar se instala pdfkit en el servidor).
+  Antes: PRODUCTO: "SE VENDE POR" FIJO EN KILO E IMPUESTO OCULTO (2026-10-03). Sin
+  desplegar.
+  Antes: MATERIALES SIN "ORDEN" (2026-10-03): fuera de la tabla y del modal; la lista
+  va por nombre. Sin desplegar.
+  Antes: EL PANEL DE AVISOS SE ABRE A LA DERECHA DEL MENÚ, la página va a TODO lo ancho
+  y el menú lateral ya no tiene barra (la campana siempre a la vista)
+  (2026-10-02, tercera entrada fechada). Sin desplegar.
+  Antes: EL REDISEÑO DE TODO EL PANEL (2026-10-02, segunda entrada fechada). Menú por
+  tareas en siete grupos, PERMISOS POR PUESTO que asigna el administrador,
+  pantallas nuevas Hoy, Caja, Permisos y CLIENTES (cinco pestañas + expediente),
+  y todas las demás con el mismo sistema de diseño. La TIENDA EN LÍNEA quedó
+  APAGADA (comentada, no borrada). ⚠ NO SE HA DESPLEGADO NI HECHO COMMIT: el
+  usuario avisará. Lo único que tocó la base fue la migración de permisos (solo
+  datos). Esperan su visto bueno cinco cosas: ver "QUEDA PARA QUE EL USUARIO
+  DECIDA" en la entrada. 215 unitarias y 20 E2E en producción; base idéntica.
+  Antes: SIETE FALLAS Y LOS DETALLES DE DISEÑO (2026-10-02). La más seria: la caja
   guardaba como pago el billete y no lo cobrado, y al cancelar devolvía de más.
   También: la caja ya no vende lo apartado, la lista de precio regresa al
   público, se puede cambiar precio y peso de una presentación, hay retiros e
   ingresos de efectivo y ajuste de deuda, y el corte enseña su diferencia.
-  ⚠ HAY UNA PROPUESTA DE ACOMODO esperando decisión del usuario (menú por
-  tareas, pantalla "Hoy"…): https://claude.ai/code/artifact/e2ab4870-b15f-44c0-9f8b-77a56fad544c
-  NO está aplicada. Las 17 E2E pasan en producción y la base quedó idéntica.
+  (La propuesta de acomodo que dejó se aplicó después: ver arriba.) Las 17 E2E pasan en producción y la base quedó idéntica.
   Antes: PRUEBA GENERAL (2026-10-01): las 16 E2E corridas EN PRODUCCIÓN (la base quedó
   idéntica) y todo el sistema recorrido en el navegador. Se corrigieron 13
   cosas; la más seria, subir la captura a un apartado creaba un pago por el
@@ -300,6 +346,811 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (12) · La frecuencia de compra, también en kilos y en dinero
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Ahora en la frecuencia tiene que ser igual por kg y por dinero, ¿sí está
+  así?". No lo estaba: solo contaba visitas y días entre una y otra.
+
+QUÉ SE HIZO
+  · clientes/analisis.js → ritmos(): de cada cliente, kilos y dinero desde
+    siempre y POR VISITA (por día con compra, igual que el ritmo: dos tickets
+    el mismo día son una visita). frecuencia(): los del periodo elegido y la
+    visita típica (mediana de kilos y de dinero por visita). El dinero es el
+    total de sus ventas, como en Cuánto gasta; los kilos, lo que se llevó de
+    hilo. Lo cancelado y lo devuelto no cuenta.
+  · En la pestaña: la cifra "Vienen cada 10 días" agrega "cada vez se llevan
+    unos 24.5 kg ($3,504)"; en "A quién le toca venir" cada cliente dice
+    "unos X kg · $Y por visita" (lo que se pierde si no vuelve); la tabla tiene
+    columnas de kilos y dinero del periodo, con lo de cada visita abajo, y se
+    puede ordenar por "el que más kilos se lleva" o "el que más dinero deja".
+
+PRUEBAS
+  245 unitarias (nuevas: la frecuencia enseña kilos y dinero y ordena por
+  dinero; Dejaron de venir pide el corte de 60 si no se dice otro). Revisado
+  en Chrome headless. Nada se subió.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (11) · Clientes → "Dejaron de venir", a donde lleva la campana
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  La campana decía "5 clientes dejaron de venir · Ver quiénes" y llevaba a
+  Clientes → Frecuencia de compra, que mide otra cosa (16 "se están enfriando"
+  contra el ritmo de cada quien): "doy clic y no me dice quiénes ya no han
+  venido". La lista estaba en "Cómo va el negocio": "no tiene que ir ahí,
+  créame un apartado en clientes para que me lleve ahí… que sea más congruente".
+
+QUÉ SE HIZO
+  · Pestaña nueva en Clientes, junto a Frecuencia: "Dejaron de venir"
+    (/admin/clientes/dejaron). Son EXACTAMENTE los del aviso: compraron 2 veces
+    o más y llevan 60 días o más sin venir. Cifras: cuántos, cuánto te
+    compraban en total y el que más te compraba. Lista ordenada por lo que
+    compraban, con apodo, teléfono, compras y cada cuánto venía, última compra,
+    días sin venir (y cuántas veces su ritmo), lo que debe, y "Ver" /
+    "Venderle". Selector del corte: 30, 60 (el del aviso), 90 o 180 días.
+  · La campana y Hoy ("Ver quiénes") llevan ahí.
+  · Una sola consulta para los dos: el aviso de la campana ahora sale de
+    analisis/model.js → clientesEnfriados, la misma de la pestaña. Antes la
+    campana tenía su propio SQL (daba igual, pero así ya no se pueden separar).
+  · Se quitó el bloque "Clientes que dejaron de venir" de "Cómo va el
+    negocio" (y su filtro de días). El endpoint del tablero lo sigue mandando.
+  · Hoy: 5 clientes (Chava, Don Pepe, Ramón, Silvia y Gerry), $61,164 que te
+    compraban. Son de la muestra sembrada.
+
+ARCHIVOS
+  NUEVO   frontend …/clientes/vistas/vista-dejaron.ts/.html/.spec.ts
+  MODIF   clientes.ts/.html, admin.routes.ts, rediseno.service.ts y su modelo
+  MODIF   admin-layout.html (campana), hoy.ts, tablero.html/.ts/.scss
+  MODIF   backend clientes/analisis.js (dejaron), clientes/controller.js
+          (?sin_venir), notificaciones/model.js (misma consulta, exporta
+          DIAS_SIN_VENIR)
+
+PRUEBAS
+  243 unitarias (3 nuevas: dice quiénes con teléfono y primero el que más
+  compraba, "Venderle" solo con permiso del punto de venta, el corte se
+  mueve). e2e-permisos pasa. Contra el servidor: la campana y la pestaña dan
+  los mismos 5; un cajero la abre; un corte inválido cae en 60. En Chrome
+  headless se siguió el camino del usuario: campana → "Ver quiénes" → la
+  pestaña con los 5 nombres; el tablero ya no tiene el bloque. Nada se subió.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (10) · Regresa el hilo parado, a precio de venta
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Al apagar el costo se fue también "Hilo parado" del tablero (colgaba del
+  mismo permiso). "Lo del hilo parado sí me sirve, regrésalo y calcúlalo con
+  el precio de venta y en base al hilo que tenemos y que se ha vendido".
+
+QUÉ SE HIZO
+  · analisis/model.js → hiloMuerto acepta conCosto: false y entonces valora
+    todo a precio de venta (existencia × precio por kg) y no saca el costo. El
+    tablero lo manda así a quien no tiene «Ver costos» (hoy, todos); el margen
+    sigue sin calcularse.
+  · En "Cómo va el negocio" vuelven la cifra "Dinero en hilo parado" y la
+    tarjeta "Hilo parado", que ahora dice "valorado a precio de venta: lo que
+    te darían por él si se vendiera". Cada renglón: cuánto HAY, cuánto VALE (y a
+    qué precio por kg), cuánto se ha VENDIDO desde siempre y los días sin
+    venderse con la fecha de la última venta.
+  · Hoy, con la regla de 90 días, salen 3 hilos de la muestra que nunca se han
+    vendido: 1,246.86 kg que valen $179,890 a precio de venta.
+
+PRUEBAS
+  240 unitarias (la del tablero sin «Ver costos» ahora exige el hilo parado a
+  precio de venta, con lo vendido y la última venta). Revisado en Chrome
+  headless como administrador. Nada se subió.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (9) · La tienda no lleva el costo
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Al ver en OPTIK "Precio público $50" y "Costo promedio $40" se le explicó la
+  diferencia, y contestó: "no necesito lo que me costó, creo que eso lo puedes
+  quitar, solo me sirve nada más en cuánto lo voy a vender".
+
+QUÉ SE HIZO
+  · Un interruptor, SE_LLEVA_COSTO = false (backend permisos/service.js y
+    frontend core/costos.ts). Apaga «Ver costos y márgenes» para TODOS, también
+    el administrador. Como todo lo del costo ya colgaba de ese permiso, con eso
+    se esconde: el costo promedio de Presentaciones, la columna de costo y el
+    aviso "Sin precio de compra" del historial, la ganancia, el margen y el
+    dinero parado del tablero, las herramientas de costo del asistente, el
+    precio de compra de los PDF, y el permiso en la pantalla de Permisos (al
+    guardar se le conserva a quien ya lo tenía, por si se vuelve a encender).
+  · Ya no se pide "Precio de compra" en Recibir remesa (un hilo) ni en la carga
+    de Presentaciones; la lista con varios colores ya no lo pedía.
+  · Se borraron los costos que se habían capturado hoy: $50 CAMEL, $40 OPTIK y
+    $30 MARINO 2/30 (sus 3 cargas y sus presentaciones). No tenían ventas, así
+    que ningún pedido guardaba ese costo. Los precios de venta no se tocaron.
+    Los únicos otros hilos con costo son de la muestra sembrada.
+  · NO se borró nada del código ni de la base: captura, promedio ponderado y
+    costo congelado en la venta siguen ahí. Volver a llevar el costo = poner los
+    dos interruptores en true.
+
+PRUEBAS
+  240 unitarias (nueva: ni el administrador ve costos con el interruptor
+  apagado; Recibir remesa ya no pide precio de compra). E2E: permisos (ahora
+  cuenta 26 permisos y comprueba que nadie tiene «Ver costos»), carga-lista y
+  remesas pasan; costo-margen sale en 0 ("no aplica"). Contra el servidor, como
+  administrador: el tablero trae margen y dinero parado en null, la
+  presentación de OPTIK ya no trae costo y Permisos no ofrece el permiso. En
+  Chrome headless: OPTIK sin "Costo promedio", Recibir remesa sin "Precio de
+  compra" ni columna de costo, tablero sin ganancia ni margen. Nada se subió.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (8) · Probado contra la base y desde la pantalla; abono de prueba borrado
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Pruébalo ya tú" (lo que la entrada 7 dejó sin probar contra la base y en el
+  navegador). Del abono de la caja de prueba: "solo fue una prueba mía, la
+  puedes quitar o dejar como quieras".
+
+QUÉ SE HIZO
+  · e2e-carga-lista.js tiene una sección nueva, "carga con avance": manda la
+    lista con ?progreso=1 y la lee trozo por trozo como el navegador. Llegó en
+    8 trozos: revisa > hilo > bultos 100 > bultos 150 > listo > hilo > bultos
+    180 > listo > guarda > fin. Un código ya cargado llega como "error" y no
+    deja nada; un cuerpo inválido sigue siendo 422 en JSON. 60 comprobaciones,
+    todas bien. e2e-remesas y e2e-carga-por-producto (la carga de un hilo, que
+    usa el mismo insert por tandas) pasan.
+  · Desde la PANTALLA, en Chrome headless: un Excel TMP de 1,800 bultos y 3
+    hilos a un almacén TMP. El panel se vio a 1 s ("100 de 1,800") y a 2 s
+    ("600 de 1,800", el primer hilo listo con su folio); terminó en unos
+    segundos con el comprobante, el aviso de precios y los 3 hilos "Falta
+    precio". Antes, 718 bultos tardaron un minuto.
+  · El historial ya no marca "no cuadra" la carga real de MARINO 2/30, y las
+    cargas de una lista tampoco dicen "Sin precio de compra" (la lista ya no lo
+    pide).
+  · Se borraron el abono de prueba (credito_movimientos 156), el turno 289 y
+    la caja "TMPAP Caja musmm37t" (186). El cliente 22 (de la muestra) vuelve
+    a deber $5,083.14, como antes de la prueba.
+  · La base quedó idéntica a la foto de antes de esta ronda, salvo esos tres
+    registros borrados.
+
+PRUEBAS
+  237 unitarias. E2E: carga-lista (60), remesas y carga-por-producto.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (7) · La lista: sin precio de compra, con avance, y sin "no cuadra"
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Después de cargar la lista real (17:14: CAMEL, OPTIK y MARINO 2/30, 718
+  bultos, con $50, $40 y $30 en "Compra por kg"):
+    · "en esa parte no me pongas que ponga el precio por kilo ya que lo tengo
+      que asignar yo en productos manual";
+    · las tres cargas salían en el historial con "El archivo decía «HTX…»":
+      "ya no tiene que cuadrar el nombre del archivo con el color";
+    · "cuando le doy cargar bultos quiero que me diga algo, que está haciendo,
+      porque parece que no está haciendo nada".
+
+QUÉ SE HIZO
+  · Fuera la columna "Compra por kg" de la lista (y su nota). El servidor aún
+    acepta el costo por hilo; la pantalla ya no lo pide.
+  · El cotejo del nombre del archivo solo opina si el nombre trae calibre al
+    final ("ROJO 1-30.xlsx"); el de la lista no lo trae y se leía entero como
+    si fuera un color. En el historial, un archivo que dejó varias cargas (una
+    lista) no se coteja. Las tres cargas de hoy ya no salen "no cuadra".
+  · Panel de avance al cargar: qué está haciendo ("Creando CAMEL 2/30 y
+    registrando sus bultos"), barra con los bultos registrados de 718, cada
+    hilo en espera / cargando / listo con su folio, y los segundos que lleva.
+    Lo dice el SERVIDOR conforme avanza (respuesta por partes, NDJSON), no es
+    un reloj inventado. Si falla dice por qué junto al botón y que no se guardó
+    nada; si se corta la comunicación dice que se revise el historial.
+  · Por qué tardaba: los bultos se insertaban uno por uno contra la base del
+    servidor (718 viajes, ~1 minuto). Ahora van de cien en cien: 8 viajes.
+
+ARCHIVOS
+  MODIF   backend/src/modules/remesas/model.js (tandas de 100, avisos de avance)
+  MODIF   remesas/lista.js, remesas/controller.js (?progreso=1 por partes)
+  MODIF   frontend core/services/inventario.service.ts (cargarLista)
+  NUEVO   core/services/inventario.service.spec.ts (lee los renglones partidos)
+  MODIF   remesas/carga-lista.ts/.html/.scss/.spec.ts, remesas/remesas.ts
+  MODIF   shared/remesa-archivo.ts y su prueba
+
+PRUEBAS
+  237 unitarias en verde. El insert por tandas, los avisos y la respuesta por
+  partes se verificaron SIN la base (SQL armado por mysql2, conexión simulada,
+  controller con la carga sustituida). NO se corrió e2e-carga-lista contra la
+  base: el usuario estaba usando el sistema (ver el incidente de la entrada
+  6). Queda pendiente. El panel de avance no se ha visto en el navegador.
+  Nada se subió.
+
+PARA DECIDIR
+  · Los $50/$40/$30 que se teclearon quedaron como PRECIO DE COMPRA (costo) de
+    esos tres hilos, no como precio de venta. ¿Son su costo real o se quitan?
+  · Sigue pendiente el abono de la caja de prueba (entrada 6).
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (6) · Carga de la lista completa del proveedor (varios colores)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Vamos a adaptar un Excel para carga de contenido pero que ya cree los
+  productos y tenga los lotes y todos los paquetes; el principal es este que
+  tiene varios colores (HTX 1.ARAC FFAU 721502-4 - INVENTARIO.xlsx)". Se le hizo
+  una propuesta y contestó:
+    1. los nombres los revisa él y los cambia en el Excel;
+    2. turco y nacional NO son hilos distintos;
+    3. el hilo se llama como él lo escriba;
+    4. "que los cargue y que me deje una alerta que falta agregar precios a los
+       que se agregaron ... una pequeña nota", con el formato del HTX (tomando
+       solo lo que sirva).
+
+QUÉ SE HIZO
+  · Recibir remesa tiene dos modos: "Lista con varios colores" (abre en este) y
+    "Un solo hilo" (la carga de siempre). Se recuerda cuál se usó.
+  · Se lee el archivo HTX tal cual: hoja GLOBAL por ENCABEZADO (BOX NO, COLOR,
+    CALIBRE, LOT, NET, CONOS, NOTA; GROSS/TARE para comprobar); RESUMEN para
+    cotejar por lote; DOCUMENTO para el proveedor, número y fecha.
+  · Vista previa: un renglón por hilo (color + calibre) que dice si ya existe
+    (recibe bultos) o es nuevo (se crea sin precio), sus lotes, bultos, kilos y
+    rango de pesos; si cuadra con el resumen del proveedor; los renglones que
+    impiden cargar y los que solo hay que revisar (las 3 notas del OCR del
+    archivo real). Material y línea para los nuevos (el material lo sugiere el
+    artículo: ACRYLIC → ACRILAN). Precio de compra opcional por hilo.
+  · Al confirmar, en UNA transacción: crea los hilos que falten (sin precio, su
+    paquete con SKU nombre+calibre y el peso promedio real), y una carga por
+    hilo con sus bultos, su entrada al inventario y su kardex. Baja solo el PDF
+    de toda la lista: resumen + una página por hilo.
+  · EL AVISO DE PRECIO: el hilo queda con su presentación en $0 y NO se puede
+    vender (la venta lo rechaza con SIN_PRECIO; el punto de venta ni lo deja
+    agregar). En Productos lleva la nota "Falta precio · Llegó en la carga
+    de…" y el botón "Poner precio"; la campana y Hoy dicen "N hilos no tienen
+    precio". Al ponerle precio por kilo, su paquete lo toma y el aviso se va.
+  · Con el archivo real: 718 bultos, 3 hilos (CAMEL, OPTIK y MARINO 2/30, los
+    tres nuevos), 5 lotes, 13,946.95 kg, 8,595 conos; cuadra con el resumen.
+
+BASE DE DATOS
+  NADA de esquema. "Sin precio" se guarda como precio $0 (la columna es NOT
+  NULL) y se calcula de ahí; no hay tabla de avisos.
+
+ARCHIVOS
+  NUEVO   backend/src/modules/remesas/lista.js (lectura, empate y confirmación)
+  MODIF   backend/src/utils/xlsx.js (leerLibro: todas las hojas, celdas numéricas)
+  MODIF   backend/src/modules/remesas/model.js (_crearRemesaEn, crearLista)
+  MODIF   remesas/routes.js, controller.js, reportes.js (pdfCargas)
+  MODIF   pedidos/model.js (SIN_PRECIO en _cotizar)
+  MODIF   productos/service.js (el precio por kilo llega a la presentación en $0)
+  MODIF   productos/model.js (sin_precio, primera_carga), notificaciones/model.js
+  NUEVO   frontend …/remesas/carga-lista.ts/.html/.scss/.spec.ts
+  MODIF   remesas/remesas.ts/.html/.scss/.spec.ts (los dos modos)
+  MODIF   productos-list, producto-form-modal (nota y filtro de "falta precio")
+  MODIF   admin-layout (campana), hoy, pos (no agrega lo que no tiene precio)
+  MODIF   core/services/inventario.service.ts, notificaciones.service.ts,
+          core/models/catalogo.models.ts
+  NUEVO   backend/scripts/e2e-carga-lista.js (50 comprobaciones; arma su Excel)
+
+PRUEBAS
+  230 unitarias en verde (5 nuevas). E2E: e2e-carga-lista (50, todas bien),
+  e2e-remesas, e2e-edicion-catalogo, e2e-costo-margen y e2e-permisos pasan; la
+  base quedó como antes en todo lo de estas pruebas. Vista previa con el
+  archivo real revisada en Chrome headless (se ajustó la tabla, que no cabía a
+  1440 px). NO se confirmó ninguna carga desde la pantalla. Nada se subió.
+
+⚠ INCIDENTE: UN ABONO REAL CAYÓ EN LA CAJA DE UNA PRUEBA
+  Al correr e2e-apartados (16:48:38 a 16:49:04), alguien con la cuenta de
+  Antonio Tristan registró, desde otro servidor conectado a la misma base (no
+  pasó por el local: no está en su registro), el abono en efectivo de
+  $5,083.14 de Ernesto Guzmán Pantoja (cliente 22, de la muestra). El modal de
+  abono propone el PRIMER turno abierto que encuentra, y era el de la prueba
+  (turno 289 de "TMPAP Caja musmm37t", id 186). La limpieza de la prueba borró
+  los movimientos de caja de ese turno —incluida la entrada de ese abono— y
+  falló al borrar el turno, porque el abono lo referencia.
+  Quedó: caja 186 (activa), turno 289 (cerrado, esperaba $6,403.14) y el abono
+  (credito_movimientos 156); el saldo del cliente quedó en $0. Se intentó
+  reponer la entrada de efectivo borrada y el permiso se negó: queda para que
+  el usuario decida (si fue una prueba suya, se borra todo eso; si es un cobro
+  real, se mueve al turno que toca y se repone su entrada).
+  Para que no se repita: las nueve pruebas que abren caja limpian sus turnos
+  con borrarTurnosPropios (_propios.js), que NO borra un turno con abonos o
+  pedidos ajenos y avisa fuerte. Y no se corren E2E contra producción mientras
+  alguien use el sistema. Pendiente de decidir: que el modal de abono no
+  proponga turno a ciegas.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (5) · Confirmaciones con el diseño del sistema (adiós al confirm del navegador)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Con la captura del cuadro "localhost:4200 dice: ¿Eliminar la presentación
+  ASDFASDF?…": "igual necesito que todas las notificaciones y mensajes tipo así
+  igual les dé un buen diseño".
+
+QUÉ SE HIZO
+  · Las 14 confirmaciones que usaban el confirm() del navegador pasan a una
+    ventana propia: icono (signo de pregunta, o aviso en rojo cuando se borra o
+    se pierde algo), la pregunta en grande, qué pasa si se acepta, y dos
+    botones: "Cancelar" y el VERBO de la acción ("Eliminar", "Cerrar el turno",
+    "Entregar", "Marcar como pagada", "Salir a Caja"…), en rojo cuando es
+    peligroso. No había alert() ni prompt() en el sistema.
+  · Dónde: eliminar almacén, caja, lista de precio, presentación, bulto e
+    imagen; entregar un apartado; cerrar el turno; sacar a alguien de la
+    nómina, marcarla pagada o cancelarla; quitar la captura de un depósito;
+    vaciar el carrito y salir a Caja con una venta a medias.
+  · Se reescribieron los textos para que digan qué pasa ("Solo se puede si
+    nunca abrió un turno. Si ya trabajó, desactívala en vez de borrarla").
+  · Va encima de cualquier modal (muchas salen de adentro de uno), no se
+    cierra al tocar el fondo, Enter acepta, y su Escape cancela SIN cerrar el
+    modal de abajo.
+
+ARCHIVOS
+  NUEVO   frontend/src/app/core/services/confirmacion.service.ts
+  NUEVO   frontend/src/app/shared/confirmacion/confirmacion.ts y .spec.ts
+  MODIF   frontend/src/app/app.ts (la ventana va una sola vez en la raíz)
+  MODIF   almacenes/almacen-form-modal.ts, apartados/apartados.ts, caja/caja.ts,
+          nomina/empleado-nomina-modal.ts, nomina/nomina.ts,
+          pedidos/pedido-detalle.ts, pos/pos.ts,
+          productos/producto-presentaciones.ts,
+          tipos-cliente/tipo-cliente-form-modal.ts
+  MODIF   pedidos/pedido-detalle.spec.ts y tipos-cliente/tipo-cliente-form-modal.spec.ts
+          (ya no simulan window.confirm)
+
+PRUEBAS
+  225 unitarias en verde (3 nuevas: muestra la pregunta y aceptar dice que sí,
+  cancelar dice que no, Escape dice que no sin llegar al modal de abajo).
+  Revisado en el navegador: "Eliminar presentación" de BEIGE y "Eliminar" de un
+  almacén (encima de su ventana); en las dos se canceló, no se borró nada.
+  Nada se subió al servidor.
+
+ENCONTRADO DE PASO (sin cambiar, para decidir)
+  · Eliminar una PRESENTACIÓN tiene el mismo hueco que tenía el producto: se
+    lleva en cascada sus bultos y sus renglones de inventario si no tiene
+    kardex ni ventas que lo frenen (variantes/service.js → eliminar solo revisa
+    que no tenga conos). La confirmación lo dice, pero no lo impide.
+  · El producto "asdfasdf" (291) ya no existe en la base: se borró desde el
+    panel durante las pruebas del usuario (no lo tocó ninguna prueba
+    automática).
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (4) · Un producto solo se elimina si no tiene nada cargado
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Ahora en productos vamos a hacer la siguiente modificación: si el producto
+  tiene alguna presentación, que no se pueda eliminar; y si no tiene nada
+  cargado, que se pueda eliminar."
+
+CÓMO SE INTERPRETÓ
+  La presentación se crea SOLA al dar de alta el producto (vacía, sin peso ni
+  bultos), así que "tener presentación" no puede ser la regla al pie de la
+  letra: ningún producto se podría borrar, ni uno recién capturado por error.
+  La regla quedó: se borra solo si NINGUNA de sus presentaciones tiene nada
+  cargado. La presentación vacía no cuenta y se borra con el producto.
+
+QUÉ PASABA ANTES
+  DELETE /productos/:id borraba en cascada las presentaciones, y con ellas los
+  bultos y los renglones de inventario. Solo lo frenaba la base cuando había
+  kardex, remesas o ventas, con un mensaje genérico. AZUL CIELO y "Ejemplo 1"
+  tienen un bulto capturado a mano y sin movimientos: se habrían borrado con
+  todo y bulto.
+
+QUÉ SE HIZO
+  · El servidor revisa y borra en una transacción, con el producto bloqueado:
+    si alguna presentación tiene bultos, cargas, existencias o apartado,
+    movimientos de kardex, ventas, traspasos, desarmes a conos, órdenes de
+    compra o está en un carrito, responde 409 PRODUCTO_CON_MOVIMIENTOS
+    diciendo qué tiene ("tiene 1 carga de mercancía, 9 bultos, 177.91 kg en
+    existencia…"). Si no, borra el producto con su presentación vacía, sus
+    precios por lista y sus imágenes.
+  · GET /productos/:id/eliminacion dice si se puede y por qué no.
+  · En el modal de edición, "Eliminar" queda apagado cuando no se puede, y un
+    aviso junto a "Activo" dice qué tiene y que para dejar de venderlo se
+    desmarque Activo. Si se puede, la confirmación dice que se borra con su
+    presentación vacía y que no se puede deshacer.
+  · Hoy se pueden borrar 2 de los 28 productos ("asdfasdf" y DEV_1); los
+    demás tienen algo cargado.
+
+ARCHIVOS
+  MODIF   backend/src/modules/productos/model.js (cargado, eliminarSiVacio),
+          service.js (motivos, eliminacion), controller.js, routes.js
+  MODIF   backend/scripts/e2e-edicion-catalogo.js (11 comprobaciones nuevas)
+  MODIF   frontend/src/app/core/services/catalogo.service.ts (eliminacionProducto)
+  MODIF   frontend/src/app/features/admin/productos/producto-form-modal.html, .ts, .spec.ts
+
+PRUEBAS
+  · 222 unitarias en verde (2 nuevas: con algo cargado el botón se apaga y
+    dice por qué; vacío, se puede).
+  · e2e-edicion-catalogo en producción: el producto con existencias da 409 y
+    sigue ahí; el recién capturado se borra con su presentación; el de un solo
+    bulto da 409 y el bulto sigue; el cajero recibe 403. La base quedó
+    idéntica.
+  · En el navegador: BEIGE con el botón apagado y su aviso; "asdfasdf" con el
+    botón activo. No se borró ningún producto real. Nada se subió al servidor.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (3) · Reportes en PDF de las entradas y "Carga de producto"
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Se necesita reportes de productos de entradas de inventario: un pdf cada vez
+  que se cargue, y que se pueda generar uno de cada producto cuando sea. Y
+  cambio de este nombre: Cargar del Excel del proveedor == Carga de producto."
+
+QUÉ SE HIZO
+  · PDF DE CADA CARGA (GET /remesas/:id/pdf): "Entrada de inventario · Carga de
+    producto · REM-…": hilo con calibre, material y línea, presentación, a qué
+    almacén entró, fecha, quién la cargó, archivo, lotes, precio de compra y
+    valor de la compra (solo con hacer:ver_costos), cifras (bultos, kilos, peso
+    promedio, conos) y la tabla de bultos —código, peso real, lote, conos y cómo
+    está HOY cada uno—, con su total. Pie con quién y cuándo lo generó y
+    "Página X de Y". Se BAJA SOLO al confirmar la carga, en Recibir remesa y en
+    Presentaciones; las dos pantallas tienen además "Descargar PDF" en la
+    tarjeta del resultado, y el historial de Recibir remesa un botón "PDF" por
+    carga para sacarlo cuando sea.
+  · PDF DE UN PRODUCTO (GET /remesas/producto/:id/pdf?desde=&hasta=):
+    "Entradas de inventario · COLOR CALIBRE": todas sus cargas (fecha, folio,
+    almacén, bultos, kilos, lotes, costo por kg si se puede ver, quién), total,
+    cuánto entró a cada almacén y cómo están hoy esos bultos. Botón "Reporte de
+    entradas" en Presentaciones: abre un modal con Desde/Hasta (vacíos = todas)
+    y la lista de cargas de ese hilo, cada una con su PDF.
+  · "Cargar del Excel del proveedor" se llama ahora "Carga de producto", y su
+    resultado "Carga REM-… lista".
+  · Los PDF se arman al momento con la base: NO se guardan archivos (ni hay que
+    excluir nada del despliegue). La carga guarda su total y cada bulto su
+    remesa_id; si alguien quitó un bulto a mano, el PDF lo dice.
+  · Solo cuentan las cargas: un traspaso o un desarme no son entradas nuevas.
+
+DECISIONES
+  · Librería pdfkit en el backend (pura JavaScript, sin compilar nada): el
+    proyecto no tenía con qué hacer PDF. El servidor la instala solo al
+    desplegar (deploy.sh corre npm ci cuando cambia el package-lock).
+  · Permiso: lo pide quien tenga ver:remesa, ver:catalogo o ver:inventario
+    (nueva guarda requirePermisoAlguno). El cajero no (403). El precio de
+    compra solo con hacer:ver_costos: el almacenista recibe el PDF sin él.
+  · La hora de "Generado el" es la de la BASE, para que cuadre con las horas de
+    las cargas (que siguen en UTC: ver el pendiente de la zona horaria).
+
+ARCHIVOS
+  NUEVO   backend/src/utils/pdf.js (piezas: encabezado, datos, cifras, tablas
+          que siguen en otra página, pie con número de página)
+  NUEVO   backend/src/modules/remesas/reportes.js
+  MODIF   backend/src/modules/remesas/routes.js, controller.js, model.js
+          (rutas de PDF y filtro ?producto_id= del listado)
+  MODIF   backend/src/middlewares/auth.js (requirePermisoAlguno)
+  MODIF   backend/package.json + package-lock.json (pdfkit 0.15.2)
+  MODIF   backend/scripts/e2e-remesas.js (6 comprobaciones nuevas del PDF)
+  NUEVO   frontend/src/app/shared/descargar.ts
+  NUEVO   frontend/src/app/features/admin/productos/entradas-modal.ts, .html, .spec.ts
+  MODIF   frontend/src/app/core/services/inventario.service.ts
+  MODIF   frontend/src/app/features/admin/remesas/remesas.ts, .html, .spec.ts
+  MODIF   frontend/src/app/features/admin/productos/producto-presentaciones.ts, .html
+
+PRUEBAS
+  · 220 unitarias en verde (5 nuevas: la descarga sola al confirmar, el modal
+    de entradas con su periodo y el PDF de una carga).
+  · e2e-remesas en producción con las 6 comprobaciones nuevas (es PDF de
+    verdad, el del producto sale aun sin cargas en el periodo, el cajero recibe
+    403, el filtro por producto); la base quedó idéntica.
+  · Los PDF se revisaron a ojo (carga de 29 bultos en 2 páginas, producto con
+    3 cargas, almacenista sin precio de compra) y los botones en el navegador:
+    las descargas salen con su nombre ("Carga REM-….pdf", "Entradas ROSA
+    MEXICANO 2-30.pdf"). Nada se subió al servidor.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 (2) · Producto: "Se vende por" fijo en kilo, impuesto oculto
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Ahora vamos con productos: el select que dice 'se vende por' se deja
+  seteado en kg y el select se deshabilita; el impuesto solo lo ocultas por
+  ahora."
+
+QUÉ SE HIZO (modal de alta y edición de producto)
+  · "Se vende por" queda en Kilogramo y deshabilitado, al crear y al editar.
+    Se sigue mandando al guardar (getRawValue incluye los campos
+    deshabilitados). La ayuda dice ahora "Todo el hilo se vende por kilo".
+    El rótulo "Precio por kg" ya no lee la unidad del evento del formulario
+    (ahí no vienen los campos deshabilitados) sino de getRawValue.
+  · El campo Impuesto se COMENTÓ en la plantilla, con la nota de cómo
+    regresarlo. Sigue en el formulario: al editar se conserva el que tenga el
+    producto y al crear va sin impuesto.
+  · No cambia ningún dato: los 28 productos están en kilogramo y ninguno
+    tiene impuesto capturado.
+
+ARCHIVOS
+  MODIF   frontend/src/app/features/admin/productos/producto-form-modal.html, .ts, .spec.ts
+
+PRUEBAS
+  Las 3 del modal de producto en verde, una nueva: la unidad queda fija y
+  deshabilitada pero se sigue mandando, y "Impuesto" no se muestra. Revisado en
+  el navegador al crear y al editar. Nada se subió al servidor.
+
+-------------------------------------------------------------------------------
+ 2026-10-03 · Materiales sin "Orden"
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Vamos a hacer correcciones ahora en el apartado de materiales, tanto en el
+  modal como en la vista: necesito que orden ya no esté."
+
+QUÉ SE HIZO
+  · Se quitó la columna "Orden" de la tabla de Materiales y el campo "Orden" del
+    modal de alta y edición. En el modal, el Nombre ocupa ahora el renglón
+    completo. El modal ya no manda `orden`: al crear, el servidor pone 0; al
+    editar, conserva el que tenía.
+  · GET /categorias ordena solo por NOMBRE (antes `orden, nombre`). Con el
+    campo fuera de la pantalla, un valor viejo que nadie ve habría decidido en
+    silencio el lugar de cada material. Hoy los dos (ACRILAN y VISCOSA) tienen
+    0, así que la lista sale igual que antes.
+  · La columna `categorias.orden` se queda en la base: no se tocó el esquema.
+
+ARCHIVOS
+  MODIF   frontend/src/app/features/admin/categorias/categorias.html
+  MODIF   frontend/src/app/features/admin/categorias/material-form-modal.html, .ts, .spec.ts
+  MODIF   backend/src/modules/categorias/model.js (ORDER BY c.nombre)
+
+PRUEBAS
+  Las 3 del modal de materiales en verde. Revisado en el navegador: la tabla
+  queda Material | Calibres | Productos | Estado, y el modal de alta y el de
+  edición ya no dicen "Orden". Nada se subió al servidor.
+
+-------------------------------------------------------------------------------
+ 2026-10-02 (3) · El panel de avisos y el ancho de la página
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Con dos capturas de la campana abierta: "revisa el apartado de las
+  notificaciones que se ve así y hay muchos espacios de los lados perdidos,
+  mejora eso. Ahora no cheques nada de responsividad en teléfono, por ahora
+  solo para computadoras".
+
+QUÉ PASABA
+  · El panel de avisos se abría DENTRO del menú lateral (248 px) y medía 320:
+    los textos se cortaban ("falta que / que llegó", "en su mínimo o d…") y la
+    barra del menú sacaba su propia barra de desplazamiento horizontal.
+  · La página medía como máximo 1,120 px: en la pantalla de 1,920 del usuario
+    quedaban casi 500 px vacíos a los lados.
+
+QUÉ SE HIZO
+  · El panel se abre A LA DERECHA del menú, sobre la página (fijo, 460 px,
+    pegado abajo junto a la campana, hasta el alto de la pantalla con su propio
+    desplazamiento). Encabezado "Pendientes" con cuántos asuntos hay y una ✕;
+    grupos Mercancía, Ventas y Clientes como en Hoy, cada aviso con su icono,
+    su detalle y a dónde lleva ("Surtir ›", "Cobrar ›"); las fechas en palabras
+    ("hoy a las 0:18"); quién debe, en renglones con el monto a la derecha; y
+    "Ver el día completo en Hoy" para quien ve Hoy. Se cierra con la ✕, con
+    Escape o tocando fuera.
+  · La página llega a 1,440 px. Pedidos, por ejemplo, ya cabe en un renglón por
+    venta.
+  · SEGUNDA VUELTA, con dos capturas más: "¿no hay forma de quitar el
+    scrollbar? Y aquí sale igual y no es necesario, se ve todo bien. Aún hay
+    espacio sobrante a los lados: ocupa lo más que se pueda".
+      - La página va a TODO lo ancho (sin tope) y sus márgenes bajaron
+        (28/32/32 px): con 56 abajo, Hoy —que cabía justo— sacaba barra por unos
+        píxeles. A 1,920 × 922 ya mide 922 exactos.
+      - El menú lateral ya no tiene barra: solo la lista de pantallas se
+        desplaza, sin barra visible, y su final se desvanece mientras haya
+        opciones abajo. El nombre, la campana y "Salir" quedan fijos abajo:
+        antes, con el menú del administrador, la campana quedaba escondida.
+        Renglones del menú de 42 a 38 px.
+      - Las barras de desplazamiento de la página, cuando sí hacen falta, son
+        delgadas y grises.
+      - El selector de caja del punto de venta y de Caja ya muestra el nombre
+        completo ("Caja Cuautepec de Hinojosa · Tienda principal").
+      - Los estilos del panel de avisos pasaron a admin-avisos.scss y el límite
+        de estilos regresó a 4 kB.
+  · TERCERA VUELTA: "en las notificaciones está bien pero como que se
+    transparenta lo de atrás y se confunde uno". No era transparencia: el panel
+    vive dentro de la barra del menú, que es sticky y por eso es su propia capa,
+    y lo que la página dibuja con posición (los puntos y líneas de la gráfica de
+    Frecuencia) se pintaba ENCIMA de toda la barra. Se le dio z-index 30 a la
+    barra. Comprobado con elementFromPoint: 0 de 2,584 puntos del panel tapados,
+    en Clientes y en el tablero; un modal sigue quedando arriba del menú.
+  · Dos choques de nombre que salieron al revisarlo: `.quien` (la clase del
+    nombre y la campana, que el panel heredaba por vivir dentro de ese bloque y
+    centraba los nombres de quien debe) y `.aviso` (la caja amarilla del sistema
+    de diseño). Los renglones del panel ahora son `.aviso-fila` y `.deudor`.
+  · (El límite de estilos se subió a 6 kB y se regresó a 4 en la segunda
+    vuelta, al separar la hoja del panel.)
+
+ARCHIVOS
+  MODIF   frontend/src/app/features/admin/admin-layout.html, .ts, .scss
+  MODIF   frontend/src/styles.scss (.pagina a 1,440 px)
+  NUEVO   frontend/src/app/features/admin/admin-avisos.scss
+  MODIF   pos/pos.scss y caja/caja.html (ancho del selector de caja)
+
+PRUEBAS
+  Revisado en Chrome headless a 1,920 y 1,366 px, como administrador y como
+  cajero: el panel queda entre los 260 y 720 px, el menú ya no se desplaza de
+  lado, y se cierra tocando fuera y con Escape. 215 unitarias en verde. No se
+  revisó el celular, como pidió el usuario. Nada se subió al servidor.
+
+-------------------------------------------------------------------------------
+ 2026-10-02 (2) · El rediseño de todo el panel, los permisos por puesto y la tienda apagada
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Aprobó la propuesta (lienzo "Rediseño · Menú y Clientes",
+  https://claude.ai/artifact/DJ1Y1zAd6Hz7g2A9gLGRgf) y pidió aplicarla:
+  "vamos a iniciar con el rediseño con eso que me mostraste; todas las pantallas
+  se cambian con tu diseño. Nada más no subas nada a servidor hasta que yo te
+  diga, y lo que haga falta en base de datos o cosas así las agregas, solo me
+  dices qué agregaste y por qué, para que al final te diga si está bien o lo
+  quitamos". Antes había fijado: menú por tareas (opción 1) con los nombres de
+  siempre, los permisos los asigna el administrador, el cajero SÍ ve Clientes
+  (incluido cuánto debe), una sección Clientes con cinco pestañas —frecuencia de
+  compra, cuánto debe, qué compra, cuándo compra, cuánto gasta— "entre más
+  información mejor, pero bien acomodado y profesional", y la tienda en línea
+  "por el momento la quitas; no la elimines, solo coméntala".
+
+NADA SE SUBIÓ AL SERVIDOR NI SE HIZO COMMIT.
+
+LO QUE SE AGREGÓ A LA BASE (para que el usuario diga si se queda)
+  · db/migrations/2026-10_permisos_por_puesto.sql — YA APLICADA en el servidor.
+    SOLO DATOS, sin tocar el esquema: llena las tablas `permisos` y
+    `rol_permisos`, que ya existían y estaban vacías. 27 claves (17 pantallas
+    `ver:*` y 10 acciones `hacer:*`) y lo que trae de fábrica cada puesto:
+    gerente todo menos Administración (23), cajero punto de venta, caja,
+    pedidos, apartados, clientes, fiar y mover efectivo (7), almacenista Hoy y
+    Mercancía con enviar, recibir, ajuste/merma y bajar conos (9). El
+    administrador no lleva filas: lo puede todo por código.
+    Por qué: sin esas filas cada puesto entraba a todo o a nada; con ellas el
+    administrador decide en Admin → Permisos.
+    Para quitarla: DELETE FROM rol_permisos; DELETE FROM permisos;
+  · Nada más. Todos los demás cambios de backend son de SOLO LECTURA (campos
+    nuevos en GET que ya existían, y tres GET nuevos), más dos huecos de
+    seguridad cerrados y una guarda de permisos.
+
+QUÉ SE VE AHORA
+  · MENÚ POR TAREAS en siete grupos (Inicio, Vender, Clientes, Mercancía,
+    Catálogo, Números, Administración) más "Pregúntame" arriba. Cada quien ve
+    solo lo que su puesto puede abrir; lo que no se ve tampoco se abre
+    escribiendo la dirección. En el celular el menú se despliega con un botón.
+  · PANTALLAS NUEVAS:
+      Hoy — los pendientes del día (los mismos de la campana, por tema), lo
+        vendido, lo que debería haber en cada cajón y las ventas por hora.
+      Caja — abrir turno, sacar o meter efectivo, los movimientos del turno con
+        su folio y su cliente, el corte con su diferencia y el alta de cajas.
+        Antes todo eso vivía dentro del punto de venta, debajo del cobro.
+      Permisos — la matriz puesto × permiso. La columna del administrador está
+        fija. Se crean puestos nuevos copiando los permisos de otro.
+      Clientes — cinco pestañas con cifras, gráfica y tabla cada una, más el
+        EXPEDIENTE rehecho con su Resumen y las mismas cinco miradas solo de ese
+        cliente.
+  · TODAS LAS DEMÁS rehechas con el mismo sistema de diseño (letra IBM Plex
+    instalada en el proyecto, colores en tokens, las mismas piezas de página):
+    punto de venta (segmentado Cobrar / Fiar / Apartar, registrar abono, alta
+    rápida en modal, "Ir a Caja"), pedidos (cifras, filtros por folio, cliente,
+    caja y fechas, qué se llevó y cuánto falta), detalle del pedido (imprimir
+    ticket, cancelación en modal, "lo que ha pasado"), apartados, inventario,
+    kardex (con buscador y fechas), recibir remesa, surtir sucursal (con el
+    avance pedido → en camino → recibido), productos, presentaciones,
+    materiales, cómo va el negocio, reportes (en pestañas, con descarga CSV),
+    pregúntame, almacenes, listas de precio, personal, nómina, configuración y
+    la entrada al sistema.
+  · TIENDA EN LÍNEA APAGADA, comentada y no borrada: rutas del frontend,
+    registro/login/perfil de clientes en el backend, el reintento como cliente
+    al iniciar sesión, y en las pantallas el filtro "En línea", la marca
+    `es_tienda_linea`, la tarifa de envío y "Destacado". La prueba
+    e2e-checkout-online sale en 0 salvo con E2E_TIENDA_EN_LINEA=si.
+
+BACKEND (todo de solo lectura salvo lo marcado)
+  NUEVO   modules/permisos/ (catálogo, model, service, routes) · GET /permisos,
+          PUT /permisos/roles/:id, POST /permisos/roles — solo administrador.
+          middlewares/auth.js → requirePermiso(clave): 403 SIN_PERMISO.
+          Las rutas que antes eran "solo jefes" ahora piden su permiso; fiar y
+          cancelar se validan en el controller de pedidos.
+  NUEVO   modules/hoy/ · GET /hoy.
+  NUEVO   modules/clientes/analisis.js · GET /clientes/analisis/:vista
+          (frecuencia, deuda, que-compra, cuando, gasto; ?dias=30|90|365|3650).
+  NUEVO   GET /pedidos/resumen (hoy, semana, por cobrar, canceladas del mes).
+  MODIF   GET /pedidos: filtros q, caja_id, desde, hasta; cada renglón con caja,
+          pagado, falta y los hilos con calibre. GET /pedidos/:id: caja, crédito
+          del pedido y abonos a la cuenta. GET /pedidos/apartados: hilos y kilos.
+  MODIF   GET /clientes/:id: `habitos` (ritmo, día y hora de costumbre, visitas,
+          por mes, 90 días contra los 90 anteriores) y ?pedidos=todos.
+  MODIF   caja: el listado de cajas trae su turno abierto y su último corte; los
+          movimientos del turno traen el folio y el cliente de la venta.
+  MODIF   inventario: producto_id, filtro de apartado, último movimiento por
+          renglón y búsqueda por código de bulto; kardex con q, desde y hasta.
+  MODIF   reportes (kilos vendidos, calibre en por reabastecer), tipos de
+          cliente (cuántos clientes y precios usa cada lista), categorías
+          (cuántos productos), bultos con su almacén.
+  MODIF   notificaciones: apartados ya liquidados por entregar.
+  MODIF   asistente: el "gerente" para la IA es quien tiene hacer:ver_costos.
+  MODIF   login y perfil devuelven los permisos del puesto.
+  SEGURIDAD (los encontró la revisión, se corrigieron):
+    · El COSTO de cada presentación salía en GET /productos/:id y GET
+      /variantes, que son PÚBLICOS, y en el escáner de la caja. Hoy venía en
+      NULL, pero se habría visto en cuanto entrara una remesa con precio de
+      compra. Ahora solo lo recibe quien tiene hacer:ver_costos
+      (permisos/service.js → sinCostosSiNoVe). El tablero tampoco calcula hilo
+      parado ni margen para quien no los puede ver.
+    · Quien tuviera Personal podía darse el puesto de ADMINISTRADOR. Ahora solo
+      un administrador lo da o lo toca (403 SOLO_ADMINISTRADOR).
+  CORRECCIÓN: apartar desde la tienda en línea se rechaza ANTES de cotizar.
+    Antes, si el almacén en línea no tenía el hilo, el error decía "no hay"
+    en vez de "los apartados se hacen en el mostrador".
+
+FRONTEND
+  NUEVO   core/navegacion.ts (el único menú), core/guards/permiso.guard.ts,
+          AuthService.puede(), core/services/rediseno.service.ts y sus modelos.
+  NUEVO   features/admin/hoy, caja (con el modal de efectivo que vivía en pos/),
+          permisos, clientes (pantalla, cinco vistas, abono y ajuste en modal,
+          expediente); modales nuevos de almacén, empleado, recibo de nómina y
+          empleado de nómina; shared/charts columnas y barras-cero;
+          shared/folio.pipe.ts.
+  BORRADO clientes-list (lo reemplaza Clientes); reportes/charts vertical-bars y
+          horizontal-bars (ya nadie los usaba).
+  MODIF   styles.scss: el sistema de diseño completo; se quitaron 91 reglas que
+          ninguna plantilla usaba y los nombres genéricos de la tienda en línea
+          quedaron dentro de .tienda-shell.
+  PAQUETES @fontsource/ibm-plex-sans y @fontsource/ibm-plex-mono (la letra va
+          dentro del proyecto: en el mostrador no siempre hay buen internet).
+
+CÓMO SE HIZO
+  Hoy, Caja y Permisos, la base de permisos, la tienda apagada y los modelos los
+  hizo la sesión principal; las demás pantallas, seis agentes en paralelo, uno
+  por grupo del menú, con el mismo instructivo (diseño de referencia, piezas del
+  sistema, permisos, reglas de CLAUDE.md, sin tocar la base). Cinco se cortaron
+  a la mitad por el límite de uso de la cuenta y se retomaron donde se quedaron.
+
+LO QUE ENCONTRÓ LA REVISIÓN EN EL NAVEGADOR (y se corrigió)
+  Chrome headless, como administrador, gerente, cajero y almacenista, a 1280 px y
+  a 390 px. Ninguna pantalla con errores de consola ni peticiones fallidas.
+  · Tres estilos viejos con nombre genérico se colaban: el `.linea` de la tienda
+    centraba los artículos del pedido, su `.detalle` partía en dos la tabla de
+    Inventario y un `.avance` viejo recortaba el de Surtir sucursal.
+  · Los folios largos ("POS-1790864580000-79FA") partían la celda en tres
+    renglones y sacaban columnas de la tarjeta: en las listas va el corto
+    ("POS-79FA"), con el completo al pasar el cursor.
+  · En el celular, 16 pantallas se ensanchaban: los textos ocultos para lector de
+    pantalla escapaban de la caja de la tabla. `.tabla-scroll` ya los contiene, y
+    las barras ponen el nombre arriba en pantalla angosta.
+  · La gráfica de "quién debe más" en media tarjeta tenía la letra ilegible, y la
+    tabla de hilo parado se cortaba: van a todo lo ancho.
+  · Los puntos de color de las cifras parpadeaban: compartían clase con los de
+    "pensando" del asistente.
+  · El botón del menú del celular usaba una función flecha en la plantilla, que
+    Angular no acepta (no compilaba).
+  · "Venderle" en el expediente no llevaba al cliente: el punto de venta ya lo
+    toma de ?cliente=<id>.
+  Lo que se revisó con cada puesto: el cajero entra al punto de venta, su menú es
+  Vender y Clientes, no ve "Cancelar venta" ni "Corregir la deuda", y escribir
+  /admin/tablero o /admin/permisos lo regresa a su inicio; el almacenista entra a
+  Hoy y ve solo Mercancía; el gerente no abre Permisos.
+
+PRUEBAS
+  · 215 pruebas unitarias en verde (eran 117).
+  · NUEVA scripts/e2e-permisos.js: 36 comprobaciones de que cada puesto entra
+    solo a lo suyo y de que el servidor niega lo demás aunque se mande a mano.
+    No escribe nada.
+  · Las E2E corridas en producción: las 20 que aplican pasan, con 492 comprobaciones
+    (la del checkout en línea se salta: la tienda está apagada). Dos fallaron
+    en la primera vuelta por un cambio en los DATOS, no del código: la caja de
+    Cuautepec está desactivada (ya lo estaba antes de este trabajo, con su turno
+    88 abierto desde el 5 de septiembre) y las pruebas que usan "la primera caja
+    activa" pusieron la mercancía en Moroleón. Apartados destapó el orden de las
+    validaciones (ver CORRECCIÓN arriba) y costo-margen ahora cotiza en el
+    mostrador, que es la misma función.
+  · Foto de la base antes y después (conteos y sumas de ids por tabla):
+    SIN CAMBIOS: la base quedó idéntica.
+
+QUEDA PARA QUE EL USUARIO DECIDA
+  1. Si se quedan los permisos de fábrica. El diseño le marcaba al cajero
+     "confirmar que llegó un envío" y "bajar conos a mostrador"; se le dejaron
+     fuera porque no ve Surtir sucursal ni Inventario. Se cambian en Permisos.
+  2. Configuración: la dirección, el teléfono y los datos de depósito se dejaron
+     visibles (el diseño los muestra), aunque hoy solo los lee el checkout
+     apagado. ¿Se esconden también?
+  3. El almacén marcado `es_tienda_linea` no se puede dar de baja mientras esa
+     marca siga escondida (el backend exige marcar otro primero).
+  4. LA HORA VA EN UTC (anotado desde el 2026-10-01): después de las 18:00 de
+     México "hoy" ya es mañana, y "Cuándo compra" enseña gente a las 20–22 h.
+     Ahora se nota más porque Hoy depende de eso. Arreglarlo cambia cómo se
+     guardan las horas.
+  5. Desplegar: el usuario dijo que avisaría. Al desplegar va el backend, el
+     frontend y nada más en la base (la migración de permisos ya está).
+     Sigue pendiente la de 2026-10_alertas_stock_con_minimo.sql, que el usuario
+     pidió esperar.
 
 
 -------------------------------------------------------------------------------

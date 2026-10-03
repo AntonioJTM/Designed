@@ -39,3 +39,24 @@ export function hoyLocal(): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+/**
+ * Cuándo pasó algo, como se dice en la tienda: "hoy a las 9:02", "ayer a las
+ * 18:40" o "el 30/09 a las 10:15". Como `FechaPipe`, toma la hora tal cual la
+ * guarda MySQL (local) y no convierte zonas. Con `conHora = false` omite la hora.
+ */
+export function fechaRelativa(valor: string | null | undefined, conHora = true): string {
+  if (!valor) return '';
+  const [dia, t = ''] = String(valor).replace('T', ' ').replace('Z', '').trim().split(' ');
+  const [h, m] = t.split(':');
+  const hora = h && conHora ? ` a las ${Number(h)}:${m}` : '';
+  const hoy = hoyLocal();
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const ayer = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  if (dia === hoy) return `hoy${hora}`;
+  if (dia === ayer) return `ayer${hora}`;
+  const [, mm, dd] = dia.split('-');
+  return `el ${dd}/${mm}${hora}`;
+}

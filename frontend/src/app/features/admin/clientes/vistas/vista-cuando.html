@@ -1,0 +1,120 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+<!-- ============================================================ A qué hora vienen -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>A qué hora vienen</h2>
+      <p>
+        Compras de clientes identificados {{ enPeriodo(dias()) }}, por día y hora. Lo oscuro es donde hace
+        falta gente en el mostrador.
+      </p>
+    </div>
+    <div class="escala" aria-hidden="true">
+      menos
+      @for (t of TONOS; track t[0]) { <i [style.background]="t[0]"></i> }
+      más
+    </div>
+  </div>
+  @if (datos().total_compras === 0) {
+    <p class="vacio">Ningún cliente identificado compró {{ enPeriodo(dias()) }}.</p>
+  } @else {
+    <div class="tabla-scroll">
+      <div class="calor" role="img" [attr.aria-label]="mapa().resumen">
+        <div class="renglon horas" [style.grid-template-columns]="mapa().columnas">
+          <span></span>
+          @for (h of mapa().horas; track $index) { <span>{{ h }}</span> }
+        </div>
+        @for (f of mapa().filas; track f.dia) {
+          <div class="renglon" [style.grid-template-columns]="mapa().columnas">
+            <span class="dia">{{ f.dia }}</span>
+            @for (c of f.celdas; track $index) {
+              <div class="celda" [style.background]="c.fondo" [style.color]="c.tinta" [title]="c.titulo">{{ c.n || '' }}</div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+</section>
+
+<!-- ========================================================= Compras por semana -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Compras por semana</h2>
+      <p>Las últimas 12 semanas, de lunes a domingo. La de color fuerte es esta semana, que todavía no termina.</p>
+    </div>
+  </div>
+  <div class="columnas" role="img" [attr.aria-label]="resumenSemanas()" style="height: 220px">
+    @for (s of semanas(); track s.etiqueta) {
+      <div>
+        <span>{{ s.n }}</span>
+        <i [class.fuerte]="s.fuerte" [style.height.px]="s.alto"></i>
+      </div>
+    }
+  </div>
+  <div class="columnas-pie">
+    @for (s of semanas(); track s.etiqueta) { <span>{{ s.etiqueta }}</span> }
+  </div>
+</section>
+
+<!-- ===================================================== Cuándo viene cada uno -->
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Cuándo viene cada uno</h2>
+      <p>
+        Su día y su hora de costumbre, y cuándo debería volver según su ritmo. Primero los que ya se
+        pasaron.
+      </p>
+    </div>
+  </div>
+  @if (datos().clientes.length === 0) {
+    <p class="vacio">Ningún cliente identificado compró {{ enPeriodo(dias()) }}.</p>
+  } @else {
+    <div class="tabla-scroll">
+      <table class="grid" style="min-width: 900px">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Día que más viene</th>
+            <th>Hora de costumbre</th>
+            <th>Última compra</th>
+            <th class="num">Ritmo</th>
+            <th>Debería volver</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of datos().clientes; track r.cliente_id) {
+            <tr>
+              <td>
+                <a [routerLink]="['/admin/clientes', r.cliente_id]" [queryParams]="{ ver: 'cuando' }"
+                   style="font-weight: 500; color: var(--tinta); text-decoration: none">{{ r.nombre }}</a>
+                @if (r.telefono) { <div class="mono muted">{{ r.telefono }}</div> }
+              </td>
+              <td>{{ r.dia }}</td>
+              <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ horaRango(r.hora) }}</td>
+              <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ fechaCorta(r.ultima) }}</td>
+              <td class="num">{{ r.ritmo ? 'cada ' + r.ritmo + ' días' : '—' }}</td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span style="font-variant-numeric: tabular-nums; min-width: 52px; white-space: nowrap">{{ r.proxima ? fechaCorta(r.proxima) : '—' }}</span>
+                  <span [class]="'pill ' + cuando(r.en_dias).pill">{{ cuando(r.en_dias).texto }}</span>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

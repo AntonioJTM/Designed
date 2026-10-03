@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -122,15 +122,15 @@ router.get('/traspasos', ...soloStaff, controller.listarTraspasos);
 router.get('/traspasos/:id', ...soloStaff, controller.obtenerTraspaso);
 
 // Escrituras (staff): movimientos, desarmes, traspasos y configuración de umbrales.
-router.post('/movimientos', ...soloStaff, validate(movimientoSchema), controller.registrarMovimiento);
-router.post('/desarmes', ...soloStaff, validate(desarmarSchema), controller.desarmar);
+router.post('/movimientos', ...soloStaff, requirePermiso('hacer:ajuste_merma'), validate(movimientoSchema), controller.registrarMovimiento);
+router.post('/desarmes', ...soloStaff, requirePermiso('hacer:bajar_conos'), validate(desarmarSchema), controller.desarmar);
 // El traspaso tiene tres pasos: se solicita (aparta), se envía (sale) y se
 // recibe (entra, con el acuse de quien lo aceptó). Cualquiera del staff puede
 // recibir; queda guardado su nombre y la hora.
-router.post('/traspasos', ...soloStaff, validate(traspasoSchema), controller.solicitarTraspaso);
-router.post('/traspasos/:id/enviar', ...soloStaff, controller.enviarTraspaso);
-router.post('/traspasos/:id/recibir', ...soloStaff, validate(recepcionSchema), controller.recibirTraspaso);
-router.post('/traspasos/:id/cancelar', ...soloStaff, validate(cancelacionSchema), controller.cancelarTraspaso);
-router.put('/configuracion', ...soloStaff, validate(configurarSchema), controller.configurar);
+router.post('/traspasos', ...soloStaff, requirePermiso('ver:surtir'), validate(traspasoSchema), controller.solicitarTraspaso);
+router.post('/traspasos/:id/enviar', ...soloStaff, requirePermiso('hacer:enviar_traspaso'), controller.enviarTraspaso);
+router.post('/traspasos/:id/recibir', ...soloStaff, requirePermiso('hacer:recibir_traspaso'), validate(recepcionSchema), controller.recibirTraspaso);
+router.post('/traspasos/:id/cancelar', ...soloStaff, requirePermiso('ver:surtir'), validate(cancelacionSchema), controller.cancelarTraspaso);
+router.put('/configuracion', ...soloStaff, requirePermiso('ver:inventario'), validate(configurarSchema), controller.configurar);
 
 module.exports = router;

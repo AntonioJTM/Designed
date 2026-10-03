@@ -1,51 +1,80 @@
-<div class="page-head">
-  <h1>Listas de precio</h1>
-  <button class="btn btn-primary" (click)="abrirNuevo()">+ Nueva lista</button>
-</div>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Listas de precio</h1>
+      <p class="sub">Con qué precio se le cobra a cada tipo de cliente. El público paga el precio de la presentación.</p>
+    </div>
+    <div class="acciones">
+      <button type="button" class="btn btn-primary" (click)="abrirNuevo()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+        Nueva lista
+      </button>
+    </div>
+  </header>
 
-<p class="muted">
-  Cada tipo de cliente es una lista de precios. El precio propio de cada lista se captura en
-  la pantalla de presentaciones del producto; sin uno capturado, esa lista cobra el precio
-  público.
-</p>
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
 
-@if (error()) { <p class="alert">{{ error() }}</p> }
-@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>
+          @if (cargando()) { Listas } @else { {{ tipos().length }} {{ tipos().length === 1 ? 'lista' : 'listas' }} }
+        </h2>
+        <p>
+          Al elegir a un cliente en el punto de venta se aplica su lista sola. El precio propio de cada
+          lista se captura en las presentaciones del producto; sin uno, esa lista cobra el público.
+        </p>
+      </div>
+    </div>
 
-@if (cargando()) {
-  <p class="muted">Cargando…</p>
-} @else if (tipos().length === 0) {
-  <p class="empty">Aún no hay listas de precio.</p>
-} @else {
-  <table class="grid">
-    <thead>
-      <tr><th>Lista</th><th>Orden</th><th>Estado</th><th></th></tr>
-    </thead>
-    <tbody>
-      @for (t of tipos(); track t.id) {
-        <tr>
-          <td>
-            {{ t.nombre }}
-            @if (t.es_publico) { <span class="pill ok">Precio público</span> }
-          </td>
-          <td>{{ t.orden }}</td>
-          <td>
-            <span class="pill" [class.ok]="t.activo" [class.off]="!t.activo">
-              {{ t.activo ? 'Activa' : 'Inactiva' }}
-            </span>
-          </td>
-          <td class="acciones">
-            <button class="btn btn-ghost btn-sm" (click)="abrirEdicion(t)">Editar</button>
-            <!-- El público es la lista base: sin él no hay precio con qué cobrar. -->
-            @if (!t.es_publico) {
-              <button class="btn btn-danger btn-sm" (click)="eliminar(t)">Eliminar</button>
+    @if (cargando()) {
+      <p class="muted">Cargando…</p>
+    } @else if (tipos().length === 0) {
+      <p class="vacio">Aún no hay listas de precio.</p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid" style="min-width: 820px">
+          <thead>
+            <tr>
+              <th>Lista</th>
+              <th class="num">Orden</th>
+              <th class="num">Clientes que la usan</th>
+              <th class="num">Presentaciones con precio propio</th>
+              <th>Estado</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of tipos(); track t.id) {
+              <tr>
+                <td>
+                  <div style="font-weight: 600">{{ t.nombre }}</div>
+                  <div class="muted" style="font-size: 13px">{{ nota(t) }}</div>
+                </td>
+                <td class="num">{{ t.orden }}</td>
+                <td class="num">{{ clientes(t) ?? '—' }}</td>
+                <!-- El público no lleva filas en variante_precios: su precio ES el de la presentación. -->
+                <td class="num">{{ t.es_publico ? 'todas' : (precios(t) ?? '—') }}</td>
+                <td>
+                  @if (t.activo) {
+                    <span class="pill verde">Activa</span>
+                  } @else {
+                    <span class="pill gris">Apagada</span>
+                  }
+                </td>
+                <td class="acciones">
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="abrirEdicion(t)">Editar</button>
+                </td>
+              </tr>
             }
-          </td>
-        </tr>
-      }
-    </tbody>
-  </table>
-}
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
 
 <!-- Se crea al abrirlo y se destruye al cerrarlo: arranca limpio cada vez. -->
 @if (modal() !== null) {
@@ -53,5 +82,6 @@
     [tipo]="tipoModal()"
     (cerrado)="cerrarModal()"
     (guardado)="guardado($event)"
+    (eliminado)="eliminado($event)"
   />
 }

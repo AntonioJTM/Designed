@@ -1,0 +1,97 @@
+/* Punto de venta (rediseño 2026-10). Lo común sale de styles.scss; aquí va solo
+   lo propio de esta pantalla. */
+
+/* Las tarjetas del POS apilan su contenido con un solo espacio. */
+.card { display: flex; flex-direction: column; gap: 14px; }
+.card-head { margin-bottom: 0; }
+
+/* La rejilla del POS es la global (.pos-layout, columnas con minmax(0, …));
+   aquí solo se le da el mismo espacio que al resto de la página. */
+.pos-layout { gap: 24px; }
+.pos-izq { gap: 20px; }
+
+/* El selector de caja del encabezado, sin rótulo visible. Ancho para que quepa
+   "Caja Cuautepec de Hinojosa · Tienda principal" completo; si no hay lugar, encoge. */
+.selector-caja { flex: 0 1 380px; }
+.selector-caja select { min-width: 220px; }
+
+/* ---- El cliente ---- */
+.cliente-fila { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.cliente-quien { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.cliente-quien > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cliente-quien b { font-size: 15px; font-weight: 600; }
+.cliente-quien .muted { font-size: 13px; }
+.aviso-cliente { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; }
+
+/* El buscador va dentro de un .field: sin esto el campo pintaba su propio marco
+   y su anillo de foco DENTRO del de la lupa. */
+.buscador input, .buscador input:focus { padding: 0; box-shadow: none; }
+
+.lista-resultados { list-style: none; margin: 0; padding: 0; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; }
+.lista-resultados li + li { border-top: 1px solid var(--borde-suave); }
+.lista-resultados button {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; min-height: 44px; padding: 10px 14px;
+  border: 0; background: #fff; font: inherit; text-align: left; cursor: pointer; color: var(--tinta);
+}
+.lista-resultados button:hover { background: var(--acento-suave); }
+.lista-resultados b { font-size: 14px; font-weight: 500; }
+.lista-resultados .muted { font-size: 13px; }
+
+/* ---- El escáner: el campo más importante de la caja, más alto y con borde de acento ---- */
+.scan { display: flex; gap: 10px; }
+.scan-caja {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 14px;
+  border: 2px solid var(--acento); border-radius: 10px; background: #fff; color: var(--acento);
+}
+.scan-caja:focus-within { box-shadow: 0 0 0 3px #2457C533; }
+.scan-caja input, .scan-caja input:focus {
+  flex: 1; min-width: 0; min-height: 0; height: 100%; padding: 0; border: 0; outline: 0; box-shadow: none;
+  background: transparent; font-size: 16px; color: var(--tinta);
+}
+.scan .btn { min-height: 52px; }
+.nota { margin: 0; font-size: 13px; line-height: 1.45; }
+
+/* ---- Carrito ---- */
+.hilo { font-weight: 500; }
+td .mono.muted { font-size: 12px; margin-top: 2px; }
+.cant { display: inline-flex; align-items: center; gap: 6px; }
+.cant input {
+  width: 96px; height: 36px; padding: 0 8px; border: 1px solid var(--borde-campo); border-radius: 6px;
+  font: inherit; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; background: #fff; color: var(--tinta);
+}
+.cant input:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533; }
+
+/* ---- El cobro ---- */
+/* Se queda a la vista al bajar por un carrito largo: el botón Cobrar no se pierde. */
+.cobro { gap: 16px; padding: 24px; border-radius: 12px; position: sticky; top: 16px; }
+.total { display: flex; flex-direction: column; gap: 4px; }
+.total > .muted { font-size: 13px; }
+.total-valor { font-size: 40px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.seg > button:disabled { opacity: 0.5; cursor: not-allowed; }
+.ayuda { font-size: 12px; color: var(--tinta-3); line-height: 1.4; }
+.ayuda-modo { margin: -8px 0 0; font-size: 12px; color: var(--tinta-3); line-height: 1.4; }
+.centro { text-align: center; margin: 0; }
+.bloque-modo {
+  display: flex; flex-direction: column; gap: 12px; padding: 14px;
+  background: var(--superficie-2); border: 1px solid var(--borde-suave); border-radius: 8px;
+}
+.bloque-modo .dato { border-bottom: 0; padding: 0; }
+.caja-cambio {
+  display: flex; justify-content: space-between; align-items: center; padding: 12px 14px;
+  border-radius: 8px; background: var(--fondo); font-size: 15px;
+}
+.caja-cambio b { font-variant-numeric: tabular-nums; }
+.caja-cambio.falta { background: var(--peligro-f); color: var(--peligro-t); }
+.btn-cobrar { min-height: 56px; font-size: 17px; }
+
+/* ---- Ticket de la venta recién hecha ---- */
+.ticket h2 { margin: 0; }
+.ticket p { margin: 0; font-size: 14px; line-height: 1.5; }
+.ticket-cifras { display: flex; flex-wrap: wrap; gap: 32px; }
+.ticket-cifras > div { display: flex; flex-direction: column; gap: 2px; }
+.ticket-cifras span { font-size: 13px; color: var(--tinta-3); }
+.ticket-cifras b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .cobro { position: static; }
+}

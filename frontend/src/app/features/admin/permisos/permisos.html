@@ -1,0 +1,145 @@
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Permisos</h1>
+      <p class="sub">Qué ve y qué puede hacer cada puesto. Los cambios aplican la próxima vez que la persona entre.</p>
+    </div>
+    <div class="acciones">
+      <a class="btn btn-ghost" routerLink="/admin/usuarios">Ver personal</a>
+      <button type="button" class="btn btn-ghost" (click)="abrirNuevo()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+        Nuevo puesto
+      </button>
+      <button type="button" class="btn btn-primary" (click)="guardar()" [disabled]="pendientes().length === 0 || guardando()">
+        {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
+      </button>
+    </div>
+  </header>
+
+  <div class="nota-info">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.1-8 9-4.6-.9-8-4.5-8-9V6z M9 12l2 2 4-4"></path></svg>
+    <span>El administrador siempre lo puede todo: su columna no se puede apagar, para que nunca se quede nadie sin poder entrar a Permisos.</span>
+  </div>
+
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (matriz()?.falta_migracion) {
+    <p class="aviso">
+      La base todavía no tiene la lista de permisos (falta la migración
+      <span class="mono">2026-10_permisos_por_puesto.sql</span>). Mientras tanto solo el administrador puede entrar a todo.
+    </p>
+  }
+
+  @if (!matriz()) {
+    <p class="muted">Cargando…</p>
+  } @else {
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Qué ve en el menú</h2>
+          <p>Lo que no se ve tampoco se puede abrir escribiendo la dirección.</p>
+        </div>
+      </div>
+      <ng-container *ngTemplateOutlet="tabla; context: { $implicit: pantallas() }" />
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Qué puede hacer</h2>
+          <p>Dentro de las pantallas que ve. Por ejemplo, un cajero ve Clientes pero no puede corregir una deuda.</p>
+        </div>
+      </div>
+      <ng-container *ngTemplateOutlet="tabla; context: { $implicit: acciones() }" />
+    </section>
+  }
+
+  @if (pendientes().length > 0) {
+    <div class="barra-guardar" role="status">
+      <span>
+        Hay cambios sin guardar en
+        @for (r of pendientes(); track r.id) { <b>{{ nombre(r) }}</b>{{ $last ? '' : ', ' }} }.
+      </span>
+      <div class="acciones">
+        <button type="button" class="btn btn-ghost btn-sm" (click)="descartar()" [disabled]="guardando()">Descartar</button>
+        <button type="button" class="btn btn-primary btn-sm" (click)="guardar()" [disabled]="guardando()">
+          {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
+        </button>
+      </div>
+    </div>
+  }
+</div>
+
+<ng-template #tabla let-grupos>
+  <div class="tabla-scroll">
+    <table class="grid matriz" [style.min-width.px]="360 + roles().length * 130">
+      <thead>
+        <tr>
+          <th style="width: 46%">Qué</th>
+          @for (r of roles(); track r.id) {
+            <th class="puesto">
+              {{ nombre(r) }}
+              <span>{{ r.personas }} {{ r.personas === 1 ? 'persona' : 'personas' }}</span>
+            </th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (g of grupos; track g.titulo) {
+          <tr class="titulo-grupo"><td [attr.colspan]="roles().length + 1">{{ g.titulo }}</td></tr>
+          @for (p of g.filas; track p.clave) {
+            <tr [class.cambiada]="filaCambiada(p.clave)">
+              <td class="que"><b>{{ p.nombre }}</b><span>{{ p.ayuda }}</span></td>
+              @for (r of roles(); track r.id) {
+                <td class="marca">
+                  <input type="checkbox" [checked]="marcado(r, p.clave)" [disabled]="r.es_admin || guardando()"
+                         (change)="alternar(r, p.clave, $any($event.target).checked)"
+                         [attr.aria-label]="p.nombre + ' · ' + nombre(r)" />
+                </td>
+              }
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+</ng-template>
+
+<!-- Nuevo puesto. No se cierra al tocar el fondo: se perdería la captura. -->
+@if (nuevoAbierto()) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="titulo-puesto">
+      <div class="modal-head">
+        <h2 id="titulo-puesto">Nuevo puesto</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarNuevo()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        @if (errorNuevo()) { <p class="alert">{{ errorNuevo() }}</p> }
+        <div class="form-grid">
+          <label class="field full">
+            Nombre del puesto
+            <input type="text" [(ngModel)]="nuevo.nombre" name="nombrePuesto" maxlength="50" placeholder="Encargado de sucursal" />
+          </label>
+          <label class="field full">
+            Empezar con los permisos de
+            <select [(ngModel)]="nuevo.copiarDe" name="copiarDe">
+              <option [ngValue]="null">Ninguno: lo marco yo</option>
+              @for (r of roles(); track r.id) {
+                @if (!r.es_admin) { <option [ngValue]="r.id">{{ nombre(r) }}</option> }
+              }
+            </select>
+            <span class="ayuda">Después se ajusta en la matriz, como cualquier otro puesto.</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrarNuevo()">Cancelar</button>
+        <button type="button" class="btn btn-primary" (click)="crearPuesto()" [disabled]="creando()">
+          {{ creando() ? 'Creando…' : 'Crear puesto' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

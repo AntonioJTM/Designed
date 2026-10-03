@@ -1,0 +1,69 @@
+/*
+  Entrar (rediseño 2026-10): la pantalla partida. El lado oscuro es el mismo
+  color de la barra del panel, para que al entrar se sienta el mismo lugar.
+  En el celular el lado oscuro se encoge arriba y el formulario queda a la mano.
+*/
+:host {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 100vh;
+  background: var(--fondo);
+  color: var(--tinta);
+}
+
+.lado {
+  flex: 1 1 420px;
+  background: var(--barra);
+  color: var(--barra-tinta);
+  padding: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.marca span { font-size: 20px; font-weight: 600; color: #fff; }
+
+.lema { display: flex; flex-direction: column; gap: 14px; max-width: 460px; }
+.lema p { margin: 0; font-size: 16px; line-height: 1.5; color: #A9B0BD; }
+.lema .titulo { font-size: 34px; line-height: 1.2; font-weight: 600; color: #fff; letter-spacing: -0.01em; }
+
+.pie { font-size: 13px; color: var(--barra-titulo); }
+
+main {
+  flex: 1 1 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+form {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.encabezado { display: flex; flex-direction: column; gap: 6px; }
+.encabezado h1 { margin: 0; font-size: 28px; font-weight: 600; }
+.encabezado p { margin: 0; font-size: 15px; color: var(--tinta-3); line-height: 1.45; }
+
+.alert { margin: 0; }
+
+.btn-entrar { min-height: 50px; font-size: 16px; width: 100%; }
+
+.registro { margin: 0; text-align: center; font-size: 14px; color: var(--tinta-3); }
+
+@media (max-width: 720px) {
+  .lado { padding: 28px 24px; gap: 20px; flex-basis: 100%; }
+  .lema .titulo { font-size: 24px; }
+  .lema p:not(.titulo) { display: none; }
+  main { padding: 32px 16px 48px; align-items: flex-start; }
+}

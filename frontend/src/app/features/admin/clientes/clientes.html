@@ -1,0 +1,117 @@
+<div class="pagina">
+  <header class="cabecera">
+    <div class="page-head">
+      <div>
+        <h1>Clientes</h1>
+        <p class="sub">{{ resumen() }}</p>
+      </div>
+      <div class="acciones">
+        <!-- Encontrar a un cliente por como le dicen o por su teléfono e ir a su expediente. -->
+        <div class="busqueda">
+          <label class="buscador">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path></svg>
+            <span class="oculto">Buscar cliente</span>
+            <input type="search" placeholder="Nombre, apodo o teléfono" autocomplete="off"
+                   role="combobox" aria-controls="clientes-encontrados" aria-autocomplete="list"
+                   [attr.aria-expanded]="resultados() !== null"
+                   [ngModel]="q" (ngModelChange)="teclear($event)" name="q"
+                   (keydown)="teclaBusqueda($event)" (blur)="cerrarResultados()" />
+          </label>
+          @if (resultados(); as r) {
+            <ul class="resultados" id="clientes-encontrados" role="listbox" (mousedown)="$event.preventDefault()">
+              @for (c of r; track c.id; let i = $index) {
+                <li role="option" [attr.aria-selected]="i === activo()" [class.activo]="i === activo()">
+                  <button type="button" (click)="irA(c)">
+                    <span class="avatar" aria-hidden="true">{{ (c.nombre_comercial || c.nombre).charAt(0).toUpperCase() }}</span>
+                    <span class="quien">
+                      <b>{{ c.nombre }}</b>
+                      <span>
+                        {{ c.nombre_comercial ? 'le dicen ' + c.nombre_comercial : '' }}{{ c.nombre_comercial && c.telefono ? ' · ' : '' }}{{ c.telefono }}
+                      </span>
+                    </span>
+                    @if (saldo(c) > 0) { <span class="pill naranja">debe {{ pesos(c.saldo) }}</span> }
+                  </button>
+                </li>
+              } @empty {
+                <li class="nada">Nadie con «{{ q.trim() }}». Busca por nombre, apodo o teléfono.</li>
+              }
+            </ul>
+          }
+        </div>
+        <button type="button" class="btn btn-primary" (click)="abrirNuevo()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+          Nuevo cliente
+        </button>
+      </div>
+    </div>
+
+    <div class="tabs-fila">
+      <nav class="tabs" aria-label="Qué quieres saber de tus clientes">
+        @for (t of PESTANAS; track t.vista) {
+          <a [routerLink]="'/admin/clientes/' + t.vista" queryParamsHandling="preserve"
+             [class.on]="t.vista === vista()" [attr.aria-current]="t.vista === vista() ? 'page' : null">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path [attr.d]="t.d"></path></svg>
+            {{ t.etiqueta }}
+          </a>
+        }
+      </nav>
+      @if (conPeriodo()) {
+        <label class="periodo">
+          Periodo
+          <select [ngModel]="dias()" (ngModelChange)="cambiarPeriodo($event)" name="dias">
+            @for (p of PERIODOS; track p.dias) { <option [ngValue]="p.dias">{{ p.etiqueta }}</option> }
+          </select>
+        </label>
+      }
+    </div>
+  </header>
+
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+
+  @switch (vista()) {
+    @case ('frecuencia') {
+      @if (frecuencia(); as d) { <app-vista-frecuencia [datos]="d" [dias]="dias()" /> }
+    }
+    @case ('dejaron') {
+      @if (dejaron(); as d) {
+        <app-vista-dejaron [datos]="d" [sinVenir]="sinVenir()" (cambiarCorte)="cambiarSinVenir($event)" />
+      }
+    }
+    @case ('deuda') {
+      @if (deuda(); as d) { <app-vista-deuda [datos]="d" (abonar)="abonando.set($event)" /> }
+    }
+    @case ('que-compra') {
+      @if (queCompra(); as d) { <app-vista-que-compra [datos]="d" [dias]="dias()" /> }
+    }
+    @case ('cuando') {
+      @if (cuando(); as d) { <app-vista-cuando [datos]="d" [dias]="dias()" /> }
+    }
+    @case ('gasto') {
+      @if (gasto(); as d) { <app-vista-gasto [datos]="d" [dias]="dias()" /> }
+    }
+  }
+  @if (cargando()) { <p class="muted" style="margin: 0">Cargando…</p> }
+</div>
+
+<!-- Los modales se crean al abrirlos y se destruyen al cerrarlos: arrancan limpios. -->
+@if (nuevoAbierto()) {
+  <app-cliente-form-modal
+    [cliente]="null"
+    (cerrado)="nuevoAbierto.set(false)"
+    (guardado)="clienteGuardado($event)"
+    (irAExpediente)="irAExpediente($event)"
+  />
+}
+@if (abonando(); as c) {
+  <app-abono-modal
+    [clienteId]="c.cliente_id"
+    [nombre]="c.nombre"
+    [saldo]="num(c.saldo)"
+    (cerrado)="abonando.set(null)"
+    (registrado)="abonoRegistrado($event)"
+  />
+}

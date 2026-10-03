@@ -46,8 +46,11 @@ export function hiloDelArchivo(nombreArchivo: string): HiloDelArchivo | null {
     const color = m[1].trim();
     return color ? { color, calibre: `${m[2]}/${m[3]}` } : null;
   }
-  // Sin calibre en el nombre: al menos se puede cotejar el color.
-  return { color: limpio, calibre: null };
+  // Sin calibre al final NO es un nombre de hilo: "HTX 1.ARAC FFAU 721502-4 -
+  // INVENTARIO" es la lista con varios colores y se leía entero como si fuera un
+  // color, así que todas sus cargas salían "no cuadra" (lo vio el usuario el
+  // 2026-10-03). No se opina.
+  return null;
 }
 
 /** Un desacuerdo entre el archivo y el producto elegido. */

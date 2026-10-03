@@ -7,45 +7,51 @@
     </div>
 
     <div class="modal-body">
-      <p style="margin-top:0">
-        <b>{{ fila().producto }}</b>
-        @if (fila().calibre) { <span> {{ fila().calibre }}</span> }
-        <span class="muted"> · {{ fila().sku }} · {{ fila().almacen }}</span>
+      <p class="explica">
+        <b>{{ fila().producto }}{{ fila().calibre ? ' ' + fila().calibre : '' }}</b>
+        @if (clasificacion(); as c) { <span> — {{ c }}</span> }
+        <br />
+        <span class="muted">
+          {{ fila().tipo_presentacion === 'cono' ? 'Cono' : 'Paquete' }} ·
+          <span class="mono">{{ fila().sku }}</span> · {{ fila().almacen }}
+        </span>
       </p>
-      <p class="muted" style="font-size:0.85rem">
+      <p class="explica">
         Cuando lo disponible en este almacén llegue al mínimo, la campana avisa y el hilo aparece
         en Reportes → Por reabastecer. Es por almacén: la matriz y cada sucursal llevan el suyo.
       </p>
 
       @if (error()) { <p class="alert">{{ error() }}</p> }
 
-      <div class="form-grid">
+      <div class="campos">
         <!-- Solo los paquetes se cuentan por pieza; el cono y el simple van en kilos. -->
         @if (esPaquete() && pesoRef()) {
-          <label class="field">
-            Capturar en
-            <select [(ngModel)]="unidad">
-              <option value="paq">Paquetes</option>
-              <option value="kg">Kilos (kg)</option>
-            </select>
-          </label>
+          <div class="field">
+            <span id="min-unidad">Capturar en</span>
+            <div class="seg" role="radiogroup" aria-labelledby="min-unidad">
+              <button type="button" role="radio" [class.on]="unidad === 'paq'"
+                      [attr.aria-checked]="unidad === 'paq'" (click)="unidad = 'paq'">Paquetes</button>
+              <button type="button" role="radio" [class.on]="unidad === 'kg'"
+                      [attr.aria-checked]="unidad === 'kg'" (click)="unidad = 'kg'">Kilos</button>
+            </div>
+          </div>
         }
-        <label class="field">
+        <label class="field" [class.completo]="!(esPaquete() && pesoRef())">
           Avisar cuando queden
-          <span class="cant-peso">
+          <span class="cant">
             <input type="number" [step]="unidad === 'paq' ? 1 : 0.001" min="0"
                    [(ngModel)]="cantidad" (keydown.enter)="guardar()" />
-            <span class="muted">{{ unidad === 'paq' ? 'paquetes' : 'kg' }}</span>
+            <span>{{ unidad === 'paq' ? 'paquetes' : 'kg' }}</span>
           </span>
         </label>
       </div>
 
-      <div class="previa-calculo">
+      <div class="previa">
         <div class="renglon">
           <span class="muted">Hoy hay disponible</span>
           <span>
             {{ disponible() | cantidad: 'kg' }}
-            @if (enPaquetes(disponible()); as p) { <span class="muted"> · {{ p }} paq</span> }
+            @if (enPaquetes(disponible()); as p) { <span class="muted"> · {{ p | cantidad }} paq</span> }
           </span>
         </div>
         <div class="renglon">
@@ -53,7 +59,7 @@
           <span>
             @if (minimoActual() > 0) {
               {{ minimoActual() | cantidad: 'kg' }}
-              @if (enPaquetes(minimoActual()); as p) { <span class="muted"> · {{ p }} paq</span> }
+              @if (enPaquetes(minimoActual()); as p) { <span class="muted"> · {{ p | cantidad }} paq</span> }
             } @else {
               <span class="muted">sin mínimo, no avisa</span>
             }
@@ -65,24 +71,24 @@
             <span>
               <b>{{ kilos() | cantidad: 'kg' }}</b>
               @if (unidad === 'kg' && enPaquetes(kilos()); as p) {
-                <span class="muted"> · {{ p }} paq</span>
+                <span class="muted"> · {{ p | cantidad }} paq</span>
               }
             </span>
           </div>
         }
         @if (quedaBajo()) {
-          <p class="aviso" style="margin:0.5rem 0 0">
+          <p class="aviso">
             Con lo que hay hoy ya está en el mínimo o debajo: la campana va a avisar en cuanto
             guardes.
           </p>
         }
         @if (esPaquete() && pesoRef()) {
-          <p class="muted" style="font-size:0.75rem; margin:0.5rem 0 0">
+          <p class="nota">
             @if (pesoEsNominal()) {
-              Un paquete se cuenta como {{ pesoRef() }} kg, el peso NOMINAL: aquí no hay bultos
-              ubicados de los que sacar el promedio real.
+              Un paquete se cuenta como {{ pesoRef() | cantidad: 'kg' }}, el peso NOMINAL: aquí no hay
+              bultos ubicados de los que sacar el promedio real.
             } @else {
-              Un paquete se cuenta como {{ pesoRef() }} kg, el promedio REAL de los
+              Un paquete se cuenta como {{ pesoRef() | cantidad: 'kg' }}, el promedio REAL de los
               {{ equivalencia()?.disponible?.paquetes }} bultos que hay aquí.
             }
           </p>
@@ -93,7 +99,7 @@
     <div class="modal-foot">
       <span class="nota">Se guarda en kilos.</span>
       @if (minimoActual() > 0) {
-        <button type="button" class="btn btn-ghost" (click)="quitar()" [disabled]="guardando()">
+        <button type="button" class="btn btn-danger" (click)="quitar()" [disabled]="guardando()">
           Quitar mínimo
         </button>
       }

@@ -11,6 +11,10 @@ export interface ResumenVentas {
   descuento: string;
   impuestos: string;
   total: string;
+  /** Kilos vendidos en el periodo (suma de `porDia`). */
+  kilos?: number | string;
+  /** De esos kilos, cuántos salieron en paquete cerrado. */
+  kilos_paquete?: number | string;
 }
 
 export interface CanalVentas {
@@ -23,6 +27,8 @@ export interface DiaVentas {
   dia: string;
   num_pedidos: number | string;
   total: string;
+  kilos?: string;
+  kilos_paquete?: string;
 }
 
 export interface ReporteVentas {
@@ -47,6 +53,8 @@ export interface PorReabastecer {
   variante_id: number;
   sku: string;
   producto: string;
+  calibre?: string | null;
+  tipo_presentacion?: string | null;
   almacen: string;
   cantidad: string;
   cantidad_reservada: string;

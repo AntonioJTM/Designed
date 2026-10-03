@@ -47,7 +47,6 @@ describe('MaterialFormModal', () => {
       nombre: 'Acrilán',
       descripcion: 'Material de prueba',
       calibres: '1/30,2/30',
-      orden: 2,
       activo: true,
     });
   });

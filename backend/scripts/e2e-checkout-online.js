@@ -20,6 +20,14 @@ const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Se niega a correr contra la base del servidor. Ver el módulo.
 require('./_no-en-produccion');
+
+// La tienda en línea está APAGADA desde 2026-10 (sus rutas de registro y login de
+// clientes están comentadas). Esta prueba se vuelve a correr al encenderla:
+// E2E_TIENDA_EN_LINEA=si node scripts/e2e-checkout-online.js
+if (process.env.E2E_TIENDA_EN_LINEA !== 'si') {
+  console.log('La tienda en línea está apagada: esta prueba no aplica. (E2E_TIENDA_EN_LINEA=si para forzarla.)');
+  process.exit(0);
+}
 const { soloPropios } = require('./_propios');
 const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');

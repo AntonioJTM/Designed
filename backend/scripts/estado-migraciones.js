@@ -25,6 +25,8 @@ const mysql = require('mysql2/promise');
 // tabla.!columna   → la columna NO debe existir (migración que elimina)
 // vista~texto      → la definición de la vista debe CONTENER ese texto
 //                    (migración que solo cambia una vista, sin tocar columnas)
+// tabla#col=valor  → debe haber una FILA con ese valor (migración que solo
+//                    llena datos, sin tocar la estructura)
 const MIGRACIONES = [
   ['2026-07_variante_codigos', 'variante_codigos'],
   ['2026-07_nomina', 'nomina_periodos'],
@@ -62,6 +64,7 @@ const MIGRACIONES = [
   ['2026-09_costo_y_margen (congelado)', 'pedido_detalle.costo_unitario'],
   ['2026-09_apartados', 'pedidos.inventario_descontado'],
   ['2026-10_alertas_stock_con_minimo', 'v_alertas_stock~`stock_minimo` > 0'],
+  ['2026-10_permisos_por_puesto', 'permisos#clave=ver:hoy'],
 ];
 
 (async () => {
@@ -75,6 +78,15 @@ const MIGRACIONES = [
 
   const faltan = [];
   for (const [nombre, huella] of MIGRACIONES) {
+    if (huella.includes('#')) {
+      const [tabla, cond] = huella.split('#');
+      const [col, valor] = cond.split('=');
+      const [[f]] = await c.query(`SELECT COUNT(*) n FROM \`${tabla}\` WHERE \`${col}\` = ?`, [valor]);
+      const ok = Number(f.n) > 0;
+      console.log(`  ${ok ? 'ok      ' : 'FALTA   '} ${nombre}${ok ? '' : `  → no hay ${tabla} con ${col} = ${valor}`}`);
+      if (!ok) faltan.push(nombre);
+      continue;
+    }
     if (huella.includes('~')) {
       const [vista, texto] = huella.split('~');
       const [[v]] = await c.query(

@@ -39,6 +39,12 @@ describe('ProductoFormModal', () => {
             : []
       ),
     obtenerProducto: (id: number) => of({ ...producto, id }),
+    eliminacionProducto: (id: number) =>
+      of(
+        id === 7
+          ? { se_puede: false, motivos: ['9 bultos'], mensaje: 'No se puede eliminar: tiene 9 bultos.' }
+          : { se_puede: true, motivos: [], mensaje: null }
+      ),
   };
 
   async function montar(productoId: number | null): Promise<ComponentFixture<ProductoFormModal>> {
@@ -84,5 +90,31 @@ describe('ProductoFormModal', () => {
     expect(c.cargando()).toBe(false);
     expect(c.form.getRawValue().nombre).toBe('');
     expect(c.form.getRawValue().unidad_medida_id).toBe(2);
+  });
+
+  it('la unidad queda fija en kilogramo y el impuesto no se muestra', async () => {
+    const fixture = await montar(null);
+    const c = fixture.componentInstance;
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(c.form.controls.unidad_medida_id.disabled).toBe(true);
+    // Deshabilitada no quiere decir vacía: al guardar se sigue mandando.
+    expect(c.form.getRawValue().unidad_medida_id).toBe(2);
+    expect(el.textContent).not.toContain('Impuesto');
+  });
+  it('con algo cargado no deja eliminar y dice por qué', async () => {
+    const fixture = await montar(7);
+    const el: HTMLElement = fixture.nativeElement;
+    const boton = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Eliminar')!;
+    expect(boton.disabled).toBe(true);
+    expect(el.textContent).toContain('No se puede eliminar: tiene 9 bultos.');
+  });
+
+  it('sin nada cargado sí deja eliminar', async () => {
+    const fixture = await montar(8);
+    const el: HTMLElement = fixture.nativeElement;
+    const boton = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Eliminar')!;
+    expect(boton.disabled).toBe(false);
+    expect(el.textContent).not.toContain('No se puede eliminar');
   });
 });

@@ -10,125 +10,140 @@
       <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
     </div>
 
-    <form [formGroup]="form" (ngSubmit)="guardar()">
+    @if (creado(); as c) {
+      <!-- Alta guardada: capturar el siguiente o ir a su expediente. -->
       <div class="modal-body">
-        @if (cargando()) {
-          <!-- El velo tapa el formulario ya dibujado, así no crece de tamaño. -->
-          <div class="modal-cargando"><span class="spinner"></span></div>
-        }
-        @if (error()) { <p class="alert" style="margin-top: 0">{{ error() }}</p> }
-
-        <p class="muted" style="margin-top: 0">
-          Lo único obligatorio es el nombre. Lo demás se completa cuando lo sepas.
+        <p class="ok-msg" style="margin: 0">
+          Se guardó a <b>{{ c.nombre_comercial || c.nombre }}</b>.
+          @if (num(c.limite_credito) <= 0) { Nace sin crédito: se le cobra completo hasta que se le autorice un límite. }
         </p>
-
-        <div class="form-grid">
-          <label class="field">
-            Nombre <span class="req">*</span>
-            <input type="text" formControlName="nombre" placeholder="Mercería La Esperanza" />
-          </label>
-          <label class="field">
-            Como le dicen
-            <input type="text" formControlName="nombre_comercial" placeholder="Doña Chela" />
-            <span class="muted" style="font-size: 0.72rem">
-              Con esto lo vas a buscar en el mostrador.
-            </span>
-          </label>
-          <label class="field">
-            Teléfono
-            <input type="tel" formControlName="telefono" maxlength="20" />
-          </label>
-          <label class="field">
-            Otro teléfono
-            <input type="tel" formControlName="telefono_alt" maxlength="20" />
-          </label>
-          <label class="field">
-            Número de cliente
-            <input type="text" formControlName="codigo" maxlength="20" placeholder="Opcional" />
-          </label>
-          <label class="field">
-            Lista de precios
-            <select formControlName="tipo_cliente_id">
-              <option [ngValue]="null">Público (la de siempre)</option>
-              @for (t of tipos(); track t.id) {
-                @if (!t.es_publico) { <option [ngValue]="t.id">{{ t.nombre }}</option> }
-              }
-            </select>
-            <span class="muted" style="font-size: 0.72rem">
-              Se aplica sola al elegirlo en el punto de venta.
-            </span>
-          </label>
-
-          <label class="field full">
-            Dirección
-            <input type="text" formControlName="direccion" maxlength="255" />
-          </label>
-          <label class="field">
-            Ciudad
-            <input type="text" formControlName="ciudad" maxlength="100" />
-          </label>
-          <label class="field">
-            Estado
-            <input type="text" formControlName="estado" maxlength="100" />
-          </label>
-
-          <label class="field">
-            Cliente desde
-            <input type="date" formControlName="cliente_desde" />
-            <span class="muted" style="font-size: 0.72rem">
-              Si es de años, pon cuándo empezó a comprarte de verdad.
-            </span>
-          </label>
-          <label class="field">
-            Cómo llegó
-            <input type="text" formControlName="como_llego" list="origenes-cliente" maxlength="60" />
-            <datalist id="origenes-cliente">
-              @for (o of origenes; track o) { <option [value]="o"></option> }
-            </datalist>
-          </label>
-          <label class="field">
-            Cumpleaños
-            <input type="date" formControlName="fecha_nacimiento" />
-          </label>
-          <label class="field">
-            Hasta cuánto se le fía
-            <div class="campo-moneda">
-              <span>$</span>
-              <input type="number" min="0" step="1" formControlName="limite_credito" />
-            </div>
-            <span class="muted" style="font-size: 0.72rem">
-              En cero no se le fía nada.
-            </span>
-          </label>
-
-          <label class="field">
-            Correo
-            <input type="email" formControlName="correo" maxlength="160" />
-          </label>
-          <label class="field">
-            RFC
-            <input type="text" formControlName="rfc" maxlength="20" />
-          </label>
-
-          <label class="field full">
-            Notas
-            <textarea formControlName="notas" rows="2"
-                      placeholder="Lo que convenga recordar: qué le gusta, cómo paga, con quién trata…"></textarea>
-          </label>
-          @if (esEdicion()) {
-            <label class="field check">
-              <input type="checkbox" formControlName="activo" /> Cliente activo
-            </label>
-          }
-        </div>
       </div>
-
       <div class="modal-foot">
-        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
-        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
-          {{ guardando() ? 'Guardando…' : esEdicion() ? 'Guardar cambios' : 'Crear cliente' }}
-        </button>
+        <button type="button" class="btn btn-ghost" (click)="otro()">+ Capturar otro cliente</button>
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+        <button type="button" class="btn btn-primary" (click)="irAExpediente.emit(c.id)">Ver su expediente →</button>
       </div>
-    </form>
+    } @else {
+      <form [formGroup]="form" (ngSubmit)="guardar()">
+        <div class="modal-body">
+          @if (cargando()) {
+            <!-- El velo tapa el formulario ya dibujado, así no crece de tamaño. -->
+            <div class="modal-cargando"><span class="spinner"></span></div>
+          }
+          @if (error()) { <p class="alert" style="margin-top: 0">{{ error() }}</p> }
+
+          <p class="muted" style="margin: 0 0 16px">
+            Lo único obligatorio es el nombre. Lo demás se completa cuando lo sepas.
+          </p>
+
+          <div class="form-grid">
+            <div class="grupo grupo-titulo">Quién es</div>
+            <label class="field">
+              <span>Nombre <span class="req" aria-hidden="true">*</span></span>
+              <input type="text" formControlName="nombre" placeholder="Mercería La Esperanza" required />
+              @if (form.controls.nombre.touched && form.controls.nombre.invalid) {
+                <span class="error-campo">Ponle al menos un nombre.</span>
+              }
+            </label>
+            <label class="field">
+              Como le dicen
+              <input type="text" formControlName="nombre_comercial" placeholder="Doña Chela" />
+              <span class="ayuda">Con esto lo vas a buscar en el mostrador.</span>
+            </label>
+            <label class="field">
+              Teléfono
+              <input type="tel" formControlName="telefono" maxlength="20" />
+              <span class="ayuda">También se le busca por su teléfono.</span>
+            </label>
+            <label class="field">
+              Otro teléfono
+              <input type="tel" formControlName="telefono_alt" maxlength="20" />
+            </label>
+
+            <div class="grupo grupo-titulo">Cómo se le vende</div>
+            <label class="field">
+              Lista de precios
+              <select formControlName="tipo_cliente_id">
+                <option [ngValue]="null">Público (la de siempre)</option>
+                @for (t of tipos(); track t.id) {
+                  @if (!t.es_publico) { <option [ngValue]="t.id">{{ t.nombre }}</option> }
+                }
+              </select>
+              <span class="ayuda">Se aplica sola al elegirlo en el punto de venta.</span>
+            </label>
+            <label class="field">
+              Hasta cuánto se le fía
+              <span class="moneda">
+                <span aria-hidden="true">$</span>
+                <input type="number" min="0" step="1" formControlName="limite_credito" />
+              </span>
+              <span class="ayuda">En cero no se le fía nada.</span>
+            </label>
+            <label class="field">
+              Cliente desde
+              <input type="date" formControlName="cliente_desde" />
+              <span class="ayuda">Si es de años, pon cuándo empezó a comprarte de verdad, no hoy.</span>
+            </label>
+            <label class="field">
+              Número de cliente
+              <input type="text" formControlName="codigo" maxlength="20" placeholder="Opcional" />
+            </label>
+
+            <div class="grupo grupo-titulo">Dónde está</div>
+            <label class="field full">
+              Dirección
+              <input type="text" formControlName="direccion" maxlength="255" />
+            </label>
+            <label class="field">
+              Ciudad
+              <input type="text" formControlName="ciudad" maxlength="100" />
+            </label>
+            <label class="field">
+              Estado
+              <input type="text" formControlName="estado" maxlength="100" />
+            </label>
+
+            <div class="grupo grupo-titulo">Más datos</div>
+            <label class="field">
+              Cómo llegó
+              <input type="text" formControlName="como_llego" list="origenes-cliente" maxlength="60" />
+              <datalist id="origenes-cliente">
+                @for (o of origenes; track o) { <option [value]="o"></option> }
+              </datalist>
+            </label>
+            <label class="field">
+              Cumpleaños
+              <input type="date" formControlName="fecha_nacimiento" />
+            </label>
+            <label class="field">
+              Correo
+              <input type="email" formControlName="correo" maxlength="160" />
+            </label>
+            <label class="field">
+              RFC
+              <input type="text" formControlName="rfc" maxlength="20" />
+            </label>
+            <label class="field full">
+              Notas
+              <textarea formControlName="notas" rows="2"
+                        placeholder="Lo que convenga recordar: qué le gusta, cómo paga, con quién trata…"></textarea>
+            </label>
+            @if (esEdicion()) {
+              <label class="field check full">
+                <input type="checkbox" formControlName="activo" /> Cliente activo
+                <span class="ayuda">Dado de baja no sale en las pestañas ni en el punto de venta.</span>
+              </label>
+            }
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+            {{ guardando() ? 'Guardando…' : esEdicion() ? 'Guardar cambios' : 'Crear cliente' }}
+          </button>
+        </div>
+      </form>
+    }
   </div>
 </div>

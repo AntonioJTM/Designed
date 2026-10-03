@@ -7,7 +7,7 @@
     </div>
 
     <div class="modal-body">
-      <p class="muted" style="margin-top:0; font-size:0.85rem">
+      <p class="explica">
         <b>Ajuste:</b> la cantidad que escribas queda como el saldo real, sin importar lo que
         hubiera. Es para cuando cuentas físicamente y no cuadra.<br />
         <b>Merma:</b> resta lo que se dañó, se mojó o se perdió.
@@ -16,37 +16,46 @@
       @if (error()) { <p class="alert">{{ error() }}</p> }
       @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
 
-      <div class="form-grid">
-        <label class="field full">
-          Buscar / escanear (SKU, código o producto)
-          <span class="input-scan">
-            <input #bc type="text" [(ngModel)]="q"
+      <div class="campos">
+        <!-- Solo esos dos: la entrada la hace la remesa, la devolución el pedido y la salida el traspaso. -->
+        <div class="field completo">
+          <span id="mov-tipo">Qué vas a registrar</span>
+          <div class="seg" role="radiogroup" aria-labelledby="mov-tipo">
+            <button type="button" role="radio" [class.on]="mov.tipo === 'ajuste'"
+                    [attr.aria-checked]="mov.tipo === 'ajuste'" (click)="mov.tipo = 'ajuste'">
+              Ajuste por conteo
+            </button>
+            <button type="button" role="radio" [class.on]="mov.tipo === 'merma'"
+                    [attr.aria-checked]="mov.tipo === 'merma'" (click)="mov.tipo = 'merma'">
+              Merma
+            </button>
+          </div>
+        </div>
+
+        <label class="field completo">
+          Buscar o escanear
+          <span class="escaneo">
+            <input #bc type="text" [(ngModel)]="q" autocomplete="off"
                    (keydown.enter)="$event.preventDefault(); buscar()"
-                   placeholder="Escanea el código o teclea SKU/nombre" />
-            <button type="button" class="btn btn-ghost btn-sm" (click)="buscar()">Buscar</button>
+                   placeholder="Color, calibre, SKU o código" />
+            <button type="button" class="btn btn-ghost" (click)="buscar()">Buscar</button>
           </span>
         </label>
-        <label class="field full">
-          Variante
+        <!--
+          La opción lleva color, CALIBRE, material y línea: el mismo color en dos
+          calibres son dos productos y con el color solo no se elige bien.
+        -->
+        <label class="field completo">
+          Hilo y presentación
           <select [(ngModel)]="varianteSel" (ngModelChange)="alElegir()">
             <option value="">— Selecciona —</option>
             @for (v of resultados(); track v.id) {
-              <option [ngValue]="v.id">
-                {{ v.sku }} · {{ v.producto }}{{ v.presentacion ? ' · ' + v.presentacion : '' }}
-              </option>
+              <option [ngValue]="v.id">{{ etiquetaVariante(v) }}</option>
             }
           </select>
           @if (resultados().length === 0) {
-            <span class="muted" style="font-size:0.72rem">
-              Busca primero la variante que vas a mover.
-            </span>
+            <span class="ayuda">Busca primero el hilo que vas a ajustar.</span>
           }
-        </label>
-        <label class="field">
-          Tipo
-          <select [(ngModel)]="mov.tipo">
-            @for (t of tipos; track t) { <option [value]="t">{{ t }}</option> }
-          </select>
         </label>
         <label class="field">
           Almacén
@@ -60,24 +69,26 @@
           ofrece para presentaciones de tipo paquete: el cono y el simple van en kilos.
         -->
         @if (esPaquete() && pesoRef()) {
-          <label class="field">
-            Capturar en
-            <select [(ngModel)]="unidad">
-              <option value="kg">Kilos (kg)</option>
-              <option value="paq">Paquetes</option>
-            </select>
-          </label>
+          <div class="field">
+            <span id="mov-unidad">Capturar en</span>
+            <div class="seg" role="radiogroup" aria-labelledby="mov-unidad">
+              <button type="button" role="radio" [class.on]="unidad === 'kg'"
+                      [attr.aria-checked]="unidad === 'kg'" (click)="unidad = 'kg'">Kilos</button>
+              <button type="button" role="radio" [class.on]="unidad === 'paq'"
+                      [attr.aria-checked]="unidad === 'paq'" (click)="unidad = 'paq'">Paquetes</button>
+            </div>
+          </div>
         }
-        <label class="field">
+        <label class="field" [class.completo]="!(esPaquete() && pesoRef())">
           {{ esAjuste() ? 'Saldo real contado' : 'Cantidad a dar de baja' }}
-          <span class="cant-peso">
+          <span class="cant">
             <input type="number" [step]="unidad === 'paq' ? 1 : 0.001" min="0"
                    [(ngModel)]="mov.cantidad" />
-            <span class="muted">{{ unidad === 'paq' ? 'paquetes' : 'kg' }}</span>
+            <span>{{ unidad === 'paq' ? 'paquetes' : 'kg' }}</span>
           </span>
         </label>
-        <label class="field full">
-          Motivo <span class="muted">(opcional)</span>
+        <label class="field completo">
+          <span>Motivo <span class="muted">(opcional)</span></span>
           <input type="text" [(ngModel)]="mov.motivo"
                  [placeholder]="esAjuste() ? 'Ej. Conteo físico: 96 paquetes' : 'Ej. Se mojaron 2 bultos'" />
         </label>
@@ -85,19 +96,19 @@
 
       <!-- Qué va a pasar, antes de confirmarlo -->
       @if (equivalencia(); as eq) {
-        <div class="previa-calculo">
+        <div class="previa">
           <div class="renglon">
             <span class="muted">Hoy hay en este almacén</span>
             <span>
-              {{ saldoActual() }} kg
-              @if (enPaquetes(saldoActual()); as p) { <span class="muted"> · {{ p }} paq</span> }
+              {{ saldoActual() | cantidad: 'kg' }}
+              @if (enPaquetes(saldoActual()); as p) { <span class="muted"> · {{ p | cantidad }} paq</span> }
             </span>
           </div>
 
           @if (unidad === 'paq' && mov.cantidad) {
             <div class="renglon">
-              <span>{{ mov.cantidad }} paquetes × {{ pesoRef() }} kg</span>
-              <span><b>{{ kilos() }} kg</b></span>
+              <span>{{ mov.cantidad | cantidad }} paquetes × {{ pesoRef() | cantidad: 'kg' }}</span>
+              <b>{{ kilos() | cantidad: 'kg' }}</b>
             </div>
           }
 
@@ -105,45 +116,40 @@
             <div class="renglon total">
               <span>{{ esAjuste() ? 'Queda en' : 'Baja a' }}</span>
               <span>
-                <b>{{ saldoResultante() }} kg</b>
+                <b [class.neg]="quedaNegativo()">{{ saldoResultante() | cantidad: 'kg' }}</b>
                 @if (enPaquetes(saldoResultante()); as p) {
-                  <span class="muted"> · {{ p }} paq</span>
+                  <span class="muted"> · {{ p | cantidad }} paq</span>
                 }
               </span>
             </div>
             @if (quedaNegativo()) {
-              <p class="aviso" style="margin:0.5rem 0 0">
-                Queda en negativo, así que el sistema lo va a rechazar. Revisa la cantidad.
-              </p>
+              <p class="aviso">Queda en negativo, así que el sistema lo va a rechazar. Revisa la cantidad.</p>
             }
           }
 
-          <p class="muted" style="font-size:0.75rem; margin:0.5rem 0 0">
+          <p class="nota">
             @if (eq.referencia_nominal) {
-              El peso de {{ pesoRef() }} kg es el NOMINAL de la presentación: aquí no hay bultos
-              ubicados de los que sacar el promedio real, así que la cuenta en paquetes es
+              El peso de {{ pesoRef() | cantidad: 'kg' }} es el NOMINAL de la presentación: aquí no hay
+              bultos ubicados de los que sacar el promedio real, así que la cuenta en paquetes es
               aproximada.
             } @else {
               Se traduce con el peso promedio REAL de los {{ eq.disponible.paquetes }} bultos que hay
-              aquí ({{ eq.disponible.peso_min }} a {{ eq.disponible.peso_max }} kg), no con el
-              nominal.
+              aquí ({{ eq.disponible.peso_min | cantidad }} a {{ eq.disponible.peso_max | cantidad: 'kg' }}),
+              no con el nominal.
             }
           </p>
+          @if (unidad === 'paq') {
+            <p class="nota">
+              Si lo que dañaste son bultos concretos, es más exacto capturar sus kilos reales: los
+              bultos pesan distinto entre sí y el promedio deja diferencia.
+            </p>
+          }
         </div>
-
-        @if (unidad === 'paq') {
-          <p class="muted" style="font-size:0.78rem">
-            Si lo que dañaste son bultos concretos, es más exacto capturar sus kilos reales: los
-            bultos pesan distinto entre sí y el promedio deja diferencia.
-          </p>
-        }
       }
     </div>
 
     <div class="modal-foot">
-      <span class="nota">
-        Se guarda en kilos y queda asentado en el kardex.
-      </span>
+      <span class="nota">Se guarda en kilos y queda asentado en el kardex.</span>
       <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
       <button type="button" class="btn btn-primary" (click)="registrar()" [disabled]="guardando()">
         {{ guardando() ? 'Registrando…' : 'Registrar' }}

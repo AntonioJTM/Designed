@@ -106,6 +106,8 @@ router.get('/mis', authRequired, controller.misPedidos);
 // Los apartados vigentes. Va ANTES de '/:id' o Express lo tomaría por un id y
 // respondería 404 — el mismo cuidado que con '/mis' y '/cotizacion'.
 router.get('/apartados', ...soloStaff, controller.apartados);
+// Las cifras de arriba de Pedidos: hoy, la semana, lo fiado por cobrar y lo cancelado.
+router.get('/resumen', ...soloStaff, controller.resumen);
 
 // Consulta y gestión: staff.
 router.get('/', ...soloStaff, controller.listar);

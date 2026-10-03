@@ -1,0 +1,30 @@
+/* Apartados (rediseño 2026-10). Lo común sale de styles.scss. */
+
+.card { display: flex; flex-direction: column; gap: 14px; }
+.card-head { margin-bottom: 0; }
+.orden { flex: 0 1 260px; }
+
+/* ---- Listos para entregar: tarjetitas blancas sobre la tarjeta verde ---- */
+.listos { display: flex; flex-wrap: wrap; gap: 14px; }
+.listo {
+  flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px;
+  background: #fff; border: 1px solid #D6EDDF; border-radius: 10px; padding: 16px 18px;
+}
+.listo-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.listo-top .quien { font-size: 15px; font-weight: 600; }
+.listo .que { font-size: 13px; color: var(--tinta-2); }
+.listo-pie { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.listo-pie .muted { font-size: 13px; }
+
+.quien { font-weight: 500; color: var(--tinta); text-decoration: none; }
+a.quien { color: var(--acento-oscuro); }
+a.quien:hover { text-decoration: underline; }
+.folio { font-size: 13px; color: var(--tinta-3); text-decoration: none; white-space: nowrap; }
+a.folio:hover { color: var(--acento); text-decoration: underline; }
+.tel { font-size: 13px; }
+.que-chico { font-size: 12px; }
+
+/* ---- Avance: carril de 110 px con el porcentaje al lado ---- */
+.avance { display: flex; align-items: center; gap: 8px; }
+.avance .carril { width: 110px; height: 8px; flex: 0 0 110px; }
+.avance .num { font-size: 13px; color: var(--tinta-2); }

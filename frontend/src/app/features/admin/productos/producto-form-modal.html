@@ -25,8 +25,8 @@
 
     @if (creado(); as p) {
       <!-- Guardado: el paso que sigue es capturar sus presentaciones -->
-      <div class="modal-body">
-        <p class="ok-msg">
+      <div class="modal-body columna" style="gap: 12px">
+        <p class="ok-msg" style="margin: 0">
           Producto <b>{{ p.nombre }}</b> guardado.
           @if (!p.presentacion_pendiente) {
             Su presentación en kilos se creó sola; los bultos y el inventario entran
@@ -34,7 +34,7 @@
           }
         </p>
         @if (p.presentacion_pendiente) {
-          <p class="alert">
+          <p class="alert" style="margin: 0">
             Pero su presentación <b>no se creó</b>: {{ p.presentacion_pendiente }}
             Edita el producto y ponle el precio por kilo, y se crea sola.
           </p>
@@ -47,6 +47,27 @@
           Ir a presentaciones →
         </button>
       </div>
+    } @else if (confirmandoBorrado()) {
+      <!--
+        Borrar un hilo se lleva sus presentaciones. Se confirma dentro del modal,
+        no con el diálogo del navegador, para poder decir qué se pierde.
+      -->
+      <div class="modal-body columna" style="gap: 12px">
+        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+        <p style="margin: 0">
+          ¿Eliminar <b>{{ form.getRawValue().nombre }}{{ form.getRawValue().grosor_calibre ? ' ' + form.getRawValue().grosor_calibre : '' }}</b>?
+        </p>
+        <p class="muted" style="margin: 0; font-size: 14px">
+          No tiene nada cargado, así que se borra junto con su presentación vacía, sus
+          precios por lista y sus imágenes. No se puede deshacer.
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="confirmandoBorrado.set(false)">No, regresar</button>
+        <button type="button" class="btn btn-danger" (click)="eliminar()" [disabled]="guardando()">
+          {{ guardando() ? 'Eliminando…' : 'Sí, eliminar' }}
+        </button>
+      </div>
     } @else {
       <!--
         El formulario se dibuja COMPLETO desde el primer cuadro, aunque las
@@ -57,12 +78,13 @@
       <form [formGroup]="form" (ngSubmit)="guardar()">
         <div class="modal-body">
           @if (error()) {
-            <p class="alert" style="margin-top:0">{{ error() }}</p>
+            <p class="alert" style="margin: 0 0 16px">{{ error() }}</p>
           }
 
           <div class="form-grid">
+            <!-- El color ES el producto: cada color en su calibre es un hilo aparte. -->
             <label class="field">
-              Nombre <span class="muted">(color)</span>
+              Color
               <input type="text" formControlName="nombre" placeholder="Ej. MARINO OSCURO" />
             </label>
             <label class="field">
@@ -75,17 +97,16 @@
               </select>
             </label>
             <label class="field">
-              Se vende por <span class="muted">(peso)</span>
-              <select formControlName="unidad_medida_id">
-                <option [ngValue]="null" disabled>— Selecciona —</option>
-                @for (u of unidades(); track u.id) {
-                  <option [ngValue]="u.id">{{ u.nombre }} ({{ u.abreviatura }})</option>
-                }
+              Calibre
+              <select formControlName="grosor_calibre">
+                <option value="">— Sin especificar —</option>
+                @for (c of calibres(); track c) { <option [value]="c">{{ c }}</option> }
               </select>
-              <span class="muted" style="font-size:0.78rem">
-                El precio de cada variante es por esta unidad y el inventario se lleva
-                en ella. Admite decimales: puedes vender 2.5 kg.
-              </span>
+              @if (calibres().length === 0) {
+                <span class="ayuda">
+                  Elige primero el material. Sus calibres se configuran en Materiales.
+                </span>
+              }
             </label>
             <label class="field">
               Línea
@@ -100,11 +121,36 @@
               Precio por {{ unidadSel() }}
               <input type="number" step="0.01" min="0" formControlName="precio_kg"
                      placeholder="Ej. 200.00" [class.invalido]="faltaPrecio() && form.touched" />
-              <span class="muted" style="font-size:0.72rem">
-                El precio de lista del hilo. Las presentaciones que se capturen después
-                arrancan con este precio.
+              @if (sinPrecio()) {
+                <span class="ayuda" style="color: var(--aviso-t); font-weight: 500">
+                  Entró con la lista del proveedor y todavía no tiene precio, así que no se puede vender.
+                  Al guardarlo, su presentación lo toma.
+                </span>
+              } @else {
+                <span class="ayuda">
+                  El precio de lista del hilo. Las presentaciones que se capturen después
+                  arrancan con este precio.
+                </span>
+              }
+            </label>
+            <!-- Fijo en kilogramo y deshabilitado (decisión del usuario, 2026-10-03):
+                 todo el hilo se vende por kilo, y dejarlo elegir solo abría la puerta a
+                 un producto en toneladas por descuido. Se sigue mandando al guardar. -->
+            <label class="field">
+              Se vende por
+              <select formControlName="unidad_medida_id">
+                @for (u of unidades(); track u.id) {
+                  <option [ngValue]="u.id">{{ u.nombre }} ({{ u.abreviatura }})</option>
+                }
+              </select>
+              <span class="ayuda">
+                Todo el hilo se vende por kilo. Admite decimales: puedes vender 2.5 kg.
               </span>
             </label>
+            <!--
+              IMPUESTO OCULTO por ahora (decisión del usuario, 2026-10-03). El campo sigue
+              en el formulario: al editar se conserva el que tenga el producto y al crear
+              va sin impuesto. Para regresarlo, descomentar este bloque.
             <label class="field">
               Impuesto
               <select formControlName="impuesto_id">
@@ -114,19 +160,7 @@
                 }
               </select>
             </label>
-            <label class="field">
-              Calibre
-              <select formControlName="grosor_calibre">
-                <option value="">— Sin especificar —</option>
-                @for (c of calibres(); track c) { <option [value]="c">{{ c }}</option> }
-              </select>
-              @if (calibres().length === 0) {
-                <span class="muted" style="font-size:0.72rem">
-                  Elige primero el material. Sus calibres se configuran en
-                  Admin → Materiales.
-                </span>
-              }
-            </label>
+            -->
 
             <label class="field full">
               Descripción
@@ -134,32 +168,56 @@
             </label>
             <label class="field check full">
               <input type="checkbox" formControlName="multipresentacion" />
-              Multipresentación
-              <span class="muted" style="font-size:0.78rem">
-                — se maneja en paquete y en conos. Necesario para poder desarmarlo.
+              <span>
+                Multipresentación
+                <span class="ayuda"> — se maneja en paquete y en conos. Necesario para poder desarmarlo.</span>
               </span>
             </label>
             <label class="field check full">
               <input type="checkbox" formControlName="por_lotes" />
-              Por lotes
-              <span class="muted" style="font-size:0.78rem">
-                — cada presentación lleva su etiqueta de remesa. Las existencias se
-                siguen sumando juntas.
+              <span>
+                Por lotes
+                <span class="ayuda">
+                  — cada presentación lleva su etiqueta de remesa. Las existencias se siguen
+                  sumando juntas.
+                </span>
               </span>
             </label>
+            <!--
+              TIENDA EN LÍNEA APAGADA (2026-10): "Destacado" solo sirve para la portada
+              de la tienda en línea, así que se esconde. El valor NO se pierde: el
+              formulario lo sigue cargando y mandando tal como estaba. Para regresarlo,
+              quita este comentario.
             <label class="field check">
               <input type="checkbox" formControlName="destacado" /> Destacado
             </label>
+            -->
             <label class="field check">
               <input type="checkbox" formControlName="activo" /> Activo
             </label>
+            <!-- Por qué no se puede borrar, junto a "Activo", que es lo que se hace en su lugar. -->
+            @if (esEdicion() && eliminacion() && !eliminacion()!.se_puede) {
+              <p class="aviso full" style="margin: 0; font-size: 13px">
+                {{ eliminacion()!.mensaje }} Para dejar de venderlo sin perder su historia,
+                desmarca <b>Activo</b>.
+              </p>
+            }
           </div>
         </div>
 
         <div class="modal-foot">
-          <span class="nota">
-            Las presentaciones (SKU, código de barras) y las imágenes se capturan aparte.
-          </span>
+          @if (esEdicion()) {
+            <button type="button" class="btn btn-danger" style="margin-right: auto"
+                    (click)="confirmandoBorrado.set(true)"
+                    [disabled]="cargando() || !eliminacion()?.se_puede"
+                    [title]="eliminacion()?.se_puede ? '' : (eliminacion()?.mensaje ?? 'No se pudo revisar si se puede eliminar')">
+              Eliminar
+            </button>
+          } @else {
+            <span class="nota">
+              Las presentaciones, los bultos y las imágenes se capturan aparte.
+            </span>
+          }
           <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
           <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando()">
             {{ guardando() ? 'Guardando…' : (esEdicion() ? 'Guardar cambios' : 'Guardar producto') }}

@@ -2,6 +2,7 @@
 
 const service = require('./service');
 const { parsePagination, parseBool } = require('../../utils/query');
+const permisos = require('../permisos/service');
 
 async function listar(req, res, next) {
   try {
@@ -24,6 +25,8 @@ async function listar(req, res, next) {
 async function obtener(req, res, next) {
   try {
     const data = await service.obtener(Number(req.params.id));
+    // La ruta es pública (la usaba la tienda en línea): el precio de compra no.
+    await permisos.sinCostosSiNoVe(req, data.variantes);
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -57,4 +60,13 @@ async function eliminar(req, res, next) {
   }
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar };
+/** ¿Se puede borrar? y, si no, por qué. */
+async function eliminacion(req, res, next) {
+  try {
+    return res.json({ data: await service.eliminacion(Number(req.params.id)), error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, eliminacion };

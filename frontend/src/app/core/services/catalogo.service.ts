@@ -31,6 +31,13 @@ export interface FiltroProductos {
   limit?: number;
 }
 
+/** Si el producto se puede borrar y, si no, qué lo impide ("tiene 9 bultos…"). */
+export interface EliminacionProducto {
+  se_puede: boolean;
+  motivos: string[];
+  mensaje: string | null;
+}
+
 /**
  * Servicio HTTP del catálogo. Cubre categorías, productos, variantes, imágenes
  * y los catálogos auxiliares (/opciones). Devuelve directamente el `data`.
@@ -81,6 +88,15 @@ export class CatalogoService {
   actualizarProducto(id: number, body: Partial<Producto>): Observable<Producto> {
     return this.http
       .put<ApiResponse<Producto>>(`${this.base}/productos/${id}`, body)
+      .pipe(map(data));
+  }
+  /**
+   * ¿Se puede borrar el producto? Solo si no tiene NADA cargado (bultos,
+   * existencias, movimientos, ventas…); si no, `mensaje` dice qué tiene.
+   */
+  eliminacionProducto(id: number): Observable<EliminacionProducto> {
+    return this.http
+      .get<ApiResponse<EliminacionProducto>>(`${this.base}/productos/${id}/eliminacion`)
       .pipe(map(data));
   }
   eliminarProducto(id: number): Observable<unknown> {

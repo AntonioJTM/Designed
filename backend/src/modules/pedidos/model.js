@@ -196,6 +196,22 @@ async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {
     if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `Variante ${item.variante_id} no existe`);
     if (!v.activo) throw new AppError(422, 'VARIANTE_INACTIVA', `La variante ${item.variante_id} está inactiva`);
 
+    // Orden de prelación: precio del tipo de cliente > oferta > público.
+    const precioUnit =
+      v.precio_tipo != null
+        ? Number(v.precio_tipo)
+        : v.precio_oferta != null
+          ? Number(v.precio_oferta)
+          : Number(v.precio);
+    // Un hilo que entró con la lista del proveedor y todavía no tiene precio
+    // queda en $0: venderlo así sería regalarlo. Se rechaza hasta que la tienda
+    // le ponga su precio por kilo.
+    if (!(precioUnit > 0)) {
+      throw new AppError(422, 'SIN_PRECIO',
+        `«${v.producto}${v.calibre ? ' ' + v.calibre : ''}» todavía no tiene precio. ` +
+        'Ponle su precio por kilo en Productos para poder venderlo.');
+    }
+
     // Bloquea existencias y valida disponibilidad.
     const [irows] = await conn.query(
       `SELECT id, cantidad FROM inventario
@@ -226,13 +242,6 @@ async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {
       );
     }
 
-    // Orden de prelación: precio del tipo de cliente > oferta > público.
-    const precioUnit =
-      v.precio_tipo != null
-        ? Number(v.precio_tipo)
-        : v.precio_oferta != null
-          ? Number(v.precio_oferta)
-          : Number(v.precio);
     const descLinea = round2(item.descuento ?? 0);
     const base = round2(precioUnit * item.cantidad);
     const subLinea = round2(base - descLinea);
@@ -293,6 +302,13 @@ async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {
 }
 
 async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
+  // Un apartado desde la tienda en línea se rechaza ANTES de cotizar: si no,
+  // la cotización revisaba primero las existencias del almacén en línea y el
+  // error decía "no hay" en vez de lo que de verdad pasa.
+  if (datos.apartado === true && datos.canal !== 'punto_venta') {
+    throw new AppError(422, 'APARTADO_SOLO_MOSTRADOR',
+      'Los apartados se hacen en el mostrador, no en la tienda en línea.');
+  }
   return withTransaction(async (conn) => {
     const cot = await _cotizar(conn, datos, { bloquear: true, esCliente });
     const {
@@ -639,11 +655,14 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
 /** Detalle completo del pedido (usa la conexión dada o el pool). */
 async function _obtenerConn(ejecutor, id) {
   const [prows] = await ejecutor.query(
-    `SELECT p.*, c.nombre AS cliente, u.nombre AS usuario, a.nombre AS almacen
+    `SELECT p.*, c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial,
+            u.nombre AS usuario, a.nombre AS almacen, cj.nombre AS caja
        FROM pedidos p
        LEFT JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN usuarios u ON u.id = p.usuario_id
        LEFT JOIN almacenes a ON a.id = p.almacen_id
+       LEFT JOIN sesiones_caja sc ON sc.id = p.sesion_caja_id
+       LEFT JOIN cajas cj ON cj.id = sc.caja_id
       WHERE p.id = :id LIMIT 1`,
     { id }
   );
@@ -728,6 +747,30 @@ async function _obtenerConn(ejecutor, id) {
   );
   pedido.detalle = det;
   pedido.pagos = pagos;
+
+  // Lo que se fió con este pedido: el cargo de la venta y, si se canceló, el
+  // ajuste que quitó la deuda. Es de solo lectura y sirve para que el detalle
+  // diga "se fió a su cuenta" y cuente lo que ha pasado.
+  const [credito] = await ejecutor.query(
+    `SELECT tipo, monto, notas, creado_en
+       FROM credito_movimientos WHERE pedido_id = :id ORDER BY creado_en, id`,
+    { id }
+  );
+  pedido.credito = credito;
+  // Los abonos a la CUENTA después de la venta. No son de este pedido —lo fiado
+  // se paga en la cuenta, no venta por venta— pero sin ellos el pedido parece
+  // que nadie lo ha pagado. Solo los últimos cinco: es contexto, no el estado
+  // de cuenta.
+  pedido.abonos_cuenta = [];
+  if (credito.length && pedido.cliente_id) {
+    const [abonos] = await ejecutor.query(
+      `SELECT monto, creado_en FROM credito_movimientos
+        WHERE cliente_id = :cliente AND tipo = 'abono' AND creado_en >= :desde
+        ORDER BY creado_en DESC, id DESC LIMIT 5`,
+      { cliente: pedido.cliente_id, desde: pedido.creado_en }
+    );
+    pedido.abonos_cuenta = abonos.reverse();
+  }
   return pedido;
 }
 
@@ -735,26 +778,79 @@ async function obtener(id) {
   return _obtenerConn(pool, id);
 }
 
-async function listar({ canal, estado, cliente_id, limit, offset }) {
+async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, limit, offset }) {
   const where = [];
   const params = {};
   if (canal) { where.push('p.canal = :canal'); params.canal = canal; }
   if (estado) { where.push('p.estado = :estado'); params.estado = estado; }
   if (cliente_id !== undefined) { where.push('p.cliente_id = :cliente_id'); params.cliente_id = cliente_id; }
+  // Rediseño 2026-10 (pantalla Pedidos): buscar por folio o por cliente —por su
+  // nombre o por como le dicen—, por caja y por rango de fechas. `hasta` es
+  // INCLUSIVO para quien lo teclea (el día completo), por eso se compara contra
+  // el día siguiente.
+  if (q) {
+    where.push('(p.numero_pedido LIKE :q OR c.nombre LIKE :q OR c.nombre_comercial LIKE :q)');
+    params.q = `%${q}%`;
+  }
+  if (caja_id) { where.push('sc.caja_id = :caja_id'); params.caja_id = caja_id; }
+  if (desde) { where.push('p.creado_en >= :desde'); params.desde = desde; }
+  if (hasta) { where.push('p.creado_en < DATE_ADD(:hasta, INTERVAL 1 DAY)'); params.hasta = hasta; }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  // Los mismos JOIN en el listado y en el conteo: los filtros por cliente y por
+  // caja los necesitan, y sin ellos el total no cuadraría con la lista.
+  const joins = `LEFT JOIN clientes c ON c.id = p.cliente_id
+       LEFT JOIN usuarios u ON u.id = p.usuario_id
+       LEFT JOIN sesiones_caja sc ON sc.id = p.sesion_caja_id
+       LEFT JOIN cajas cj ON cj.id = sc.caja_id`;
 
+  // `pagado` es lo COBRADO (pagos completados). Con él la pantalla dice cuánto
+  // falta de cada venta sin pedir el detalle de cada una.
   const [rows] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.canal, p.metodo_entrega, p.estado, p.total, p.creado_en,
-            c.nombre AS cliente, u.nombre AS usuario
+            p.inventario_descontado,
+            c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial,
+            u.nombre AS usuario, cj.nombre AS caja,
+            (SELECT COALESCE(SUM(pg.monto), 0) FROM pagos pg
+              WHERE pg.pedido_id = p.id AND pg.estado = 'completado') AS pagado
        FROM pedidos p
-       LEFT JOIN clientes c ON c.id = p.cliente_id
-       LEFT JOIN usuarios u ON u.id = p.usuario_id
+       ${joins}
        ${whereSql}
       ORDER BY p.creado_en DESC, p.id DESC
       LIMIT :limit OFFSET :offset`,
     { ...params, limit, offset }
   );
-  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM pedidos p ${whereSql}`, params);
+
+  // Qué se llevó: los hilos de cada pedido, con su CALIBRE (dos ROJO de distinto
+  // calibre son dos hilos) y marcando el cono. Va en una segunda consulta y no
+  // con GROUP_CONCAT, que se corta a 1,024 caracteres.
+  for (const r of rows) {
+    r.hilos = [];
+    const pagado = Number(r.pagado);
+    r.falta = INACTIVOS.includes(r.estado) ? 0 : Math.max(0, round2(Number(r.total) - pagado));
+  }
+  if (rows.length) {
+    const [lineas] = await pool.query(
+      `SELECT d.pedido_id, pr.nombre AS producto, pr.grosor_calibre AS calibre,
+              pv.tipo_presentacion
+         FROM pedido_detalle d
+         JOIN producto_variantes pv ON pv.id = d.variante_id
+         JOIN productos pr          ON pr.id = pv.producto_id
+        WHERE d.pedido_id IN (:ids)
+        ORDER BY d.id`,
+      { ids: rows.map((r) => r.id) }
+    );
+    const porPedido = new Map(rows.map((r) => [r.id, r]));
+    for (const l of lineas) {
+      const r = porPedido.get(l.pedido_id);
+      const hilo = `${l.producto}${l.calibre ? ' ' + l.calibre : ''}${l.tipo_presentacion === 'cono' ? ' · cono' : ''}`;
+      if (r && !r.hilos.includes(hilo)) r.hilos.push(hilo);
+    }
+  }
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM pedidos p ${joins} ${whereSql}`,
+    params
+  );
   return { rows, total };
 }
 
@@ -1711,9 +1807,48 @@ async function listarApartados({ cliente_id, orden } = {}) {
       ORDER BY ${orderBy}`,
     params
   );
+
+  // Qué se guardó y cuántos kilos (rediseño 2026-10): la pantalla dice "NEGRO
+  // 2/30 · 3 paquetes" y cuánta mercancía de la bodega ya tiene dueño. Solo
+  // lectura, en una consulta aparte para no tocar la vista.
+  for (const r of rows) { r.hilos = []; r.kg = 0; }
+  let kgApartado = 0;
+  if (rows.length) {
+    const [lineas] = await pool.query(
+      `SELECT d.pedido_id, d.cantidad, pr.nombre AS producto, pr.grosor_calibre AS calibre,
+              pv.tipo_presentacion, pv.peso_kg
+         FROM pedido_detalle d
+         JOIN producto_variantes pv ON pv.id = d.variante_id
+         JOIN productos pr          ON pr.id = pv.producto_id
+        WHERE d.pedido_id IN (:ids)
+        ORDER BY d.id`,
+      { ids: rows.map((r) => r.pedido_id) }
+    );
+    const porPedido = new Map(rows.map((r) => [r.pedido_id, r]));
+    for (const l of lineas) {
+      const r = porPedido.get(l.pedido_id);
+      if (!r) continue;
+      const kg = Number(l.cantidad);
+      // Cuántos paquetes son, con el peso de referencia de la presentación.
+      // Es aproximado (cada bulto pesa distinto) y por eso se redondea.
+      const pesoPaquete = Number(l.peso_kg);
+      const paquetes = l.tipo_presentacion === 'paquete' && pesoPaquete > 0
+        ? Math.max(1, Math.round(kg / pesoPaquete))
+        : null;
+      r.hilos.push({
+        hilo: `${l.producto}${l.calibre ? ' ' + l.calibre : ''}`,
+        tipo_presentacion: l.tipo_presentacion,
+        kg: round3(kg),
+        paquetes,
+      });
+      r.kg = round3(r.kg + kg);
+      kgApartado += kg;
+    }
+  }
   return {
     items: rows,
     num_apartados: rows.length,
+    kg_apartado: round3(kgApartado),
     // Cuánto dinero de la tienda está comprometido en mercancía guardada.
     total_apartado: round2(rows.reduce((s, r) => s + Number(r.total), 0)),
     // Y cuánto han dejado ya.
@@ -1721,7 +1856,36 @@ async function listarApartados({ cliente_id, orden } = {}) {
   };
 }
 
+/**
+ * Las cifras de arriba de la pantalla Pedidos. En "por cobrar", `ventas` es en
+ * realidad el número de CLIENTES que deben (ver abajo).
+ */
+async function resumen() {
+  const vivo = "estado NOT IN ('cancelado', 'devuelto')";
+  const [[hoy]] = await pool.query(
+    `SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total FROM pedidos
+      WHERE ${vivo} AND DATE(creado_en) = CURDATE()`
+  );
+  const [[semana]] = await pool.query(
+    `SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total FROM pedidos
+      WHERE ${vivo} AND creado_en >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)`
+  );
+  // Lo fiado se debe en la CUENTA del cliente, no en cada venta: los abonos se
+  // aplican al saldo, así que una venta fiada sigue "pendiente" aunque el
+  // cliente ya haya pagado. Lo que de verdad se debe es el saldo de las cuentas.
+  const [[fiado]] = await pool.query(
+    `SELECT COUNT(*) AS ventas, COALESCE(SUM(saldo), 0) AS monto FROM v_clientes_saldo WHERE saldo > 0`
+  );
+  const [[canceladas]] = await pool.query(
+    `SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total FROM pedidos
+      WHERE estado IN ('cancelado', 'devuelto') AND creado_en >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`
+  );
+  const n = (x) => ({ ventas: Number(x.ventas), total: round2(Number(x.total ?? x.monto)) });
+  return { hoy: n(hoy), semana: n(semana), por_cobrar: n(fiado), canceladas_mes: n(canceladas) };
+}
+
 module.exports = {
+  resumen,
   crearPedido, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,
   abonarApartado, entregarApartado, listarApartados,

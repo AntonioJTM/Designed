@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -46,8 +46,8 @@ const cerrarSchema = z.object({ monto_final: z.coerce.number().nonnegative() }).
 router.use(...soloStaff);
 
 // Cualquier cajero necesita ver las cajas para abrir su turno, pero darlas de
-// alta o modificarlas es configuración: solo administradores.
-const soloAdmin = requireRol('administrador');
+// alta o modificarlas es configuración: lo da Permisos («Almacenes y Listas de precio»).
+const soloAdmin = requirePermiso('ver:almacenes');
 
 router.get('/cajas', controller.listarCajas);
 router.post('/cajas', soloAdmin, validate(cajaSchema), controller.crearCaja);
@@ -57,7 +57,7 @@ router.delete('/cajas/:id', soloAdmin, controller.eliminarCaja);
 router.post('/sesiones', validate(abrirSchema), controller.abrirSesion);
 router.get('/sesiones/abierta', controller.sesionAbierta); // ?caja_id=
 router.get('/sesiones/:id', controller.obtenerSesion);
-router.post('/sesiones/:id/movimientos', validate(movimientoSchema), controller.registrarMovimiento);
+router.post('/sesiones/:id/movimientos', requirePermiso('hacer:mover_efectivo'), validate(movimientoSchema), controller.registrarMovimiento);
 router.post('/sesiones/:id/cerrar', validate(cerrarSchema), controller.cerrarSesion);
 
 module.exports = router;

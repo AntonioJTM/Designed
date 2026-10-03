@@ -27,6 +27,8 @@ export interface Usuario {
   ultimo_acceso?: string | null;
   creado_en: string;
   actualizado_en: string;
+  /** Lo que su puesto puede ver y hacer (Administración → Permisos). */
+  permisos?: string[];
 }
 
 /** Rol de staff (tabla `roles`). */
@@ -64,4 +66,6 @@ export interface SesionActual {
   nombre: string;
   correo: string;
   rol?: string; // solo staff
+  /** Claves de Permisos del puesto (solo staff). El administrador las trae todas. */
+  permisos?: string[];
 }

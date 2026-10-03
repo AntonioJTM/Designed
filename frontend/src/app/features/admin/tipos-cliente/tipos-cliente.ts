@@ -5,12 +5,24 @@ import { ApiError } from '../../../core/models/auth.models';
 import { TipoClienteFormModal } from './tipo-cliente-form-modal';
 
 /**
- * Las listas de precio. Cada tipo de cliente es una: el marcado como público
- * cobra `producto_variantes.precio` y los demás llevan su propio precio por
- * presentación, que se captura en la pantalla de presentaciones del producto.
+ * Una lista como la trae `GET /tipos-cliente`: además del tipo, cuántos clientes
+ * la usan y en cuántas presentaciones tiene precio propio (de solo lectura).
+ */
+export interface ListaPrecio extends TipoCliente {
+  num_clientes?: number | string;
+  num_precios?: number | string;
+}
+
+/**
+ * Las listas de precio (rediseño 2026-10). Cada tipo de cliente es una: el
+ * marcado como público cobra `producto_variantes.precio` y los demás llevan su
+ * propio precio por presentación, que se captura en la pantalla de
+ * presentaciones del producto.
  *
- * Hasta ahora solo se podían crear por API; el punto de venta ya ofrecía el
- * selector pero no había dónde darlos de alta.
+ * La tabla dice si cada lista SE USA —cuántos clientes la tienen y cuántas
+ * presentaciones le pusieron precio—: sin eso no hay forma de saber si apagar
+ * una lista le cambia el precio a alguien. El alta, la edición y la baja son un
+ * modal; el público no se puede eliminar ni desactivar.
  */
 @Component({
   selector: 'app-tipos-cliente',
@@ -20,13 +32,13 @@ import { TipoClienteFormModal } from './tipo-cliente-form-modal';
 export class TiposCliente {
   private readonly catalogo = inject(CatalogoService);
 
-  readonly tipos = signal<TipoCliente[]>([]);
+  readonly tipos = signal<ListaPrecio[]>([]);
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
 
   /** `null` = cerrado, `'nuevo'` = alta, un tipo = edición de ese renglón. */
-  readonly modal = signal<TipoCliente | 'nuevo' | null>(null);
+  readonly modal = signal<ListaPrecio | 'nuevo' | null>(null);
 
   constructor() {
     this.cargar();
@@ -46,8 +58,28 @@ export class TiposCliente {
     });
   }
 
+  /** Clientes que la tienen como su lista habitual (`null` si el servidor no lo dijo). */
+  clientes(t: ListaPrecio): number | null {
+    return t.num_clientes === undefined ? null : Number(t.num_clientes);
+  }
+
+  /** Presentaciones con precio propio en la lista. */
+  precios(t: ListaPrecio): number | null {
+    return t.num_precios === undefined ? null : Number(t.num_precios);
+  }
+
+  /** La línea de abajo del nombre: qué es la lista y si de verdad se usa. */
+  nota(t: ListaPrecio): string {
+    if (t.es_publico) return 'La de mostrador. No se puede borrar ni apagar.';
+    const precios = this.precios(t);
+    const clientes = this.clientes(t);
+    if (precios === 0 && clientes === 0) return 'Sin uso por ahora';
+    if (precios === 0) return 'Sin precio propio todavía: cobra el precio público';
+    return 'Precio propio en cada presentación';
+  }
+
   /** Tipo que edita el modal (`null` cuando es un alta). */
-  tipoModal(): TipoCliente | null {
+  tipoModal(): ListaPrecio | null {
     const m = this.modal();
     return m === 'nuevo' || m === null ? null : m;
   }
@@ -58,7 +90,7 @@ export class TiposCliente {
     this.modal.set('nuevo');
   }
 
-  abrirEdicion(t: TipoCliente): void {
+  abrirEdicion(t: ListaPrecio): void {
     this.mensaje.set(null);
     this.error.set(null);
     this.modal.set(t);
@@ -73,19 +105,9 @@ export class TiposCliente {
     this.cargar();
   }
 
-  eliminar(t: TipoCliente): void {
-    if (!confirm(`¿Eliminar la lista "${t.nombre}"?`)) return;
-    this.error.set(null);
-    this.mensaje.set(null);
-    this.catalogo.eliminarTipoCliente(t.id).subscribe({
-      next: () => {
-        this.mensaje.set(`Se eliminó "${t.nombre}".`);
-        this.cargar();
-      },
-      // El backend rechaza borrar el público y los que tienen precios o pedidos,
-      // con un mensaje que ya explica qué hacer: se muestra tal cual.
-      error: (e) => this.error.set(this.msg(e)),
-    });
+  eliminado(t: TipoCliente): void {
+    this.mensaje.set(`Se eliminó "${t.nombre}".`);
+    this.cargar();
   }
 
   private msg(e: unknown): string {

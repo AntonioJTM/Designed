@@ -1,111 +1,124 @@
-<div class="page-head">
-  <h1>Pregúntame</h1>
-  @if (empezado()) {
-    <button class="btn btn-ghost" (click)="limpiar()">Empezar de nuevo</button>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Pregúntame</h1>
+      <p class="sub">
+        Pregunta en palabras normales. Contesta con los datos de la tienda y dice qué consultó. No cambia nada.
+      </p>
+    </div>
+    @if (empezado()) {
+      <div class="acciones">
+        <button type="button" class="btn btn-ghost" (click)="limpiar()" [disabled]="pensando()">
+          Empezar de nuevo
+        </button>
+      </div>
+    }
+  </header>
+
+  @if (capacidades(); as cap) {
+    @if (!cap.configurado) {
+      <!-- Sin llave el asistente no puede contestar nada. Se dice de una vez, en
+           vez de dejar que lo intente y falle en la primera pregunta. -->
+      <p class="alert">
+        El asistente no está configurado: falta la llave de la IA. Se pone en el
+        archivo <span class="mono">.env</span> del servidor, en
+        <span class="mono">IA_API_KEY</span>.
+      </p>
+    }
   }
-</div>
 
-@if (capacidades(); as cap) {
-  @if (!cap.configurado) {
-    <!-- Sin llave el asistente no puede contestar nada. Se dice de una vez, en
-         vez de dejar que lo intente y falle en la primera pregunta. -->
-    <p class="alert">
-      El asistente no está configurado: falta la llave de la IA. Se pone en el
-      archivo <span class="mono">.env</span> del servidor, en
-      <span class="mono">IA_API_KEY</span>.
-    </p>
-  }
-}
+  @if (error()) { <p class="alert">{{ error() }}</p> }
 
-@if (error()) { <p class="alert">{{ error() }}</p> }
-
-@if (!empezado()) {
-  <!-- Con un cuadro de texto vacío nadie sabe qué preguntar: se ofrecen las
-       preguntas de siempre, en las palabras de la tienda. -->
-  <div class="card">
-    <p class="muted" style="margin-top: 0">
-      Pregúntame lo que quieras del negocio, como se lo preguntarías a alguien.
-      Contesto con los datos de tu sistema.
-    </p>
+  <section class="card conversacion">
     @if (capacidades(); as cap) {
-      <div class="ejemplos">
+      <!-- Con un cuadro de texto vacío nadie sabe qué preguntar: se ofrecen las
+           preguntas de siempre, en las palabras de la tienda. -->
+      <div class="sugerencias">
         @for (e of cap.ejemplos; track e) {
-          <button class="ejemplo" (click)="usarEjemplo(e)">{{ e }}</button>
+          <button type="button" class="sugerencia" (click)="usarEjemplo(e)" [disabled]="pensando()">{{ e }}</button>
         }
       </div>
 
-      <button class="enlace" (click)="verQuePuede.set(!verQuePuede())">
-        {{ verQuePuede() ? 'Ocultar' : 'Ver' }} todo lo que puedo consultar
-        ({{ cap.herramientas.length }})
-      </button>
-      @if (verQuePuede()) {
-        <ul class="lista-capacidades">
-          @for (h of cap.herramientas; track h.nombre) {
-            <li><b>{{ h.descripcion }}</b></li>
-          }
-        </ul>
-        <p class="muted" style="font-size: 0.78rem">
-          Solo consulto: no puedo registrar ventas, mover inventario ni cambiar
-          nada. Y las cifras salen de las mismas consultas que usan las
-          pantallas, así que no se contradicen.
-        </p>
-      }
-    }
-  </div>
-}
-
-@if (empezado()) {
-  <div class="card chat" #hilo>
-    @for (m of mensajes(); track $index) {
-      <div class="turno" [class.mio]="m.quien === 'yo'">
-        <div class="burbuja" [class.err]="m.error">
-          {{ m.texto }}
-        </div>
-
-        <!-- DE DÓNDE SALIÓ. Es lo que hace que se pueda confiar en la cifra:
-             si dice "vendiste $12,400", aquí se ve que lo consultó y no que se
-             lo inventó. -->
-        @if (m.consultado && m.consultado.length > 0) {
-          <div class="de-donde">
-            Consulté:
-            @for (c of m.consultado; track $index) {
-              <span class="fuente">{{ nombreConsulta(c) }}</span>
+      <div class="que-puede">
+        <button type="button" class="btn-enlace" (click)="verQuePuede.set(!verQuePuede())"
+                [attr.aria-expanded]="verQuePuede()">
+          {{ verQuePuede() ? 'Ocultar' : 'Ver' }} todo lo que puedo consultar ({{ cap.herramientas.length }})
+        </button>
+        @if (verQuePuede()) {
+          <ul class="lista-que-puede">
+            @for (h of cap.herramientas; track h.nombre) {
+              <li>{{ h.descripcion }}</li>
             }
+          </ul>
+          <p class="muted chico">
+            Solo consulto: no puedo registrar ventas, mover inventario ni cambiar
+            nada. Y las cifras salen de las mismas consultas que usan las
+            pantallas, así que no se contradicen.
+          </p>
+        }
+      </div>
+    }
+
+    @if (empezado()) {
+      <!-- El hilo tiene alto acotado y scroll propio: así el cuadro de preguntar
+           no se va de la pantalla al crecer la charla. -->
+      <div class="charla" #hilo aria-live="polite">
+        @for (m of mensajes(); track $index) {
+          <div class="mensaje" [class.mio]="m.quien === 'yo'">
+            <div class="globo" [class.fallo]="m.error">
+              <span class="texto">{{ m.texto }}</span>
+              <!-- DE DÓNDE SALIÓ. Es lo que hace que se pueda confiar en la cifra:
+                   si dice "vendiste $12,400", aquí se ve que lo consultó y no que se
+                   lo inventó. -->
+              @if (m.quien === 'asistente' && !m.error) {
+                <span class="nota">{{ nota(m) }}</span>
+              }
+              @if (m.incompleto) {
+                <span class="nota">No pude terminar de resolverlo.</span>
+              }
+            </div>
           </div>
         }
-        @if (m.incompleto) {
-          <div class="de-donde">No pude terminar de resolverlo.</div>
+
+        @if (pensando()) {
+          <div class="mensaje">
+            <div class="globo pensando">
+              <span class="latidos" aria-hidden="true"><i></i><i></i><i></i></span>
+              @if (tardando()) {
+                <span class="tardanza">Consultando tus datos… suele tardar medio minuto.</span>
+              } @else {
+                <span class="oculto">Pensando</span>
+              }
+            </div>
+          </div>
         }
       </div>
+    } @else {
+      <p class="muted invitacion">
+        Pregúntame lo que quieras del negocio, como se lo preguntarías a alguien.
+        Contesto con los datos de tu sistema.
+      </p>
     }
 
-    @if (pensando()) {
-      <div class="turno">
-        <div class="burbuja pensando">
-          <span class="punto"></span><span class="punto"></span><span class="punto"></span>
-          @if (tardando()) {
-            <span class="tardanza">Consultando tus datos… suele tardar medio minuto.</span>
-          }
-        </div>
-      </div>
-    }
-  </div>
-}
-
-<div class="card preguntar">
-  <textarea
-    [(ngModel)]="pregunta"
-    name="pregunta"
-    rows="2"
-    placeholder="¿Cuánto vendí hoy?"
-    (keydown.enter)="$event.preventDefault(); enviar()"
-    [disabled]="pensando()"
-  ></textarea>
-  <button class="btn btn-primary" (click)="enviar()" [disabled]="pensando() || !pregunta.trim()">
-    {{ pensando() ? 'Pensando…' : 'Preguntar' }}
-  </button>
+    <div class="caja-pregunta">
+      <label class="field">
+        Tu pregunta
+        <textarea
+          [(ngModel)]="pregunta"
+          name="pregunta"
+          rows="2"
+          placeholder="¿Cuánto vendí esta semana?"
+          (keydown.enter)="$event.preventDefault(); enviar()"
+          [disabled]="pensando()"
+        ></textarea>
+      </label>
+      <button type="button" class="btn btn-primary" (click)="enviar()" [disabled]="pensando() || !pregunta.trim()">
+        {{ pensando() ? 'Pensando…' : 'Preguntar' }}
+      </button>
+    </div>
+    <p class="pie">
+      Enter para enviar. Suele tardar medio minuto en contestar: está consultando tus datos.
+      Puedo equivocarme al interpretar la pregunta, así que revisa de dónde saqué cada cifra.
+    </p>
+  </section>
 </div>
-<p class="muted" style="font-size: 0.75rem">
-  Enter para enviar. Puedo equivocarme al interpretar la pregunta, así que revisa
-  de dónde saqué cada cifra.
-</p>

@@ -1,0 +1,169 @@
+<!--
+  No se cierra al hacer clic en el fondo, igual que los demás modales del panel:
+  un clic distraído borraría la captura. Se sale con la ✕, con "Cerrar" o con
+  Escape.
+-->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-recibo-titulo">
+    <div class="modal-head">
+      <h2 id="modal-recibo-titulo">
+        Recibo de {{ actual()?.usuario }}
+        <span class="muted" style="font-weight: 400; font-size: 15px; text-transform: capitalize"> · {{ actual()?.rol }}</span>
+      </h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      @if (actual(); as r) {
+        <div class="columna" style="gap: 20px">
+          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (mensaje()) { <p class="ok-msg" style="margin: 0">{{ mensaje() }}</p> }
+
+          <!-- De dónde sale lo que se le paga, renglón por renglón. -->
+          <div class="resumen-recibo">
+            <div class="dato"><span>Sueldo base</span><span>{{ r.sueldo_base | dinero }}</span></div>
+            <div class="dato">
+              <span>
+                Comisión
+                @if (num(r.porcentaje_comision) > 0) {
+                  · {{ num(r.porcentaje_comision) }}% de {{ r.ventas_netas | dinero }} de venta neta
+                } @else {
+                  · no recibe comisión
+                }
+              </span>
+              <span>{{ num(r.porcentaje_comision) > 0 ? (r.comision | dinero) : '—' }}</span>
+            </div>
+            <div class="dato">
+              <span>Horas extra y otros</span>
+              <span class="pos">{{ num(r.otras_percepciones) ? '+' + (r.otras_percepciones | dinero) : '—' }}</span>
+            </div>
+            <div class="dato">
+              <span>Descuentos</span>
+              <span style="color: var(--alerta-t)">{{ num(r.deducciones) ? '−' + (r.deducciones | dinero) : '—' }}</span>
+            </div>
+            <div class="dato total">
+              <span>A pagar</span>
+              <span [class.neg]="num(r.total_pagar) < 0">{{ r.total_pagar | dinero }}</span>
+            </div>
+          </div>
+
+          <div class="dos">
+            <!-- Ajustes capturados a mano -->
+            <section>
+              <h3>Ajustes del recibo</h3>
+              @if (r.conceptos.length === 0) {
+                <p class="muted" style="margin: 0; font-size: 14px">Sin horas extra ni descuentos capturados.</p>
+              } @else {
+                @for (c of r.conceptos; track c.id) {
+                  <div class="concepto">
+                    <div class="que">
+                      <b style="font-weight: 500">
+                        {{ etiquetaConcepto(c.clave) }}
+                        @if (c.cantidad) { <span style="display: inline"> · {{ num(c.cantidad) }} h</span> }
+                      </b>
+                      @if (c.descripcion) { <span>{{ c.descripcion }}</span> }
+                    </div>
+                    <span class="monto" [class.neg]="c.tipo === 'deduccion'" [class.pos]="c.tipo !== 'deduccion'">
+                      {{ c.tipo === 'deduccion' ? '−' : '+' }}{{ c.importe | dinero }}
+                    </span>
+                    @if (editable()) {
+                      <button type="button" class="btn btn-danger btn-sm" [disabled]="ocupado()" (click)="quitarConcepto(c.id)">
+                        Quitar
+                      </button>
+                    }
+                  </div>
+                }
+              }
+
+              @if (editable()) {
+                <div class="form-concepto">
+                  <label class="field">
+                    Concepto
+                    <select [(ngModel)]="form.clave" name="clave">
+                      <option value="horas_extra">Horas extra</option>
+                      <option value="falta">Falta</option>
+                      <option value="descuento">Descuento</option>
+                    </select>
+                  </label>
+                  @if (form.clave === 'horas_extra') {
+                    <label class="field">
+                      Horas
+                      <input type="number" step="0.5" min="0" [(ngModel)]="form.cantidad" name="cantidad" />
+                    </label>
+                  }
+                  <label class="field">
+                    Importe
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      [(ngModel)]="form.importe"
+                      name="importe"
+                      [placeholder]="form.clave === 'horas_extra' ? 'automático' : '0.00'"
+                    />
+                  </label>
+                  <label class="field ancho">
+                    Nota
+                    <input type="text" [(ngModel)]="form.descripcion" name="descripcion" placeholder="Opcional" />
+                  </label>
+                  <button type="button" class="btn btn-primary" [disabled]="ocupado()" (click)="agregarConcepto()">
+                    Agregar
+                  </button>
+                </div>
+                @if (form.clave === 'horas_extra') {
+                  <p class="nota-chica">
+                    Si dejas el importe vacío se calcula con el valor de hora configurado para este empleado.
+                  </p>
+                }
+              } @else {
+                <p class="nota-chica">Esta nómina ya no está en borrador: el recibo solo se consulta.</p>
+              }
+            </section>
+
+            <!-- Ventas que formaron la comisión -->
+            <section>
+              <h3>Ventas de la semana</h3>
+              @if (!ventas()) {
+                <p class="muted" style="margin: 0; font-size: 14px">Cargando…</p>
+              } @else if (ventas()!.pedidos.length === 0) {
+                <p class="muted" style="margin: 0; font-size: 14px">Sin ventas registradas a su nombre en esta semana.</p>
+              } @else {
+                <div class="tabla-scroll">
+                  <table class="grid">
+                    <thead>
+                      <tr><th>Pedido</th><th>Fecha</th><th class="num">Venta neta</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (v of ventas()!.pedidos; track v.id) {
+                        <tr>
+                          <td>
+                            {{ v.numero_pedido }}
+                            <!-- El canal es un dato del pedido (los viejos pueden ser en línea), no un filtro. -->
+                            <div class="muted" style="font-size: 12px">{{ v.canal === 'punto_venta' ? 'Mostrador' : 'En línea' }}</div>
+                          </td>
+                          <td class="muted">{{ v.creado_en | fecha }}</td>
+                          <td class="num">{{ v.venta_neta | dinero }}</td>
+                        </tr>
+                      }
+                      <tr>
+                        <td colspan="2"><b>Base comisionable</b></td>
+                        <td class="num"><b>{{ ventas()!.venta_neta | dinero }}</b></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="nota-chica">
+                  Venta neta = subtotal − descuento. Sin IVA ni envío, y sin lo cancelado ni lo devuelto.
+                </p>
+              }
+            </section>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+    </div>
+  </div>
+</div>

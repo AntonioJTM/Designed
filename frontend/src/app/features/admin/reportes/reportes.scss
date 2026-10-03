@@ -1,0 +1,38 @@
+// Reportes. Lo común (pestañas, KPIs, tarjetas, tablas, barras y columnas) sale
+// de styles.scss; aquí solo lo propio de esta pantalla.
+
+// "Desde [fecha]" en el encabezado: la etiqueta al lado del campo, como en el diseño.
+.rango-fecha {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--tinta-3);
+}
+.rango-fecha input {
+  height: 44px; width: 170px; padding: 0 12px;
+  border: 1px solid var(--borde-campo); border-radius: 8px; background: #fff;
+  font: inherit; font-size: 14px; color: var(--tinta);
+}
+.rango-fecha input:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533; }
+
+// Dentro de una tarjeta los bloques van con aire entre sí.
+.card > * + * { margin-top: 14px; }
+.card > .card-head + * { margin-top: 0; }
+.card-head { margin-bottom: 16px; }
+
+// Un día sin ventas se ve más apagado: está para que la serie no brinque, no
+// para leerse igual que uno con ventas.
+tr.sin-ventas td { color: var(--tinta-3); }
+table.grid tfoot td {
+  font-weight: 600; border-top: 1px solid var(--borde); border-bottom: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+// El total partido en lo que es venta, descuento e IVA.
+.desglose { display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 13px; color: var(--tinta-3); }
+.desglose b { color: var(--tinta); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 4px; }
+
+// La cola de "Más vendidos": el dinero, alineado a la derecha.
+.cola { font-size: 13px; text-align: right; white-space: nowrap; color: var(--tinta-2); }
+
+.hilo { font-weight: 500; }
+.chico { font-size: 12px; }
+.nowrap { white-space: nowrap; }

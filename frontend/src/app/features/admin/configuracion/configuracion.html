@@ -1,64 +1,85 @@
-<div class="page-head">
-  <h1>Configuración de la tienda</h1>
-  <button class="btn btn-primary" (click)="guardar()" [disabled]="!hayCambios() || guardando()">
-    {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
-  </button>
-</div>
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Configuración</h1>
+      <p class="sub">Los datos de la tienda que aparecen en tickets y avisos.</p>
+    </div>
+    <div class="acciones">
+      <button type="button" class="btn btn-primary" (click)="guardar()" [disabled]="!hayCambios() || guardando()">
+        {{ guardando() ? 'Guardando…' : 'Guardar' }}
+      </button>
+    </div>
+  </header>
 
-<p class="muted">
-  Lo que el cliente ve al comprar en línea: cuánto se le cobra por enviarle, a qué cuenta
-  deposita y dónde recoge su pedido.
-</p>
+  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
 
-@if (error()) { <p class="alert">{{ error() }}</p> }
-@if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
-
-@if (cargando()) {
-  <p class="muted">Cargando…</p>
-} @else {
-  <div class="config-grupos">
+  @if (cargando()) {
+    <p class="muted">Cargando…</p>
+  } @else {
     @for (g of grupos; track g.titulo) {
       @if (opcionesDe(g.prefijos).length) {
         <section class="card">
-          <h2>{{ g.titulo }}</h2>
-          @for (o of opcionesDe(g.prefijos); track o.clave) {
-            <label class="config-campo">
-              <span class="config-desc">{{ o.descripcion || o.clave }}</span>
-              @if (esNumero(o.clave)) {
-                <div class="config-moneda">
-                  <span>$</span>
+          <div class="card-head">
+            <div>
+              <h2>{{ g.titulo }}</h2>
+              @if (g.sub) { <p>{{ g.sub }}</p> }
+            </div>
+          </div>
+          <div class="campos">
+            @for (o of opcionesDe(g.prefijos); track o.clave) {
+              <label class="field" [style.flex]="campo(o).ancho || null">
+                {{ campo(o).etiqueta }}
+                @if (campo(o).tipo === 'number') {
+                  <input type="number" min="0" step="0.01" [(ngModel)]="valores[o.clave]" [name]="o.clave" />
+                } @else {
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    [type]="campo(o).tipo || 'text'"
                     [(ngModel)]="valores[o.clave]"
                     [name]="o.clave"
+                    [placeholder]="campo(o).placeholder || ''"
+                    maxlength="500"
                   />
-                </div>
-              } @else {
-                <input type="text" [(ngModel)]="valores[o.clave]" [name]="o.clave" maxlength="500" />
-              }
-            </label>
-          }
+                }
+              </label>
+            }
+          </div>
         </section>
       }
     }
 
+    <!-- Claves nuevas que todavía no tienen tarjeta: se ven con su descripción. -->
     @if (otras().length) {
       <section class="card">
-        <h2>Otros</h2>
-        @for (o of otras(); track o.clave) {
-          <label class="config-campo">
-            <span class="config-desc">{{ o.descripcion || o.clave }}</span>
-            <input type="text" [(ngModel)]="valores[o.clave]" [name]="o.clave" maxlength="500" />
-          </label>
-        }
+        <div class="card-head"><div><h2>Otros</h2></div></div>
+        <div class="campos">
+          @for (o of otras(); track o.clave) {
+            <label class="field">
+              {{ o.descripcion || o.clave }}
+              <input type="text" [(ngModel)]="valores[o.clave]" [name]="o.clave" maxlength="500" />
+            </label>
+          }
+        </div>
       </section>
     }
-  </div>
+  }
 
-  <p class="muted">
-    Sin costo de envío capturado, enviar a domicilio sale gratis. Sin los datos de
-    transferencia, al cliente que elija esa forma de pago se le pide que llame a la tienda.
-  </p>
-}
+  <!--
+    TIENDA EN LÍNEA APAGADA (2026-10, decisión del usuario: "sin eliminarla, solo
+    comentada"). La tarjeta lo dice para que nadie la busque. Para volver a
+    abrirla: rutas en app.routes.ts (ver su nota), el login como cliente en
+    AuthService.login, y aquí el grupo de envío en configuracion.ts.
+  -->
+  <section class="card suave">
+    <div class="card-head">
+      <div>
+        <h2>Tienda en línea</h2>
+        <p>
+          Apagada. El catálogo, el carrito y el registro de clientes siguen guardados en el sistema, sin
+          borrar nada, para cuando se quiera abrir.
+        </p>
+      </div>
+      <span class="pill gris" style="font-size: 13px; padding: 5px 12px">Apagada</span>
+    </div>
+  </section>
+</div>

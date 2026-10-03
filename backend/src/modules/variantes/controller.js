@@ -1,6 +1,7 @@
 'use strict';
 
 const service = require('./service');
+const permisos = require('../permisos/service');
 const { parsePagination, parseBool } = require('../../utils/query');
 
 async function listar(req, res, next) {
@@ -15,6 +16,8 @@ async function listar(req, res, next) {
       limit,
       offset,
     });
+    // Ruta pública y la usa la caja para buscar: el costo solo a quien lo puede ver.
+    await permisos.sinCostosSiNoVe(req, data.items ?? data);
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -76,6 +79,7 @@ async function listarCodigos(req, res, next) {
 async function resolverCodigo(req, res, next) {
   try {
     const data = await service.resolverCodigo(req.params.codigo);
+    await permisos.sinCostosSiNoVe(req, data?.variante);
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);

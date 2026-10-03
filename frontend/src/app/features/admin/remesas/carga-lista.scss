@@ -1,0 +1,80 @@
+/* La lista completa del proveedor (varios hilos). */
+:host { display: contents; }
+.card > .card-head:last-child { margin-bottom: 0; }
+
+.campos { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+.campos > .field { flex: 1 1 200px; }
+.campos > .field.ancho { flex: 2 1 320px; }
+.nota { margin: 12px 0 0; font-size: 13px; color: var(--tinta-3); line-height: 1.45; }
+
+.soltar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 18px; border: 2px dashed var(--borde-campo); border-radius: 10px; background: var(--superficie-2);
+}
+.soltar.encima { border-color: var(--acento); background: var(--acento-suave); }
+.soltar-archivo { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.icono-archivo {
+  flex: 0 0 44px; width: 44px; height: 44px; border-radius: 8px;
+  background: var(--ok-f); color: var(--ok-t);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.soltar-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.soltar-texto b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.soltar-texto span { font-size: 13px; color: var(--tinta-3); }
+
+.resumen { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.caja-dato {
+  flex: 1 1 140px; padding: 12px 14px; border-radius: 8px; background: var(--fondo);
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.caja-dato > span, .caja-dato > small { font-size: 12px; color: var(--tinta-3); }
+.caja-dato > b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.doc-linea { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 14px; }
+.alert, .aviso { margin: 0 0 14px; }
+.alert ul, .aviso ul { margin: 6px 0 4px 1.2rem; padding: 0; font-size: 13px; }
+
+/* Los hilos que se crean: material y línea, en un recuadro aparte. */
+.nuevos { padding: 14px 16px; margin-bottom: 14px; border-radius: 8px; background: var(--info-f); }
+.nuevos > p { margin: 0 0 12px; font-size: 14px; color: var(--tinta-2); line-height: 1.45; }
+.nuevos .campos { margin-bottom: 0; }
+.nuevos .alert { margin: 12px 0 0; }
+
+.falta-precio { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.falta-precio > span { flex: 1 1 320px; line-height: 1.45; }
+
+table.grid.hilos { min-width: 740px; }
+table.grid.cargas { min-width: 640px; }
+table.grid .sub { font-size: 12px; color: var(--tinta-3); margin-top: 2px; }
+table.grid td .pill { margin-left: 6px; }
+
+/* El panel de avance mientras carga: qué hace, la barra y cada hilo. */
+.error-carga { margin: 14px 0 0; }
+.estado-carga {
+  margin-top: 14px; padding: 16px 18px; border-radius: 10px;
+  border: 1px solid var(--borde); background: var(--superficie-2);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.estado-cabeza { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.estado-cabeza .reloj { margin-left: auto; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+.avance-barra { height: 8px; border-radius: 4px; background: var(--fondo); overflow: hidden; }
+.avance-barra > span { display: block; height: 100%; border-radius: 4px; background: var(--acento); transition: width 0.3s; }
+.avance-cifra { margin: 0; font-size: 13px; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+.avance-hilos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.avance-hilos li { display: flex; align-items: center; gap: 8px; }
+.avance-hilos .marca {
+  flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--borde); display: inline-flex; align-items: center; justify-content: center;
+}
+.avance-hilos li.cargando .marca { border-color: var(--acento); border-top-color: transparent; animation: girar 0.8s linear infinite; }
+.avance-hilos li.listo .marca { border-color: var(--ok-t); background: var(--ok-t); color: #fff; }
+.estado-carga .nota { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .avance-hilos li.cargando .marca { animation-duration: 2s; } }
+table.grid.hilos td.num, table.grid.hilos td:nth-child(2) { white-space: nowrap; }
+/* La nota del hilo ("Se crea sin precio · ya tienes…") baja de renglón en vez de ensanchar la tabla. */
+table.grid.hilos td:first-child { min-width: 220px; max-width: 340px; }
+
+.confirmar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 14px; font-size: 13px;
+}

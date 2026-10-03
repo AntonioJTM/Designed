@@ -3,6 +3,11 @@
 const service = require('./service');
 const { parsePagination, parseBool } = require('../../utils/query');
 
+/** Un día 'YYYY-MM-DD' o undefined: el filtro de fechas del kardex. */
+function fechaDia(v) {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined;
+}
+
 async function listarStock(req, res, next) {
   try {
     const { page, limit, offset } = parsePagination(req.query);
@@ -11,6 +16,9 @@ async function listarStock(req, res, next) {
       variante_id: req.query.variante_id ? Number(req.query.variante_id) : undefined,
       q: req.query.q,
       bajo_stock: parseBool(req.query.bajo_stock),
+      apartado: parseBool(req.query.apartado),
+      // La pantalla quiere saber qué fue lo último que le pasó a cada renglón.
+      conUltimoMovimiento: parseBool(req.query.ultimo_movimiento),
       page,
       limit,
       offset,
@@ -47,6 +55,12 @@ async function listarMovimientos(req, res, next) {
       tipo: req.query.tipo,
       // Agrupación en lenguaje de tienda: ventas, traspasos, desarmes…
       concepto: req.query.concepto,
+      // Color, calibre, SKU, folio o código de bulto.
+      q: req.query.q,
+      // Días (YYYY-MM-DD), los dos inclusive. Lo que no tenga esa forma se
+      // ignora en vez de llegar al SQL.
+      desde: fechaDia(req.query.desde),
+      hasta: fechaDia(req.query.hasta),
       page,
       limit,
       offset,

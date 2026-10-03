@@ -15,7 +15,10 @@ import { SesionCaja } from '../../../core/models/ventas.models';
 /**
  * El punto de venta mueve dinero. Lo que se prueba aquí son los errores que ya
  * pasaron: guardar el billete y no lo cobrado, que la lista de precio del
- * cliente anterior se quedara puesta, y que el corte desapareciera al cerrar.
+ * cliente anterior se quedara puesta, que no se pudiera pasar a otra caja, y
+ * que el "paga hoy" de una venta fiada se quedara pegado al teclear.
+ *
+ * El corte y la apertura del turno ya no viven aquí: se mudaron a Caja.
  */
 describe('Pos', () => {
   const sesion: SesionCaja = {
@@ -41,14 +44,15 @@ describe('Pos', () => {
     credito_disponible: '5000',
   };
 
-  let pedidoEnviado: { pagos?: { metodo_pago_id: number; monto: number }[] } | null = null;
+  let pedidoEnviado: { pagos?: { metodo_pago_id: number; monto: number }[]; a_credito?: number } | null = null;
   let cajaPedida: number | null = null;
+  let permisos: Set<string>;
 
   const ventasFalso = {
     cajas: () =>
       of([
-        { id: 1, almacen_id: 1, almacen: 'Matriz', nombre: 'Caja 1', activo: 1 },
-        { id: 2, almacen_id: 2, almacen: 'Sucursal', nombre: 'Caja 2', activo: 1 },
+        { id: 1, almacen_id: 1, almacen: 'Matriz', nombre: 'Caja 1', activo: 1, turno_id: 9 },
+        { id: 2, almacen_id: 2, almacen: 'Sucursal', nombre: 'Caja 2', activo: 1, turno_id: null },
       ]),
     sesionAbierta: (cajaId: number) => {
       cajaPedida = cajaId;
@@ -59,13 +63,11 @@ describe('Pos', () => {
         { id: 1, nombre: 'Efectivo' },
         { id: 2, nombre: 'Tarjeta' },
       ]),
-    obtenerSesion: () => of(sesion),
+    apartados: () => of({ items: [], num_apartados: 0, total_apartado: 0, total_abonado: 0 }),
     crearPedido: (body: { pagos?: { metodo_pago_id: number; monto: number }[] }) => {
       pedidoEnviado = body;
       return of({ id: 1, numero_pedido: 'POS-1', estado: 'pagado', total: '432.00', cambio: 68 });
     },
-    cerrarSesion: () =>
-      of({ ...sesion, estado: 'cerrada', monto_esperado: '500.00', monto_final: '490.00', diferencia: '-10.00' }),
   };
 
   async function montar() {
@@ -74,8 +76,15 @@ describe('Pos', () => {
       providers: [
         provideRouter([]),
         { provide: VentasService, useValue: ventasFalso },
-        { provide: InventarioService, useValue: { almacenes: () => of([]) } },
-        { provide: AuthService, useValue: { sesion: signal({ rol: 'cajero' }), cargarPerfil: () => of(null) } },
+        { provide: InventarioService, useValue: {} },
+        {
+          provide: AuthService,
+          useValue: {
+            sesion: signal({ rol: 'cajero' }),
+            cargarPerfil: () => of(null),
+            puede: (k: string) => permisos.has(k),
+          },
+        },
         {
           provide: CatalogoService,
           useValue: {
@@ -87,7 +96,7 @@ describe('Pos', () => {
           },
         },
         { provide: ClientesService, useValue: { buscar: () => of([]) } },
-        { provide: TiendaService, useValue: { cotizar: () => of({ total: 432 }) } },
+        { provide: TiendaService, useValue: { cotizar: () => of({ total: 432, subtotal: 372.41, impuestos: 59.59, lineas: [] }) } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Pos);
@@ -105,8 +114,13 @@ describe('Pos', () => {
   beforeEach(() => {
     pedidoEnviado = null;
     cajaPedida = null;
+    permisos = new Set(['ver:caja', 'hacer:fiar']);
+    try { localStorage.removeItem('caja_sel'); } catch { /* sin almacenamiento */ }
   });
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    try { localStorage.removeItem('caja_sel'); } catch { /* sin almacenamiento */ }
+  });
 
   it('al quitar al cliente la lista de precio regresa al PÚBLICO', async () => {
     const { c } = await montar();
@@ -164,21 +178,84 @@ describe('Pos', () => {
     expect(c.error()).toContain('Faltan');
   });
 
-  it('con un turno abierto se puede pasar a otra caja', async () => {
+  // ---- La caja ----
+
+  it('sin caja recordada entra a la primera con turno abierto', async () => {
+    const { c } = await montar();
+    expect(cajaPedida).toBe(1);
+    expect(c.sesion()?.id).toBe(9);
+    expect(c.subtitulo()).toContain('turno de Cajero');
+  });
+
+  it('con un turno abierto se puede pasar a otra caja, y la elección se recuerda', async () => {
     const { c } = await montar();
     expect(c.sesion()?.id).toBe(9);
     c.cajaSel = 2;
     c.cambiarCaja();
     expect(cajaPedida).toBe(2);
     expect(c.sesion()).toBeNull();
+    // La misma clave que usa la pantalla Caja: las dos abren la misma caja.
+    expect(localStorage.getItem('caja_sel')).toBe('2');
   });
 
-  it('al cerrar la caja, la diferencia del corte queda a la vista', async () => {
+  it('abre la caja que se usó la última vez, aquí o en Caja', async () => {
+    localStorage.setItem('caja_sel', '2');
     const { c } = await montar();
-    spyOn(window, 'confirm').and.returnValue(true);
-    c.montoFinal = 490;
-    c.cerrarCaja();
-    expect(c.ultimoCorte()).not.toBeNull();
-    expect(c.diferenciaCorte(c.ultimoCorte()!)).toBe(-10);
+    expect(cajaPedida).toBe(2);
+    expect(c.sesion()).toBeNull();
+    expect(c.subtitulo()).toContain('sin turno abierto');
+  });
+
+  // ---- Cobrar / Fiar / Apartar ----
+
+  it('fiar y apartar exigen elegir al cliente', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirModo('fiar');
+    expect(c.modo()).toBe('cobrar');
+    c.elegirModo('apartar');
+    expect(c.modo()).toBe('cobrar');
+    expect(c.motivoSinFiar()).toContain('elige al cliente');
+  });
+
+  it('a un cliente sin crédito no se le puede fiar, y dice por qué', async () => {
+    const { c } = await montar();
+    c.elegirCliente({ ...mayoreo, limite_credito: '0', credito_disponible: '0' });
+    c.elegirModo('fiar');
+    expect(c.modo()).toBe('cobrar');
+    expect(c.motivoSinFiar()).toContain('no tiene crédito');
+  });
+
+  it('sin el permiso del puesto no se puede fiar', async () => {
+    permisos = new Set(['ver:caja']);
+    const { c } = await montar();
+    c.elegirCliente(mayoreo);
+    c.elegirModo('fiar');
+    expect(c.modo()).toBe('cobrar');
+  });
+
+  it('al fiar, vacío es todo lo que alcance, y el "paga hoy" sigue lo que se teclea', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente(mayoreo);
+    c.elegirModo('fiar');
+    expect(c.fiando()).toBe(true);
+    expect(c.aPagarHoy()).toBe(0);
+    // Era un computed sobre un campo con ngModel: se quedaba pegado al teclear.
+    c.aCredito = 100;
+    expect(c.aPagarHoy()).toBe(332);
+    c.metodoSel = 2;
+    c.cobrar();
+    expect(pedidoEnviado!.a_credito).toBe(100);
+    expect(pedidoEnviado!.pagos).toEqual([{ metodo_pago_id: 2, monto: 332 }]);
+  });
+
+  it('quitar al cliente regresa a cobrar', async () => {
+    const { c } = await montar();
+    c.elegirCliente(mayoreo);
+    c.elegirModo('apartar');
+    expect(c.apartando()).toBe(true);
+    c.quitarCliente();
+    expect(c.modo()).toBe('cobrar');
   });
 });

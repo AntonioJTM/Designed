@@ -1,6 +1,6 @@
 'use strict';
 
-const { pool } = require('../../config/db');
+const { pool, withTransaction } = require('../../config/db');
 const { porPalabras } = require('../../utils/query');
 
 // Acceso a datos de `productos` (la línea/modelo). Las variantes (SKU) e
@@ -18,6 +18,15 @@ const SELECT_BASE = `
          p.nombre, p.descripcion, p.grosor_calibre, p.precio_kg,
          p.multipresentacion, p.por_lotes, p.destacado, p.activo,
          p.creado_en, p.actualizado_en,
+         -- No se puede vender: su presentación en kilos está en $0. Pasa con los
+         -- hilos que crea la lista completa del proveedor, que entran sin precio.
+         EXISTS (SELECT 1 FROM producto_variantes sp
+                  WHERE sp.producto_id = p.id AND sp.activo = 1
+                    AND sp.tipo_presentacion <> 'cono' AND sp.precio <= 0) AS sin_precio,
+         -- Cuándo entró su primera carga: la nota "llegó en la carga del…".
+         (SELECT DATE_FORMAT(MIN(r.creado_en), '%Y-%m-%d %H:%i:%s')
+            FROM remesas r JOIN producto_variantes rv ON rv.id = r.variante_id
+           WHERE rv.producto_id = p.id) AS primera_carga,
          (SELECT MIN(COALESCE(pv.precio_oferta, pv.precio))
             FROM producto_variantes pv
            WHERE pv.producto_id = p.id AND pv.activo = 1) AS precio_desde,
@@ -156,9 +165,51 @@ async function actualizar(id, datos) {
   return obtener(id);
 }
 
-async function eliminar(id) {
-  const [r] = await pool.query('DELETE FROM productos WHERE id = :id', { id });
-  return r.affectedRows > 0;
+/**
+ * Lo que el producto tiene CARGADO en cualquiera de sus presentaciones. Con una
+ * sola cosa de estas ya no se borra: borrar el producto se lleva en cascada sus
+ * presentaciones, y con ellas los bultos y las existencias, sin dejar rastro.
+ * La presentación vacía que se crea sola al dar de alta NO cuenta: un producto
+ * recién capturado (o capturado por error) se puede borrar.
+ */
+async function cargado(id, ejecutor = pool) {
+  const sub = '(SELECT id FROM producto_variantes WHERE producto_id = :id)';
+  const [[r]] = await ejecutor.query(
+    `SELECT
+       (SELECT COUNT(*) FROM variante_codigos      WHERE variante_id IN ${sub}) AS bultos,
+       (SELECT COUNT(*) FROM remesas               WHERE variante_id IN ${sub}) AS cargas,
+       (SELECT COALESCE(SUM(cantidad), 0) FROM inventario WHERE variante_id IN ${sub}) AS kg,
+       (SELECT COUNT(*) FROM inventario
+         WHERE variante_id IN ${sub} AND (cantidad <> 0 OR cantidad_reservada <> 0)) AS saldos,
+       (SELECT COUNT(*) FROM movimientos_inventario WHERE variante_id IN ${sub}) AS movimientos,
+       (SELECT COUNT(DISTINCT pedido_id) FROM pedido_detalle WHERE variante_id IN ${sub}) AS ventas,
+       (SELECT COUNT(DISTINCT traspaso_id) FROM traspaso_detalle WHERE variante_id IN ${sub}) AS traspasos,
+       (SELECT COUNT(*) FROM variante_conversiones
+         WHERE variante_origen_id IN ${sub} OR variante_destino_id IN ${sub}) AS desarmes,
+       (SELECT COUNT(*) FROM orden_compra_detalle  WHERE variante_id IN ${sub}) AS compras,
+       (SELECT COUNT(*) FROM carrito_items         WHERE variante_id IN ${sub}) AS carritos`,
+    { id }
+  );
+  return Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Number(v)]));
+}
+
+/**
+ * Borra el producto SOLO si no tiene nada cargado; lo revisa y lo borra en la
+ * misma transacción, con el producto bloqueado. Devuelve null si lo borró, o lo
+ * que tiene cargado si no. Lo vacío (la presentación sin nada, sus precios por
+ * lista, sus imágenes, renglones de inventario en cero) se va en cascada.
+ */
+async function eliminarSiVacio(id) {
+  return withTransaction(async (conn) => {
+    const [[p]] = await conn.query('SELECT id FROM productos WHERE id = :id FOR UPDATE', { id });
+    if (!p) return { noExiste: true };
+    const c = await cargado(id, conn);
+    const tiene = c.bultos || c.cargas || c.saldos || c.movimientos || c.ventas || c.traspasos
+      || c.desarmes || c.compras || c.carritos;
+    if (tiene) return c;
+    await conn.query('DELETE FROM productos WHERE id = :id', { id });
+    return null;
+  });
 }
 
 module.exports = {
@@ -168,5 +219,6 @@ module.exports = {
   imagenesDe,
   crear,
   actualizar,
-  eliminar,
+  cargado,
+  eliminarSiVacio,
 };

@@ -1,3 +1,4 @@
+import { HabitosCliente } from './rediseno.models';
 // El expediente del cliente y su crédito. Refleja `GET /api/v1/clientes/*`.
 //
 // Los DECIMAL de MySQL llegan como STRING. Se declaran como `string | number`
@@ -92,6 +93,14 @@ export interface PedidoDeCliente {
   creado_en: string;
   atendio?: string | null;
   num_lineas: Cifra;
+  /** Kilos de todo el pedido. */
+  kilos?: Cifra;
+  /** Qué se llevó, por HILO (color + calibre), del que más kilos al que menos. */
+  hilos?: { producto_id: number; hilo: string; kg: Cifra }[];
+  /** Con qué pagó (los reembolsados también: dicen cómo pagó lo que canceló). */
+  pagado_con?: { metodo: string; monto: Cifra }[];
+  /** Lo que se llevó a deber (el cargo original). */
+  a_credito?: Cifra;
 }
 
 /** Un movimiento de crédito: un cargo, un abono o un ajuste. */
@@ -119,6 +128,8 @@ export interface Expediente extends Cliente {
   total_pedidos: number;
   credito_movimientos: MovimientoCredito[];
   total_movimientos: number;
+  /** Su costumbre: ritmo, día, hora, visitas y gasto por mes (vista Resumen). */
+  habitos?: HabitosCliente;
 }
 
 /** Estado de cuenta, para la pantalla de crédito. */

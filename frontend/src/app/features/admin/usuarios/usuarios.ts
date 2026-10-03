@@ -1,41 +1,67 @@
-import { Component, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { UsuariosService } from '../../../core/services/usuarios.service';
-import { Rol, Usuario } from '../../../core/models/auth.models';
-import { ApiError } from '../../../core/models/auth.models';
+import { AuthService } from '../../../core/services/auth.service';
+import { ApiError, Rol, Usuario } from '../../../core/models/auth.models';
+import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
+import { UsuarioFormModal } from './usuario-form-modal';
 
+/** "administrador" → "Administrador": los puestos se guardan en minúscula. */
+export function nombrePuesto(rol: string | null | undefined): string {
+  const r = (rol ?? '').trim();
+  return r ? r.charAt(0).toUpperCase() + r.slice(1) : '—';
+}
+
+/**
+ * Personal (rediseño 2026-10): quién trabaja en la tienda y en qué puesto. Lo
+ * que puede hacer cada puesto se decide en Permisos, que es solo del
+ * administrador; por eso el botón "Ver permisos" solo le aparece a él.
+ *
+ * NUNCA se muestra una contraseña ni su hash: el backend no los manda en el
+ * listado (`CAMPOS_PUBLICOS`) y aquí solo se teclea una nueva al dar de alta o
+ * para restablecerla.
+ *
+ * El puesto de administrador lo da y lo quita solo otro administrador: con el
+ * permiso de Personal, un gerente podría darse a sí mismo —o a quien sea— acceso
+ * a sueldos, costos y permisos.
+ */
 @Component({
   selector: 'app-usuarios',
-  imports: [ReactiveFormsModule],
+  imports: [RouterLink, UsuarioFormModal],
   templateUrl: './usuarios.html',
 })
 export class Usuarios {
-  private readonly fb = inject(FormBuilder);
   private readonly api = inject(UsuariosService);
+  private readonly auth = inject(AuthService);
+  private readonly fechaPipe = new FechaPipe();
 
   readonly usuarios = signal<Usuario[]>([]);
   readonly roles = signal<Rol[]>([]);
   readonly cargando = signal(true);
-  readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
-  readonly editandoId = signal<number | null>(null);
 
-  readonly form = this.fb.nonNullable.group({
-    rol_id: [null as number | null, Validators.required],
-    nombre: ['', [Validators.required, Validators.minLength(2)]],
-    correo: ['', [Validators.required, Validators.email]],
-    telefono: [''],
-    contrasena: [''],
-    activo: [true],
-  });
+  /** `null` = cerrado, `'nuevo'` = alta, un usuario = edición de ese renglón. */
+  readonly modal = signal<Usuario | 'nuevo' | null>(null);
+
+  /** Permisos es solo del administrador: a nadie más se le enlaza. */
+  readonly esAdmin = computed(() => this.auth.esAdmin());
+
+  /** Los puestos que se pueden asignar desde esta sesión. */
+  readonly rolesAsignables = computed(() =>
+    this.esAdmin() ? this.roles() : this.roles().filter((r) => r.nombre !== 'administrador')
+  );
+
+  /** Activos primero, y dentro de cada grupo por nombre. */
+  readonly ordenados = computed(() =>
+    [...this.usuarios()].sort(
+      (a, b) => Number(!!b.activo) - Number(!!a.activo) || a.nombre.localeCompare(b.nombre)
+    )
+  );
 
   constructor() {
     this.api.roles().subscribe({
-      next: (r) => {
-        this.roles.set(r);
-        this.form.patchValue({ rol_id: this.rolPorOmision() });
-      },
+      next: (r) => this.roles.set(r),
       error: (e) => this.error.set(this.msg(e)),
     });
     this.cargar();
@@ -55,101 +81,62 @@ export class Usuarios {
     });
   }
 
-  nuevo(): void {
-    this.editandoId.set(null);
-    this.form.reset({
-      rol_id: this.rolPorOmision(),
-      nombre: '',
-      correo: '',
-      telefono: '',
-      contrasena: '',
-      activo: true,
-    });
-    this.form.get('correo')?.enable();
-    this.form.get('contrasena')?.setValidators([Validators.required, Validators.minLength(8)]);
-    this.form.get('contrasena')?.updateValueAndValidity();
+  puesto(u: Usuario): string {
+    return nombrePuesto(u.rol);
   }
 
-  editar(u: Usuario): void {
-    this.editandoId.set(u.id);
-    this.form.reset({
-      rol_id: u.rol_id,
-      nombre: u.nombre,
-      correo: u.correo,
-      telefono: u.telefono ?? '',
-      contrasena: '',
-      activo: !!u.activo,
-    });
-    // Al editar, el correo no se cambia y la contraseña es opcional (solo si se quiere resetear).
-    this.form.get('correo')?.disable();
-    this.form.get('contrasena')?.clearValidators();
-    this.form.get('contrasena')?.updateValueAndValidity();
+  /** Administrador y gerente en azul (deciden); el resto en gris. */
+  puestoAzul(u: Usuario): boolean {
+    return u.rol === 'administrador' || u.rol === 'gerente';
   }
 
-  guardar(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
+  /** Solo un administrador edita a un administrador (ver la nota de la clase). */
+  puedeEditar(u: Usuario): boolean {
+    return this.esAdmin() || u.rol !== 'administrador';
+  }
+
+  /** "hoy 9:02", "ayer 18:30" o la fecha completa: así se lee de un vistazo quién entró. */
+  acceso(u: Usuario): string {
+    if (!u.ultimo_acceso) return 'Nunca ha entrado';
+    const limpio = String(u.ultimo_acceso).replace('T', ' ').replace('Z', '').trim();
+    const [dia, hora = ''] = limpio.split(' ');
+    const hhmm = hora.slice(0, 5).replace(/^0(\d)/, '$1');
+    const hoy = hoyLocal();
+    if (dia === hoy) return `hoy ${hhmm}`.trim();
+    const ayer = new Date(`${hoy}T12:00:00`);
+    ayer.setDate(ayer.getDate() - 1);
+    const p = (n: number) => String(n).padStart(2, '0');
+    if (dia === `${ayer.getFullYear()}-${p(ayer.getMonth() + 1)}-${p(ayer.getDate())}`) {
+      return `ayer ${hhmm}`.trim();
     }
-    this.guardando.set(true);
-    this.error.set(null);
+    return this.fechaPipe.transform(limpio);
+  }
+
+  /** Usuario que edita el modal (`null` cuando es un alta). */
+  usuarioModal(): Usuario | null {
+    const m = this.modal();
+    return m === 'nuevo' || m === null ? null : m;
+  }
+
+  abrirNuevo(): void {
     this.mensaje.set(null);
-
-    const v = this.form.getRawValue();
-    const id = this.editandoId();
-
-    if (id) {
-      this.api
-        .actualizar(id, {
-          rol_id: v.rol_id!,
-          nombre: v.nombre,
-          telefono: v.telefono.trim() || null,
-          activo: v.activo,
-          contrasena: v.contrasena.trim() || undefined,
-        })
-        .subscribe({
-          next: () => this.tras('Usuario actualizado.'),
-          error: (e) => this.fallo(e),
-        });
-    } else {
-      this.api
-        .crear({
-          rol_id: v.rol_id!,
-          nombre: v.nombre,
-          correo: v.correo,
-          telefono: v.telefono.trim() || undefined,
-          contrasena: v.contrasena,
-        })
-        .subscribe({
-          next: () => this.tras('Usuario dado de alta.'),
-          error: (e) => this.fallo(e),
-        });
-    }
+    this.error.set(null);
+    this.modal.set('nuevo');
   }
 
-  private tras(msg: string): void {
-    this.guardando.set(false);
-    this.mensaje.set(msg);
-    this.nuevo();
+  abrirEdicion(u: Usuario): void {
+    if (!this.puedeEditar(u)) return;
+    this.mensaje.set(null);
+    this.error.set(null);
+    this.modal.set(u);
+  }
+
+  guardado(u: Usuario, eraAlta: boolean): void {
+    this.mensaje.set(eraAlta ? `${u.nombre} quedó dado de alta.` : `Se guardaron los cambios de ${u.nombre}.`);
     this.cargar();
-  }
-
-  private fallo(e: unknown): void {
-    this.error.set(this.msg(e));
-    this.guardando.set(false);
   }
 
   private msg(e: unknown): string {
     return (e as { error?: { error?: ApiError } })?.error?.error?.message ?? 'Ocurrió un error.';
-  }
-
-  /**
-   * Con qué rol arranca un alta: CAJERO, no el primero de la lista. El primero
-   * es "administrador" y un descuido al dar de alta a alguien de mostrador le
-   * daba acceso a sueldos, costos y configuración.
-   */
-  private rolPorOmision(): number | null {
-    const r = this.roles();
-    return (r.find((x) => x.nombre === 'cajero') ?? r.find((x) => x.nombre !== 'administrador') ?? r[0])?.id ?? null;
   }
 }

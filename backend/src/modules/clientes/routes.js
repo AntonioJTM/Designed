@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requireRol } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -25,14 +25,21 @@ const loginSchema = z
   })
   .strict();
 
-// POST /api/v1/clientes/registro  → alta de cuenta de cliente
-router.post('/registro', validate(registroSchema), controller.registrar);
-
-// POST /api/v1/clientes/login  → inicio de sesión de cliente
-router.post('/login', validate(loginSchema), controller.iniciarSesion);
-
-// GET /api/v1/clientes/perfil  → perfil del cliente autenticado
-router.get('/perfil', authRequired, requireTipo('cliente'), controller.perfil);
+// ---------------------------------------------------------------------------
+//  TIENDA EN LÍNEA APAGADA (2026-10, decisión del usuario: "el cliente por
+//  ahora no la quiere"). Se COMENTA, no se borra: para volver a abrirla basta
+//  con descomentar estas tres rutas y las de `frontend/src/app/app.routes.ts`.
+//  Sin ellas nadie puede abrirse una cuenta ni entrar como cliente, así que el
+//  checkout y las direcciones (que exigen token de cliente) quedan cerrados solos.
+// ---------------------------------------------------------------------------
+// // POST /api/v1/clientes/registro  → alta de cuenta de cliente
+// router.post('/registro', validate(registroSchema), controller.registrar);
+//
+// // POST /api/v1/clientes/login  → inicio de sesión de cliente
+// router.post('/login', validate(loginSchema), controller.iniciarSesion);
+//
+// // GET /api/v1/clientes/perfil  → perfil del cliente autenticado
+// router.get('/perfil', authRequired, requireTipo('cliente'), controller.perfil);
 
 // ---------------------------------------------------------------------------
 //  El expediente del cliente. Solo personal.
@@ -42,9 +49,8 @@ router.get('/perfil', authRequired, requireTipo('cliente'), controller.perfil);
 // ---------------------------------------------------------------------------
 
 const soloStaff = [authRequired, requireTipo('usuario')];
-// El límite de crédito y los ajustes de saldo son dinero: solo administradores
-// y gerentes. Un cajero puede COBRAR un abono, pero no perdonar una deuda.
-const soloJefes = [authRequired, requireTipo('usuario'), requireRol('administrador', 'gerente')];
+// Corregir una deuda es dinero: lo decide Permisos («Corregir la deuda de un
+// cliente»). Un cajero puede COBRAR un abono, pero de inicio no perdonar una deuda.
 
 const expedienteSchema = z
   .object({
@@ -94,6 +100,8 @@ const ajusteSchema = z
 
 // Búsqueda rápida para el POS: literal antes de '/:id'.
 router.get('/buscar', ...soloStaff, controller.buscar);
+// Las cinco pestañas de Clientes: frecuencia, deuda, que-compra, cuando, gasto.
+router.get('/analisis/:vista', ...soloStaff, requirePermiso('ver:clientes'), controller.analisis);
 
 router.get('/', ...soloStaff, controller.listar);
 router.post('/', ...soloStaff, validate(expedienteSchema), controller.crearDesdeStaff);
@@ -103,6 +111,6 @@ router.put('/:id', ...soloStaff, validate(editarSchema), controller.actualizar);
 // Crédito. El estado de cuenta viaja dentro del expediente (GET /:id) y la lista
 // de quién debe, en el tablero (GET /analisis/tablero).
 router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), controller.abonar);
-router.post('/:id/ajustes', ...soloJefes, validate(ajusteSchema), controller.ajustar);
+router.post('/:id/ajustes', ...soloStaff, requirePermiso('hacer:corregir_deuda'), validate(ajusteSchema), controller.ajustar);
 
 module.exports = router;

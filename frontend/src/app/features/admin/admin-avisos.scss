@@ -1,0 +1,94 @@
+// El panel de avisos de la campana (marco del panel). Va en su propia hoja
+// para que la del marco no pase el límite de estilos por archivo de Angular.
+
+/*
+  Panel de avisos. FLOTA a la derecha del menú, pegado abajo junto a la campana,
+  sobre la página: adentro de la barra (248 px) los textos se cortaban y salía
+  una barra de desplazamiento con media pantalla vacía al lado. `position: fixed`
+  lo saca del recorte de la barra, que se desplaza sola.
+  Cada aviso es un botón: lleva a la pantalla donde se atiende.
+*/
+.avisos {
+  position: fixed;
+  left: calc(248px + 12px);
+  bottom: 16px;
+  z-index: 40;
+  width: 460px;
+  max-width: calc(100vw - 248px - 24px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--superficie);
+  color: var(--tinta);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(18, 22, 31, 0.22);
+  animation: avisos-entra 0.12s ease-out;
+}
+@keyframes avisos-entra { from { opacity: 0; transform: translateX(-4px); } }
+@media (prefers-reduced-motion: reduce) { .avisos { animation: none; } }
+
+.avisos-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 18px 20px 14px; border-bottom: 1px solid var(--borde-suave);
+}
+.avisos-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.avisos-head p { margin: 4px 0 0; font-size: 13px; color: var(--tinta-3); line-height: 1.4; }
+.avisos-cerrar {
+  flex: 0 0 36px; width: 36px; height: 36px; border-radius: 8px; border: 0;
+  background: transparent; color: var(--tinta-3); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.avisos-cerrar:hover { background: var(--fondo); color: var(--tinta); }
+
+.avisos-cuerpo { overflow-y: auto; padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.avisos-grupo { display: flex; flex-direction: column; }
+.avisos-grupo h3 {
+  margin: 12px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--tinta-3);
+}
+
+.aviso-fila {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 8px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--tinta);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.aviso-fila:hover { background: var(--superficie-2); }
+.aviso-fila:hover .ir { color: var(--acento); }
+.aviso-fila .icono {
+  flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.aviso-fila .icono svg {
+  width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.aviso-fila .que { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.aviso-fila .que b { font-size: 14px; font-weight: 500; line-height: 1.35; }
+.aviso-fila .que span { font-size: 12.5px; color: var(--tinta-3); line-height: 1.35; }
+.aviso-fila .ir { flex: 0 0 auto; font-size: 13px; font-weight: 500; color: var(--tinta-3); white-space: nowrap; }
+
+/* Quién debe: nombre, días y teléfono a la izquierda; cuánto, a la derecha.
+   (`.deudor` y no `.quien`: esa clase ya es la del nombre y la campana de abajo,
+   y como el panel vive dentro de ese bloque, le heredaba su acomodo.) */
+.deudores {
+  list-style: none; margin: 2px 0 6px 54px; padding: 4px 0;
+  border-left: 2px solid var(--borde-suave);
+}
+.deudores button {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 7px 8px 7px 12px; border: 0; border-radius: 6px;
+  background: transparent; font: inherit; text-align: left; cursor: pointer; color: var(--tinta);
+}
+.deudores button:hover { background: var(--superficie-2); }
+.deudores .deudor { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.deudores .deudor b { font-size: 13.5px; font-weight: 500; }
+.deudores .deudor span { font-size: 12px; color: var(--tinta-3); }
+.deudores .monto { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.avisos-pie { padding: 12px 20px; border-top: 1px solid var(--borde-suave); }
+.avisos-pie .btn-enlace { font-size: 14px; }
+
+@media (max-width: 900px) {
+  .avisos { left: 12px; right: 12px; width: auto; max-width: none; }
+}

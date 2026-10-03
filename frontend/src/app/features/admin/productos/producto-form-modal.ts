@@ -1,8 +1,8 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { forkJoin, of } from 'rxjs';
-import { CatalogoService } from '../../../core/services/catalogo.service';
+import { catchError, forkJoin, of } from 'rxjs';
+import { CatalogoService, EliminacionProducto } from '../../../core/services/catalogo.service';
 import {
   Categoria,
   Opcion,
@@ -39,6 +39,8 @@ export class ProductoFormModal implements OnInit {
   readonly guardado = output<Producto>();
   /** Se pide ir a capturar las presentaciones del producto recién guardado. */
   readonly irAPresentaciones = output<number>();
+  /** Se eliminó (lleva el nombre, para que el listado lo diga). */
+  readonly eliminado = output<string>();
 
   readonly esEdicion = computed(() => this.productoId() !== null);
 
@@ -52,6 +54,17 @@ export class ProductoFormModal implements OnInit {
    * cerraba sin decir qué sigue.
    */
   readonly creado = signal<Producto | null>(null);
+  /**
+   * Pidió eliminar y el modal pregunta antes. Eliminar vive aquí y no en el
+   * renglón del listado: ahí quedaba junto a "Editar", a un clic distraído.
+   */
+  readonly confirmandoBorrado = signal(false);
+  /**
+   * Si este producto se puede borrar. Solo uno SIN nada cargado (regla del
+   * usuario, 2026-10-03): con bultos, existencias, movimientos o ventas, el
+   * botón se apaga y el modal dice qué tiene. Lo valida también el servidor.
+   */
+  readonly eliminacion = signal<EliminacionProducto | null>(null);
 
   readonly categorias = signal<Categoria[]>([]);
   readonly lineas = signal<Opcion[]>([]);
@@ -85,7 +98,10 @@ export class ProductoFormModal implements OnInit {
 
   /** Abreviatura de la unidad elegida, para rotular el precio ("por kg"). */
   readonly unidadSel = computed(() => {
-    const id = Number(this.formValor().unidad_medida_id);
+    this.formValor(); // se recalcula con cada cambio del formulario
+    // getRawValue y no el valor del evento: la unidad va deshabilitada, y los
+    // campos deshabilitados no vienen en `valueChanges`.
+    const id = Number(this.form.getRawValue().unidad_medida_id);
     return this.unidades().find((u) => u.id === id)?.abreviatura ?? 'kg';
   });
 
@@ -130,6 +146,11 @@ export class ProductoFormModal implements OnInit {
       unidades: this.catalogo.opciones('unidades'),
       impuestos: this.catalogo.opciones('impuestos'),
       producto: id !== null ? this.catalogo.obtenerProducto(id) : of(null),
+      // Si no se puede saber, el botón queda apagado: mejor eso que ofrecer
+      // un borrado que va a fallar.
+      eliminacion: id !== null
+        ? this.catalogo.eliminacionProducto(id).pipe(catchError(() => of(null)))
+        : of(null),
     }).subscribe({
       next: (o) => {
         this.categorias.set(o.categorias.items);
@@ -137,6 +158,7 @@ export class ProductoFormModal implements OnInit {
         this.unidades.set(o.unidades);
         this.impuestos.set(o.impuestos);
 
+        this.eliminacion.set(o.eliminacion);
         if (o.producto) this.llenar(o.producto);
         else {
           // Producto nuevo: el kilogramo es la unidad habitual de la tienda.
@@ -144,6 +166,8 @@ export class ProductoFormModal implements OnInit {
           if (kg) this.form.patchValue({ unidad_medida_id: kg.id });
         }
         this.form.enable({ emitEvent: false });
+        // La unidad queda fija en kilogramo: se ve, pero no se cambia.
+        this.form.controls.unidad_medida_id.disable({ emitEvent: false });
         this.cargando.set(false);
       },
       error: (e) => {
@@ -171,7 +195,14 @@ export class ProductoFormModal implements OnInit {
     // Si el calibre guardado no está entre los del material, se conserva
     // como opción extra para no borrárselo sin avisar al guardar.
     this.calibreHeredado.set(p.grosor_calibre?.trim() || null);
+    this.sinPrecio.set(!!p.sin_precio);
   }
+
+  /**
+   * El hilo entró con la lista del proveedor y su presentación está en $0: no
+   * se puede vender. Al guardar el precio por kilo, la presentación lo toma.
+   */
+  readonly sinPrecio = signal(false);
 
   /**
    * Al CREAR el precio por kilo es obligatorio: la presentación se crea sola y
@@ -238,6 +269,24 @@ export class ProductoFormModal implements OnInit {
     this.form.patchValue({ nombre: '', descripcion: '', precio_kg: null, destacado: false });
     this.form.patchValue({ unidad_medida_id: unidad });
     this.form.markAsUntouched();
+  }
+
+  eliminar(): void {
+    const id = this.productoId();
+    if (id === null) return;
+    const nombre = this.form.getRawValue().nombre;
+    this.guardando.set(true);
+    this.error.set(null);
+    this.catalogo.eliminarProducto(id).subscribe({
+      next: () => {
+        this.guardando.set(false);
+        this.eliminado.emit(nombre);
+      },
+      error: (e) => {
+        this.error.set(this.msg(e));
+        this.guardando.set(false);
+      },
+    });
   }
 
   cerrar(): void {
