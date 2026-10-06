@@ -21,11 +21,26 @@
  *     E2E_ACEPTO_PRODUCCION=si node scripts/e2e-loquesea.js
  *
  * No basta con equivocarse de terminal: hay que escribirlo.
+ *
+ * Desde el 2026-10-05 la base REAL es `hitex` y `desarrollo` quedó para pruebas,
+ * las dos en el mismo servidor (ver `_produccion.js`). Contra `hitex` no corre
+ * nada, ni con el permiso: ahí está la operación de la tienda.
  */
+
+const { esProduccion } = require('./_produccion');
 
 const LOCALES = ['localhost', '127.0.0.1', '::1', ''];
 
 const host = (process.env.DB_HOST || '').trim();
+const base = (process.env.DB_NAME || '').trim();
+
+if (esProduccion(base)) {
+  console.error(
+    `\n  ✗ "${base}" es la base de PRODUCCIÓN: ninguna prueba corre ahí, ni con E2E_ACEPTO_PRODUCCION.\n` +
+      '    Las pruebas van contra la base de pruebas (desarrollo) o una local.\n'
+  );
+  process.exit(3);
+}
 
 if (!LOCALES.includes(host)) {
   if (String(process.env.E2E_ACEPTO_PRODUCCION || '').toLowerCase() === 'si') {

@@ -9,18 +9,32 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-03
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-05
 ===============================================================================
 
-⚠ LA BASE DE PRODUCCIÓN TIENE UNA MUESTRA SEMBRADA (2026-10-01)
-  18 hilos, 40 clientes y tres meses de operación INVENTADOS, para enseñarle el
-  sistema a un cliente. Están mezclados con lo real. NO los tomes por datos del
-  negocio. Se borran con:
-      cd backend && node scripts/demo/limpiar.js --base desarrollo --confirmar
-  Ver la entrada "2026-10-01 · Muestra para enseñar el sistema".
+⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
+  · PRODUCCIÓN: https://devtristan.cloud → base "hitex". Nació vacía: solo el
+    administrador y los catálogos del sistema. Ahí va la operación REAL.
+  · PRUEBAS: https://devtristan.cloud:8443 → base "desarrollo", con la etiqueta
+    roja "SISTEMA DE PRUEBAS". Tiene la MUESTRA sembrada el 2026-10-01 (18 hilos,
+    40 clientes y tres meses INVENTADOS) mezclada con lo que se capturó antes.
+  · El .env LOCAL sigue apuntando a "desarrollo": trabajar desde aquí es probar.
+  · Las E2E y el sembrado se NIEGAN a correr contra "hitex"
+    (backend/scripts/_produccion.js), aun con E2E_ACEPTO_PRODUCCION.
+  · Una MIGRACIÓN nueva se aplica en LAS DOS bases.
+  Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
-  FRECUENCIA EN KILOS Y DINERO (2026-10-03, entrada 12): cada cliente dice
+  BASE DE PRODUCCIÓN "hitex" Y SISTEMA DE PRUEBAS (2026-10-05): la tienda en línea
+  de siempre ya usa la base nueva, vacía, para capturar de verdad; la de antes
+  quedó de pruebas en el puerto 8443. Ver la entrada fechada.
+  Antes: MANUAL DE USO EN PDF (2026-10-05): 152 páginas para el personal, con
+  capturas; vive fuera del repo (D:\Imagenes\Manual de uso - Tienda de hilos.pdf
+  y sus fuentes en "Manual de uso (fuentes)"), porque el repo es público.
+  Antes: TODO DESPLEGADO (2026-10-04, despliegue 20261004-181551): el rediseño y todo
+  lo del 2026-10-03 ya están en el servidor, con la migración de alertas
+  aplicada. Sin commit (el despliegue sube el working tree).
+  Antes: FRECUENCIA EN KILOS Y DINERO (2026-10-03, entrada 12): cada cliente dice
   cuánto se lleva por visita y en el periodo; la tabla ordena por kilos o
   dinero.
   Antes: CLIENTES → "DEJARON DE VENIR" (2026-10-03, entrada 11): la campana ya lleva a
@@ -337,7 +351,8 @@ SIGUIENTE PASO NATURAL
 DEUDAS CONOCIDAS QUE NO SON DE ESTE CAMBIO
   · backend/.env.example está borrado del repo aunque backend/README.md lo
     referencia. Viene así de antes.
-  · Las migraciones de db/migrations/ están aplicadas SOLO en "desarrollo".
+  · Las migraciones de db/migrations/ están en "desarrollo" y, por clonación
+    de su estructura, en "hitex" (2026-10-05). Las nuevas van en LAS DOS.
 
 CÓMO TRABAJA EL USUARIO
   · Contestarle siempre en español.
@@ -347,6 +362,97 @@ CÓMO TRABAJA EL USUARIO
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
 
+
+-------------------------------------------------------------------------------
+ 2026-10-05 · Base de producción hitex y sistema de pruebas
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Créame ahora sí la base de producción solo con el usuario admin para
+  habilitar los demás espacios, y esta me la dejas para hacer pruebas; que la
+  base se llame hitex". Al preguntarle cómo dejar el servidor eligió DOS
+  SISTEMAS: producción en hitex y uno de pruebas en desarrollo.
+
+LA BASE "hitex" (MariaDB 10.11 del servidor; la memoria decía MySQL 8.4 y no)
+  · Estructura CLONADA de "desarrollo" (mysqldump --no-data, sin las tablas
+    _demo_*): comparadas en information_schema, idénticas — 477 columnas, 174
+    índices, 80 llaves foráneas, 50 CHECK y las 7 vistas.
+  · Datos: SOLO lo que el sistema necesita para arrancar, porque no tiene
+    pantalla para capturarlo:
+      roles (4), permisos (27) y rol_permisos (39, los de hoy), unidades_medida
+      (kilogramo y tonelada), metodos_pago (5), impuestos (IVA 16 %), lineas
+      (Turco, Nacional, Chino — no hay pantalla de líneas), paqueterias (5, de
+      la tienda en línea), tipos_cliente solo "Público" (Medio mayoreo y
+      Mayoreo eran de la MUESTRA) y las 6 claves de configuracion con el valor
+      VACÍO (envío 0.00; los datos de depósito eran de demostración).
+  · Usuarios: SOLO el administrador (id 1, Antonio Tristán), con su MISMO
+    correo y contraseña (el hash se copió tal cual) y sin último acceso.
+  · TODO lo demás nace vacío y se captura desde el panel: materiales,
+    almacenes, cajas, listas de precio, personal, nómina, productos, clientes.
+  · Probado contra el código: el backend local con DB_NAME=hitex contestó 44
+    pantallas de lectura como administrador sin un solo 500.
+  · Respaldo de "desarrollo" antes de todo:
+    /root/respaldos/desarrollo_antes_hitex_20261005-235248.sql (no se tocó).
+
+EL SERVIDOR
+  · Producción: el .env del backend pasó a DB_NAME=hitex (respaldo del .env en
+    /root/respaldos/env_backend_antes_hitex_*). Servicio tienda-hilos-api,
+    puerto 3000, https://devtristan.cloud. Verificado: 0 productos.
+  · Pruebas: servicio NUEVO tienda-hilos-pruebas (mismo código y misma carpeta),
+    puerto 3001, con /etc/tienda-hilos/pruebas.env (fuera del código, el deploy
+    no lo toca): DB_NAME=desarrollo, PORT=3001, UPLOADS_DIR propio y un
+    JWT_SECRET PROPIO (una sesión de pruebas no sirve en producción ni al
+    revés). nginx: conf.d/tienda-hilos-pruebas.conf en el 8443 con el mismo
+    certificado, y un sub_filter que pone "PRUEBAS ·" en el título y una
+    etiqueta roja arriba al centro (sin pointer-events: no tapa clics).
+    firewalld: se abrió 8443/tcp. Verificado desde internet: 31 productos.
+  · Comprobantes: los 26 que había eran de "desarrollo": se copiaron a
+    /var/www/tienda-hilos/uploads-pruebas y los de producción se movieron a
+    /root/respaldos/uploads_desarrollo_*; producción arranca sin ninguno.
+
+EN EL CÓDIGO
+  · backend/scripts/_produccion.js: la lista de bases de producción (hitex).
+    _no-en-produccion.js (todas las E2E) y demo/sembrar.js se niegan a correr
+    contra ellas, AUN con E2E_ACEPTO_PRODUCCION=si. Antes el seguro miraba solo
+    el host, y ahora las dos bases están en el mismo.
+  · deploy/deploy.sh reinicia también tienda-hilos-pruebas y revisa su /health
+    (si falla avisa, no revierte producción). deploy/README.md lo documenta.
+  · NO se hizo commit ni despliegue de código: lo del servidor se configuró
+    directo (servicio, nginx, firewall, .env).
+
+LO QUE SIGUE PARA EL USUARIO
+  · Entrar a https://devtristan.cloud con su usuario de siempre y capturar en
+    este orden: materiales, almacenes (marcar la matriz), cajas, listas de
+    precio, personal y permisos, configuración, y después recibir mercancía.
+  · Probar lo que quiera en https://devtristan.cloud:8443.
+
+-------------------------------------------------------------------------------
+ 2026-10-04 · Despliegue de todo al servidor
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Súbeme cambios al servidor, ahora sí sube todo".
+
+QUÉ SE HIZO
+  · Migración 2026-10_alertas_stock_con_minimo.sql aplicada (solo cambia el
+    filtro de la vista v_alertas_stock: "Por reabastecer" ya no cuenta hilos
+    sin mínimo). estado-migraciones: la base está al día.
+  · npm run deploy (deploy/deploy.sh all): Angular compilado en local, backend
+    desde el working tree, npm ci en el servidor porque cambió el lock
+    (pdfkit). Despliegue 20261004-181551, verificado desde internet: /health,
+    la página y /api/v1/productos en 200.
+  · Revisado en el servidor (solo lectura): pdfkit instalado, servicio activo,
+    y nginx no comprime ni junta la respuesta por partes de la carga de lista
+    (application/x-ndjson no está en gzip_types y no ignora
+    X-Accel-Buffering), así que el avance llega en vivo.
+  · NO se hizo commit (el despliegue sube el working tree, como siempre).
+
+LO QUE QUEDÓ ARRIBA
+  El rediseño completo y todo lo del 2026-10-03: PDF de cargas, confirmaciones
+  propias, producto solo se borra vacío, lista completa del proveedor con
+  avance, costo apagado (SE_LLEVA_COSTO = false), hilo parado a precio de
+  venta, Clientes → Dejaron de venir y la frecuencia en kilos y dinero. La
+  tienda en línea sigue apagada.
 
 -------------------------------------------------------------------------------
  2026-10-03 (12) · La frecuencia de compra, también en kilos y en dinero
