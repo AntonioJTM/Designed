@@ -7,18 +7,17 @@ const { AppError } = require('../../middlewares/error');
 const ADMIN = 'administrador';
 
 /**
- * ¿La tienda lleva el COSTO de lo que compra? NO, por decisión del usuario
- * (2026-10-03): "no necesito lo que me costó, solo me sirve en cuánto lo voy a
- * vender". Mientras esto esté en false, «Ver costos y márgenes» no lo tiene
- * NADIE —ni el administrador—: el costo no sale en ninguna respuesta, el
- * tablero no calcula ganancia, margen ni dinero parado, el asistente no ofrece
- * sus herramientas de costo y los PDF no imprimen el precio de compra. La
- * pantalla de Permisos ya no lo enseña (y al guardar no se pierde a quien lo
- * tenía). Las columnas y el promedio ponderado siguen en la base, intactos:
- * para volver a llevarlo se pone en true aquí y en su gemelo del frontend
- * (`core/costos.ts`).
+ * ¿La tienda lleva el COSTO de lo que compra? SÍ, desde el 2026-10-06: "costo
+ * por kilo, solo administrador y contabilidad" (al surtir inventario). Del
+ * 2026-10-03 a esa fecha estuvo en false ("no necesito lo que me costó") y
+ * entonces «Ver costos y márgenes» no lo tenía nadie, ni el administrador.
+ *
+ * Encendido, lo ve quien tenga `hacer:ver_costos`: el administrador (siempre) y
+ * el puesto Contabilidad (migración 2026-10_carga_proveedor_costo, que se lo
+ * quitó al gerente). Con false se vuelve a apagar todo lo del costo; su gemelo
+ * del frontend es `core/costos.ts`.
  */
-const SE_LLEVA_COSTO = false;
+const SE_LLEVA_COSTO = true;
 const VER_COSTOS = 'hacer:ver_costos';
 
 /** True si el sujeto del token es el administrador: él lo puede todo. */

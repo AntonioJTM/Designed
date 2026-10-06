@@ -48,6 +48,51 @@
       }
     }
 
+    <!-- Las cuentas para transferencias: pueden ser varias (2026-10-06). -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Cuentas para transferencias</h2>
+          <p>A dónde deposita un cliente que paga por transferencia. Puedes tener varias.</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="abrirCuenta('nueva')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+          Agregar cuenta
+        </button>
+      </div>
+      @if (cuentas().length === 0) {
+        <p class="vacio">Todavía no hay cuentas. Agrega la primera para darle a los clientes dónde depositar.</p>
+      } @else {
+        <div class="tabla-scroll">
+          <table class="grid" style="min-width: 760px">
+            <thead>
+              <tr>
+                <th>Banco</th><th>A nombre de</th><th>Número de cuenta</th><th>CLABE</th><th>Estado</th>
+                <th><span class="oculto">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of cuentas(); track c.id) {
+                <tr [class.fila-inactiva]="!c.activa">
+                  <td><b style="font-weight: 500">{{ c.banco }}</b></td>
+                  <td>{{ c.titular || '—' }}</td>
+                  <td><span class="cuenta-num">{{ c.numero_cuenta || '—' }}</span></td>
+                  <td><span class="cuenta-num">{{ c.clabe ? clabeLegible(c.clabe) : '—' }}</span></td>
+                  <td>
+                    @if (c.activa) { <span class="pill verde">Activa</span> } @else { <span class="pill gris">Oculta</span> }
+                  </td>
+                  <td class="acciones">
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="abrirCuenta(c)">Editar</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
     <!-- Claves nuevas que todavía no tienen tarjeta: se ven con su descripción. -->
     @if (otras().length) {
       <section class="card">
@@ -83,3 +128,12 @@
     </div>
   </section>
 </div>
+
+<!-- Se crea al abrirlo y se destruye al cerrarlo: arranca limpio. -->
+@if (cuentaAbierta()) {
+  <app-cuenta-bancaria-modal
+    [cuenta]="cuentaDelModal()"
+    (cerrado)="cuentaAbierta.set(null)"
+    (guardada)="cuentaGuardada($event)"
+  />
+}

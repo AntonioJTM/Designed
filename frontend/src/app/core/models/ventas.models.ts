@@ -225,6 +225,13 @@ export interface Pedido {
   credito?: MovimientoCreditoPedido[];
   /** Detalle: abonos a la cuenta del cliente después de la venta (no son de este pedido). */
   abonos_cuenta?: { monto: string; creado_en: string }[];
+  /**
+   * Detalle de una venta fiada: cuánto de lo fiado ya se pagó con abonos a la
+   * cuenta y cuánto falta (los abonos se aplican a lo más antiguo primero).
+   * null si no se fió.
+   */
+  credito_pagado?: number | null;
+  credito_por_pagar?: number | null;
   actualizado_en?: string;
   subtotal: string;
   descuento: string;

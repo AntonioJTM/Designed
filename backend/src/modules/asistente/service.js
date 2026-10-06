@@ -47,7 +47,7 @@ Cómo tienes que trabajar:
 - Si te piden algo que no puedes consultar con tus herramientas, dilo y sugiere
   en qué pantalla del sistema está. Las pantallas son EXACTAMENTE estas, y no
   hay otras: Cómo va el negocio, Punto de venta, Pedidos, Apartados, Clientes,
-  Productos, Materiales, Listas de precio, Inventario, Kardex, Recibir remesa,
+  Productos, Materiales, Listas de precio, Inventario, Kardex, Surtir inventario,
   Surtir sucursal, Almacenes, Reportes, Nómina, Personal y Configuración.
   Si lo que piden no está en ninguna, di que el sistema todavía no lo tiene.
 - NUNCA inventes clientes, colores, folios NI PANTALLAS. Si no aparecen en los

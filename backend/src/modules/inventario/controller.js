@@ -137,7 +137,7 @@ async function solicitarTraspaso(req, res, next) {
 
 async function enviarTraspaso(req, res, next) {
   try {
-    const data = await service.enviarTraspaso(Number(req.params.id), req.auth.sub);
+    const data = await service.enviarTraspaso(Number(req.params.id), req.auth.sub, req.body);
     res.json({ data, error: null });
   } catch (err) {
     next(err);

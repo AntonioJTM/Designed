@@ -20,6 +20,8 @@
 .franja-cifras .cliente { font-size: 16px; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .franja-cifras .cifra { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .franja-cifras .cifra.alerta { color: var(--alerta-t); }
+.franja-cifras .pie { font-size: 12.5px; color: var(--tinta-3); }
+.franja-cifras .pie.alerta { color: var(--alerta-t); }
 @media (max-width: 720px) { .franja-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---- Artículos ---- */

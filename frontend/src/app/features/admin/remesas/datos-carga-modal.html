@@ -1,0 +1,40 @@
+<!-- No cierra al hacer clic en el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-datos-carga-titulo">
+    <div class="modal-head">
+      <h2 id="modal-datos-carga-titulo">Datos de la carga · {{ carga().folio }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p class="muted" style="margin: 0 0 16px">
+        {{ carga().producto }}{{ carga().calibre ? ' ' + carga().calibre : '' }} ·
+        {{ carga().num_bultos | cantidad }} bultos · {{ carga().kg_total | cantidad: 'kg' }} en {{ carga().almacen }}
+      </p>
+
+      @if (error()) { <p class="alert" style="margin: 0 0 16px">{{ error() }}</p> }
+
+      <app-datos-carga [(datos)]="datos" [conCosto]="veCostos()" />
+
+      @if (enLista() > 1) {
+        <label class="check" style="margin-top: 16px; display: flex; gap: 8px; align-items: flex-start">
+          <input type="checkbox" [(ngModel)]="todaLaLista" name="toda-lista" />
+          <span>
+            Aplicar proveedor, factura, pedimento, contenedor y fecha a las {{ enLista() }} cargas de esta lista
+            <span class="muted">(el costo es de cada hilo: solo cambia el de esta)</span>
+          </span>
+        </label>
+      }
+    </div>
+
+    <div class="modal-foot">
+      @if (veCostos()) {
+        <span class="nota">Si cambias el costo, se rehace el costo promedio del hilo.</span>
+      }
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" [disabled]="guardando()" (click)="guardar()">
+        {{ guardando() ? 'Guardando…' : 'Guardar' }}
+      </button>
+    </div>
+  </div>
+</div>

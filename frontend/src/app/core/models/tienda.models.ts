@@ -32,11 +32,34 @@ export type DireccionInput = Omit<Direccion, 'id' | 'cliente_id' | 'es_predeterm
  */
 export interface ConfiguracionTienda {
   envio_costo_fijo?: string | null;
-  transferencia_banco?: string | null;
-  transferencia_titular?: string | null;
-  transferencia_clabe?: string | null;
   tienda_telefono?: string | null;
   tienda_direccion?: string | null;
+  /** Las cuentas ACTIVAS a las que se puede depositar (2026-10-06: pueden ser varias). */
+  cuentas_bancarias?: CuentaBancariaPublica[];
+}
+
+/** Lo que el cliente ve de una cuenta para depositar. */
+export interface CuentaBancariaPublica {
+  id: number;
+  banco: string;
+  titular: string | null;
+  numero_cuenta: string | null;
+  clabe: string | null;
+}
+
+/** Una cuenta de banco como la maneja el panel de Configuración. */
+export interface CuentaBancaria extends CuentaBancariaPublica {
+  activa: number | boolean;
+  creado_en: string;
+  actualizado_en: string;
+}
+
+export interface CuentaBancariaInput {
+  banco: string;
+  titular: string | null;
+  numero_cuenta: string | null;
+  clabe: string | null;
+  activa: boolean;
 }
 
 /** Una clave de configuración como la ve el panel, con su descripción. */

@@ -16,7 +16,10 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
  * no cuadra: entra dinero al cajón que ninguna venta explica. Por eso los
  * turnos se buscan al ABRIR el modal, para avisar antes de teclear el monto y
  * no al confirmar. Si hay más de un turno abierto (dos tiendas), se elige a
- * cuál entra; antes se tomaba el primero que contestara.
+ * cuál entra: viene puesto el de la caja con que se está trabajando (la que
+ * recuerdan el punto de venta y Caja en `localStorage['caja_sel']`); si no hay
+ * una elegida, no se propone ninguno y hay que escogerlo. Antes se proponía el
+ * primero de la lista y el efectivo de una tienda caía en el turno de otra.
  *
  * No se cierra al hacer clic en el fondo; sale con la ✕, "Cancelar" o Escape.
  */
@@ -64,9 +67,26 @@ export class AbonoModal implements OnInit {
     }).subscribe(({ metodos, turnos }) => {
       this.metodos.set(metodos);
       this.turnos.set(turnos);
-      this.turnoId = turnos[0]?.id ?? null;
+      this.turnoId = this.turnoPropuesto(turnos);
       this.cargando.set(false);
     });
+  }
+
+  /**
+   * El turno donde cae el efectivo: el único abierto, o el de la caja con que se
+   * está trabajando. Con varios abiertos y ninguna elegida, ninguno: adivinar
+   * descuadra dos cortes a la vez.
+   */
+  private turnoPropuesto(turnos: SesionCaja[]): number | null {
+    if (turnos.length === 1) return turnos[0].id;
+    let elegida: number | null = null;
+    try {
+      const v = Number(localStorage.getItem('caja_sel'));
+      elegida = Number.isFinite(v) && v > 0 ? v : null;
+    } catch {
+      elegida = null;
+    }
+    return turnos.find((t) => Number(t.caja_id) === elegida)?.id ?? null;
   }
 
   /** Prueba caja por caja; una caja que falla no tumba la búsqueda. */
@@ -108,8 +128,10 @@ export class AbonoModal implements OnInit {
     }
     if (this.esEfectivo() && !this.turnoId) {
       this.error.set(
-        'Un abono en efectivo tiene que entrar en un turno de caja abierto, o el corte no va a ' +
-          'cuadrar. Abre el turno en Caja, o registra el abono con otro método.'
+        this.turnos().length > 1
+          ? 'Elige a qué caja entra el efectivo: es la que lo recibió.'
+          : 'Un abono en efectivo tiene que entrar en un turno de caja abierto, o el corte no va a ' +
+            'cuadrar. Abre el turno en Caja, o registra el abono con otro método.'
       );
       return;
     }

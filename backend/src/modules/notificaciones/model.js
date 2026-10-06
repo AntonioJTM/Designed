@@ -129,7 +129,7 @@ async function pendientes() {
   );
 
   // Hilos que no se pueden vender porque no tienen precio. Los crea así la
-  // lista completa del proveedor (Recibir remesa): entra la mercancía y el
+  // lista completa del proveedor (Surtir inventario): entra la mercancía y el
   // precio se pone después en Productos. El aviso sigue hasta que se le ponga.
   const [sinPrecio] = await pool.query(
     `SELECT p.id AS producto_id, p.nombre, p.grosor_calibre AS calibre,

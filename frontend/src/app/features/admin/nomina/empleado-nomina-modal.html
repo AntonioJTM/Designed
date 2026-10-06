@@ -4,7 +4,7 @@
   Escape.
 -->
 <div class="modal-overlay">
-  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-empleado-titulo">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-empleado-titulo">
     <div class="modal-head">
       <h2 id="modal-empleado-titulo">
         {{ empleado().nombre }}
@@ -15,7 +15,7 @@
 
     <form [formGroup]="form" (ngSubmit)="guardar()">
       <div class="modal-body">
-        <div class="columna" style="gap: 16px">
+        <div class="columna" style="gap: 22px">
           @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
 
           <div class="form-grid">
@@ -25,9 +25,9 @@
               <span class="ayuda">En pesos, por semana de domingo a sábado.</span>
             </label>
             <label class="field">
-              Valor de la hora extra
-              <input type="number" step="0.01" min="0" formControlName="valor_hora_extra" />
-              <span class="ayuda">En pesos. Se usa si el ajuste del recibo no trae importe.</span>
+              Fecha de ingreso
+              <input type="date" formControlName="fecha_ingreso" />
+              <span class="ayuda">Cuándo entró a trabajar: con ella se cuentan sus vacaciones.</span>
             </label>
             <label class="field check full">
               <input type="checkbox" formControlName="paga_comision" /> Recibe comisión por ventas
@@ -39,10 +39,75 @@
                 <span class="ayuda">Sobre la venta neta: sin IVA, sin envío, sin lo cancelado.</span>
               </label>
             }
-            <label class="field check full">
-              <input type="checkbox" formControlName="activo" /> En nómina: entra en el cálculo de la semana
-            </label>
           </div>
+
+          <!-- El horario: cada día con su entrada y su salida. -->
+          <div class="seccion">
+            <h3>Horario</h3>
+            <p class="ayuda-sec">
+              Marca los días que trabaja y a qué hora entra y sale cada uno. De aquí salen los días que se le
+              pagan y sus horas extra.
+            </p>
+            <div class="tabla-scroll">
+              <table class="horario">
+                <thead>
+                  <tr><th>Día</th><th>Entra</th><th>Sale</th><th>Horas</th></tr>
+                </thead>
+                <tbody>
+                  @for (d of dias; track d.dia) {
+                    <tr [class.descanso]="!d.trabaja">
+                      <td class="dia">
+                        <label>
+                          <input type="checkbox" [(ngModel)]="d.trabaja" [ngModelOptions]="{ standalone: true }" />
+                          <span style="text-transform: capitalize">{{ DIAS[d.dia] }}</span>
+                        </label>
+                      </td>
+                      <td>
+                        <input type="time" [(ngModel)]="d.entrada" [ngModelOptions]="{ standalone: true }"
+                               [disabled]="!d.trabaja" [attr.aria-label]="'Entrada del ' + DIAS[d.dia]" />
+                      </td>
+                      <td>
+                        <input type="time" [(ngModel)]="d.salida" [ngModelOptions]="{ standalone: true }"
+                               [disabled]="!d.trabaja" [attr.aria-label]="'Salida del ' + DIAS[d.dia]" />
+                      </td>
+                      <td class="horas">{{ horasDe(d) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="fila-botones">
+              <button type="button" class="btn btn-ghost btn-sm" (click)="copiarLunes()">
+                Copiar el lunes a martes–viernes
+              </button>
+              <label class="field" style="flex-direction: row; align-items: center; gap: 8px; margin-left: auto">
+                Comida al día
+                <input type="number" min="0" max="240" step="5" style="width: 90px"
+                       [(ngModel)]="comidaMin" [ngModelOptions]="{ standalone: true }" />
+                <span class="muted">min</span>
+              </label>
+            </div>
+            <p class="ayuda-sec" style="margin: 0">
+              Los minutos de comida se restan de cada día para sacar las horas que de verdad trabaja.
+            </p>
+
+            <!-- Lo que sale del horario, calculado al momento. -->
+            @if (diasQueTrabaja() > 0) {
+              <div class="resumen-jornada" aria-live="polite">
+                <div><span>Trabaja</span><b>{{ diasQueTrabaja() }} {{ diasQueTrabaja() === 1 ? 'día' : 'días' }}</b></div>
+                <div><span>Horas a la semana</span><b>{{ horas().toLocaleString('es-MX') }} h</b></div>
+                <div><span>Su día vale</span><b>{{ valorDia() | dinero }}</b></div>
+                <div><span>Su hora vale</span><b>{{ valorDeLaHora() | dinero }}</b></div>
+                <div><span>Su hora extra (al doble)</span><b>{{ valorHoraExtra() | dinero }}</b></div>
+              </div>
+            } @else {
+              <p class="alert" style="margin: 0">Marca al menos un día de trabajo.</p>
+            }
+          </div>
+
+          <label class="field check">
+            <input type="checkbox" formControlName="activo" /> En nómina: entra en el cálculo de la semana
+          </label>
         </div>
       </div>
 
@@ -53,7 +118,7 @@
           </button>
         }
         <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
-        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+        <button type="submit" class="btn btn-primary" [disabled]="guardando() || diasQueTrabaja() === 0">
           {{ guardando() ? 'Guardando…' : 'Guardar' }}
         </button>
       </div>

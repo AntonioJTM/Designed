@@ -73,4 +73,53 @@ async function clavesValidas() {
   return rows.map((r) => r.clave);
 }
 
-module.exports = { listar, mapa, valor, numero, guardar, clavesValidas };
+// ---------------------------------------------------------------------------
+// Cuentas de banco para transferencias (2026-10-06): pueden ser varias.
+// ---------------------------------------------------------------------------
+
+const CAMPOS_CUENTA = 'id, banco, titular, numero_cuenta, clabe, activa, creado_en, actualizado_en';
+
+/** Las cuentas, activas primero. Con `soloActivas`, las que se le enseñan al cliente. */
+async function listarCuentas({ soloActivas = false } = {}) {
+  const [rows] = await pool.query(
+    `SELECT ${CAMPOS_CUENTA} FROM cuentas_bancarias
+      ${soloActivas ? 'WHERE activa = 1' : ''}
+      ORDER BY activa DESC, banco, id`
+  );
+  return rows;
+}
+
+async function obtenerCuenta(id) {
+  const [rows] = await pool.query(`SELECT ${CAMPOS_CUENTA} FROM cuentas_bancarias WHERE id = :id`, { id });
+  return rows[0] || null;
+}
+
+async function crearCuenta(c) {
+  const [r] = await pool.query(
+    `INSERT INTO cuentas_bancarias (banco, titular, numero_cuenta, clabe, activa)
+     VALUES (:banco, :titular, :numero_cuenta, :clabe, :activa)`,
+    c
+  );
+  return obtenerCuenta(r.insertId);
+}
+
+async function actualizarCuenta(id, c) {
+  await pool.query(
+    `UPDATE cuentas_bancarias
+        SET banco = :banco, titular = :titular, numero_cuenta = :numero_cuenta,
+            clabe = :clabe, activa = :activa
+      WHERE id = :id`,
+    { ...c, id }
+  );
+  return obtenerCuenta(id);
+}
+
+async function eliminarCuenta(id) {
+  const [r] = await pool.query('DELETE FROM cuentas_bancarias WHERE id = :id', { id });
+  return r.affectedRows;
+}
+
+module.exports = {
+  listar, mapa, valor, numero, guardar, clavesValidas,
+  listarCuentas, obtenerCuenta, crearCuenta, actualizarCuenta, eliminarCuenta,
+};

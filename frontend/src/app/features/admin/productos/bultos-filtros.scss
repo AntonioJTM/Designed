@@ -1,0 +1,14 @@
+// Filtros de la tarjeta de bultos (2026-10-06): lote, peso y conos. Hoja aparte:
+// producto-presentaciones.scss ya está en el límite de 4 kB por hoja.
+.filtros-bultos {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px;
+  margin-bottom: 12px; padding: 12px 14px; border-radius: 10px; background: var(--superficie-2);
+}
+.filtros-bultos .field { flex: 0 1 180px; }
+.filtros-bultos .field.peso { flex: 0 1 260px; }
+.filtros-bultos .rango { display: flex; align-items: center; gap: 6px; }
+.filtros-bultos .rango input { width: 100%; }
+.filtros-bultos .resumen { margin-left: auto; font-size: 13.5px; color: var(--tinta-2); text-align: right; }
+.filtros-bultos .resumen b { color: var(--tinta); }
+.lotes .ficha.boton { cursor: pointer; border: 1px solid transparent; font: inherit; }
+.lotes .ficha.boton.on { border-color: var(--acento); color: var(--acento); }

@@ -36,3 +36,13 @@ table.grid tfoot td {
 .hilo { font-weight: 500; }
 .chico { font-size: 12px; }
 .nowrap { white-space: nowrap; }
+
+// "Venta por color": el porcentaje con su barra. La barra se llena con ese
+// MISMO porcentaje (contra 100%), no contra el hilo más grande.
+.tabla-color { min-width: 980px; }
+.tabla-color th { white-space: nowrap; }
+.pct-celda { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.pct-celda .carril { width: 90px; height: 8px; flex: 0 0 90px; }
+.pct-num { min-width: 52px; text-align: right; }
+// Mientras llega la búsqueda nueva, lo de antes se ve apagado.
+.recargando { opacity: 0.6; transition: opacity 0.15s; }

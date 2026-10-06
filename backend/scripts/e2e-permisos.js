@@ -95,7 +95,14 @@ const ck = (n, ok, d) => {
     ck('pero no Hoy ni cancelar ventas', !pc.has('ver:hoy') && !pc.has('hacer:cancelar_venta'));
     r = await admin('GET', '/usuarios/perfil');
     ck(`el administrador: todo (${TOTAL})`, (r.data?.permisos ?? []).length === TOTAL, (r.data?.permisos ?? []).length);
-    ck('pero nadie ve costos mientras la tienda no los lleve', !(r.data?.permisos ?? []).includes('hacer:ver_costos'));
+    // El costo, solo administración y contabilidad (2026-10-06); al gerente se le quitó.
+    const llevaCosto = require('../src/modules/permisos/service').SE_LLEVA_COSTO;
+    ck(llevaCosto ? 'el administrador ve costos' : 'nadie ve costos mientras la tienda no los lleve',
+      (r.data?.permisos ?? []).includes('hacer:ver_costos') === llevaCosto);
+    if (de('gerente')) {
+      r = await como('gerente')('GET', '/usuarios/perfil');
+      ck('el gerente ya no ve costos', !(r.data?.permisos ?? []).includes('hacer:ver_costos'));
+    }
 
     console.log('\n=== 3. Pantallas: lo que no se ve tampoco se consulta ===');
     ck('cajero → Hoy: no', negado(await cajero('GET', '/hoy')));

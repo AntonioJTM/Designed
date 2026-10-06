@@ -253,9 +253,16 @@
             </div>
           </div>
           <div class="cifras-cuenta">
-            <div><span class="muted">Debe</span><span class="grande">{{ saldo() | dinero }}</span>
-              @if (saldo() <= 0) { <span class="muted">{{ limite() > 0 ? 'sin deuda' : 'no se le ha fiado' }}</span> }
-            </div>
+            @if (saldo() < 0) {
+              <!-- Se le canceló una venta fiada que ya había abonado: paga lo próximo que se le fíe. -->
+              <div><span class="muted">A su favor</span><span class="grande">{{ -saldo() | dinero }}</span>
+                <span class="muted">paga lo próximo que se le fíe</span>
+              </div>
+            } @else {
+              <div><span class="muted">Debe</span><span class="grande">{{ saldo() | dinero }}</span>
+                @if (saldo() <= 0) { <span class="muted">{{ limite() > 0 ? 'sin deuda' : 'no se le ha fiado' }}</span> }
+              </div>
+            }
             @if (limite() > 0) {
               <div><span class="muted">Le queda de crédito</span><span class="grande" style="font-size: 22px">{{ disponible() | dinero }}</span></div>
               <div><span class="muted">Se le fía hasta</span><span class="grande" style="font-size: 22px">{{ limite() | dinero }}</span></div>

@@ -274,17 +274,17 @@
         <div class="card-head">
           <div>
             <h2>Carga de producto</h2>
-            <p>Entra a la misma remesa que en Recibir remesa, ya con este hilo elegido.</p>
+            <p>Es lo mismo que en Surtir inventario, ya con este hilo elegido.</p>
           </div>
           @if (puedeCargarRemesa()) {
-            <a class="btn-enlace" routerLink="/admin/remesas">Ir a Recibir remesa</a>
+            <a class="btn-enlace" routerLink="/admin/remesas">Ir a Surtir inventario</a>
           }
         </div>
 
-        <!-- Subir la lista da ENTRADA a mercancía: es el permiso de Recibir remesa. -->
+        <!-- Subir la lista da ENTRADA a mercancía: es el permiso de Surtir inventario. -->
         @if (!puedeCargarRemesa()) {
           <p class="muted" style="margin: 0; font-size: 14px">
-            Cargar mercancía es parte de Recibir remesa, y tu puesto no lo tiene.
+            Cargar mercancía es parte de Surtir inventario, y tu puesto no lo tiene.
           </p>
         } @else {
           <label class="zona-carga" [class.encima]="arrastrando()"
@@ -308,18 +308,10 @@
                 }
               </select>
             </label>
-            <!-- La tienda no lleva el costo (core/costos.ts): no se pide el precio de compra. -->
-            @if (seLlevaCosto) {
-              <label class="field">
-                Precio de compra (opcional)
-                <span class="campo-moneda">
-                  <span>$</span>
-                  <input type="number" min="0" step="0.01" [(ngModel)]="costoKg" placeholder="0.00" />
-                  <span class="unidad">por kilo</span>
-                </span>
-                <span class="ayuda">A cómo te salió el kilo. Con esto se calcula cuánto te deja este hilo.</span>
-              </label>
-            }
+          </div>
+          <!-- De quién llegó y con qué papeles; el costo, solo administración y contabilidad. -->
+          <div style="margin-top: 16px">
+            <app-datos-carga [(datos)]="datosCarga" [conCosto]="puedeVerCostos()" />
           </div>
 
           <!--
@@ -418,7 +410,7 @@
         <div class="pie-tarjeta">
           <span class="muted" style="font-size: 14px">
             Entra a <b>{{ nombreAlmacenCarga() }}</b>
-            @if (costoKg) { · a {{ costoKg | dinero }} el kilo }
+            @if (puedeVerCostos() && datosCarga().costo_kg) { · a {{ datosCarga().costo_kg | dinero }} el kilo }
           </span>
           <button type="button" class="btn btn-primary" (click)="confirmarCarga()"
                   [disabled]="cargandoRemesa() || !pr.se_puede_cargar">
@@ -484,20 +476,63 @@
         </div>
 
         @if (lotes().length > 1) {
+          <!-- Tocar un lote lo filtra (y tocarlo otra vez lo quita). -->
           <div class="lotes">
             @for (g of lotes(); track g.lote) {
-              <span class="ficha">
+              <button type="button" class="ficha boton" [class.on]="loteBultos() === g.lote"
+                      [attr.aria-pressed]="loteBultos() === g.lote" (click)="alternarLote(g.lote)">
                 Lote {{ g.lote }} · {{ g.disponibles }} de {{ g.bultos.length }} disponibles
                 @if (g.kgDisponibles > 0) { · {{ g.kgDisponibles | cantidad: 'kg' }} }
-              </span>
+              </button>
             }
+          </div>
+        }
+
+        <!-- Filtros por lote, peso y conos (2026-10-06). -->
+        @if (bultos().length > 0) {
+          <div class="filtros-bultos">
+            <label class="field">
+              Lote
+              <select [ngModel]="loteBultos()" (ngModelChange)="loteBultos.set($event); verTodosLosBultos.set(false)"
+                      name="lote-bultos">
+                <option value="">Todos</option>
+                @for (g of lotes(); track g.lote) { <option [value]="g.lote">{{ g.lote }}</option> }
+              </select>
+            </label>
+            <div class="field peso">
+              <span>Peso real (kg)</span>
+              <div class="rango">
+                <input type="number" step="0.01" min="0" [ngModel]="pesoDesde()" (ngModelChange)="fijarPeso('desde', $event)"
+                       name="peso-desde" [placeholder]="rangoPesos() ? 'de ' + rangoPesos()!.min : 'de'" aria-label="Peso desde" />
+                <span class="muted">a</span>
+                <input type="number" step="0.01" min="0" [ngModel]="pesoHasta()" (ngModelChange)="fijarPeso('hasta', $event)"
+                       name="peso-hasta" [placeholder]="rangoPesos() ? 'a ' + rangoPesos()!.max : 'a'" aria-label="Peso hasta" />
+              </div>
+            </div>
+            <label class="field">
+              Conos que rinde
+              <select [ngModel]="conosBultos()" (ngModelChange)="conosBultos.set($event); verTodosLosBultos.set(false)"
+                      name="conos-bultos">
+                <option value="">Todos</option>
+                @for (o of opcionesConos(); track o.valor) {
+                  <option [value]="o.valor">{{ o.etiqueta }} ({{ o.n }})</option>
+                }
+              </select>
+            </label>
+            @if (hayFiltrosBultos()) {
+              <button type="button" class="btn btn-ghost btn-sm" (click)="limpiarFiltrosBultos()">Quitar filtros</button>
+            }
+            <div class="resumen">
+              <b>{{ resumenFiltrados().bultos }} {{ resumenFiltrados().bultos === 1 ? 'bulto' : 'bultos' }}</b>
+              · {{ resumenFiltrados().kg | cantidad: 'kg' }}
+            </div>
           </div>
         }
 
         @if (bultos().length === 0) {
           <p class="vacio">Sin bultos registrados. Llegan solos al cargar el Excel del proveedor, o captúralos a mano.</p>
         } @else if (bultosFiltrados().length === 0) {
-          <p class="vacio">No hay bultos con ese estado.</p>
+          <p class="vacio">No hay bultos con esos filtros.</p>
         } @else {
           <div class="tabla-scroll">
             <table class="grid" style="min-width: 760px">

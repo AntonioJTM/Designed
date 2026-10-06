@@ -17,17 +17,22 @@ import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { CuandoPipe } from '../inventario/cuando.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
+import { EnvioModal } from './envio-modal';
 
 /**
- * Línea en captura. La cantidad va en KILOS, siempre: así es como pide la
- * sucursal ("mándame 100 kg de negro") y así se lleva el inventario. Antes se
- * capturaba en paquetes y se convertía; lo corrigió el usuario el 2026-07-28:
- * "cuando me hacen un pedido no me dicen cuántos paquetes, yo mando por kilos".
+ * Línea en captura. Se pide en PAQUETES y la pantalla dice cuántos kilos son
+ * (2026-10-06: "las nuevas solicitudes de traspaso se van a hacer con paquetes
+ * mostrando el aproximado en kilos"). Del 2026-07-28 a esa fecha se pedía en
+ * kilos ("yo mando por kilos"); el usuario lo cambió.
+ *
+ * Los kilos son un APROXIMADO: paquetes × el peso promedio real de los paquetes
+ * que hay en el origen. Quien surte agarra los que tenga a la mano, no los busca
+ * por fecha (usuario, 2026-10-06), así que no se puede saber cuáles saldrán.
  */
 interface LineaEnvio {
   variante: Variante;
-  /** Kilos que se piden. */
-  kg: number;
+  /** Paquetes que se piden. */
+  paquetes: number;
 }
 
 /** Lo que el responsable declara de una línea al recibir. */
@@ -62,14 +67,14 @@ const HISTORIAL = 100;
  * el responsable acepte de que recibió y que diga qué recibió, para que no haya
  * problemas".
  *
- * Se pide en KILOS —"cuando me hacen un pedido no me dicen cuántos paquetes, yo
- * mando por kilos"— y al lado se muestra a cuántos paquetes equivale, con el peso
- * real de los bultos. Solo se mandan PAQUETES: los conos nacen en la sucursal, al
- * desarmarlos.
+ * Se pide en PAQUETES (desde el 2026-10-06; antes en kilos) y al lado se dice
+ * cuántos kilos son, más o menos. Al ENVIAR se escanean los paquetes que suben a
+ * la camioneta (`EnvioModal`) y sale su peso real. Solo se mandan PAQUETES: los
+ * conos nacen en la sucursal, al desarmarlos.
  */
 @Component({
   selector: 'app-traspasos',
-  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe],
+  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe, EnvioModal],
   templateUrl: './traspasos.html',
   styleUrl: './traspasos.scss',
   // Los dos modales (acuse y cancelación) se cierran con Escape, nunca al
@@ -100,8 +105,8 @@ export class Traspasos {
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
 
-  /** Traspaso al que se le está dando un paso (enviar), para no mandarlo dos veces. */
-  readonly ocupado = signal<number | null>(null);
+  /** Traspaso que se está surtiendo: el modal donde se escanean los paquetes. */
+  readonly porEnviar = signal<Traspaso | null>(null);
 
   /** Traspaso que se está cancelando, con su motivo. */
   readonly cancelando = signal<Traspaso | null>(null);
@@ -125,10 +130,14 @@ export class Traspasos {
   /** La matriz, para señalarla en el selector de origen. */
   readonly matriz = computed(() => this.almacenes().find((a) => a.es_matriz) ?? null);
 
-  /** Total de la solicitud, en kilos: es la unidad de todo el flujo. */
-  readonly totalKg = computed(() =>
-    Math.round(this.lineas().reduce((s, l) => s + (Number(l.kg) || 0), 0) * 1000) / 1000
-  );
+  /** Total de la solicitud: los paquetes que se piden… */
+  readonly totalPaquetes = computed(() => this.lineas().reduce((s, l) => s + (Number(l.paquetes) || 0), 0));
+
+  /** …y los kilos que son, con el peso real de esos bultos. */
+  readonly totalKg = computed(() => {
+    this.pesos(); // depende también de los pesos que van llegando
+    return Math.round(this.lineas().reduce((s, l) => s + (this.kgAprox(l) ?? 0), 0) * 1000) / 1000;
+  });
 
   /** Los que están esperando algo: se muestran arriba, son los que hay que atender. */
   readonly pendientes = computed(() =>
@@ -210,19 +219,52 @@ export class Traspasos {
   readonly pesos = signal<Record<number, EquivalenciaPaquetes>>({});
 
   /**
-   * A cuántos paquetes equivalen los kilos pedidos, con el peso promedio REAL de
-   * los bultos que hay en el origen. Es solo para leerlo como lo cuenta la tienda;
-   * lo que se manda son los kilos.
+   * Cuánto pesa, en promedio, un paquete de ese hilo en el origen (o el peso del
+   * catálogo si ahí no hay paquetes con peso). Es el mismo peso con que aparta el
+   * servidor (`inventario/model.js → pesoPorPaquete`).
    */
-  enPaquetes(l: LineaEnvio): number | null {
+  pesoPaquete(l: LineaEnvio): number | null {
     const eq = this.pesos()[l.variante.id];
-    if (!eq || !eq.peso_referencia || !l.kg) return null;
-    return Math.round((Number(l.kg) / eq.peso_referencia) * 100) / 100;
+    return eq ? Number(eq.peso_referencia) : null;
   }
 
-  /** Cuántos bultos hay en el origen, como referencia. */
-  disponibles(l: LineaEnvio): number | null {
-    return this.pesos()[l.variante.id]?.disponible.paquetes ?? null;
+  /** ¿El peso salió del catálogo porque en el origen no hay paquetes con peso? */
+  pesoDeCatalogo(l: LineaEnvio): boolean {
+    return !!this.pesos()[l.variante.id]?.referencia_nominal;
+  }
+
+  /**
+   * Cuántos kilos son, más o menos, los paquetes pedidos: paquetes × el peso
+   * promedio. Con bultos se multiplica por kilos ÷ paquetes SIN redondear el
+   * promedio, igual que el servidor: redondeado, pedir TODOS los paquetes daba
+   * unos gramos más de los que hay y no dejaba.
+   */
+  kgAprox(l: LineaEnvio): number | null {
+    const eq = this.pesos()[l.variante.id];
+    if (!eq) return null;
+    const n = Math.max(0, Math.floor(Number(l.paquetes) || 0));
+    const d = eq.disponible;
+    const kg = eq.referencia_nominal || !d.paquetes
+      ? n * Number(eq.peso_referencia)
+      : (n * Number(d.kg_en_bultos)) / d.paquetes;
+    return Math.round(kg * 1000) / 1000;
+  }
+
+  /** Cuántos paquetes caben en lo LIBRE del origen, con ese mismo peso promedio. */
+  paquetesLibres(l: LineaEnvio): number | null {
+    const eq = this.pesos()[l.variante.id];
+    const libre = this.kilosLibres(l);
+    if (!eq || libre == null) return null;
+    const d = eq.disponible;
+    const porPaquete = eq.referencia_nominal || !d.paquetes
+      ? Number(eq.peso_referencia)
+      : Number(d.kg_en_bultos) / d.paquetes;
+    return porPaquete > 0 ? Math.max(0, Math.floor((libre + 0.0005) / porPaquete)) : 0;
+  }
+
+  /** Cuántos paquetes con peso hay en el origen: el promedio sale de ellos. */
+  paquetesEnOrigen(l: LineaEnvio): number {
+    return this.pesos()[l.variante.id]?.disponible.paquetes ?? 0;
   }
 
   /** Kilos LIBRES en el origen: la existencia menos lo ya apartado a otras solicitudes. */
@@ -237,24 +279,18 @@ export class Traspasos {
   }
 
   /**
-   * ¿Alcanza? Todo en KILOS: es lo que se pide y es la unidad del inventario. Es
-   * la alerta que pidió el usuario: que no deje mandar la solicitud si no hay.
+   * ¿Alcanza? Los kilos que son esos paquetes contra los kilos LIBRES del origen:
+   * es lo que valida el servidor. Es la alerta que pidió el usuario: que no deje
+   * mandar la solicitud si no hay.
    */
   insuficiente(l: LineaEnvio): boolean {
     const hay = this.kilosLibres(l);
-    return hay != null && Number(l.kg) > hay;
+    const kg = this.kgAprox(l);
+    return hay != null && kg != null && kg > hay + 0.0005;
   }
 
   /** Alguna línea no alcanza: la solicitud no se puede mandar. */
   readonly hayInsuficientes = computed(() => this.lineas().some((l) => this.insuficiente(l)));
-
-  /** Rango de peso de esos bultos: explica por qué el total es aproximado. */
-  rangoPeso(l: LineaEnvio): string | null {
-    const d = this.pesos()[l.variante.id]?.disponible;
-    if (!d || !d.paquetes) return null;
-    if (d.peso_min === d.peso_max) return `${d.peso_min} kg cada uno`;
-    return `de ${d.peso_min} a ${d.peso_max} kg cada uno`;
-  }
 
   /** Consulta los pesos reales de una variante en el almacén de origen. */
   private cargarPesos(varianteId: number): void {
@@ -287,15 +323,15 @@ export class Traspasos {
       return;
     }
     this.error.set(null);
-    this.lineas.update((arr) => [...arr, { variante: v, kg: 0 }]);
+    this.lineas.update((arr) => [...arr, { variante: v, paquetes: 1 }]);
     this.cargarPesos(v.id);
     this.q = '';
     this.resultados.set([]);
   }
 
-  cambiarKg(l: LineaEnvio, kg: number): void {
+  cambiarPaquetes(l: LineaEnvio, paquetes: number): void {
     this.lineas.update((arr) =>
-      arr.map((x) => (x.variante.id === l.variante.id ? { ...x, kg } : x))
+      arr.map((x) => (x.variante.id === l.variante.id ? { ...x, paquetes: Number(paquetes) || 0 } : x))
     );
   }
 
@@ -319,8 +355,8 @@ export class Traspasos {
       this.error.set('Agrega al menos un producto.');
       return;
     }
-    if (lineas.some((l) => !l.kg || Number(l.kg) <= 0)) {
-      this.error.set('Todas las líneas necesitan los kilos que se piden.');
+    if (lineas.some((l) => !Number.isInteger(Number(l.paquetes)) || Number(l.paquetes) <= 0)) {
+      this.error.set('Todas las líneas necesitan los paquetes que se piden (enteros).');
       return;
     }
     // La alerta la da la pantalla antes de molestar al servidor; el backend la
@@ -336,12 +372,14 @@ export class Traspasos {
     this.error.set(null);
     this.mensaje.set(null);
 
-    // Siempre en kilos: el backend acepta `cantidad` para cualquier presentación
-    // y ya no hay que convertir nada aquí.
-    const items: TraspasoItemInput[] = lineas.map((l) => ({
-      variante_id: l.variante.id,
-      cantidad: Number(l.kg),
-    }));
+    // En PAQUETES: el servidor toma los bultos que de verdad hay (los más
+    // antiguos) y aparta su peso real. Una presentación que no es paquete (la
+    // "simple") no lleva bultos por paquete: va en los kilos que son.
+    const items: TraspasoItemInput[] = lineas.map((l) =>
+      l.variante.tipo_presentacion === 'paquete'
+        ? { variante_id: l.variante.id, paquetes: Number(l.paquetes) }
+        : { variante_id: l.variante.id, cantidad: this.kgAprox(l) ?? 0 }
+    );
 
     this.inv
       .solicitarTraspaso({
@@ -371,28 +409,29 @@ export class Traspasos {
 
   // ---- Paso 2 · Enviar ----
 
+  /** "Enviar" abre el modal donde se escanean los paquetes que suben. */
   enviarTraspaso(t: Traspaso): void {
-    if (this.ocupado()) return;
     this.error.set(null);
     this.mensaje.set(null);
-    this.ocupado.set(t.id);
-    this.inv.enviarTraspaso(t.id).subscribe({
-      next: (r) => {
-        this.ocupado.set(null);
-        const ajustadas = r.lineas.filter((l) => l.ajustado).length;
-        this.mensaje.set(
-          `Traspaso ${r.folio} en camino.` +
-            (ajustadas > 0
-              ? ` ${ajustadas} línea(s) cambiaron de peso: salieron los bultos que de verdad había.`
-              : '')
-        );
-        this.cargarHistorial();
-      },
-      error: (e) => {
-        this.ocupado.set(null);
-        this.error.set(this.msg(e));
-      },
-    });
+    this.porEnviar.set(t);
+  }
+
+  /** Ya salió: dice qué salió de verdad (lo escaneado) y recarga. */
+  alEnviar(r: ResultadoTraspaso): void {
+    this.porEnviar.set(null);
+    const paq = r.lineas.reduce((s, l) => s + Number(l.paquetes ?? 0), 0);
+    const kg = Math.round(r.lineas.reduce((s, l) => s + Number(l.cantidad), 0) * 1000) / 1000;
+    const incompletos = r.lineas.filter(
+      (l) => l.paquetes_pedidos != null && Number(l.paquetes) < l.paquetes_pedidos
+    ).length;
+    this.mensaje.set(
+      `Traspaso ${r.folio} en camino: ${paq} ${paq === 1 ? 'paquete escaneado' : 'paquetes escaneados'}, ` +
+        `${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg reales.` +
+        (incompletos
+          ? ` ${incompletos === 1 ? 'Un hilo no salió completo' : `${incompletos} hilos no salieron completos`}: quedó en la nota del envío.`
+          : '')
+    );
+    this.cargarHistorial();
   }
 
   // ---- Paso 3 · Recibir ----
@@ -404,7 +443,8 @@ export class Traspasos {
     this.notasRecepcion = '';
     this.recibiendo.set(t);
     this.lineasRecepcion.set(
-      (t.lineas ?? []).map((l) => {
+      // Lo que no salió (no había) no se recibe: no viene en la camioneta.
+      (t.lineas ?? []).filter((l) => !this.noSalio(l)).map((l) => {
         const enPaquetes = l.paquetes != null;
         const enviado = enPaquetes ? Number(l.paquetes) : Number(l.cantidad);
         return {
@@ -557,7 +597,8 @@ export class Traspasos {
 
   /** Lo que lleva, dicho en una línea: cuántos hilos, cuántos kilos y dónde está. */
   resumenLleva(t: Traspaso): string {
-    const lineas = t.lineas ?? [];
+    // Lo que no salió no se lleva.
+    const lineas = (t.lineas ?? []).filter((l) => !this.noSalio(l));
     const kg = Math.round(lineas.reduce((s, l) => s + Number(l.cantidad), 0) * 1000) / 1000;
     const partes = [
       `${lineas.length} ${lineas.length === 1 ? 'hilo' : 'hilos'}`,
@@ -606,6 +647,23 @@ export class Traspasos {
   }
 
   /** Lo recibido de una línea ya cerrada, para el historial. */
+  /** Un hilo que se pidió y no salió: no había. */
+  noSalio(l: TraspasoLinea): boolean {
+    return l.paquetes_solicitados != null && Number(l.cantidad) === 0;
+  }
+
+  /**
+   * Los paquetes de la línea, contra lo pedido cuando no cuadra: "15 de 20 paq"
+   * (salió menos) o "21 paq, se pidieron 20".
+   */
+  paquetesTexto(l: TraspasoLinea): string | null {
+    if (l.paquetes == null) return null;
+    const p = Number(l.paquetes);
+    const s = l.paquetes_solicitados != null ? Number(l.paquetes_solicitados) : null;
+    if (s == null || p === s) return `${p} paq`;
+    return p < s ? `${p} de ${s} paq` : `${p} paq, se pidieron ${s}`;
+  }
+
   recibidoDe(l: TraspasoLinea): string | null {
     if (l.cantidad_recibida == null) return null;
     const rec = Number(l.cantidad_recibida);

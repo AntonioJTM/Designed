@@ -53,14 +53,23 @@ async function _crearRemesaEn(conn, datos, usuarioId, alAvanzar = null) {
   const folio = `REM-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
   const [r] = await conn.query(
     `INSERT INTO remesas
-       (folio, variante_id, almacen_id, usuario_id, num_bultos, kg_total, costo_kg,
-        lotes, archivo, notas)
-     VALUES (:folio, :variante_id, :almacen_id, :usuario_id, :num_bultos, :kg_total,
-             :costo_kg, :lotes, :archivo, :notas)`,
+       (folio, variante_id, almacen_id, proveedor_id, usuario_id, num_bultos, kg_total, costo_kg,
+        factura, pedimento, contenedor, fecha_ingreso, lista, lotes, archivo, notas)
+     VALUES (:folio, :variante_id, :almacen_id, :proveedor_id, :usuario_id, :num_bultos, :kg_total,
+             :costo_kg, :factura, :pedimento, :contenedor, COALESCE(:fecha_ingreso, CURDATE()),
+             :lista, :lotes, :archivo, :notas)`,
     {
       folio,
       variante_id,
       almacen_id,
+      // De quién llegó y con qué papeles (2026-10-06). La fecha de ingreso es
+      // el día que llegó; sin ella, hoy.
+      proveedor_id: datos.proveedor_id ?? null,
+      factura: datos.factura ?? null,
+      pedimento: datos.pedimento ?? null,
+      contenedor: datos.contenedor ?? null,
+      fecha_ingreso: datos.fecha_ingreso ?? null,
+      lista: datos.lista ?? null,
       usuario_id: usuarioId ?? null,
       num_bultos: bultos.length,
       kg_total: kgTotal,
@@ -209,6 +218,9 @@ async function _skuLibre(conn, texto) {
  * la pantalla lo diga mientras carga.
  */
 async function crearLista(datos, usuarioId, { catalogo, empatar, avisar = () => {} }) {
+  // Las cargas de un mismo archivo comparten esta marca: así sus datos
+  // (factura, pedimento…) se corrigen de una vez.
+  const marcaLista = `LST-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
   return withTransaction(async (conn) => {
     const cat = await catalogo(conn);
     const [[kg]] = await conn.query(`SELECT id FROM unidades_medida WHERE abreviatura = 'kg' LIMIT 1`);
@@ -301,6 +313,12 @@ async function crearLista(datos, usuarioId, { catalogo, empatar, avisar = () => 
           archivo: datos.archivo,
           notas: datos.notas,
           costo_kg: h.costo_kg,
+          proveedor_id: datos.proveedor_id,
+          factura: datos.factura,
+          pedimento: datos.pedimento,
+          contenedor: datos.contenedor,
+          fecha_ingreso: datos.fecha_ingreso,
+          lista: marcaLista,
           bultos: h.bultos,
         },
         usuarioId,
@@ -333,6 +351,9 @@ async function crearLista(datos, usuarioId, { catalogo, empatar, avisar = () => 
 
 const SELECT_REMESA = `
   SELECT r.id, r.folio, r.num_bultos, r.kg_total, r.costo_kg, r.lotes, r.archivo, r.notas, r.creado_en,
+         r.proveedor_id, prv.nombre AS proveedor, r.factura, r.pedimento, r.contenedor,
+         DATE_FORMAT(r.fecha_ingreso, '%Y-%m-%d') AS fecha_ingreso, r.lista,
+         (SELECT COUNT(*) FROM remesas r2 WHERE r2.lista = r.lista) AS cargas_en_lista,
          r.variante_id, pv.sku, prod.nombre AS producto,
          -- El calibre viaja para poder cotejarlo con el nombre del archivo: el
          -- del proveedor se llama "COLOR CALIBRE.xlsx" y así el historial marca
@@ -344,15 +365,17 @@ const SELECT_REMESA = `
     JOIN productos prod        ON prod.id = pv.producto_id
     JOIN almacenes a           ON a.id = r.almacen_id
     LEFT JOIN usuarios u       ON u.id = r.usuario_id
+    LEFT JOIN proveedores prv  ON prv.id = r.proveedor_id
 `;
 
-async function listar({ variante_id, producto_id, limit, offset }) {
+async function listar({ variante_id, producto_id, proveedor_id, limit, offset }) {
   const cond = [];
   if (variante_id) cond.push('r.variante_id = :variante_id');
+  if (proveedor_id) cond.push('r.proveedor_id = :proveedor_id');
   // Por hilo: todas sus presentaciones. El conteo necesita el mismo JOIN.
   if (producto_id) cond.push('r.variante_id IN (SELECT id FROM producto_variantes WHERE producto_id = :producto_id)');
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
-  const params = { variante_id, producto_id, limit, offset };
+  const params = { variante_id, producto_id, proveedor_id, limit, offset };
   const [rows] = await pool.query(
     `${SELECT_REMESA} ${where} ORDER BY r.creado_en DESC, r.id DESC LIMIT :limit OFFSET :offset`,
     params
@@ -364,4 +387,82 @@ async function listar({ variante_id, producto_id, limit, offset }) {
   return { rows, total };
 }
 
-module.exports = { codigosExistentes, crearRemesa, crearLista, listar };
+async function obtener(id) {
+  const [rows] = await pool.query(`${SELECT_REMESA} WHERE r.id = :id`, { id });
+  return rows[0] || null;
+}
+
+/**
+ * Guarda los datos corregidos de una carga. Con `todaLaLista`, proveedor,
+ * factura, pedimento, contenedor y fecha van también a las demás cargas del
+ * mismo archivo (el costo NO: es de cada hilo). Si cambió el costo, se rehace
+ * el costo promedio del hilo.
+ */
+async function editarDatos(id, cambios, { todaLaLista = false } = {}) {
+  return withTransaction(async (conn) => {
+    const [[r]] = await conn.query('SELECT id, variante_id, lista, costo_kg FROM remesas WHERE id = :id FOR UPDATE', { id });
+    if (!r) throw new AppError(404, 'NO_ENCONTRADO', 'Esa carga no existe');
+
+    const compartidos = ['proveedor_id', 'factura', 'pedimento', 'contenedor', 'fecha_ingreso']
+      .filter((k) => cambios[k] !== undefined);
+    if (compartidos.length) {
+      const set = compartidos.map((k) => `${k} = :${k}`).join(', ');
+      const donde = todaLaLista && r.lista ? 'lista = :lista' : 'id = :id';
+      // Una fecha borrada vuelve al día de la captura: la carga siempre tiene una.
+      const valores = { ...cambios, id, lista: r.lista };
+      await conn.query(
+        `UPDATE remesas SET ${set.replace('fecha_ingreso = :fecha_ingreso', 'fecha_ingreso = COALESCE(:fecha_ingreso, DATE(creado_en))')}
+          WHERE ${donde}`,
+        valores
+      );
+    }
+    if (cambios.costo_kg !== undefined) {
+      const antes = r.costo_kg != null ? Number(r.costo_kg) : null;
+      const despues = cambios.costo_kg != null ? Number(cambios.costo_kg) : null;
+      if (antes !== despues) {
+        await conn.query('UPDATE remesas SET costo_kg = :c WHERE id = :id', { c: despues, id });
+        await recalcularCosto(conn, r.variante_id);
+      }
+    }
+  });
+}
+
+/**
+ * Rehace el COSTO del hilo como si cada costo se hubiera capturado a tiempo:
+ * recorre sus cargas en orden y aplica el promedio ponderado móvil con los
+ * kilos que había JUSTO ANTES de cada una (la suma de su kardex hasta ese
+ * movimiento, en todos los almacenes). Hace falta porque el costo se puede
+ * poner o corregir después de cargar (contabilidad lo pone cuando llega la
+ * factura) y el promedio depende del orden. Una carga sin costo no lo mueve.
+ */
+async function recalcularCosto(conn, varianteId) {
+  const [cargas] = await conn.query(
+    `SELECT r.id, r.kg_total, r.costo_kg,
+            (SELECT MIN(m.id) FROM movimientos_inventario m
+              WHERE m.referencia_tipo = 'remesa' AND m.referencia_id = r.id) AS mov_id
+       FROM remesas r WHERE r.variante_id = :v ORDER BY r.id`,
+    { v: varianteId }
+  );
+  let costo = null;
+  for (const c of cargas) {
+    if (c.costo_kg == null || c.mov_id == null) continue;
+    const [[{ previos }]] = await conn.query(
+      `SELECT COALESCE(SUM(cantidad), 0) AS previos FROM movimientos_inventario
+        WHERE variante_id = :v AND id < :mov`,
+      { v: varianteId, mov: c.mov_id }
+    );
+    const kgPrevios = Math.max(0, round3(previos));
+    const kg = Number(c.kg_total);
+    const nuevo = Number(c.costo_kg);
+    costo = costo == null || kgPrevios <= 0
+      ? nuevo
+      : Math.round(((kgPrevios * costo + kg * nuevo) / (kgPrevios + kg)) * 100) / 100;
+  }
+  await conn.query(
+    `UPDATE producto_variantes SET costo = :costo, costo_actualizado_en = NOW() WHERE id = :v`,
+    { costo, v: varianteId }
+  );
+  return costo;
+}
+
+module.exports = { codigosExistentes, crearRemesa, crearLista, listar, obtener, editarDatos, recalcularCosto };

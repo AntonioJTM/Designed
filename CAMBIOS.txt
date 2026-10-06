@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-05
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-06
 ===============================================================================
 
 ⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
@@ -25,7 +25,49 @@
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
-  BASE DE PRODUCCIÓN "hitex" Y SISTEMA DE PRUEBAS (2026-10-05): la tienda en línea
+  SURTIR INVENTARIO Y VENTA POR COLOR (2026-10-06, entrada 9): "Recibir remesa"
+  se llama "Surtir inventario" y cada carga guarda proveedor (de una lista),
+  factura, pedimento, contenedor y fecha de ingreso; el costo por kilo volvió,
+  solo para administración y el puesto nuevo Contabilidad. Reportes tiene "Venta
+  por color". ⚠ SIN DESPLEGAR; migración 2026-10_carga_proveedor_costo.sql solo
+  en "desarrollo". El usuario quitó 8 listas de muestras/ y siete E2E ya no
+  corren sin ellas (ver la entrada).
+  Antes: VENDER REVISADO (2026-10-06, entrada 8): todo va en hora de México (la base
+  estaba en UTC: Pedidos no enseñaba una venta de las 23:09), lo fiado se da por
+  pagado solo al abonar (de lo más antiguo a lo más nuevo) y 7 fallas más de
+  Vender corregidas. ⚠ SIN DESPLEGAR: al desplegar, con el servicio parado,
+  migraciones → scripts/ajustar-hora.js en hitex → código (pasos en CLAUDE.md).
+  Antes: SURTIR SUCURSAL: SE MANDA LO QUE HAY (2026-10-06, entrada 7): al enviar se
+  escanea todo lo que sale; si de un hilo hay menos (o nada), sale lo que hay y
+  la nota del envío lo dice sola ("era lo único que había"). ⚠ SIN DESPLEGAR;
+  la migración 2026-10_traspaso_lo_que_salio.sql está SOLO en "desarrollo".
+  Falta la pistola física.
+  Antes: SURTIR SUCURSAL: SIN ESCANEAR NO SE ENVÍA (2026-10-06, entrada 6).
+  Antes: SURTIR SUCURSAL: AL ENVIAR SE ESCANEAN LOS PAQUETES (2026-10-06, entrada 5):
+  "Enviar" abre un modal con el lector; sale el peso real de los paquetes
+  escaneados y esos quedan en la sucursal.
+  Antes: SURTIR SUCURSAL: KILOS = PAQUETES × PESO PROMEDIO (2026-10-06, entrada 4): el
+  usuario agarra los paquetes que tenga a la mano, no los más antiguos; así que
+  se aparta y se descuenta N × el promedio real del origen, y la pantalla lo dice
+  "en promedio". ⚠ SIN DESPLEGAR.
+  Antes: FILTROS DE BULTOS Y SURTIR SUCURSAL POR PAQUETES (2026-10-06, entrada 3): la
+  tarjeta Bultos filtra por lote, peso y conos; la solicitud de traspaso se pide
+  en PAQUETES. De paso: cancelar un envío en camino regresaba de más bultos (ya
+  regresa solo los de ese envío). ⚠ SIN DESPLEGAR; la migración
+  2026-10_traspaso_bultos.sql está SOLO en "desarrollo".
+  Antes: VARIAS CUENTAS DE BANCO PARA TRANSFERENCIAS (2026-10-06): en Configuración, una
+  lista de cuentas (banco, a nombre de, NÚMERO DE CUENTA y CLABE) que se agregan,
+  editan, esconden o quitan en un modal; la CLABE se revisa con su dígito de
+  control. ⚠ SIN DESPLEGAR; la migración 2026-10_cuentas_bancarias.sql está
+  aplicada SOLO en "desarrollo" (al desplegar va en "hitex").
+  Antes: NÓMINA POR DÍAS, HORARIO, HORAS EXTRA Y VACACIONES (2026-10-06): cada empleado
+  tiene su horario día por día; el recibo paga los días trabajados (sueldo ÷
+  días que trabaja), las horas extra se cuentan solas contra su horario de ese
+  día y se pagan AL DOBLE, y las vacaciones van por ley según su fecha de
+  ingreso y se pagan como días normales. ⚠ SIN DESPLEGAR y la migración
+  2026-10_nomina_dias_vacaciones_horario.sql está aplicada SOLO en "desarrollo":
+  al desplegar va también en "hitex". Ver la entrada fechada.
+  Antes: BASE DE PRODUCCIÓN "hitex" Y SISTEMA DE PRUEBAS (2026-10-05): la tienda en línea
   de siempre ya usa la base nueva, vacía, para capturar de verdad; la de antes
   quedó de pruebas en el puerto 8443. Ver la entrada fechada.
   Antes: MANUAL DE USO EN PDF (2026-10-05): 152 páginas para el personal, con
@@ -361,6 +403,658 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (9) · Surtir inventario (datos de la carga y el costo) y Venta por color
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Recibir remesas === surtir inventarios: nombre de proveedor, costo por kilo
+  (solo administrador y contabilidad), pedimento número, número de contenedor,
+  factura, fecha ingreso."
+  "REPORTES INVENTARIO: en cierto rango de tiempo cuántos kg se han vendido de
+  cierto color y qué porcentaje lo representa, y ver qué porcentaje del color ya
+  se vendió y cuánto queda en inventario."
+  Decidió (preguntas): renombrar a "Surtir inventario"; crear el puesto
+  Contabilidad y ENCENDER el costo solo para administración y contabilidad (al
+  gerente se le quita); el proveedor de una LISTA; se captura al cargar y se
+  corrige después.
+
+1) SURTIR INVENTARIO
+  · La pantalla "Recibir remesa" se llama "Surtir inventario" (menú, título,
+    Permisos, Presentaciones, el asistente). La ruta y el permiso no cambian.
+  · Cada carga guarda proveedor, factura, número de pedimento, número de
+    contenedor y fecha de ingreso (el día que llegó; sin ella, hoy; no futura).
+    Es un mismo bloque (remesas/datos-carga.ts) en los tres cargadores: un hilo,
+    la lista con varios colores (los papeles valen para toda la lista; el
+    proveedor de la hoja DOCUMENTO se elige solo si ya está dado de alta, y si
+    no, ofrece "Darlo de alta") y Presentaciones.
+  · El proveedor se elige de una lista; "Nuevo" lo da de alta ahí mismo con su
+    nombre (no se repite: «tmpsi canan tekstil» = «TMPSI Canan Tekstil»).
+  · Historial ("Cargas recibidas"): columna "Proveedor y papeles", la fecha de
+    ingreso, y el botón "Datos" para completar o corregir todo después. En una
+    carga de lista ofrece aplicarlo a todas sus cargas (menos el costo).
+  · EL COSTO: solo administración y contabilidad lo capturan (en un hilo, en el
+    bloque; en la lista, una columna por hilo) y lo ven (historial, aviso "Sin
+    costo", PDF). Si alguien más lo manda: 403. Corregirlo o ponerlo después
+    REHACE el costo promedio del hilo en orden (recalcularCosto), con los kilos
+    que había antes de cada carga según el kardex: da lo mismo que si se hubiera
+    capturado a tiempo (probado: 115.24 y luego 110.32 con la cuenta a mano).
+  · El interruptor SE_LLEVA_COSTO volvió a true: con él regresan, solo para
+    quien ve costos, el costo promedio en Presentaciones y el margen/ganancia
+    del tablero y del asistente.
+
+2) REPORTES → VENTA POR COLOR (lo hizo un agente; revisado y visto)
+  · GET /reportes/venta-por-color?desde&hasta[&q]. Por hilo (color + calibre,
+    paquete y cono sumados): kg vendidos en el periodo, % de todo lo vendido en
+    el periodo, importe sin IVA, vendido desde siempre, lo que queda y el % ya
+    vendido (vendido ÷ vendido + lo que queda). Cifras arriba, buscador, periodo
+    y orden (más vendido, % ya vendido, lo que queda). Entra en "Descargar".
+  · "Vendido" = salió del inventario: sin cancelados, devueltos ni apartados sin
+    entregar. "Más vendidos" sí cuenta esos apartados: por eso puede salir un
+    poco abajo (hoy, 76 kg en 90 días; el E2E lo comprueba).
+  · En el navegador: 1,014.4 kg en el periodo de 29 hilos; buscando "rojo", los
+    dos rojos son el 20.4% de lo vendido y del rojo ya se vendió el 57.1%.
+
+CAMBIO EN LA BASE (migración 2026-10_carga_proveedor_costo.sql)
+  · remesas: proveedor_id (FK proveedores), factura, pedimento, contenedor,
+    fecha_ingreso (las que ya había: el día que se cargaron) y lista (marca de
+    las cargas de un mismo archivo).
+  · proveedores: el nombre no se repite (índice único).
+  · roles: 'contabilidad', con hacer:ver_costos, ver:remesa, ver:reportes,
+    ver:negocio, ver:inventario y ver:kardex.
+  · rol_permisos: al gerente se le quita hacer:ver_costos.
+  · Aplicada en "desarrollo". ⚠ Falta en "hitex".
+
+LO TÉCNICO
+  · Backend: módulo nuevo proveedores (GET y POST /proveedores);
+    remesas: rutas (datos y PATCH /:id), controller (403 del costo, quita el
+    costo del historial a quien no lo ve), service (datosDeCarga,
+    validarDatosCarga, editarDatos), lista.js, model.js (columnas, marca de
+    lista, obtener, editarDatos, recalcularCosto), reportes.js (PDF);
+    permisos (SE_LLEVA_COSTO = true, nombre de ver:remesa); reportes
+    (venta-color.js y su prueba, model, service, routes, controller).
+  · Frontend: remesas/datos-carga.ts|html|scss (nuevo), datos-carga-modal.ts|html
+    (nuevo) y sus pruebas; remesas.ts|html, carga-lista.ts|html|scss y sus
+    pruebas; producto-presentaciones; core/costos.ts; navegacion.ts;
+    inventario.service.ts (Proveedor, DatosCarga, editarDatosCarga,
+    proveedores, crearProveedor); reportes (pestaña nueva, servicio, modelos).
+  · Al probar se encontró que el proveedor del archivo solo se elegía al abrir la
+    pantalla (en la lista el archivo llega después): ahora reacciona a cuando
+    llega.
+
+LA VERIFICACIÓN
+  · e2e-surtir-inventario.js (nuevo, 25 + limpieza): proveedores sin repetir,
+    carga con todos sus datos, 403 al almacenista que manda costo, fecha
+    futura, historial sin costo para el almacenista y con costo para
+    contabilidad, completar papeles después, el promedio rehecho en orden, la
+    lista corregida de una vez y su PDF. Arma sus bultos en el código.
+  · e2e-reporte-color.js (nuevo, 30), e2e-costo-margen (17, ya no sale en 0),
+    e2e-permisos (actualizada: el administrador ve costos, el gerente no),
+    e2e-carga-lista (60), e2e-asistente (46): pasan.
+  · 277 unitarias del frontend y 19 del backend; compila sin avisos.
+  · En el navegador: Surtir inventario (un hilo con su costo), el historial con
+    "Datos", la ventana de corrección y el reporte por color.
+  · NO corren (les faltan las listas que el usuario quitó de muestras/ hoy):
+    remesas, cancelacion, carga-por-producto, bultos-estado, trazabilidad,
+    traspaso-paquetes y bajar-a-mostrador.
+  · ⚠ SIN DESPLEGAR.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (8) · Vender: la hora de la tienda, lo fiado que se paga y 7 fallas
+-------------------------------------------------------------------------------
+
+LO QUE DIJO EL USUARIO
+  "VENDER. Revisar toda la parte de vender, porque creo está mal: en Pedidos no
+  me carga la venta que realicé; pedí a crédito y lo aboné, y la venta aún
+  seguía con pendiente a crédito y se suponía que ya lo había pagado."
+
+LO QUE PASÓ (leído en "hitex", solo lectura)
+  La venta POS-…8FE6 ($120, "la esperanza") se hizo el 5 a las 23:09, toda a
+  crédito; a las 23:11 se abonaron los $120 en efectivo (entraron a la caja, el
+  saldo quedó en 0). Ninguna de las dos cosas movió el estado de la venta (hoy
+  dice "pagado": la cambiaron a mano). Y la base la guardó a las 05:09 del día 6.
+
+1) LA HORA (la causa de "no me carga la venta")
+  El MariaDB del servidor corre en UTC y las conexiones no decían en qué hora
+  hablaban: todo se guardaba en UTC y, después de las 18:00, "hoy" ya era mañana.
+  Pedidos abre "esta semana hasta hoy" (día 5) y la venta decía día 6: no salía.
+  Además TODAS las horas se veían 6 h adelantadas (un envío de las 11:09 decía
+  "salió 17:09"). El código suponía una base en hora local (así era en esta
+  máquina, antes de pasarla al servidor).
+  · config/db.js: cada conexión hace SET time_zone = '-06:00' (DB_TIMEZONE).
+  · config/env.js: TZ = America/Mexico_City para Node (TZ_TIENDA), salvo que un
+    script ya traiga el suyo.
+  · clientes/service.js: `cliente_desde` usaba la fecha UTC; ahora hoyLocal().
+  · scripts/ajustar-hora.js: recorre −6 h todas las columnas DATETIME, una vez por
+    base (marca `_zona_horaria`). Con la muestra sembrada solo recorre lo posterior
+    a la siembra (la muestra se sembró con reloj simulado en hora de México): el
+    corte es `_demo_estado.sembrado.en`. Una sentencia por tabla con todas sus
+    columnas, para que ON UPDATE no pise `actualizado_en`.
+    En "desarrollo" se aplicó: 1,510 filas en 18 tablas, corte 2026-10-01
+    21:31:36. En "hitex" se vio sin aplicar (718 bultos, la venta, el turno…).
+
+2) LO FIADO SE DA POR PAGADO SOLO
+  clientes/model.js → aplicarAbonos reparte lo abonado (y los ajustes que bajan
+  la deuda) de lo MÁS ANTIGUO a lo más nuevo entre lo que debe cada venta;
+  liquidarVentasACredito pasa a 'pagado' la 'pendiente' que queda cubierta. Corre
+  en la transacción del abono, del ajuste, de la venta fiada (un saldo a favor la
+  paga al nacer) y de cancelar/reactivar una fiada. El abono responde con
+  `liquidadas` (los folios).
+  · scripts/liquidar-ventas-credito.js: pone al día lo ya pagado. En
+    "desarrollo" pasaron a pagado 51 ventas de la muestra (13 clientes). En
+    "hitex": ninguna (la única ya estaba en pagado). También AVISA, sin tocarlas,
+    de las marcadas pagadas a mano que se deben: en "desarrollo" la 760 (prueba
+    del usuario del día 5, Chava, $1,330) y la 592 (muestra, "entregado").
+
+3) LAS 7 FALLAS DE LA REVISIÓN (un agente revisó el flujo; cada una se comprobó)
+  1. Apartados: el abono en EFECTIVO siempre fallaba con "abre un turno" aunque
+     hubiera turno: `abonoEsEfectivo` era un computed sobre un campo de ngModel
+     (justo lo que prohíbe CLAUDE.md). Ahora es método. Visto en el navegador:
+     "El efectivo entra al turno de Caja Moroleon".
+  2. Pedidos decía "Falta $X" en una fiada ya pagada, y el detalle "En su
+     cuenta" en ámbar: ahora la lista resta lo pagado con abonos y el detalle
+     dice "Se fió $X · ya está pagado" / "debe $X" (`credito_pagado`,
+     `credito_por_pagar` en GET /pedidos/:id). La historia y el POS ya no dicen
+     "no a este pedido en particular".
+  3. Cancelar una fiada no volvía a repartir los abonos: la siguiente se quedaba
+     pendiente para siempre, o el saldo quedaba en negativo sin explicación.
+     Ahora se reparten de nuevo, y el saldo negativo se lee "A su favor" en el
+     expediente y paga lo próximo que se le fíe.
+  4. A mano se podía marcar "pagado" una fiada que se debía (eso pasó en hitex y
+     en la 760): 409 VENTA_FIADA_SIN_PAGAR; y regresar a pendiente una ya pagada:
+     409 VENTA_FIADA_PAGADA. El selector del detalle no las ofrece.
+  5. El abono del expediente proponía el PRIMER turno abierto: ahora el de la
+     caja con que se trabaja (`caja_sel`); con varias y ninguna elegida, hay que
+     escogerla.
+  6. Punto de venta: bajar los kilos de una línea con bultos dejaba "vendido" un
+     bulto que seguía en la bodega. Ahora esos kilos no se teclean, cada bulto
+     tiene su ✕, y el servidor rechaza bultos que pesen más que lo cobrado
+     (422 BULTOS_EXCEDEN_CANTIDAD). Estilos en pos-bultos.scss (pos.scss se
+     pasaba del límite de 4 kB por 7 bytes).
+  7. Reactivar una venta devuelta a medias sacaba lo VENDIDO y no lo que regresó
+     (10 vendidos, 4 de vuelta → inventario 6 kg abajo): ahora saca lo que
+     regresó, con el kardex del pedido. De paso se encontró que una venta de DOS
+     hilos cancelada no se podía reactivar (el regreso del segundo contaba como
+     "otra presentación" del primero): corregido. Y "Canceladas este mes" ahora
+     cuenta las canceladas este mes (no las creadas) y dice "en ventas", no
+     "devueltos".
+     NO se hizo: tope a la cantidad que regresa en una devolución en otra
+     presentación (los conos pesan más que el paquete por el tubo; un tope fijo
+     rechazaría devoluciones legítimas).
+
+LA VERIFICACIÓN
+  · E2E contra "desarrollo", todas pasan: clientes-credito (59: secciones 6 y 7
+    nuevas: liquidar, FIFO, condonar, cancelar libera el abono, saldo a favor,
+    cambio a mano, "Falta" en la lista), cancelacion (22: devolución a medias y
+    venta de dos hilos), bultos-estado (24: BULTOS_EXCEDEN_CANTIDAD), apartados
+    (47), cancelacion-caja (31), comprobante-pago (41), devolucion-presentacion
+    (18), trazabilidad (14), traspaso-paquetes (61), traspaso-estados (39),
+    permisos (37), nomina-jornada (47), cuentas-bancarias (18).
+  · 266 unitarias del frontend (nuevas: apartados con el método elegido después
+    de abrir, abono con dos tiendas, detalle de fiada pagada/a medias, POS quitar
+    bulto) y 15 del backend.
+  · En el navegador: Pedidos enseña la venta con su hora ("ayer 16:13"), el
+    detalle de una fiada pagada y de una que debe, y el abono de un apartado.
+  · ⚠ SIN DESPLEGAR. Pasos al desplegar en CLAUDE.md ("VENDER REVISADO…"): con
+    el servicio parado, migraciones → ajustar-hora en hitex → código →
+    liquidar-ventas-credito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (7) · Surtir sucursal: se manda lo que hay, y queda anotado
+-------------------------------------------------------------------------------
+
+LO QUE DIJO EL USUARIO (sobre la entrada 6, que obligaba a escanear cada hilo)
+  "No me gustaría que se hiciera de nuevo; quisiera que solo se mande lo que se
+  tiene: si pido 20 bultos de negro 1/30 y solo tengo 15, que se envíen esos y
+  nada más, que en notas ponerle que no se envió, que era lo único que tenía."
+
+CÓMO QUEDÓ
+  · Se sigue sin poder enviar sin escanear nada (SIN_ESCANEAR), pero ya no hace
+    falta escanear de TODOS los hilos: se quitó LINEA_SIN_ESCANEAR.
+  · Un hilo con menos paquetes sale con los escaneados; uno sin ninguno no sale
+    (su línea queda en 0, suelta lo apartado y no toca saldo ni kardex).
+  · El modal lo dice antes: "No sale completo: BLACK 2/30 (2 de 3), OPTIK 2/30
+    (no sale). Se manda lo que hay y en las notas del envío queda que era lo
+    único que había." El renglón del hilo dice "no sale". Hay campo "Notas del
+    envío (opcional)".
+  · El servidor escribe solo la nota: "BLACK 2/30: salieron 2 de 3; OPTIK 2/30:
+    no salió (se pidieron 2). Era lo único que había." y le agrega lo que se
+    escribió ("Va en la camioneta 2").
+  · Pendientes dice por línea "24.55 kg · BLACK 2/30 (2 de 3 paq)" y "OPTIK 2/30
+    · no salió (no había)", y "Al enviar: …" con la nota. El historial también,
+    y el acuse de recibo enseña la nota y no pide recibir lo que no salió.
+  · Al enviar, el aviso verde dice cuántos hilos no salieron completos.
+
+CAMBIO EN LA BASE (migración 2026-10_traspaso_lo_que_salio.sql)
+  · traspaso_detalle.paquetes_solicitados y cantidad_solicitada: lo PEDIDO.
+    Hacían falta porque al enviar `paquetes` y `cantidad` se reescriben con lo que
+    salió y se perdía lo pedido. Lo ya existente se llenó con lo que dice la línea.
+  · traspaso_detalle.cantidad admite 0 (CHECK >= 0, antes > 0): el hilo que no
+    salió se queda en la solicitud con 0 para que se vea.
+  · traspasos.envio_notas: la nota del envío.
+  · Aplicada en "desarrollo". ⚠ Falta en "hitex" (después de traspaso_bultos).
+
+LA VERIFICACIÓN
+  · e2e-traspaso-paquetes.js, sección 9 nueva: pide 3 de PP BLANCO y 1 de PP
+    NEGRO, se escanean 2 de BLANCO y nada de NEGRO → salen 2 con su peso real,
+    NEGRO no sale ni se mueve, se suelta lo apartado de los dos, la nota dice
+    "PP BLANCO: salieron 2 de 3; PP NEGRO: no salió (se pidieron 1). Era lo único
+    que había. Va en la camioneta 2", el historial guarda "2 de 3", al recibir no
+    hay faltantes y NEGRO no tiene movimientos; cancelar en camino regresa solo lo
+    que salió. Todo pasa.
+  · e2e-traspaso-estados.js (39) y e2e-permisos.js pasan; 261 unitarias del
+    frontend y 15 del backend.
+  · Visto en el navegador con una solicitud temporal enviada de verdad (BLACK 2
+    de 3, OPTIK no sale) y luego cancelada y borrada con sus movimientos: la
+    bodega quedó idéntica (12,951.4 kg de BLACK, 683 paquetes, sin apartados).
+  · ⚠ SIN DESPLEGAR.
+
+PENDIENTE DE DECIDIR
+  La SOLICITUD sigue sin dejar pedir más de lo que el sistema dice que hay libre
+  (lo pidió el usuario el 2026-07-28). "Se manda lo que hay" aplica al SURTIR,
+  cuando en la bodega se encuentran menos de los que el sistema decía.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (6) · Surtir sucursal: sin escanear no se envía
+-------------------------------------------------------------------------------
+
+LO QUE DIJO EL USUARIO
+  "Aquí cada cosa que sale se escanea, no se puede enviar si no se escanea."
+  (Sobre la salida "Enviar sin escanear" que se dejó en la entrada 5.)
+
+CÓMO QUEDÓ
+  · El modal de "Enviar" ya no ofrece "Enviar sin escanear": el botón se apaga
+    mientras algún hilo no tenga ningún paquete escaneado. Ese renglón dice
+    "0 paq. · sin escanear" y abajo: "Falta escanear: OPTIK 2/30 · ACRILAN ·
+    Nacional. Sin escanear no se puede enviar; si de ese hilo ya no hay, cancela
+    la solicitud y pide de nuevo sin él."
+  · El servidor exige lo mismo: sin códigos, 422 SIN_ESCANEAR; con un hilo sin
+    ningún paquete, 422 LINEA_SIN_ESCANEAR (nombra el hilo). No mueve nada.
+  · Se quitó del servidor la salida por lo apartado y la elección de "los más
+    antiguos" (`bultosDisponibles`): ya no la usa nadie. Lo apartado al pedir
+    solo reserva; al enviar se libera completo y sale lo escaneado. Una solicitud
+    vieja en kilos también sale escaneando.
+  · Del envío se quitaron `escaneado` y `peso_estimado` de cada línea (siempre
+    sería escaneado y nunca estimado).
+
+DECISIÓN TOMADA SIN PREGUNTAR (para revisar con el usuario)
+  Si de un hilo ya no hay, no se puede mandar el resto: hay que cancelar y pedir
+  de nuevo sin ese hilo. La otra opción —que el hilo sin escanear simplemente
+  no salga y el resto sí— quedó sin hacer.
+
+LA VERIFICACIÓN
+  · e2e-traspaso-paquetes.js: sin escanear → SIN_ESCANEAR sin mover nada; 5
+    escaneados que NO son los más antiguos → sale su peso real (95.26 kg; se
+    habían apartado 95.441) y quedan ESOS en la tienda; 77 pedidos y 75
+    escaneados → salen los 75 con su peso real; dos hilos con uno sin escanear →
+    LINEA_SIN_ESCANEAR; además todo lo de la entrada 5. Todo pasa.
+  · e2e-traspaso-estados.js reescrita para enviar escaneando (39, 0 fallos).
+    e2e-permisos.js pasa.
+  · 261 unitarias del frontend y 15 del backend; compila.
+  · Visto en el navegador con una solicitud temporal de dos hilos (TMP, ya
+    borrada): 2 paquetes de BLACK escaneados, OPTIK "sin escanear" y "Enviar"
+    apagado.
+  · ⚠ SIN DESPLEGAR. Falta la pistola física.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (5) · Surtir sucursal: al enviar se escanean los paquetes que salen
+-------------------------------------------------------------------------------
+
+LO QUE DIJO EL USUARIO
+  "Aquí cuando se surte sí se escanean los paquetes que salen." (Corrigió lo que
+  se le explicó en la entrada 4: que nadie escaneaba al surtir y por eso se
+  anotaban los más antiguos.)
+
+CÓMO QUEDÓ
+  · "Enviar" (Pendientes de Surtir sucursal) ya no envía de golpe: abre un modal
+    con el lector (traspasos/envio-modal.ts). Se escanea cada paquete conforme se
+    sube; el modal dice por hilo cuántos se pidieron, cuántos van escaneados
+    ("faltan 1" / "1 de más") y sus kilos reales, y abajo la lista de paquetes con
+    "Quitar". El pie: "N paquetes · X kg reales".
+  · Al enviar, de cada hilo sale el peso REAL de sus paquetes escaneados y ESOS
+    quedan en la sucursal (no los más antiguos). Pueden ser más o menos de los
+    pedidos: la línea queda con lo que salió y se libera todo lo apartado.
+  · Cada código se revisa al leerlo y se avisa en el momento: el código de la
+    presentación ("escanea la etiqueta del paquete"), un paquete de otro hilo, uno
+    vendido (con su folio) o bajado a conos, uno repetido o uno que no existe. El
+    servidor lo vuelve a revisar al enviar y rechaza sin mover nada.
+  · Un hilo sin escanear sale como antes (lo apartado, el aproximado) y el modal
+    lo avisa; sin escanear nada, el botón dice "Enviar sin escanear". Queda como
+    salida por si falla el lector o un paquete no tiene etiqueta.
+  · Al terminar: "Traspaso X en camino: N paquetes escaneados, Y kg reales."
+
+UNA FALLA QUE SE EVITÓ: EL CAMPO NO SE VACIABA
+  Al probarlo en el navegador el campo se quedaba con el último código. Con
+  `eventCoalescing` (app.config.ts), si el último dígito y el Enter caen en el
+  mismo ciclo —lo normal con un lector— `codigo = ''` no cambia nada para
+  Angular (ya valía '') y el texto se queda: el siguiente escaneo se habría
+  pegado al anterior. El modal vacía el campo directo; hay una prueba que lo
+  simula. ("Bajar conos" no lo tiene: vacía hasta que contesta el servidor.)
+
+LO TÉCNICO
+  · POST /inventario/traspasos/:id/enviar acepta { codigos: [...] } (zod,
+    hasta 2,000). inventario/model.js → _bultosEscaneados (bloquea con FOR
+    UPDATE y revisa) y enviarTraspaso. Errores: BULTO_REPETIDO,
+    CODIGO_DESCONOCIDO, CODIGO_NO_ES_PAQUETE, BULTO_NO_ES_DEL_TRASPASO (422),
+    BULTO_NO_DISPONIBLE (409), BULTO_SIN_PESO (422). No valida que el paquete
+    estuviera en el origen (igual que al vender): le corrige la ubicación.
+  · La respuesta de cada línea trae `escaneado` y `paquetes_pedidos`.
+  · Sin migración.
+  · Frontend: envio-modal.ts/html/scss/spec.ts (nuevos), traspasos.ts/html,
+    inventario.service.ts (enviarTraspaso con códigos).
+
+LA VERIFICACIÓN
+  · e2e-traspaso-paquetes.js, sección 8: pide 3 y escanea 3 de los MÁS NUEVOS;
+    rechaza repetido, desconocido, el de la presentación, uno de otro hilo y uno
+    vendido sin mover nada; sale su peso real exacto, se libera el apartado,
+    viajan ESOS paquetes y la tienda recibe su peso. Todo pasa.
+  · e2e-traspaso-estados.js (36) y e2e-permisos.js pasan.
+  · 260 unitarias del frontend (8 nuevas del modal) y 15 del backend.
+  · Visto en el navegador con una solicitud temporal (TMP, ya borrada; el
+    apartado de BLACK volvió a 0): 2 paquetes de BLACK escaneados (24.55 kg
+    reales, "faltan 1") y el aviso de un paquete de OPTIK.
+  · ⚠ SIN DESPLEGAR. Falta probarlo con la pistola física.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (4) · Surtir sucursal: los kilos son paquetes × el peso PROMEDIO
+-------------------------------------------------------------------------------
+
+LO QUE DIJO EL USUARIO (sobre la entrada 3)
+  "Me van a pedir paquetes, pero en peso aprox. quiero pensar que es más o menos
+  cuántos kilos son, porque cuando yo vaya a poner esa solicitud lo que voy a
+  hacer es agarrar paquetes de ese color, ese calibre, y los voy a poner; no me
+  voy a poner a buscar los más viejos."
+
+CÓMO ESTABA (desde la entrada 3, unas horas antes)
+  Los kilos de N paquetes eran la SUMA del peso real de los N bultos más
+  antiguos del origen, y la pantalla decía "los 5 más antiguos: de 18.1 a
+  18.65 kg". Eso suponía que quien surte se lleva justo esos, y no es así.
+
+CÓMO QUEDÓ
+  · Pantalla: "≈ 94.813 kg · 18.963 kg por paquete, en promedio". Sin paquetes
+    con peso en la bodega: "con el peso del catálogo, X kg por paquete". "Hay
+    libre" dice cuántos paquetes caben en lo libre con ese mismo promedio.
+  · Servidor: aparta N × el promedio real de los paquetes del origen
+    (inventario/model.js → pesoPorPaquete) y al ENVIAR descuenta exactamente lo
+    apartado, sin recalcular. Se siguen moviendo los N bultos más antiguos a la
+    sucursal, solo para que la cuenta de paquetes por almacén no se quede pegada
+    (nadie escanea al surtir; se corrige al escanear al vender).
+  · Se multiplica por kilos ÷ paquetes SIN redondear el promedio: con el
+    promedio a tres decimales, BLACK decía "682 paquetes libres" teniendo 683
+    (683 × 18.963 se pasaba 0.33 kg del total) y no dejaba pedirlos todos.
+  · Al enviar ya no sale "N líneas cambiaron de peso": lo que sale es lo que se
+    apartó.
+  · Se quitaron `pesos_en_orden` (del endpoint de equivalencia) y la cuenta por
+    bultos más antiguos de la entrada 3: no los usa nadie.
+  · Lo de la entrada 3 sobre la cancelación (`traspaso_bultos`, regresan solo
+    los bultos de ese envío) sigue igual.
+
+DE PASO: UNA PRUEBA QUE SE TRAGABA SUS ERRORES
+  e2e-traspaso-estados.js tenía el `process.exit` dentro del `finally`: si algo
+  tronaba a media prueba, salía sin decirlo y reportaba "0 fallos". Con el
+  promedio, su sección 5 pedía 10 kg donde quedaban 9.4 y fallaba en silencio
+  (contaba 33 comprobaciones en vez de 36). Ahora un error cuenta como falla y se
+  imprime; la sección 5 pide 5 kg.
+
+LA VERIFICACIÓN
+  · e2e-traspaso-paquetes.js: aparta y descuenta N × promedio, se pueden pedir
+    TODOS los paquetes (1,527.05 = 1,527.05 kg), 77 paquetes con 75 bultos, y la
+    cancelación regresa solo los bultos de ese envío. Todo pasa.
+  · e2e-traspaso-estados.js: 36 comprobaciones, 0 fallos.
+  · 252 unitarias del frontend y 15 del backend; compila.
+  · Visto en el navegador: BLACK 5 paquetes ≈ 94.813 kg (18.963 en promedio),
+    683 paquetes libres; OPTIK 300 → inventario insuficiente.
+  · Sin basura en "desarrollo". ⚠ SIN DESPLEGAR (sin migración nueva).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (3) · Filtros de bultos y Surtir sucursal por paquetes
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "PRODUCTOS. En bultos se van a necesitar filtros por lote, por peso y por
+  número de conos. En Surtir sucursal las nuevas solicitudes de traspaso se van
+  a hacer con paquetes, mostrando el aproximado en kilos que son, con la
+  información que ya se maneja."
+
+1) FILTROS EN LA TARJETA "BULTOS" (Productos → Presentaciones)
+  · Debajo de las fichas de lote, una barra con: Lote (todos o uno), Peso real
+    de … a … kg (los cuadros sugieren el más ligero y el más pesado que hay),
+    Conos que rinde (12, 7… con cuántos bultos hay de cada uno) y "Quitar
+    filtros". A la derecha dice cuántos bultos y kilos quedan con esos filtros.
+  · Tocar una ficha de lote también lo filtra (y tocarla otra vez lo quita).
+  · Se suman al selector de siempre (Disponibles / Vendidos / Bajados a conos /
+    Todos). Es solo pantalla: no pide nada nuevo al servidor.
+  · Los filtros son señales (no campos con ngModel) porque los lee un
+    `computed` (ver la regla de CLAUDE.md sobre computed y ngModel). Su hoja de
+    estilos va aparte (bultos-filtros.scss): la de presentaciones ya estaba en
+    el límite de 4 kB.
+
+2) SURTIR SUCURSAL: LA SOLICITUD NUEVA SE PIDE EN PAQUETES
+  CÓMO ESTABA: desde el 2026-07-28 se pedía en KILOS ("yo mando por kilos") y
+  los paquetes eran solo referencia. El usuario lo cambió hoy.
+  CÓMO QUEDÓ
+  · Cada línea se captura en PAQUETES (enteros; arranca en 1). Al lado, "Son
+    aprox. ≈ 92.2 kg · los 5 más antiguos: de 18.1 a 18.65 kg": la suma del
+    peso REAL de los bultos que saldrían, los más antiguos de la bodega, que es
+    exactamente lo que aparta el servidor. "Hay libre" dice cuántos PAQUETES
+    caben en lo libre y los kilos. El pie: "N paquetes (≈ X kg)".
+  · Si se piden más paquetes que bultos ubicados en la bodega (kilos que
+    entraron por ajuste, o bultos sin almacén), lo dice: "2 sin bulto ubicado:
+    con 19.465 kg cada uno" (el peso del paquete).
+  · Se manda `paquetes` al servidor (que ya lo aceptaba). Una presentación que
+    no es paquete ("simple") va en los kilos aproximados.
+  · El historial de traspasos ya decía paquetes cuando se pidió así; ahora
+    pone "N paquetes" arriba y "≈ X kg" abajo (con "(estimado)" si aplica).
+  EN EL SERVIDOR
+  · GET /inventario/equivalencia-paquetes trae `pesos_en_orden`: el peso de
+    cada bulto disponible EN EL ORDEN EN QUE SALE. Con eso la pantalla hace la
+    misma cuenta que el servidor (inventario/model.js → pesosEnOrden).
+  · CAMBIO DE REGLA: con más paquetes que bultos ubicados, antes TODOS iban al
+    peso nominal y no viajaba ningún bulto; ahora van los bultos que sí hay con
+    su peso real y SOLO los que faltan al nominal (`_kilosDePaquetes`, al
+    solicitar y al enviar). Con pedir en paquetes ese caso deja de ser raro.
+
+3) FALLA QUE YA EXISTÍA, ENCONTRADA AL PROBAR: CANCELAR UN ENVÍO EN CAMINO
+  · Regresaba al origen TODOS los bultos disponibles de ese hilo que hubiera en
+    la sucursal, incluidos los que llegaron en traspasos anteriores ya
+    recibidos (la prueba: viajaron 75 y regresaron 80). Los kilos sí quedaban
+    bien; los bultos no (la sucursal se quedaba sin ellos y la bodega con de
+    más).
+  · Ahora el envío deja escrito qué bultos viajaron (tabla nueva
+    `traspaso_bultos`) y la cancelación regresa SOLO esos. Un envío hecho antes
+    de esta tabla no tiene renglones: si se cancela, sus bultos se quedan donde
+    están (la ubicación es aproximada a propósito; los saldos son la verdad).
+
+LO TÉCNICO
+  · Migración db/migrations/2026-10_traspaso_bultos.sql (tabla
+    traspaso_bultos: detalle_id + variante_codigo_id, las dos en cascada).
+    schema_mysql.sql al día. Aplicada en "desarrollo". ⚠ Falta en "hitex".
+  · scripts/estado-migraciones.js ahora revisa también las tres migraciones del
+    2026-10-06 (nómina, cuentas de banco y traspaso_bultos).
+  · Backend: inventario/model.js (pesosEnOrden, _kilosDePaquetes, el INSERT en
+    traspaso_bultos al enviar y la cancelación por esa tabla) y
+    inventario/service.js (pesos_en_orden).
+  · Frontend: traspasos.ts/html/spec.ts, inventario.service.ts
+    (EquivalenciaPaquetes.pesos_en_orden), producto-presentaciones.ts/html y
+    bultos-filtros.scss (nuevo).
+
+LA VERIFICACIÓN
+  · 251 unitarias del frontend (las de Surtir reescritas para paquetes) y 15
+    del backend; compila sin pasar el límite de estilos.
+  · e2e-traspaso-paquetes.js con una sección nueva (7): kilos sin bulto por
+    ajuste, 77 paquetes con 75 bultos → aparta 75 reales + 2 nominales, el
+    envío mueve los 75 y la cancelación regresa SOLO esos 75 (la tienda
+    conserva sus 5). Todo pasa contra "desarrollo"; e2e-traspaso-estados.js
+    (36) también. No quedó basura (0 renglones en traspaso_bultos).
+  · Visto en el navegador: los filtros de bultos sobre BLACK 2/30 (683 bultos;
+    con lote, 18 a 19 kg y 12 conos quedan 23) y la solicitud nueva con BLACK
+    (5 paquetes ≈ 92.2 kg) y OPTIK (300 paquetes: 80 sin bulto ubicado y
+    "inventario insuficiente").
+  · ⚠ SIN DESPLEGAR.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 (2) · Varias cuentas de banco para transferencias
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "CONFIGURACIÓN. Apartado de las cuentas de banco para transferencias: se tiene
+  que poder agregar a más de una y agregando número de cuenta."
+
+CÓMO ESTABA
+  Una sola cuenta, en tres claves sueltas de `configuracion`
+  (transferencia_banco, transferencia_titular y transferencia_clabe, que además
+  decía "CLABE o número de cuenta"), dibujadas en la tarjeta "Para recibir
+  depósitos".
+
+CÓMO QUEDÓ
+  · Configuración → tarjeta "Cuentas para transferencias": la lista (Banco, A
+    nombre de, Número de cuenta, CLABE, Activa/Oculta) y el botón "Agregar
+    cuenta". Cada cuenta se agrega o edita en un modal y se guarda AL MOMENTO
+    (aparte del botón Guardar de arriba, que es para los datos de la tienda).
+  · El modal pide el banco (sugiere los más usados) y el número de cuenta, la
+    CLABE o los dos. Mientras se teclea la CLABE dice "Van 16 de 18 dígitos",
+    "CLABE válida" o que el último dígito no cuadra. "Activa: se le da a los
+    clientes": desmarcada la esconde sin borrarla. "Quitar" la borra (pide
+    confirmación): ninguna venta ni pago apunta a una cuenta.
+  · El checkout de la tienda en línea (apagada) ya enseña TODAS las cuentas
+    activas, con su número de cuenta y su CLABE.
+
+REGLAS
+  · Los números se guardan sin espacios ni guiones (se pueden teclear con ellos).
+  · La CLABE: 18 dígitos y su DÍGITO DE CONTROL (pesos 3, 7, 1 sobre los otros
+    17) — atrapa un dígito mal copiado antes de que un cliente deposite a una
+    cuenta que no existe. No se repite (índice único: 409 CLABE_REPETIDA).
+  · El número de cuenta: solo dígitos, de 4 a 20.
+  · Sin número de cuenta ni CLABE no se guarda (también hay CHECK en la base).
+  · GET /configuracion (público) trae `cuentas_bancarias`: solo las ACTIVAS y
+    sin fechas ni estado.
+
+LO TÉCNICO
+  · Migración db/migrations/2026-10_cuentas_bancarias.sql: tabla
+    cuentas_bancarias; copia la cuenta que estaba capturada (a CLABE si son 18
+    dígitos, si no a número de cuenta) y BORRA las tres claves
+    transferencia_*. schema_mysql.sql al día. Aplicada en "desarrollo": la
+    cuenta de demostración ("Banco de ejemplo (demostración)") quedó como la
+    cuenta 1. OJO: esa cuenta NO está en `_demo_registros`, así que
+    `scripts/demo/limpiar.js` no la quita: si se limpia la muestra, bórrala a
+    mano desde Configuración. ⚠ Falta en "hitex" (allá no hay cuenta capturada:
+    solo crea la tabla y borra las claves vacías).
+  · El sistema de pruebas (8443) corre el código viejo: hasta desplegar, su
+    Configuración ya no enseña la cuenta (las claves se borraron). No afecta
+    nada más: solo las leía el checkout apagado.
+  · Backend: modules/configuracion/cuentas.js (reglas y CLABE, con
+    cuentas.test.js) y en el mismo módulo GET/POST /configuracion/cuentas,
+    PUT y DELETE /configuracion/cuentas/:id (permiso ver:config).
+  · Frontend: configuracion/cuenta-bancaria-modal nuevo; configuracion.ts y su
+    spec; tienda.models.ts, tienda.service.ts y checkout.html.
+
+LA VERIFICACIÓN
+  · 15 pruebas del backend (4 nuevas de la CLABE) y 251 unitarias del frontend.
+  · scripts/e2e-cuentas-bancarias.js: 18 comprobaciones contra "desarrollo"
+    con cuentas "TMP Banco …"; las cuentas quedaron como estaban.
+  · Visto en el navegador: la tarjeta con la cuenta migrada y el modal con sus
+    avisos de la CLABE.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-06 · Nómina por días, horario, horas extra y vacaciones
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Para pagar nómina que pregunte cuántos días de la semana trabaja que se
+  calcule solo en base a su sueldo. Días de vacaciones: fechas en la que entró
+  a laborar para calcular sus vacaciones y los días que tiene y los que le
+  restan, y esos días se pagan como si fueran normales. Para las horas extras
+  que se calculen solas en base al salario total en base a su horario laboral:
+  unos empleados entran a una hora y otros a otra, y lo mismo salen; algunos
+  días también cambia."
+
+LAS DECISIONES QUE TOMÓ (se le preguntaron antes de programar)
+  · Horas extra: se capturan SOLO los días que hubo, con la hora real de salida
+    (o de entrada); el sistema compara contra su horario de ESE día.
+  · Se pagan AL DOBLE, siempre (no doble/triple como la ley).
+  · Vacaciones POR LEY (art. 76 LFT, reforma 2023), SIN prima vacacional.
+  · El día vale SUELDO SEMANAL ÷ DÍAS QUE TRABAJA (no ÷ 7).
+
+CÓMO QUEDÓ
+  · Sueldos y comisiones → Editar: fecha de ingreso y HORARIO día por día
+    (entra, sale; los días sin marcar son descanso), minutos de comida, y una
+    vista previa: días que trabaja, horas de su semana, lo que vale su día, su
+    hora (sueldo ÷ horas de la semana, ya sin comida) y su hora extra (al doble).
+    El campo "Valor de la hora extra" se quitó de la pantalla: ahora sale solo.
+  · Sueldos y comisiones → Vacaciones (botón nuevo por renglón): le tocan, ha
+    tomado y le quedan en su año vigente (de aniversario a aniversario), y se
+    registran POR FECHAS; gastan solo los días de trabajo de su horario. Al
+    registrarlas, la semana en borrador que tocan se recalcula sola.
+  · El recibo: "Sueldo · 3 de 6 días × $300 · faltó 1", "Vacaciones · 2 días ×
+    $300, como días normales", y tres secciones: Días de la semana (bajar los
+    días trabajados = registrar faltas), Horas extra (día + entró/salió, con la
+    cuenta a la vista antes de agregar) y Descuentos. La tabla de la semana
+    enseña "3 de 6 días · 2 de vacaciones" bajo el sueldo.
+  · Sin horario, el recibo paga la semana completa como antes y lo dice
+    ("sin horario"); la tabla de Sueldos y comisiones marca "Sin horario".
+
+REGLAS QUE NO SE VEN A SIMPLE VISTA
+  · Las faltas se CONSERVAN al recalcular: son los días de su horario que no
+    trabajó ni fueron vacaciones. Si después se registran vacaciones, se
+    descuentan de los trabajados sin borrar la falta.
+  · 6 de 6 días dan el sueldo EXACTO: se calcula sueldo × días ÷ días del
+    horario, no con el salario diario ya redondeado.
+  · El recibo CONGELA días, salario diario y valor de la hora con que se calculó.
+  · Horas extra: un renglón por día (409 si se repite); en su día de descanso
+    pide entrada y salida y todo cuenta como extra; llegar tarde o salir
+    temprano NO resta (eso es falta, no extra).
+  · Vacaciones: no se registran antes del primer año (dice cuándo lo cumple),
+    ni más de las que le quedan, ni encimadas, ni en una semana ya PAGADA
+    (tampoco se quitan de ella). Cuentan contra el año de vacaciones donde
+    EMPIEZAN.
+
+LO TÉCNICO
+  · Migración db/migrations/2026-10_nomina_dias_vacaciones_horario.sql (solo
+    AGREGA): nomina_empleados.fecha_ingreso y comida_min; tablas
+    nomina_horarios y nomina_vacaciones; en nomina_recibos dias_laborales,
+    dias_trabajados, dias_vacaciones, salario_diario, valor_hora y
+    pago_vacaciones; en nomina_recibo_conceptos fecha, hora_entrada y
+    hora_salida. db/schema_mysql.sql al día. Aplicada y auditada en
+    information_schema de "desarrollo" (11 columnas y 2 tablas). ⚠ FALTA en
+    "hitex": va al desplegar.
+  · Backend: modules/nomina/jornada.js (las cuentas, sin base) con su prueba
+    jornada.test.js — `npm test` en backend/ (script nuevo, node --test) —, y
+    en el modelo _calcular (reusable dentro de una transacción),
+    fijarDiasTrabajados, vacaciones y horas extra. Rutas nuevas:
+    PATCH /nomina/recibos/:id/dias, POST /nomina/recibos/:id/horas-extra,
+    GET|POST /nomina/empleados/:id/vacaciones, DELETE /nomina/vacaciones/:id.
+    total_pagar = sueldo_base + pago_vacaciones + comisión + percepciones −
+    deducciones.
+  · Frontend: features/admin/nomina/jornada.ts (gemela para la vista previa,
+    con su spec), vacaciones-modal nuevo, y empleado-nomina-modal,
+    nomina-config, recibo-modal y nomina rehechos.
+
+LA VERIFICACIÓN
+  · 11 pruebas del backend (jornada.test.js) y 249 unitarias del frontend.
+  · scripts/e2e-nomina-jornada.js: 46 comprobaciones contra "desarrollo", con
+    un empleado TMP en una semana de 2031; las tablas de nómina quedaron
+    idénticas. Sale en 0.
+  · Visto en el navegador (Chrome sin ventana) con datos de ejemplo que luego
+    se borraron: Sueldos y comisiones, el horario, las vacaciones, la semana y
+    el recibo con la vista previa de las horas extra.
+  · De paso: el backend viejo del 2026-10-05 seguía corriendo en el 3210 con
+    el código anterior; se detuvo.
+
+LO QUE QUEDA
+  · Desplegar cuando el usuario diga, y aplicar la migración en "hitex".
+  · Capturar el horario y la fecha de ingreso de cada empleado: sin horario se
+    sigue pagando la semana completa.
+  · El manual de uso (capítulo de Nómina) describe las pantallas de antes.
 
 
 -------------------------------------------------------------------------------

@@ -5,6 +5,7 @@ const usuariosRoutes = require('./modules/usuarios/routes');
 const clientesRoutes = require('./modules/clientes/routes');
 const direccionesRoutes = require('./modules/direcciones/routes');
 const tiposClienteRoutes = require('./modules/tipos-cliente/routes');
+const proveedoresRoutes = require('./modules/proveedores/routes');
 const categoriasRoutes = require('./modules/categorias/routes');
 const productosRoutes = require('./modules/productos/routes');
 const variantesRoutes = require('./modules/variantes/routes');
@@ -32,6 +33,7 @@ router.use('/usuarios', usuariosRoutes);
 router.use('/clientes', clientesRoutes);
 router.use('/direcciones', direccionesRoutes);
 router.use('/tipos-cliente', tiposClienteRoutes);
+router.use('/proveedores', proveedoresRoutes);
 // Qué ve y qué puede hacer cada puesto (solo el administrador lo cambia).
 router.use('/permisos', permisosRoutes);
 

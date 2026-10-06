@@ -74,6 +74,14 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
 
     console.log('\n=== 2. Vender un bulto lo marca vendido ===');
     const b1 = r.data.bulto;
+    // Cobrar menos kilos de los que pesa el bulto lo dejaría "vendido" sin salir
+    // (2026-10-06): se rechaza la venta completa y el bulto sigue disponible.
+    r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s.id,
+      items: [{ variante_id: paq, cantidad: 1, bultos: [{ codigo: b1.codigo, peso_kg: Number(b1.peso_kg), lote: b1.lote }] }],
+      pagos: [{ metodo_pago_id: 1, monto: 200 }] });
+    ck('bultos que pesan más de lo que se cobra: 422 BULTOS_EXCEDEN_CANTIDAD', r.status === 422 && r.error?.code === 'BULTOS_EXCEDEN_CANTIDAD',
+      r.status + ' ' + r.error?.code);
+    ck('y el bulto sigue disponible', (await api('GET', `/variantes/resolver/${b1.codigo}`)).data.bulto?.estado === 'disponible');
     r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s.id,
       items: [{ variante_id: paq, cantidad: Number(b1.peso_kg), bultos: [{ codigo: b1.codigo, peso_kg: Number(b1.peso_kg), lote: b1.lote }] }],
       pagos: [{ metodo_pago_id: 1, monto: Number(b1.peso_kg) * 200 }] });

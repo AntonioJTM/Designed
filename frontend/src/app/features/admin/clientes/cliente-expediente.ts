@@ -219,9 +219,17 @@ export class ClienteExpediente implements OnInit {
       tinta: est === 'frio' || est === 'perdido' ? alerta : normal,
     });
 
-    // 2. Lo que debe
+    // 2. Lo que debe. Saldo NEGATIVO es a su favor: se le canceló una venta fiada
+    // que ya había abonado; paga primero lo próximo que se le fíe.
     const uso = this.usoCredito();
-    lista.push({
+    if (this.saldo() < 0) {
+      lista.push({
+        etiqueta: 'A su favor',
+        valor: pesos(-this.saldo()),
+        pie: 'se le canceló una venta que ya había abonado',
+        tinta: normal,
+      });
+    } else lista.push({
       etiqueta: 'Debe',
       valor: pesos(this.saldo()),
       pie:

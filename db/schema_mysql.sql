@@ -287,7 +287,8 @@ CREATE TABLE `proveedores` (
   `rfc_id_fiscal` varchar(30) DEFAULT NULL,
   `activo` tinyint(1) NOT NULL DEFAULT 1,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_proveedores_nombre` (`nombre`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: ordenes_compra ----------
@@ -339,10 +340,16 @@ CREATE TABLE `remesas` (
   `folio` varchar(40) NOT NULL,
   `variante_id` bigint(20) unsigned NOT NULL,
   `almacen_id` smallint(5) unsigned NOT NULL,
+  `proveedor_id` bigint(20) unsigned DEFAULT NULL,
   `usuario_id` bigint(20) unsigned DEFAULT NULL,
   `num_bultos` int(10) unsigned NOT NULL,
   `kg_total` decimal(12,3) NOT NULL,
   `costo_kg` decimal(12,2) DEFAULT NULL,
+  `factura` varchar(60) DEFAULT NULL,
+  `pedimento` varchar(40) DEFAULT NULL,
+  `contenedor` varchar(40) DEFAULT NULL,
+  `fecha_ingreso` date DEFAULT NULL,
+  `lista` varchar(40) DEFAULT NULL,
   `lotes` varchar(255) DEFAULT NULL,
   `archivo` varchar(255) DEFAULT NULL,
   `notas` text DEFAULT NULL,
@@ -353,7 +360,10 @@ CREATE TABLE `remesas` (
   KEY `usuario_id` (`usuario_id`),
   KEY `idx_remesas_variante` (`variante_id`),
   KEY `idx_remesas_fecha` (`creado_en`),
+  KEY `idx_remesas_proveedor` (`proveedor_id`),
+  KEY `idx_remesas_lista` (`lista`),
   CONSTRAINT `remesas_ibfk_1` FOREIGN KEY (`variante_id`) REFERENCES `producto_variantes` (`id`),
+  CONSTRAINT `remesas_proveedor` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores` (`id`),
   CONSTRAINT `remesas_ibfk_2` FOREIGN KEY (`almacen_id`) REFERENCES `almacenes` (`id`),
   CONSTRAINT `remesas_ibfk_3` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `remesas_chk_1` CHECK (`kg_total` > 0),
@@ -438,6 +448,7 @@ CREATE TABLE `traspasos` (
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   `enviado_en` datetime DEFAULT NULL,
   `enviado_por` bigint(20) unsigned DEFAULT NULL,
+  `envio_notas` text DEFAULT NULL,
   `recibido_en` datetime DEFAULT NULL,
   `recibido_por` bigint(20) unsigned DEFAULT NULL,
   `recepcion_notas` text DEFAULT NULL,
@@ -469,6 +480,8 @@ CREATE TABLE `traspaso_detalle` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `traspaso_id` bigint(20) unsigned NOT NULL,
   `variante_id` bigint(20) unsigned NOT NULL,
+  `paquetes_solicitados` decimal(12,3) DEFAULT NULL,
+  `cantidad_solicitada` decimal(12,3) DEFAULT NULL,
   `paquetes` decimal(12,3) DEFAULT NULL,
   `cantidad` decimal(12,3) NOT NULL,
   `cantidad_recibida` decimal(12,3) DEFAULT NULL,
@@ -478,7 +491,22 @@ CREATE TABLE `traspaso_detalle` (
   KEY `idx_traspaso_detalle_traspaso` (`traspaso_id`),
   CONSTRAINT `traspaso_detalle_ibfk_1` FOREIGN KEY (`traspaso_id`) REFERENCES `traspasos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `traspaso_detalle_ibfk_2` FOREIGN KEY (`variante_id`) REFERENCES `producto_variantes` (`id`),
-  CONSTRAINT `traspaso_detalle_chk_1` CHECK (`cantidad` > 0)
+  CONSTRAINT `traspaso_detalle_chk_1` CHECK (`cantidad` >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: traspaso_bultos ----------
+-- Qué bultos se movieron al ENVIAR cada línea, para que cancelar el envío en
+-- camino regrese solo esos (2026-10-06, migración 2026-10_traspaso_bultos.sql).
+DROP TABLE IF EXISTS `traspaso_bultos`;
+CREATE TABLE `traspaso_bultos` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `detalle_id` bigint(20) unsigned NOT NULL,
+  `variante_codigo_id` bigint(20) unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_traspaso_bultos_detalle` (`detalle_id`),
+  KEY `idx_traspaso_bultos_bulto` (`variante_codigo_id`),
+  CONSTRAINT `traspaso_bultos_detalle` FOREIGN KEY (`detalle_id`) REFERENCES `traspaso_detalle` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `traspaso_bultos_bulto` FOREIGN KEY (`variante_codigo_id`) REFERENCES `variante_codigos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: variante_conversiones ----------
@@ -924,6 +952,8 @@ CREATE TABLE `nomina_empleados` (
   `paga_comision` tinyint(1) NOT NULL DEFAULT 0,
   `porcentaje_comision` decimal(5,2) NOT NULL DEFAULT 0.00,
   `valor_hora_extra` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `fecha_ingreso` date DEFAULT NULL,
+  `comida_min` smallint(5) unsigned NOT NULL DEFAULT 0,
   `activo` tinyint(1) NOT NULL DEFAULT 1,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -932,6 +962,41 @@ CREATE TABLE `nomina_empleados` (
   CONSTRAINT `nomina_empleados_chk_1` CHECK (`sueldo_base_semanal` >= 0),
   CONSTRAINT `nomina_empleados_chk_2` CHECK (`porcentaje_comision` >= 0 and `porcentaje_comision` <= 100),
   CONSTRAINT `nomina_empleados_chk_3` CHECK (`valor_hora_extra` >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: nomina_horarios ----------
+-- El horario de cada empleado, día por día (0 = domingo … 6 = sábado). Un día
+-- sin renglón es su descanso.
+DROP TABLE IF EXISTS `nomina_horarios`;
+CREATE TABLE `nomina_horarios` (
+  `usuario_id` bigint(20) unsigned NOT NULL,
+  `dia_semana` tinyint(3) unsigned NOT NULL,
+  `hora_entrada` time NOT NULL,
+  `hora_salida` time NOT NULL,
+  PRIMARY KEY (`usuario_id`,`dia_semana`),
+  CONSTRAINT `nomina_horarios_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `nomina_horarios_chk_1` CHECK (`dia_semana` between 0 and 6),
+  CONSTRAINT `nomina_horarios_salida` CHECK (`hora_salida` > `hora_entrada`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: nomina_vacaciones ----------
+-- Vacaciones tomadas por rango de fechas; `dias` = días de trabajo del rango.
+DROP TABLE IF EXISTS `nomina_vacaciones`;
+CREATE TABLE `nomina_vacaciones` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `usuario_id` bigint(20) unsigned NOT NULL,
+  `fecha_inicio` date NOT NULL,
+  `fecha_fin` date NOT NULL,
+  `dias` decimal(4,1) NOT NULL,
+  `notas` varchar(255) DEFAULT NULL,
+  `creado_por` bigint(20) unsigned DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_nomina_vacaciones_usuario` (`usuario_id`,`fecha_inicio`),
+  CONSTRAINT `nomina_vacaciones_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `nomina_vacaciones_ibfk_2` FOREIGN KEY (`creado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `nomina_vacaciones_chk_1` CHECK (`dias` > 0),
+  CONSTRAINT `nomina_vacaciones_rango` CHECK (`fecha_fin` >= `fecha_inicio`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: nomina_periodos ----------
@@ -961,6 +1026,12 @@ CREATE TABLE `nomina_recibos` (
   `periodo_id` bigint(20) unsigned NOT NULL,
   `usuario_id` bigint(20) unsigned NOT NULL,
   `sueldo_base` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `dias_laborales` decimal(3,1) DEFAULT NULL,
+  `dias_trabajados` decimal(3,1) DEFAULT NULL,
+  `dias_vacaciones` decimal(3,1) NOT NULL DEFAULT 0.0,
+  `salario_diario` decimal(12,2) DEFAULT NULL,
+  `valor_hora` decimal(12,2) DEFAULT NULL,
+  `pago_vacaciones` decimal(12,2) NOT NULL DEFAULT 0.00,
   `num_pedidos` int(10) unsigned NOT NULL DEFAULT 0,
   `ventas_netas` decimal(12,2) NOT NULL DEFAULT 0.00,
   `porcentaje_comision` decimal(5,2) NOT NULL DEFAULT 0.00,
@@ -987,6 +1058,9 @@ CREATE TABLE `nomina_recibo_conceptos` (
   `clave` varchar(20) NOT NULL,
   `descripcion` varchar(200) DEFAULT NULL,
   `cantidad` decimal(10,2) DEFAULT NULL,
+  `fecha` date DEFAULT NULL,
+  `hora_entrada` time DEFAULT NULL,
+  `hora_salida` time DEFAULT NULL,
   `importe` decimal(12,2) NOT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -995,6 +1069,24 @@ CREATE TABLE `nomina_recibo_conceptos` (
   CONSTRAINT `nomina_recibo_conceptos_chk_1` CHECK (`tipo` in (_utf8mb4'percepcion',_utf8mb4'deduccion')),
   CONSTRAINT `nomina_recibo_conceptos_chk_2` CHECK (`clave` in (_utf8mb4'horas_extra',_utf8mb4'falta',_utf8mb4'descuento',_utf8mb4'otro')),
   CONSTRAINT `nomina_recibo_conceptos_chk_3` CHECK (`importe` >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: cuentas_bancarias ----------
+-- Cuentas de banco para transferencias (varias). Las activas se le enseñan al
+-- cliente que paga por transferencia. Lleva número de cuenta, CLABE o los dos.
+DROP TABLE IF EXISTS `cuentas_bancarias`;
+CREATE TABLE `cuentas_bancarias` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `banco` varchar(80) NOT NULL,
+  `titular` varchar(120) DEFAULT NULL,
+  `numero_cuenta` varchar(20) DEFAULT NULL,
+  `clabe` char(18) DEFAULT NULL,
+  `activa` tinyint(1) NOT NULL DEFAULT 1,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_cuentas_bancarias_clabe` (`clabe`),
+  CONSTRAINT `cuentas_bancarias_dato` CHECK (`numero_cuenta` is not null or `clabe` is not null)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP VIEW IF EXISTS `v_ventas_por_empleado`;

@@ -168,51 +168,65 @@ describe('Traspasos', () => {
     expect(c.etiquetaHilo(paquete)).toBe('NEGRO 2/30 — ACRILAN · Turco');
   });
 
-  it('se pide en KILOS y avisa cuando no alcanza', async () => {
+  it('se pide en PAQUETES y avisa cuando no alcanza', async () => {
     const c = await montar();
     c.agregar(paquete);
+    // Arranca en 1 paquete.
+    expect(c.lineas()[0].paquetes).toBe(1);
 
-    // Hay 57.033 kg libres.
-    c.cambiarKg(c.lineas()[0], 57.033);
+    // Hay 3 bultos: los 3 caben en lo libre.
+    c.cambiarPaquetes(c.lineas()[0], 3);
     expect(c.insuficiente(c.lineas()[0])).toBe(false);
     expect(c.hayInsuficientes()).toBe(false);
 
-    c.cambiarKg(c.lineas()[0], 60);
+    c.cambiarPaquetes(c.lineas()[0], 4);
     expect(c.insuficiente(c.lineas()[0])).toBe(true);
     expect(c.hayInsuficientes()).toBe(true);
   });
 
-  it('los paquetes son solo referencia: se calculan del peso real promedio', async () => {
+  it('los kilos son un aproximado: paquetes × el peso promedio del origen', async () => {
     const c = await montar();
     c.agregar(paquete);
-    // 100 kg / 19.011 kg por bulto ≈ 5.26 paquetes.
-    c.cambiarKg(c.lineas()[0], 100);
-    expect(c.enPaquetes(c.lineas()[0])).toBe(5.26);
-    // Y el total del pie va en kilos.
-    expect(c.totalKg()).toBe(100);
+    // Quien surte agarra los que tenga a la mano: 2 × 19.011 (el promedio).
+    c.cambiarPaquetes(c.lineas()[0], 2);
+    expect(c.pesoPaquete(c.lineas()[0])).toBe(19.011);
+    expect(c.pesoDeCatalogo(c.lineas()[0])).toBe(false);
+    expect(c.kgAprox(c.lineas()[0])).toBe(38.022);
+    expect(c.totalPaquetes()).toBe(2);
+    expect(c.totalKg()).toBe(38.022);
+    expect(c.paquetesLibres(c.lineas()[0])).toBe(3);
+  });
+
+  it('sin paquetes con peso en el origen, usa el del catálogo y lo dice', async () => {
+    eqActual = { ...equivalencia, peso_referencia: 19.094, referencia_nominal: true };
+    const c = await montar();
+    c.agregar(paquete);
+    c.cambiarPaquetes(c.lineas()[0], 2);
+    expect(c.pesoDeCatalogo(c.lineas()[0])).toBe(true);
+    expect(c.kgAprox(c.lineas()[0])).toBe(38.188);
   });
 
   it('con una línea insuficiente NO manda la solicitud', async () => {
     const c = await montar();
     c.agregar(paquete);
-    c.cambiarKg(c.lineas()[0], 500);
+    c.cambiarPaquetes(c.lineas()[0], 30);
     c.solicitar();
 
     expect(solicitado).toBeNull();
     expect(c.error()).toContain('sin existencia suficiente');
   });
 
-  it('la solicitud manda KILOS y avisa que la mercancía quedó apartada', async () => {
+  it('la solicitud manda PAQUETES y avisa que la mercancía quedó apartada', async () => {
     const c = await montar();
     c.agregar(paquete);
-    c.cambiarKg(c.lineas()[0], 38.5);
+    c.cambiarPaquetes(c.lineas()[0], 2);
     c.solicitar();
 
     expect(solicitado).toEqual({
       almacen_origen_id: 1,
       almacen_destino_id: 2,
       notas: undefined,
-      items: [{ variante_id: 10, cantidad: 38.5 }],
+      items: [{ variante_id: 10, paquetes: 2 }],
     });
     expect(c.mensaje()).toContain('apartada');
     expect(c.lineas().length).toBe(0);
@@ -278,7 +292,11 @@ describe('Traspasos', () => {
     expect(c.kilosLibres(c.lineas()[0])).toBe(37.033);
     expect(c.kilosApartados(c.lineas()[0])).toBe(20);
 
-    c.cambiarKg(c.lineas()[0], 40);
+    // 1 paquete (≈ 19.011 kg) cabe; 2 (≈ 38.022 kg) ya no.
+    expect(c.paquetesLibres(c.lineas()[0])).toBe(1);
+    c.cambiarPaquetes(c.lineas()[0], 1);
+    expect(c.insuficiente(c.lineas()[0])).toBe(false);
+    c.cambiarPaquetes(c.lineas()[0], 2);
     expect(c.insuficiente(c.lineas()[0])).toBe(true);
   });
 

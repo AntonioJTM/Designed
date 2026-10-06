@@ -23,6 +23,8 @@ interface CifraPedido {
   valor: number;
   /** Lo que se debe va en naranja: es lo que hay que perseguir. */
   alerta?: boolean;
+  /** Una línea corta debajo de la cifra ("debe $200", "ya está pagado"). */
+  pie?: string;
 }
 
 /** Un renglón de la tabla de pagos. */
@@ -111,10 +113,17 @@ export class PedidoDetalle implements OnDestroy {
     // "En preparación" y "Enviado" son del envío de la tienda en línea: en una
     // venta de mostrador no significan nada (y la tienda está apagada).
     const enLinea = p?.canal === 'tienda_linea';
+    // Una venta FIADA se da por pagada sola al abonar: no se ofrece marcarla
+    // pagada (o entregada) mientras se deba, ni regresarla a pendiente si ya se
+    // pagó. El servidor lo valida igual (VENTA_FIADA_SIN_PAGAR / _PAGADA).
+    const fiadaVigente = !!p && this.fiado(p) > 0 && !this.inactivo(p);
+    const debe = fiadaVigente ? this.fiadoPorPagar(p!) > 0.004 : false;
     return this.estados().filter((e) => {
       if (e === actual) return true;
       if (!this.puedeCancelar() && (e === 'cancelado' || e === 'devuelto')) return false;
       if (!enLinea && (e === 'en_preparacion' || e === 'enviado')) return false;
+      if (fiadaVigente && actual === 'pendiente' && debe && e !== 'cancelado' && e !== 'devuelto') return false;
+      if (fiadaVigente && e === 'pendiente' && !debe) return false;
       return true;
     });
   });
@@ -163,6 +172,16 @@ export class PedidoDetalle implements OnDestroy {
   }
 
   /**
+   * Lo que todavía se debe de lo fiado en ESTA venta. Los abonos van a la cuenta
+   * y se aplican a lo más antiguo primero; el servidor hace esa cuenta
+   * (`credito_por_pagar`). Cancelada, no se debe nada.
+   */
+  fiadoPorPagar(p: Pedido): number {
+    if (this.fiadoVigente(p) <= 0) return 0;
+    return Math.max(0, Number(p.credito_por_pagar ?? this.fiadoVigente(p)));
+  }
+
+  /**
    * Las cuatro cifras de arriba. Cambian según el caso porque las preguntas
    * cambian: de un apartado se pregunta cuánto ha dejado; de una venta fiada,
    * cuánto pagó y cuánto se fió.
@@ -181,10 +200,14 @@ export class PedidoDetalle implements OnDestroy {
     }
     const fiado = this.fiado(p);
     if (fiado > 0) {
+      const debe = this.fiadoPorPagar(p);
+      const pie = this.fiadoVigente(p) <= 0
+        ? 'se quitó de su cuenta'
+        : debe <= 0.004 ? 'ya está pagado' : `debe ${this.dinero(debe)}`;
       return [
         { etiqueta: 'Total', valor: total },
         { etiqueta: 'Pagó al comprar', valor: pagado },
-        { etiqueta: 'Se fió a su cuenta', valor: fiado, alerta: this.fiadoVigente(p) > 0 },
+        { etiqueta: 'Se fió a su cuenta', valor: fiado, alerta: debe > 0.004, pie },
       ];
     }
     const falta = this.inactivo(p) ? 0 : Math.max(0, total - pagado);
@@ -208,11 +231,19 @@ export class PedidoDetalle implements OnDestroy {
     const fiado = this.fiado(p);
     if (fiado > 0) {
       const vigente = this.fiadoVigente(p);
+      const debe = this.fiadoPorPagar(p);
+      // Pagado con abonos, a medias ("debe $X") o todo por pagar.
+      const estado = vigente <= 0
+        ? { estado: 'Sin deuda', tono: 'gris' }
+        : debe <= 0.004
+          ? { estado: 'Pagado con abonos', tono: 'verde' }
+          : debe < fiado - 0.004
+            ? { estado: `Debe ${this.dinero(debe)}`, tono: 'ambar' }
+            : { estado: 'Por pagar', tono: 'ambar' };
       filas.push({
         como: vigente > 0 ? 'A crédito, a su cuenta' : 'A crédito (se quitó de su cuenta)',
         monto: fiado,
-        estado: vigente > 0 ? 'En su cuenta' : 'Sin deuda',
-        tono: vigente > 0 ? 'ambar' : 'gris',
+        ...estado,
       });
     }
     return filas;
@@ -276,7 +307,7 @@ export class PedidoDetalle implements OnDestroy {
       else ev.push({ t: c.creado_en, que: c.notas || (Number(c.monto) < 0 ? `Se quitaron ${m} de su cuenta` : `Se cargaron ${m} a su cuenta`) });
     }
     for (const a of p.abonos_cuenta ?? []) {
-      ev.push({ t: a.creado_en, que: `${quien} abonó ${this.dinero(a.monto)} a su cuenta (no a este pedido en particular)` });
+      ev.push({ t: a.creado_en, que: `${quien} abonó ${this.dinero(a.monto)} a su cuenta (se aplica a lo más antiguo que deba)` });
     }
     if (p.entregado_en) ev.push({ t: p.entregado_en, que: 'Se le entregó la mercancía' });
     if (this.inactivo(p) && p.actualizado_en) {

@@ -2,12 +2,15 @@ import { Component, OnDestroy, computed, effect, inject, input, output, signal }
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import {
+  DatosCarga,
   EventoCarga,
   HiloLista,
   InventarioService,
   PreviaLista,
   ResultadoLista,
 } from '../../../core/services/inventario.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { DatosCargaCampos, datosCargaVacios, datosParaEnviar } from './datos-carga';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Categoria, Opcion } from '../../../core/models/catalogo.models';
@@ -36,18 +39,29 @@ interface Avance {
  * hilo: si ya existe se le agregan bultos, y si no, se crea SIN precio —la
  * tienda se lo pone después en Productos y la campana avisa mientras falte—.
  *
- * Vive dentro de Recibir remesa, como la otra forma de cargar. Nada se mueve
+ * Vive dentro de Surtir inventario, como la otra forma de cargar. Nada se mueve
  * hasta confirmar, y entra la lista completa o nada.
  */
 @Component({
   selector: 'app-carga-lista',
-  imports: [FormsModule, RouterLink, CantidadPipe, DineroPipe, FolioPipe],
+  imports: [FormsModule, RouterLink, CantidadPipe, DineroPipe, FolioPipe, DatosCargaCampos],
   templateUrl: './carga-lista.html',
   styleUrl: './carga-lista.scss',
 })
 export class CargaLista implements OnDestroy {
   private readonly inv = inject(InventarioService);
   private readonly catalogo = inject(CatalogoService);
+  private readonly auth = inject(AuthService);
+
+  /**
+   * El costo por kilo, solo para administración y contabilidad (2026-10-06): va
+   * por HILO, en una columna de la revisión (cada color pudo costar distinto).
+   */
+  readonly veCostos = computed(() => this.auth.puede('hacer:ver_costos'));
+  /** Proveedor, factura, pedimento, contenedor y fecha: los mismos para toda la lista. */
+  readonly datosCarga = signal<DatosCarga>(datosCargaVacios());
+  /** El costo por kilo de cada hilo, por su clave. */
+  costos: Record<string, number | null> = {};
 
   /** Los almacenes activos; los trae la pantalla de arriba. */
   readonly almacenes = input<Almacen[]>([]);
@@ -231,7 +245,14 @@ export class CargaLista implements OnDestroy {
         categoria_id: this.materialSel ? Number(this.materialSel) : null,
         linea_id: this.lineaSel ? Number(this.lineaSel) : null,
         documento: p.documento,
-        hilos: p.hilos.map((h) => ({ nombre: h.nombre, calibre: h.calibre, bultos: h.bultos })),
+        // Los datos de la lista; el costo NO (va por hilo, abajo).
+        ...datosParaEnviar(this.datosCarga(), false),
+        hilos: p.hilos.map((h) => ({
+          nombre: h.nombre,
+          calibre: h.calibre,
+          ...(this.veCostos() && Number(this.costos[h.clave]) > 0 ? { costo_kg: Number(this.costos[h.clave]) } : {}),
+          bultos: h.bultos,
+        })),
       })
       .subscribe({
         next: (ev) => {
@@ -246,6 +267,8 @@ export class CargaLista implements OnDestroy {
             this.previa.set(null);
             this.archivo = null;
             this.notas = '';
+            this.datosCarga.set(datosCargaVacios());
+            this.costos = {};
             this.cargada.emit(ev.data);
             // El comprobante queda arriba: se sube para que se vea.
             window.scrollTo?.({ top: 0, behavior: 'smooth' });

@@ -90,7 +90,9 @@ export class Nomina {
     const suma = (f: (r: ReciboNomina) => string) => recibos.reduce((s, r) => s + Number(f(r)), 0);
     return {
       empleados: recibos.length,
-      sueldos: suma((r) => r.sueldo_base),
+      // Las vacaciones se pagan como días normales: son sueldo.
+      sueldos: suma((r) => r.sueldo_base) + suma((r) => r.pago_vacaciones ?? '0'),
+      vacaciones: suma((r) => r.pago_vacaciones ?? '0'),
       ventas: suma((r) => r.ventas_netas),
       comisiones: suma((r) => r.comision),
       percepciones: suma((r) => r.otras_percepciones),

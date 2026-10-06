@@ -76,6 +76,16 @@ const traspasoSchema = z
  * Lo que el responsable declara al recibir. Sin `recibido` se acepta el envío
  * completo; con él se dice línea por línea qué llegó de verdad.
  */
+// Los paquetes escaneados al surtir: sin ellos no se envía (el modelo lo dice
+// con SIN_ESCANEAR, en palabras de la tienda). `notas`: lo que quiera añadir
+// quien surte; lo que no salió completo se anota solo.
+const envioSchema = z
+  .object({
+    codigos: z.array(z.string().trim().min(1).max(60)).max(2000).optional(),
+    notas: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
 const recepcionSchema = z
   .object({
     notas: z.string().trim().max(1000).optional(),
@@ -128,7 +138,7 @@ router.post('/desarmes', ...soloStaff, requirePermiso('hacer:bajar_conos'), vali
 // recibe (entra, con el acuse de quien lo aceptó). Cualquiera del staff puede
 // recibir; queda guardado su nombre y la hora.
 router.post('/traspasos', ...soloStaff, requirePermiso('ver:surtir'), validate(traspasoSchema), controller.solicitarTraspaso);
-router.post('/traspasos/:id/enviar', ...soloStaff, requirePermiso('hacer:enviar_traspaso'), controller.enviarTraspaso);
+router.post('/traspasos/:id/enviar', ...soloStaff, requirePermiso('hacer:enviar_traspaso'), validate(envioSchema), controller.enviarTraspaso);
 router.post('/traspasos/:id/recibir', ...soloStaff, requirePermiso('hacer:recibir_traspaso'), validate(recepcionSchema), controller.recibirTraspaso);
 router.post('/traspasos/:id/cancelar', ...soloStaff, requirePermiso('ver:surtir'), validate(cancelacionSchema), controller.cancelarTraspaso);
 router.put('/configuracion', ...soloStaff, requirePermiso('ver:inventario'), validate(configurarSchema), controller.configurar);

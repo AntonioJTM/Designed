@@ -25,7 +25,7 @@ const CATALOGO = [
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:apartados', nombre: 'Apartados', ayuda: 'Lo guardado para un cliente' },
   { grupo: 'Clientes', tipo: 'pantalla', clave: 'ver:clientes', nombre: 'Clientes', ayuda: 'Las cinco pestañas y el expediente' },
   { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:inventario', nombre: 'Inventario', ayuda: 'Existencias por almacén' },
-  { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:remesa', nombre: 'Recibir remesa', ayuda: 'La lista de empaque del proveedor' },
+  { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:remesa', nombre: 'Surtir inventario', ayuda: 'Cargar la lista del proveedor, con su factura y pedimento' },
   { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:surtir', nombre: 'Surtir sucursal', ayuda: 'Pedir, enviar y recibir traspasos' },
   { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:kardex', nombre: 'Kardex', ayuda: 'Cada entrada y salida' },
   { grupo: 'Catálogo y números', tipo: 'pantalla', clave: 'ver:catalogo', nombre: 'Productos y Materiales', ayuda: 'Dar de alta hilos y materiales' },

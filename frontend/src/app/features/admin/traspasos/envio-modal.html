@@ -1,0 +1,107 @@
+<!-- No cierra al hacer clic en el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-envio-titulo">
+    <div class="modal-head">
+      <h2 id="modal-envio-titulo">Enviar · {{ traspaso().folio }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p class="explica">
+        De <b>{{ traspaso().almacen_origen }}</b> a <b>{{ traspaso().almacen_destino }}</b>. Escanea cada
+        paquete conforme lo subes: sale su peso real y esos paquetes quedan en la sucursal.
+      </p>
+
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+
+      <label class="field">
+        Código del paquete
+        <span class="escaneo">
+          <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
+                 (keydown.enter)="$event.preventDefault(); leer()"
+                 placeholder="Escanea la etiqueta del paquete" />
+          <button type="button" class="btn btn-ghost" (click)="leer()">Agregar</button>
+        </span>
+      </label>
+      @if (ultimo()) { <p class="ultimo">✓ {{ ultimo() }}</p> }
+
+      <!-- Lo que se pidió contra lo que va subiendo, hilo por hilo. -->
+      <div class="tabla-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Hilo</th>
+              <th class="num">Se pidió</th>
+              <th class="num">Escaneados</th>
+              <th class="num">Peso real</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of lineas(); track l.variante_id) {
+              <tr>
+                <td>{{ etiqueta(l) }}</td>
+                <td class="num muted">
+                  @if (pedidos(l) !== null) { {{ pedidos(l) }} paq. }
+                  <div class="sub">≈ {{ l.cantidad | cantidad: 'kg' }}</div>
+                </td>
+                <td class="num">
+                  <b>{{ cuantos(l) }}</b> paq.
+                  @if (cuantos(l) === 0) {
+                    <div class="sub aviso-txt">{{ totalPaquetes() > 0 ? 'no sale' : 'sin escanear' }}</div>
+                  } @else if (diferencia(l); as d) {
+                    <div class="sub aviso-txt">{{ d }}</div>
+                  }
+                </td>
+                <td class="num">
+                  @if (cuantos(l) > 0) { {{ kgDe(l) | cantidad: 'kg' }} } @else { <span class="muted">—</span> }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (lista().length > 0) {
+        <ul class="escaneados" aria-label="Paquetes escaneados">
+          @for (p of lista(); track p.codigo) {
+            <li>
+              <span class="mono">{{ p.codigo }}</span>
+              <span class="muted">{{ nombreDe(p.variante_id) }}{{ p.lote ? ' · lote ' + p.lote : '' }}</span>
+              <b>{{ p.peso_kg | cantidad: 'kg' }}</b>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="quitar(p.codigo)"
+                      [attr.aria-label]="'Quitar el paquete ' + p.codigo">Quitar</button>
+            </li>
+          }
+        </ul>
+      }
+
+      <!-- Se manda lo que hay: se dice antes qué no sale completo y que queda anotado. -->
+      @if (totalPaquetes() > 0 && incompletos().length > 0) {
+        <p class="aviso">
+          No sale completo:
+          @for (x of incompletos(); track x; let ultimo = $last) {
+            <b>{{ x }}</b>{{ ultimo ? '.' : ', ' }}
+          }
+          Se manda lo que hay y en las notas del envío queda que era lo único que había.
+        </p>
+      }
+
+      <label class="field notas-envio">
+        <span>Notas del envío <span class="muted">(opcional)</span></span>
+        <input type="text" [(ngModel)]="notas" placeholder="Ej. Va en la camioneta 2" />
+      </label>
+    </div>
+
+    <div class="modal-foot">
+      <span class="nota">
+        <b>{{ totalPaquetes() }} {{ totalPaquetes() === 1 ? 'paquete' : 'paquetes' }}</b>
+        · {{ totalKg() | cantidad: 'kg' }} reales
+      </span>
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" [disabled]="enviando() || totalPaquetes() === 0"
+              (click)="confirmar()">
+        {{ enviando() ? 'Enviando…' : 'Enviar' }}
+      </button>
+    </div>
+  </div>
+</div>

@@ -2,6 +2,7 @@
 
 const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
+const jornada = require('./jornada');
 
 // Nómina semanal del personal (domingo → sábado, pagada ese mismo sábado).
 //
@@ -29,6 +30,8 @@ async function listarEmpleados({ soloNomina } = {}) {
             COALESCE(ne.paga_comision, 0)       AS paga_comision,
             COALESCE(ne.porcentaje_comision, 0) AS porcentaje_comision,
             COALESCE(ne.valor_hora_extra, 0)    AS valor_hora_extra,
+            DATE_FORMAT(ne.fecha_ingreso, '%Y-%m-%d') AS fecha_ingreso,
+            COALESCE(ne.comida_min, 0)          AS comida_min,
             COALESCE(ne.activo, 0)              AS activo
        FROM usuarios u
        JOIN roles r ON r.id = u.rol_id
@@ -36,7 +39,33 @@ async function listarEmpleados({ soloNomina } = {}) {
       ${soloNomina ? 'WHERE ne.usuario_id IS NOT NULL AND ne.activo = 1' : ''}
       ORDER BY u.nombre`
   );
+  const horarios = await horariosDe(rows.map((r) => r.usuario_id));
+  for (const r of rows) r.horario = horarios.get(Number(r.usuario_id)) ?? [];
   return rows;
+}
+
+/**
+ * El horario de cada empleado, por id: { dia_semana, hora_entrada, hora_salida }
+ * con las horas como 'HH:MM'. Un día sin renglón es su descanso.
+ */
+async function horariosDe(ids, conn = pool) {
+  const mapa = new Map();
+  if (!ids.length) return mapa;
+  const [rows] = await conn.query(
+    `SELECT usuario_id, dia_semana,
+            TIME_FORMAT(hora_entrada, '%H:%i') AS hora_entrada,
+            TIME_FORMAT(hora_salida,  '%H:%i') AS hora_salida
+       FROM nomina_horarios
+      WHERE usuario_id IN (:ids)
+      ORDER BY usuario_id, dia_semana`,
+    { ids }
+  );
+  for (const r of rows) {
+    const id = Number(r.usuario_id);
+    if (!mapa.has(id)) mapa.set(id, []);
+    mapa.get(id).push({ dia_semana: Number(r.dia_semana), hora_entrada: r.hora_entrada, hora_salida: r.hora_salida });
+  }
+  return mapa;
 }
 
 async function obtenerEmpleado(usuarioId) {
@@ -47,6 +76,8 @@ async function obtenerEmpleado(usuarioId) {
             COALESCE(ne.paga_comision, 0)       AS paga_comision,
             COALESCE(ne.porcentaje_comision, 0) AS porcentaje_comision,
             COALESCE(ne.valor_hora_extra, 0)    AS valor_hora_extra,
+            DATE_FORMAT(ne.fecha_ingreso, '%Y-%m-%d') AS fecha_ingreso,
+            COALESCE(ne.comida_min, 0)          AS comida_min,
             COALESCE(ne.activo, 0)              AS activo
        FROM usuarios u
        JOIN roles r ON r.id = u.rol_id
@@ -55,24 +86,147 @@ async function obtenerEmpleado(usuarioId) {
       LIMIT 1`,
     { id: usuarioId }
   );
+  const emp = rows[0] || null;
+  if (emp) emp.horario = (await horariosDe([emp.usuario_id])).get(Number(emp.usuario_id)) ?? [];
+  return emp;
+}
+
+/**
+ * Alta o actualización de la configuración de nómina de un empleado. Si trae
+ * `horario`, lo REEMPLAZA completo (los días que no vienen quedan de descanso);
+ * sin `horario`, el que tenía se queda igual.
+ */
+async function guardarEmpleado(usuarioId, datos) {
+  const { horario, ...config } = datos;
+  await withTransaction(async (conn) => {
+    await conn.query(
+      `INSERT INTO nomina_empleados
+         (usuario_id, sueldo_base_semanal, paga_comision, porcentaje_comision, valor_hora_extra,
+          fecha_ingreso, comida_min, activo)
+       VALUES (:usuario_id, :sueldo_base_semanal, :paga_comision, :porcentaje_comision, :valor_hora_extra,
+               :fecha_ingreso, :comida_min, :activo)
+       ON DUPLICATE KEY UPDATE
+         sueldo_base_semanal = :sueldo_base_semanal,
+         paga_comision       = :paga_comision,
+         porcentaje_comision = :porcentaje_comision,
+         valor_hora_extra    = :valor_hora_extra,
+         fecha_ingreso       = :fecha_ingreso,
+         comida_min          = :comida_min,
+         activo              = :activo`,
+      { usuario_id: usuarioId, ...config }
+    );
+    if (horario) {
+      await conn.query('DELETE FROM nomina_horarios WHERE usuario_id = :id', { id: usuarioId });
+      for (const d of horario) {
+        await conn.query(
+          `INSERT INTO nomina_horarios (usuario_id, dia_semana, hora_entrada, hora_salida)
+           VALUES (:id, :dia, :entrada, :salida)`,
+          { id: usuarioId, dia: d.dia_semana, entrada: d.hora_entrada, salida: d.hora_salida }
+        );
+      }
+    }
+  });
+  return obtenerEmpleado(usuarioId);
+}
+
+// ---------------------------------------------------------------------------
+// Vacaciones
+// ---------------------------------------------------------------------------
+
+const SELECT_VACACIONES = `
+  SELECT v.id, v.usuario_id,
+         DATE_FORMAT(v.fecha_inicio, '%Y-%m-%d') AS fecha_inicio,
+         DATE_FORMAT(v.fecha_fin,    '%Y-%m-%d') AS fecha_fin,
+         v.dias, v.notas, v.creado_en, u.nombre AS creado_por
+    FROM nomina_vacaciones v
+    LEFT JOIN usuarios u ON u.id = v.creado_por
+`;
+
+async function listarVacaciones(usuarioId, conn = pool) {
+  const [rows] = await conn.query(
+    `${SELECT_VACACIONES} WHERE v.usuario_id = :id ORDER BY v.fecha_inicio DESC`,
+    { id: usuarioId }
+  );
+  return rows;
+}
+
+async function obtenerVacaciones(id) {
+  const [rows] = await pool.query(`${SELECT_VACACIONES} WHERE v.id = :id LIMIT 1`, { id });
   return rows[0] || null;
 }
 
-/** Alta o actualización de la configuración de nómina de un empleado. */
-async function guardarEmpleado(usuarioId, datos) {
-  await pool.query(
-    `INSERT INTO nomina_empleados
-       (usuario_id, sueldo_base_semanal, paga_comision, porcentaje_comision, valor_hora_extra, activo)
-     VALUES (:usuario_id, :sueldo_base_semanal, :paga_comision, :porcentaje_comision, :valor_hora_extra, :activo)
-     ON DUPLICATE KEY UPDATE
-       sueldo_base_semanal = :sueldo_base_semanal,
-       paga_comision       = :paga_comision,
-       porcentaje_comision = :porcentaje_comision,
-       valor_hora_extra    = :valor_hora_extra,
-       activo              = :activo`,
-    { usuario_id: usuarioId, ...datos }
+/** Semanas de nómina que tocan un rango de fechas (para no mover una ya pagada). */
+async function periodosEnRango(desde, hasta, conn = pool) {
+  const [rows] = await conn.query(
+    `SELECT id, estado,
+            DATE_FORMAT(fecha_inicio, '%Y-%m-%d') AS fecha_inicio,
+            DATE_FORMAT(fecha_fin,    '%Y-%m-%d') AS fecha_fin
+       FROM nomina_periodos
+      WHERE fecha_inicio <= :hasta AND fecha_fin >= :desde
+      ORDER BY fecha_inicio`,
+    { desde, hasta }
   );
-  return obtenerEmpleado(usuarioId);
+  return rows;
+}
+
+/**
+ * Registra unas vacaciones y recalcula las semanas en borrador que tocan, para
+ * que esos días se paguen como días normales. Todo junto o nada.
+ */
+async function crearVacaciones(datos) {
+  return withTransaction(async (conn) => {
+    // Bloquea al empleado: dos registros a la vez no deben pasarse del saldo.
+    await conn.query('SELECT usuario_id FROM nomina_empleados WHERE usuario_id = :id FOR UPDATE', {
+      id: datos.usuario_id,
+    });
+    const [encimadas] = await conn.query(
+      `SELECT DATE_FORMAT(fecha_inicio, '%d/%m/%Y') AS ini, DATE_FORMAT(fecha_fin, '%d/%m/%Y') AS fin
+         FROM nomina_vacaciones
+        WHERE usuario_id = :id AND fecha_inicio <= :hasta AND fecha_fin >= :desde
+        LIMIT 1`,
+      { id: datos.usuario_id, desde: datos.fecha_inicio, hasta: datos.fecha_fin }
+    );
+    if (encimadas.length) {
+      throw new AppError(409, 'VACACIONES_ENCIMADAS',
+        `Esas fechas se enciman con sus vacaciones del ${encimadas[0].ini} al ${encimadas[0].fin}.`);
+    }
+    const [r] = await conn.query(
+      `INSERT INTO nomina_vacaciones (usuario_id, fecha_inicio, fecha_fin, dias, notas, creado_por)
+       VALUES (:usuario_id, :fecha_inicio, :fecha_fin, :dias, :notas, :creado_por)`,
+      { ...datos, notas: datos.notas ?? null, creado_por: datos.creado_por ?? null }
+    );
+    await _recalcularBorradores(conn, datos.fecha_inicio, datos.fecha_fin);
+    return r.insertId;
+  });
+}
+
+async function eliminarVacaciones(id) {
+  return withTransaction(async (conn) => {
+    const [rows] = await conn.query(
+      `SELECT id, usuario_id,
+              DATE_FORMAT(fecha_inicio, '%Y-%m-%d') AS fecha_inicio,
+              DATE_FORMAT(fecha_fin,    '%Y-%m-%d') AS fecha_fin
+         FROM nomina_vacaciones WHERE id = :id FOR UPDATE`,
+      { id }
+    );
+    const v = rows[0];
+    if (!v) throw new AppError(404, 'NO_ENCONTRADO', 'Vacaciones no encontradas');
+    await conn.query('DELETE FROM nomina_vacaciones WHERE id = :id', { id });
+    await _recalcularBorradores(conn, v.fecha_inicio, v.fecha_fin);
+    return v;
+  });
+}
+
+/** Recalcula las semanas EN BORRADOR (y ya calculadas) que tocan el rango. */
+async function _recalcularBorradores(conn, desde, hasta) {
+  const periodos = await periodosEnRango(desde, hasta, conn);
+  for (const p of periodos) {
+    if (p.estado !== 'borrador') continue;
+    const [[{ n }]] = await conn.query(
+      'SELECT COUNT(*) AS n FROM nomina_recibos WHERE periodo_id = :id', { id: p.id }
+    );
+    if (Number(n) > 0) await _calcular(conn, p.id);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +316,9 @@ async function cambiarEstadoPeriodo(id, estado) {
 async function listarRecibos(periodoId) {
   const [recibos] = await pool.query(
     `SELECT r.id, r.periodo_id, r.usuario_id, u.nombre AS usuario, rol.nombre AS rol,
-            r.sueldo_base, r.num_pedidos, r.ventas_netas, r.porcentaje_comision, r.comision,
+            r.sueldo_base, r.dias_laborales, r.dias_trabajados, r.dias_vacaciones,
+            r.salario_diario, r.valor_hora, r.pago_vacaciones,
+            r.num_pedidos, r.ventas_netas, r.porcentaje_comision, r.comision,
             r.otras_percepciones, r.deducciones, r.total_pagar, r.notas
        FROM nomina_recibos r
        JOIN usuarios u  ON u.id = r.usuario_id
@@ -174,7 +330,10 @@ async function listarRecibos(periodoId) {
   if (recibos.length === 0) return [];
 
   const [conceptos] = await pool.query(
-    `SELECT c.id, c.recibo_id, c.tipo, c.clave, c.descripcion, c.cantidad, c.importe, c.creado_en
+    `SELECT c.id, c.recibo_id, c.tipo, c.clave, c.descripcion, c.cantidad, c.importe, c.creado_en,
+            DATE_FORMAT(c.fecha, '%Y-%m-%d') AS fecha,
+            TIME_FORMAT(c.hora_entrada, '%H:%i') AS hora_entrada,
+            TIME_FORMAT(c.hora_salida,  '%H:%i') AS hora_salida
        FROM nomina_recibo_conceptos c
        JOIN nomina_recibos r ON r.id = c.recibo_id
       WHERE r.periodo_id = :id
@@ -183,7 +342,12 @@ async function listarRecibos(periodoId) {
   );
   const porRecibo = new Map(recibos.map((r) => [r.id, []]));
   for (const c of conceptos) porRecibo.get(c.recibo_id)?.push(c);
-  for (const r of recibos) r.conceptos = porRecibo.get(r.id) ?? [];
+  // El horario VIGENTE de cada quien: el recibo lo usa para calcular horas extra.
+  const horarios = await horariosDe(recibos.map((r) => r.usuario_id));
+  for (const r of recibos) {
+    r.conceptos = porRecibo.get(r.id) ?? [];
+    r.horario = horarios.get(Number(r.usuario_id)) ?? [];
+  }
 
   return recibos;
 }
@@ -202,7 +366,7 @@ async function obtenerRecibo(id) {
 
 /**
  * Recalcula percepciones/deducciones manuales de un recibo y su total.
- * total = sueldo_base + comision + otras_percepciones - deducciones
+ * total = sueldo_base + pago_vacaciones + comision + otras_percepciones - deducciones
  */
 async function _recalcularTotales(conn, reciboId) {
   const [[sumas]] = await conn.query(
@@ -215,7 +379,7 @@ async function _recalcularTotales(conn, reciboId) {
     `UPDATE nomina_recibos
         SET otras_percepciones = :percepciones,
             deducciones        = :deducciones,
-            total_pagar        = sueldo_base + comision + :percepciones - :deducciones
+            total_pagar        = sueldo_base + pago_vacaciones + comision + :percepciones - :deducciones
       WHERE id = :id`,
     { id: reciboId, percepciones: sumas.percepciones, deducciones: sumas.deducciones }
   );
@@ -227,97 +391,209 @@ async function _recalcularTotales(conn, reciboId) {
  * elimina los recibos de quien salió de la nómina.
  */
 async function calcularPeriodo(periodoId) {
-  return withTransaction(async (conn) => {
-    const [prows] = await conn.query(
-      `SELECT id, estado,
-              DATE_FORMAT(fecha_inicio, '%Y-%m-%d') AS fecha_inicio,
-              DATE_FORMAT(fecha_fin,    '%Y-%m-%d') AS fecha_fin
-         FROM nomina_periodos WHERE id = :id FOR UPDATE`,
-      { id: periodoId }
-    );
-    const periodo = prows[0];
-    if (!periodo) throw new AppError(404, 'NO_ENCONTRADO', 'Periodo de nómina no encontrado');
-    if (periodo.estado !== 'borrador') {
-      throw new AppError(409, 'PERIODO_CERRADO',
-        'Solo se puede recalcular un periodo en borrador');
-    }
+  return withTransaction((conn) => _calcular(conn, periodoId));
+}
 
-    const desde = `${periodo.fecha_inicio} 00:00:00`;
-    const hastaExcl = _diaSiguiente(periodo.fecha_fin);
+/**
+ * El cálculo, dentro de una transacción abierta (lo reusan las vacaciones y
+ * los días trabajados, que recalculan la semana en el mismo movimiento).
+ *
+ * Con horario, el recibo paga POR DÍAS (decisión del usuario, 2026-10-06):
+ *   día = sueldo semanal ÷ días que trabaja
+ *   sueldo del recibo  = día × días trabajados
+ *   vacaciones         = día × días de vacaciones que caen en la semana
+ * Las faltas que ya se capturaron (días de su horario que no trabajó ni fueron
+ * vacaciones) se CONSERVAN al recalcular: si después se registran vacaciones,
+ * se descuentan de los días trabajados sin borrar la falta.
+ * Sin horario, el recibo paga el sueldo semanal completo, como antes.
+ */
+async function _calcular(conn, periodoId) {
+  const [prows] = await conn.query(
+    `SELECT id, estado,
+            DATE_FORMAT(fecha_inicio, '%Y-%m-%d') AS fecha_inicio,
+            DATE_FORMAT(fecha_fin,    '%Y-%m-%d') AS fecha_fin
+       FROM nomina_periodos WHERE id = :id FOR UPDATE`,
+    { id: periodoId }
+  );
+  const periodo = prows[0];
+  if (!periodo) throw new AppError(404, 'NO_ENCONTRADO', 'Periodo de nómina no encontrado');
+  if (periodo.estado !== 'borrador') {
+    throw new AppError(409, 'PERIODO_CERRADO',
+      'Solo se puede recalcular un periodo en borrador');
+  }
 
-    // Empleados vigentes en la nómina.
-    const [empleados] = await conn.query(
-      `SELECT ne.usuario_id, ne.sueldo_base_semanal, ne.paga_comision, ne.porcentaje_comision
-         FROM nomina_empleados ne
-         JOIN usuarios u ON u.id = ne.usuario_id
-        WHERE ne.activo = 1`
-    );
-    if (empleados.length === 0) {
-      throw new AppError(422, 'SIN_EMPLEADOS',
-        'No hay personal dado de alta en la nómina. Configúralo antes de calcular.');
-    }
+  const desde = `${periodo.fecha_inicio} 00:00:00`;
+  const hastaExcl = _diaSiguiente(periodo.fecha_fin);
 
-    // Venta neta de la semana por vendedor.
-    const [ventas] = await conn.query(
-      `SELECT usuario_id, COUNT(*) AS num_pedidos,
-              COALESCE(SUM(subtotal - descuento), 0) AS ventas_netas
-         FROM pedidos
-        WHERE usuario_id IS NOT NULL
-          AND creado_en >= :desde AND creado_en < :hasta
-          AND ${VENTA_VALIDA}
-        GROUP BY usuario_id`,
-      { desde, hasta: hastaExcl }
-    );
-    const ventaPorUsuario = new Map(ventas.map((v) => [Number(v.usuario_id), v]));
+  // Empleados vigentes en la nómina.
+  const [empleados] = await conn.query(
+    `SELECT ne.usuario_id, ne.sueldo_base_semanal, ne.paga_comision, ne.porcentaje_comision,
+            ne.comida_min
+       FROM nomina_empleados ne
+       JOIN usuarios u ON u.id = ne.usuario_id
+      WHERE ne.activo = 1`
+  );
+  if (empleados.length === 0) {
+    throw new AppError(422, 'SIN_EMPLEADOS',
+      'No hay personal dado de alta en la nómina. Configúralo antes de calcular.');
+  }
+  const ids = empleados.map((e) => e.usuario_id);
+  const horarios = await horariosDe(ids, conn);
 
-    // Upsert de un recibo por empleado.
-    for (const emp of empleados) {
-      const venta = ventaPorUsuario.get(Number(emp.usuario_id));
-      const ventasNetas = venta ? round2(venta.ventas_netas) : 0;
-      const numPedidos = venta ? Number(venta.num_pedidos) : 0;
-      const pct = emp.paga_comision ? Number(emp.porcentaje_comision) : 0;
-      const comision = round2((ventasNetas * pct) / 100);
-      const sueldoBase = round2(emp.sueldo_base_semanal);
+  // Vacaciones que tocan la semana, por empleado.
+  const [vacaciones] = await conn.query(
+    `SELECT usuario_id,
+            DATE_FORMAT(GREATEST(fecha_inicio, :ini), '%Y-%m-%d') AS desde,
+            DATE_FORMAT(LEAST(fecha_fin, :fin), '%Y-%m-%d')       AS hasta
+       FROM nomina_vacaciones
+      WHERE usuario_id IN (:ids) AND fecha_inicio <= :fin AND fecha_fin >= :ini`,
+    { ids, ini: periodo.fecha_inicio, fin: periodo.fecha_fin }
+  );
 
-      await conn.query(
-        `INSERT INTO nomina_recibos
-           (periodo_id, usuario_id, sueldo_base, num_pedidos, ventas_netas,
-            porcentaje_comision, comision, total_pagar)
-         VALUES (:periodo_id, :usuario_id, :sueldo_base, :num_pedidos, :ventas_netas,
-                 :pct, :comision, :sueldo_base + :comision)
-         ON DUPLICATE KEY UPDATE
-           sueldo_base         = :sueldo_base,
-           num_pedidos         = :num_pedidos,
-           ventas_netas        = :ventas_netas,
-           porcentaje_comision = :pct,
-           comision            = :comision`,
-        {
-          periodo_id: periodoId,
-          usuario_id: emp.usuario_id,
-          sueldo_base: sueldoBase,
-          num_pedidos: numPedidos,
-          ventas_netas: ventasNetas,
-          pct,
-          comision,
-        }
+  // Lo que ya tenía cada recibo: de ahí salen las faltas capturadas.
+  const [previos] = await conn.query(
+    `SELECT usuario_id, dias_laborales, dias_trabajados, dias_vacaciones
+       FROM nomina_recibos WHERE periodo_id = :id`,
+    { id: periodoId }
+  );
+  const previoPorUsuario = new Map(previos.map((r) => [Number(r.usuario_id), r]));
+
+  // Venta neta de la semana por vendedor.
+  const [ventas] = await conn.query(
+    `SELECT usuario_id, COUNT(*) AS num_pedidos,
+            COALESCE(SUM(subtotal - descuento), 0) AS ventas_netas
+       FROM pedidos
+      WHERE usuario_id IS NOT NULL
+        AND creado_en >= :desde AND creado_en < :hasta
+        AND ${VENTA_VALIDA}
+      GROUP BY usuario_id`,
+    { desde, hasta: hastaExcl }
+  );
+  const ventaPorUsuario = new Map(ventas.map((v) => [Number(v.usuario_id), v]));
+
+  // Upsert de un recibo por empleado.
+  for (const emp of empleados) {
+    const id = Number(emp.usuario_id);
+    const venta = ventaPorUsuario.get(id);
+    const ventasNetas = venta ? round2(venta.ventas_netas) : 0;
+    const numPedidos = venta ? Number(venta.num_pedidos) : 0;
+    const pct = emp.paga_comision ? Number(emp.porcentaje_comision) : 0;
+    const comision = round2((ventasNetas * pct) / 100);
+    const sueldo = Number(emp.sueldo_base_semanal);
+
+    const horario = horarios.get(id) ?? [];
+    let dias = { laborales: null, trabajados: null, vacaciones: 0, diario: null, hora: null };
+    let sueldoBase = round2(sueldo);
+    let pagoVacaciones = 0;
+    if (horario.length) {
+      const laborales = jornada.diasLaborales(horario);
+      const vac = Math.min(
+        laborales,
+        vacaciones
+          .filter((v) => Number(v.usuario_id) === id)
+          .reduce((s, v) => s + jornada.diasHabilesEnRango(horario, v.desde, v.hasta), 0)
       );
+      const previo = previoPorUsuario.get(id);
+      const faltas = previo && previo.dias_laborales !== null && previo.dias_trabajados !== null
+        ? Math.max(0, Number(previo.dias_laborales) - Number(previo.dias_vacaciones) - Number(previo.dias_trabajados))
+        : 0;
+      const trabajados = Math.max(0, laborales - vac - faltas);
+      dias = {
+        laborales,
+        trabajados,
+        vacaciones: vac,
+        diario: jornada.salarioDiario(sueldo, horario),
+        hora: jornada.valorHora(sueldo, horario, emp.comida_min),
+      };
+      sueldoBase = jornada.pagoPorDias(sueldo, horario, trabajados);
+      pagoVacaciones = jornada.pagoPorDias(sueldo, horario, vac);
     }
 
-    // Fuera de la nómina = fuera del periodo (arrastra sus conceptos por CASCADE).
-    const ids = empleados.map((e) => e.usuario_id);
     await conn.query(
-      'DELETE FROM nomina_recibos WHERE periodo_id = :id AND usuario_id NOT IN (:ids)',
-      { id: periodoId, ids }
+      `INSERT INTO nomina_recibos
+         (periodo_id, usuario_id, sueldo_base, dias_laborales, dias_trabajados, dias_vacaciones,
+          salario_diario, valor_hora, pago_vacaciones, num_pedidos, ventas_netas,
+          porcentaje_comision, comision, total_pagar)
+       VALUES (:periodo_id, :usuario_id, :sueldo_base, :laborales, :trabajados, :vacaciones,
+               :diario, :hora, :pago_vacaciones, :num_pedidos, :ventas_netas,
+               :pct, :comision, :sueldo_base + :pago_vacaciones + :comision)
+       ON DUPLICATE KEY UPDATE
+         sueldo_base         = :sueldo_base,
+         dias_laborales      = :laborales,
+         dias_trabajados     = :trabajados,
+         dias_vacaciones     = :vacaciones,
+         salario_diario      = :diario,
+         valor_hora          = :hora,
+         pago_vacaciones     = :pago_vacaciones,
+         num_pedidos         = :num_pedidos,
+         ventas_netas        = :ventas_netas,
+         porcentaje_comision = :pct,
+         comision            = :comision`,
+      {
+        periodo_id: periodoId,
+        usuario_id: emp.usuario_id,
+        sueldo_base: sueldoBase,
+        ...dias,
+        pago_vacaciones: pagoVacaciones,
+        num_pedidos: numPedidos,
+        ventas_netas: ventasNetas,
+        pct,
+        comision,
+      }
     );
+  }
 
-    // Reaplica los conceptos manuales sobre los montos recién calculados.
-    const [recibos] = await conn.query(
-      'SELECT id FROM nomina_recibos WHERE periodo_id = :id',
-      { id: periodoId }
+  // Fuera de la nómina = fuera del periodo (arrastra sus conceptos por CASCADE).
+  await conn.query(
+    'DELETE FROM nomina_recibos WHERE periodo_id = :id AND usuario_id NOT IN (:ids)',
+    { id: periodoId, ids }
+  );
+
+  // Reaplica los conceptos manuales sobre los montos recién calculados.
+  const [recibos] = await conn.query(
+    'SELECT id FROM nomina_recibos WHERE periodo_id = :id',
+    { id: periodoId }
+  );
+  for (const r of recibos) await _recalcularTotales(conn, r.id);
+
+  return recibos.length;
+}
+
+/**
+ * Cuántos días trabajó de verdad en la semana (los que faltan para llegar a los
+ * de su horario, sin contar vacaciones, son faltas y no se pagan). Recalcula la
+ * semana en el mismo movimiento para que el recibo quede al día.
+ */
+async function fijarDiasTrabajados(reciboId, diasTrabajados) {
+  return withTransaction(async (conn) => {
+    const [rows] = await conn.query(
+      `SELECT r.id, r.periodo_id, r.dias_laborales, r.dias_vacaciones, p.estado AS periodo_estado
+         FROM nomina_recibos r JOIN nomina_periodos p ON p.id = r.periodo_id
+        WHERE r.id = :id FOR UPDATE`,
+      { id: reciboId }
     );
-    for (const r of recibos) await _recalcularTotales(conn, r.id);
-
-    return recibos.length;
+    const recibo = rows[0];
+    if (!recibo) throw new AppError(404, 'NO_ENCONTRADO', 'Recibo de nómina no encontrado');
+    if (recibo.periodo_estado !== 'borrador') {
+      throw new AppError(409, 'PERIODO_CERRADO', 'Esta nómina ya no está en borrador: no se puede cambiar.');
+    }
+    if (recibo.dias_laborales === null) {
+      throw new AppError(422, 'SIN_HORARIO',
+        'Este empleado no tiene horario: captúralo en Sueldos y comisiones y recalcula la semana.');
+    }
+    const maximo = Number(recibo.dias_laborales) - Number(recibo.dias_vacaciones);
+    if (diasTrabajados > maximo) {
+      throw new AppError(422, 'DIAS_DE_MAS',
+        Number(recibo.dias_vacaciones) > 0
+          ? `Su horario tiene ${Number(recibo.dias_laborales)} días y ${Number(recibo.dias_vacaciones)} fueron de vacaciones: trabajó ${maximo} como máximo.`
+          : `Su horario tiene ${maximo} días a la semana: no puede haber trabajado más.`);
+    }
+    await conn.query('UPDATE nomina_recibos SET dias_trabajados = :d WHERE id = :id', {
+      d: diasTrabajados,
+      id: reciboId,
+    });
+    await _calcular(conn, recibo.periodo_id);
+    return recibo.periodo_id;
   });
 }
 
@@ -336,15 +612,31 @@ async function agregarConcepto(reciboId, datos) {
         'No se pueden agregar conceptos a un periodo que ya no está en borrador');
     }
 
+    // Horas extra del mismo día, una sola vez: dos renglones del martes pagarían doble.
+    if (datos.fecha) {
+      const [dup] = await conn.query(
+        `SELECT id FROM nomina_recibo_conceptos
+          WHERE recibo_id = :id AND clave = 'horas_extra' AND fecha = :fecha LIMIT 1`,
+        { id: reciboId, fecha: datos.fecha }
+      );
+      if (dup.length) {
+        throw new AppError(409, 'HORAS_EXTRA_DUPLICADAS',
+          'Ese día ya tiene horas extra. Quítalas y vuelve a capturarlas si cambiaron.');
+      }
+    }
     const [r] = await conn.query(
-      `INSERT INTO nomina_recibo_conceptos (recibo_id, tipo, clave, descripcion, cantidad, importe)
-       VALUES (:recibo_id, :tipo, :clave, :descripcion, :cantidad, :importe)`,
+      `INSERT INTO nomina_recibo_conceptos
+         (recibo_id, tipo, clave, descripcion, cantidad, fecha, hora_entrada, hora_salida, importe)
+       VALUES (:recibo_id, :tipo, :clave, :descripcion, :cantidad, :fecha, :hora_entrada, :hora_salida, :importe)`,
       {
         recibo_id: reciboId,
         tipo: datos.tipo,
         clave: datos.clave,
         descripcion: datos.descripcion ?? null,
         cantidad: datos.cantidad ?? null,
+        fecha: datos.fecha ?? null,
+        hora_entrada: datos.hora_entrada ?? null,
+        hora_salida: datos.hora_salida ?? null,
         importe: datos.importe,
       }
     );
@@ -416,6 +708,13 @@ module.exports = {
   listarEmpleados,
   obtenerEmpleado,
   guardarEmpleado,
+  horariosDe,
+  listarVacaciones,
+  obtenerVacaciones,
+  periodosEnRango,
+  crearVacaciones,
+  eliminarVacaciones,
+  fijarDiasTrabajados,
   obtenerPeriodoPorInicio,
   obtenerPeriodo,
   crearPeriodo,

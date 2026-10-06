@@ -65,6 +65,15 @@ const MIGRACIONES = [
   ['2026-09_apartados', 'pedidos.inventario_descontado'],
   ['2026-10_alertas_stock_con_minimo', 'v_alertas_stock~`stock_minimo` > 0'],
   ['2026-10_permisos_por_puesto', 'permisos#clave=ver:hoy'],
+  ['2026-10_nomina_dias_vacaciones_horario', 'nomina_vacaciones'],
+  ['2026-10_nomina_dias_vacaciones_horario (recibos)', 'nomina_recibos.dias_trabajados'],
+  ['2026-10_cuentas_bancarias', 'cuentas_bancarias'],
+  ['2026-10_traspaso_bultos', 'traspaso_bultos'],
+  ['2026-10_traspaso_lo_que_salio', 'traspasos.envio_notas'],
+  ['2026-10_traspaso_lo_que_salio (pedido)', 'traspaso_detalle.cantidad_solicitada'],
+  ['2026-10 hora de la tienda (scripts/ajustar-hora.js)', '_zona_horaria'],
+  ['2026-10_carga_proveedor_costo', 'remesas.proveedor_id'],
+  ['2026-10_carga_proveedor_costo (contabilidad)', 'roles#nombre=contabilidad'],
 ];
 
 (async () => {

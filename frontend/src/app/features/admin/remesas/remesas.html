@@ -1,7 +1,7 @@
 <div class="pagina">
   <header class="page-head">
     <div>
-      <h1>Recibir remesa</h1>
+      <h1>Surtir inventario</h1>
       <p class="sub">La lista de empaque del proveedor: un renglón por bulto, con su peso real y su lote.</p>
     </div>
   </header>
@@ -108,27 +108,14 @@
             }
           </select>
         </label>
-        <!-- La tienda no lleva el costo (core/costos.ts): no se pide el precio de compra. -->
-        @if (seLlevaCosto) {
-          <label class="field">
-            Precio de compra por kg
-            <span class="campo-moneda">
-              <span>$</span>
-              <input type="number" min="0" step="0.01" [(ngModel)]="costoKg"
-                     placeholder="0.00" name="costokg" />
-            </span>
-          </label>
-        }
       </div>
-      @if (seLlevaCosto) {
-        <p class="nota">
-          El precio de compra es lo que deja ver el margen. Si no lo pones, la remesa entra igual
-          pero no cambia el costo del hilo.
-        </p>
-      }
-      <label class="field">
+      <!-- De quién llegó y con qué papeles; el costo, solo administración y contabilidad. -->
+      <div style="margin-top: 16px">
+        <app-datos-carga [(datos)]="datosCarga" [conCosto]="veCostos()" />
+      </div>
+      <label class="field" style="margin-top: 16px">
         <span>Notas <span class="muted">(opcional)</span></span>
-        <input type="text" [(ngModel)]="notas" placeholder="Ej. Factura 4821, llegó el martes" />
+        <input type="text" [(ngModel)]="notas" placeholder="Ej. Llegó con dos cajas golpeadas" />
       </label>
     }
   </section>
@@ -304,8 +291,8 @@
   <section class="card">
     <div class="card-head">
       <div>
-        <h2>Remesas recibidas</h2>
-        <p>Las más recientes primero.</p>
+        <h2>Cargas recibidas</h2>
+        <p>Las más recientes primero. En «Datos» se completan el proveedor, los papeles y el costo.</p>
       </div>
       @if (sospechosas() > 0) {
         <span class="pill naranja">
@@ -330,11 +317,12 @@
             <tr>
               <th>Folio</th>
               <th>Hilo</th>
+              <th>Proveedor y papeles</th>
               <th>Almacén</th>
               <th class="num">Bultos</th>
               <th class="num">Kilos</th>
               @if (veCostos()) { <th class="num">Costo por kg</th> }
-              <th>Cuándo</th>
+              <th>Ingreso</th>
               <th>Aviso</th>
               <th><span class="oculto">Reporte</span></th>
             </tr>
@@ -353,20 +341,33 @@
                     @if (r.lotes) { · lote {{ r.lotes }} }
                   </div>
                 </td>
+                <td>
+                  {{ r.proveedor || '—' }}
+                  @if (r.factura || r.pedimento || r.contenedor) {
+                    <div class="sub">
+                      @if (r.factura) { factura {{ r.factura }} }
+                      @if (r.pedimento) { · pedimento {{ r.pedimento }} }
+                      @if (r.contenedor) { · contenedor {{ r.contenedor }} }
+                    </div>
+                  }
+                </td>
                 <td>{{ r.almacen }}</td>
                 <td class="num">{{ r.num_bultos | cantidad }}</td>
                 <td class="num"><b>{{ r.kg_total | cantidad: 'kg' }}</b></td>
                 @if (veCostos()) {
                   <td class="num">{{ r.costo_kg != null ? (r.costo_kg | dinero) : '—' }}</td>
                 }
-                <td class="cuando" [title]="r.creado_en | fecha">{{ r.creado_en | cuando }}</td>
+                <!-- El día que llegó; se capturó cuando dice el título. -->
+                <td class="cuando" [title]="'Se capturó ' + (r.creado_en | fecha)">
+                  {{ (r.fecha_ingreso || r.creado_en) | fecha: true }}
+                </td>
                 <td class="avisos">
                   @if (avisoHistorial(r); as aviso) {
                     <span class="pill naranja" [title]="aviso">El archivo decía «{{ nombreArchivo(r) }}»</span>
                   }
                   @if (sinCosto(r)) {
                     <span class="pill ambar"
-                          title="Entró sin precio de compra: no movió el costo del hilo.">Sin precio de compra</span>
+                          title="Entró sin costo por kilo: no movió el costo del hilo. Ponlo en «Datos».">Sin costo</span>
                   }
                   @if (!avisoHistorial(r) && !sinCosto(r)) {
                     <span class="pill verde">Sin avisos</span>
@@ -374,6 +375,8 @@
                 </td>
                 <!-- El comprobante de cualquier carga, cuando se necesite. -->
                 <td class="acciones">
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="corrigiendo.set(r)"
+                          [attr.aria-label]="'Datos de la carga ' + r.folio">Datos</button>
                   <button type="button" class="btn btn-ghost btn-sm" (click)="descargarPdf(r.id, r.folio)"
                           [disabled]="generandoPdf() === r.id" [attr.aria-label]="'PDF de la carga ' + r.folio">
                     {{ generandoPdf() === r.id ? 'Generando…' : 'PDF' }}
@@ -387,3 +390,7 @@
     }
   </section>
 </div>
+
+@if (corrigiendo(); as c) {
+  <app-datos-carga-modal [carga]="c" (cerrado)="corrigiendo.set(null)" (guardado)="alCorregir()" />
+}

@@ -57,7 +57,7 @@ export type ModoVenta = 'cobrar' | 'fiar' | 'apartar';
   host: { '(document:keydown.escape)': 'alEscape()' },
   imports: [FormsModule, RouterLink, DineroPipe, CantidadPipe],
   templateUrl: './pos.html',
-  styleUrl: './pos.scss',
+  styleUrls: ['./pos.scss', './pos-bultos.scss'],
 })
 export class Pos {
   private readonly ventas = inject(VentasService);
@@ -542,8 +542,33 @@ export class Pos {
     });
   }
 
+  /**
+   * Quita UN bulto escaneado de la línea (el cliente se llevó 2 de 3): baja sus
+   * kilos y deja de ir en la venta. Es la única forma de cobrar menos en una
+   * línea con bultos: si se bajaran los kilos a mano, el bulto que no se lleva
+   * quedaría "vendido" estando en la bodega (2026-10-06). Sin bultos, la línea
+   * se va.
+   */
+  quitarBulto(item: ItemCarrito, codigo: string): void {
+    const quedan = (item.bultos ?? []).filter((b) => b.codigo !== codigo);
+    const quitado = (item.bultos ?? []).find((b) => b.codigo === codigo);
+    if (!quitado) return;
+    if (!quedan.length && this.round3(item.cantidad - Number(quitado.peso_kg)) <= 0) return this.quitar(item);
+    this.carrito.update((arr) =>
+      arr.map((i) =>
+        i.variante_id === item.variante_id
+          ? { ...i, bultos: quedan, cantidad: this.round3(i.cantidad - Number(quitado.peso_kg)) }
+          : i
+      )
+    );
+    this.mensaje.set(`Se quitó el bulto ${codigo} del ticket.`);
+  }
+
   /** La venta es por peso: la cantidad admite decimales (2.5 kg). */
   cambiarCantidad(item: ItemCarrito, cantidad: number): void {
+    // Con bultos escaneados los kilos son los de los bultos: se cambian quitando
+    // un bulto (ver quitarBulto). La caja ni deja teclearlos.
+    if (item.bultos?.length) return;
     const n = Number(cantidad);
     if (!Number.isFinite(n) || n <= 0) return this.quitar(item);
     // 3 decimales = el mismo alcance que DECIMAL(12,3) en la BD (1 gramo).

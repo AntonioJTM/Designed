@@ -3,7 +3,13 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
-import { MasVendido, PorReabastecer, ReporteCortes, ReporteVentas } from '../models/reportes.models';
+import {
+  MasVendido,
+  PorReabastecer,
+  ReporteCortes,
+  ReporteVentaColor,
+  ReporteVentas,
+} from '../models/reportes.models';
 
 function data<T>(r: ApiResponse<T>): T {
   if (r.error || r.data === null) throw r.error ?? { code: 'DESCONOCIDO', message: 'Respuesta vacía' };
@@ -45,6 +51,15 @@ export class ReportesService {
   cortesCaja(desde?: string, hasta?: string): Observable<ReporteCortes> {
     return this.http
       .get<ApiResponse<ReporteCortes>>(`${this.base}/reportes/cortes-caja`, { params: rangoParams(desde, hasta) })
+      .pipe(map(data));
+  }
+
+  /** Kilos vendidos por hilo en el rango, lo vendido desde siempre y lo que queda. */
+  ventaPorColor(desde?: string, hasta?: string, q?: string): Observable<ReporteVentaColor> {
+    let params = rangoParams(desde, hasta);
+    if (q?.trim()) params = params.set('q', q.trim());
+    return this.http
+      .get<ApiResponse<ReporteVentaColor>>(`${this.base}/reportes/venta-por-color`, { params })
       .pipe(map(data));
   }
 }

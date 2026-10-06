@@ -118,6 +118,35 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.001;
     const [[pe]] = await db.query('SELECT estado FROM pedidos WHERE id=?', [ped]);
     ck('el pedido NO cambió de estado', pe.estado === 'devuelto', pe.estado);
     ck('ni se movió el inventario', (await saldo(paq, almA)) === 0, (await saldo(paq, almA)) + ' kg');
+
+    // Reactivar saca lo que REGRESÓ, no lo vendido (2026-10-06): se vendieron
+    // 10 kg, regresaron 4; sacar 10 dejaba el inventario 6 kg por debajo.
+    console.log('\n=== 8. Devolución a medias y reactivar ===');
+    await db.query('UPDATE inventario SET cantidad=200 WHERE variante_id=? AND almacen_id=?', [paq, almA]);
+    r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s.id,
+      items: [{ variante_id: paq, cantidad: 10 }], pagos: [{ metodo_pago_id: 1, monto: 2000 }] });
+    const ped10 = r.data.id;
+    const det10 = r.data.detalle[0].id;
+    r = await api('PATCH', '/pedidos/' + ped10 + '/estado', { estado: 'devuelto', devoluciones: [{ detalle_id: det10, variante_id: paq, cantidad: 4 }] });
+    ck('regresan 4 de 10', r.status === 200 && cerca(await saldo(paq, almA), 194), `${r.status} ${await saldo(paq, almA)} kg`);
+    r = await api('PATCH', '/pedidos/' + ped10 + '/estado', { estado: 'pagado' });
+    ck('al reactivar salen los 4 que regresaron, no los 10', r.status === 200 && cerca(await saldo(paq, almA), 190),
+      `${r.status} ${await saldo(paq, almA)} kg (190 = 200 − 10 vendidos)`);
+
+    // Una venta de DOS hilos cancelada normal se puede reactivar: antes el regreso
+    // del segundo hilo contaba como "otra presentación" del primero.
+    console.log('\n=== 9. Reactivar una venta de dos hilos ===');
+    const p2 = (await api('POST', '/productos', { categoria_id: cat, unidad_medida_id: kgu, nombre: 'TMPC Negro', multipresentacion: true })).data.id;
+    const paq2 = (await api('POST', '/variantes', { producto_id: p2, sku: 'TMPC-PAQ-2', presentacion: 'Paquete', tipo_presentacion: 'paquete', peso_kg: 19, precio: 200 })).data.id;
+    await api('POST', '/inventario/movimientos', { variante_id: paq2, almacen_id: almA, tipo: 'entrada', cantidad: 50, motivo: 'TMPC inicial negro' });
+    r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s.id,
+      items: [{ variante_id: paq, cantidad: 1 }, { variante_id: paq2, cantidad: 2 }], pagos: [{ metodo_pago_id: 1, monto: 600 }] });
+    const pedDos = r.data.id;
+    await api('PATCH', '/pedidos/' + pedDos + '/estado', { estado: 'cancelado' });
+    r = await api('PATCH', '/pedidos/' + pedDos + '/estado', { estado: 'pagado' });
+    ck('se reactiva (no es "otra presentación")', r.status === 200, `${r.status} ${r.error?.code ?? r.data?.estado}`);
+    ck('y descuenta los dos hilos', cerca(await saldo(paq, almA), 189) && cerca(await saldo(paq2, almA), 48),
+      `${await saldo(paq, almA)} · ${await saldo(paq2, almA)}`);
   } finally {
     console.log('\n=== Limpieza ===');
     await db.query('SET FOREIGN_KEY_CHECKS=0');

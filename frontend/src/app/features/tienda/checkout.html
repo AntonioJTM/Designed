@@ -11,20 +11,23 @@
     </p>
 
     @if (pagaPorTransferencia()) {
-      <p>Para completarlo, deposita el total a esta cuenta:</p>
-      <div class="datos-pago">
-        @if (config().transferencia_banco) {
-          <div><span>Banco</span><b>{{ config().transferencia_banco }}</b></div>
+      <!-- Las cuentas activas de Configuración (pueden ser varias): el cliente elige a cuál depositar. -->
+      @if (config().cuentas_bancarias?.length) {
+        <p>
+          Para completarlo, deposita el total a
+          {{ config().cuentas_bancarias!.length === 1 ? 'esta cuenta' : 'cualquiera de estas cuentas' }}:
+        </p>
+        @for (c of config().cuentas_bancarias; track c.id) {
+          <div class="datos-pago">
+            <div><span>Banco</span><b>{{ c.banco }}</b></div>
+            @if (c.titular) { <div><span>A nombre de</span><b>{{ c.titular }}</b></div> }
+            @if (c.numero_cuenta) { <div><span>Número de cuenta</span><b>{{ c.numero_cuenta }}</b></div> }
+            @if (c.clabe) { <div><span>CLABE</span><b>{{ c.clabe }}</b></div> }
+            <div><span>Referencia</span><b>{{ p.numero_pedido }}</b></div>
+          </div>
         }
-        @if (config().transferencia_titular) {
-          <div><span>A nombre de</span><b>{{ config().transferencia_titular }}</b></div>
-        }
-        @if (config().transferencia_clabe) {
-          <div><span>CLABE</span><b>{{ config().transferencia_clabe }}</b></div>
-        }
-        <div><span>Referencia</span><b>{{ p.numero_pedido }}</b></div>
-      </div>
-      @if (!config().transferencia_clabe) {
+      }
+      @if (!config().cuentas_bancarias?.length) {
         <p class="muted">
           Comunícate con la tienda para que te den los datos de depósito.
           @if (config().tienda_telefono) { Tel. {{ config().tienda_telefono }} }

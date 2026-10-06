@@ -1,0 +1,23 @@
+// Modal de "Enviar": el lector y la lista de paquetes que van subiendo.
+.explica { margin: 0 0 16px; font-size: 14px; color: var(--tinta-2); line-height: 1.5; }
+.explica b { color: var(--tinta); }
+.modal-body > .alert, .modal-body > .aviso { margin: 0 0 16px; }
+.modal-body > .aviso { margin: 16px 0 0; }
+.notas-envio { margin-top: 16px; }
+.escaneo { display: flex; gap: 8px; }
+.escaneo input { flex: 1; }
+.ultimo { margin: 8px 0 0; font-size: 13.5px; color: var(--ok-t); }
+.tabla-scroll { margin-top: 16px; }
+.sub { font-size: 12px; color: var(--tinta-3); }
+.sub.aviso-txt { color: var(--aviso-t); }
+.escaneados {
+  list-style: none; margin: 12px 0 0; padding: 0; max-height: 220px; overflow-y: auto;
+  border: 1px solid var(--borde); border-radius: 8px;
+}
+.escaneados li {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px;
+  padding: 6px 10px; font-size: 13.5px; border-top: 1px solid var(--borde);
+}
+.escaneados li:first-child { border-top: 0; }
+.escaneados li b { font-variant-numeric: tabular-nums; }
+.escaneados .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

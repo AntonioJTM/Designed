@@ -45,6 +45,7 @@
               <label class="field">
                 A qué caja entra
                 <select [(ngModel)]="turnoId" name="turno">
+                  <option [ngValue]="null" disabled>Elige la caja que lo recibe</option>
                   @for (t of turnos(); track t.id) {
                     <option [ngValue]="t.id">{{ t.caja || 'Caja ' + t.caja_id }}{{ t.usuario ? ' · ' + t.usuario : '' }}</option>
                   }

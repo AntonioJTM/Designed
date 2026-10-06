@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../../config/db');
+const { porPalabras } = require('../../utils/query');
 
 // Reportes de solo lectura. Los pedidos cancelados/devueltos no cuentan como venta.
 const VENTA_VALIDA = "estado NOT IN ('cancelado','devuelto')";
@@ -116,4 +117,93 @@ async function cortesCaja(desde, hastaExcl) {
   return rows;
 }
 
-module.exports = { ventasResumen, ventasPorDia, masVendidos, porReabastecer, cortesCaja };
+/**
+ * Lo que cuenta como VENDIDO en "Venta por color": lo que de verdad SALIÓ del
+ * inventario. Ni lo cancelado ni lo devuelto (regresó al almacén), ni un
+ * apartado que todavía no se entrega (`inventario_descontado = 0`: la
+ * mercancía sigue en la bodega, solo está reservada).
+ *
+ * OJO: es más estricto que "Ventas por día" y que "Más vendidos" (la vista
+ * v_mas_vendidos), que solo excluyen cancelado/devuelto y sí cuentan el
+ * apartado sin entregar. Aquí no, porque el reporte compara lo vendido contra
+ * lo que QUEDA en inventario, y un apartado sin entregar todavía está en las
+ * existencias: contarlo en los dos lados lo sumaría dos veces. Por eso los
+ * kilos de este reporte pueden salir un poco abajo de los de "Ventas por día".
+ * El rango va por `pedidos.creado_en` (el apartado entregado cuenta el día que
+ * se apartó), igual que los demás reportes.
+ */
+const VENDIDO = "ped.estado NOT IN ('cancelado','devuelto') AND ped.inventario_descontado = 1";
+
+/**
+ * Venta por color: un renglón por HILO (`productos.id` = color + calibre) con
+ * todas sus presentaciones sumadas —paquete y cono, las dos en kilos—. Se
+ * agrupa por `producto_id`, nunca por nombre: "ROJO 1/30" y "ROJO 2/30" son
+ * dos hilos.
+ *
+ * Salen los hilos que vendieron algo en el rango y TAMBIÉN los que tienen
+ * existencias sin haber vendido nada (0% del periodo es una respuesta). `q`
+ * busca por palabras en color, calibre, material y línea.
+ *
+ * Devuelve los renglones crudos y lo vendido en el periodo por TODOS los hilos
+ * (sin el filtro de `q`), que es contra lo que se mide el "% del periodo".
+ */
+async function ventaPorColor(desde, hastaExcl, q) {
+  const params = { desde, hasta: hastaExcl };
+  const where = ['(COALESCE(v.kg_periodo, 0) > 0 OR COALESCE(e.existencia, 0) > 0)'];
+  const busca = porPalabras(q, [
+    'p.nombre', { col: 'p.grosor_calibre', calibre: true }, 'cat.nombre', 'l.nombre',
+  ]);
+  if (busca) {
+    where.push(busca.sql);
+    Object.assign(params, busca.params);
+  }
+
+  const [[filas], [[periodo]]] = await Promise.all([
+    pool.query(
+      `SELECT p.id AS producto_id, p.nombre AS color, p.grosor_calibre AS calibre,
+              cat.nombre AS material, l.nombre AS linea,
+              COALESCE(v.kg_periodo, 0) AS kg_vendidos,
+              COALESCE(v.importe, 0)    AS importe,
+              COALESCE(v.kg_total, 0)   AS vendido_total,
+              COALESCE(e.existencia, 0) AS existencia,
+              v.ultima_venta
+         FROM productos p
+         LEFT JOIN categorias cat ON cat.id = p.categoria_id
+         LEFT JOIN lineas l       ON l.id = p.linea_id
+         LEFT JOIN (
+           -- Lo vendido de cada hilo: en el rango y desde siempre, en una pasada.
+           SELECT pv.producto_id,
+                  SUM(CASE WHEN ped.creado_en >= :desde AND ped.creado_en < :hasta
+                           THEN d.cantidad ELSE 0 END) AS kg_periodo,
+                  SUM(CASE WHEN ped.creado_en >= :desde AND ped.creado_en < :hasta
+                           THEN d.subtotal ELSE 0 END) AS importe,
+                  SUM(d.cantidad) AS kg_total,
+                  DATE_FORMAT(MAX(ped.creado_en), '%Y-%m-%d') AS ultima_venta
+             FROM pedido_detalle d
+             JOIN pedidos ped           ON ped.id = d.pedido_id
+             JOIN producto_variantes pv ON pv.id = d.variante_id
+            WHERE ${VENDIDO}
+            GROUP BY pv.producto_id
+         ) v ON v.producto_id = p.id
+         LEFT JOIN (
+           -- Lo que hay hoy, en todos los almacenes y todas sus presentaciones.
+           SELECT pv.producto_id, SUM(i.cantidad) AS existencia
+             FROM inventario i
+             JOIN producto_variantes pv ON pv.id = i.variante_id
+            GROUP BY pv.producto_id
+         ) e ON e.producto_id = p.id
+        WHERE ${where.join(' AND ')}`,
+      params
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(d.cantidad), 0) AS kg_vendidos, COALESCE(SUM(d.subtotal), 0) AS importe
+         FROM pedido_detalle d
+         JOIN pedidos ped ON ped.id = d.pedido_id
+        WHERE ${VENDIDO} AND ped.creado_en >= :desde AND ped.creado_en < :hasta`,
+      { desde, hasta: hastaExcl }
+    ),
+  ]);
+  return { filas, periodo };
+}
+
+module.exports = { ventasResumen, ventasPorDia, masVendidos, porReabastecer, cortesCaja, ventaPorColor };

@@ -4,6 +4,7 @@ import { Subject, of } from 'rxjs';
 import { CargaLista } from './carga-lista';
 import { EventoCarga, InventarioService, PreviaLista, ResultadoLista } from '../../../core/services/inventario.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
+import { AuthService } from '../../../core/services/auth.service';
 
 /**
  * Lo que importa de la lista completa del proveedor (varios colores):
@@ -64,7 +65,14 @@ describe('CargaLista', () => {
   let pdfs: number[][] = [];
   let respuestaPrevia: PreviaLista = previa;
 
+  /** Los permisos del puesto; null = todos (el administrador). */
+  let permisos: string[] | null = null;
+  const authFalso = { puede: (p: string) => permisos === null || permisos.includes(p) };
+
   const invFalso = {
+    // El proveedor que dice el archivo ya está dado de alta: se elige solo.
+    proveedores: () => of([{ id: 3, nombre: 'CANAN TEKSTIL' }]),
+    crearProveedor: (nombre: string) => of({ id: 4, nombre }),
     previaLista: () => of(respuestaPrevia),
     cargarLista: (b: Parameters<InventarioService['cargarLista']>[0]) => {
       enviado = b;
@@ -87,6 +95,8 @@ describe('CargaLista', () => {
     opciones: () => of([{ id: 1, nombre: 'Turco' }, { id: 2, nombre: 'Nacional' }]),
   };
 
+  beforeEach(() => (permisos = null));
+
   async function montar() {
     await TestBed.configureTestingModule({
       imports: [CargaLista],
@@ -94,6 +104,7 @@ describe('CargaLista', () => {
         provideRouter([]),
         { provide: InventarioService, useValue: invFalso },
         { provide: CatalogoService, useValue: catalogoFalso },
+        { provide: AuthService, useValue: authFalso },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(CargaLista);
@@ -166,13 +177,38 @@ describe('CargaLista', () => {
     expect(boton.disabled).toBe(true);
   });
 
-  it('no pide precio de compra: los precios se ponen a mano en Productos', async () => {
-    const f = await montar();
+  it('el costo por kilo va por hilo, y solo para administración y contabilidad (2026-10-06)', async () => {
+    permisos = ['ver:remesa'];
+    let f = await montar();
     subir(f.componentInstance);
     f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('table.hilos input')).toBeNull();
-    expect(el.textContent).not.toContain('Compra por kg');
+    expect((f.nativeElement as HTMLElement).querySelector('table.hilos input')).toBeNull();
+    TestBed.resetTestingModule();
+
+    permisos = null;
+    f = await montar();
+    const c = f.componentInstance;
+    subir(c);
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).querySelectorAll('table.hilos input').length).toBe(2);
+    c.costos['CAMEL|2/30'] = 88;
+    c.confirmar();
+    expect(enviado!.hilos[0].costo_kg).toBe(88);
+    expect(enviado!.hilos[1].costo_kg).toBeUndefined();
+  });
+
+  it('los papeles van para toda la lista, y el proveedor del archivo viene elegido', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    subir(c);
+    f.detectChanges();
+    await f.whenStable();
+    f.detectChanges();
+    // «Canan Tekstil» del archivo = «CANAN TEKSTIL» de la lista.
+    expect(c.datosCarga().proveedor_id).toBe(3);
+    c.datosCarga.update((d) => ({ ...d, factura: 'F-9', contenedor: 'MSCU1234567' }));
+    c.confirmar();
+    expect(enviado).toEqual(jasmine.objectContaining({ proveedor_id: 3, factura: 'F-9', contenedor: 'MSCU1234567' }));
   });
 
   it('mientras carga dice qué está haciendo, hilo por hilo y los bultos que van', async () => {

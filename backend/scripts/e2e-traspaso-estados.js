@@ -95,7 +95,9 @@ async function main() {
 
     // Cinco bultos con pesos DISTINTOS, como llegan de verdad.
     const pesos = [19.5, 20.25, 18.75, 21.0, 19.0];
-    const sumaTres = 19.5 + 20.25 + 18.75; // los tres más antiguos: 58.5
+    // 3 paquetes = 3 × el peso PROMEDIO de los que hay (98.5 / 5 = 19.7): quien
+    // surte agarra los que tenga a la mano, no los más antiguos (2026-10-06).
+    const tresPaquetes = round3(3 * (98.5 / 5)); // 59.1
     for (let i = 0; i < pesos.length; i++) {
       await pool.query(
         `INSERT INTO variante_codigos (variante_id, codigo, peso_kg, almacen_id, estado)
@@ -119,11 +121,11 @@ async function main() {
     );
     ids.traspasos.push(sol.id);
     check('queda en estado solicitado', sol.estado === 'solicitado', sol.estado);
-    check('la cantidad sale del peso REAL de los 3 bultos más antiguos',
-      sol.lineas[0].cantidad === sumaTres, sol.lineas[0].cantidad);
+    check('la cantidad es 3 × el peso promedio real de los paquetes del origen',
+      sol.lineas[0].cantidad === tresPaquetes, sol.lineas[0].cantidad);
     let s = await kg(paquete, origen);
     check('la existencia NO se movió todavía', s.cantidad === total, s);
-    check('pero quedó APARTADA', s.reservada === sumaTres, s);
+    check('pero quedó APARTADA', s.reservada === tresPaquetes, s);
 
     await esperaError('un cono no se traspasa', 'NO_SE_TRASPASAN_CONOS', () =>
       model.solicitarTraspaso(
@@ -132,7 +134,7 @@ async function main() {
       )
     );
 
-    // Lo apartado ya no está libre: 98.5 − 58.5 = 40 kg.
+    // Lo apartado ya no está libre: 98.5 − 59.1 = 39.4 kg.
     await esperaError('otra solicitud no puede pedir lo apartado', 'STOCK_INSUFICIENTE', () =>
       model.solicitarTraspaso(
         { almacen_origen_id: origen, almacen_destino_id: destino, items: [{ variante_id: paquete, cantidad: 45 }] },
@@ -140,12 +142,20 @@ async function main() {
       )
     );
 
-    // ---- 2 · Enviar ----
+    // ---- 2 · Enviar: al surtir se ESCANEA cada paquete que sale ----
     console.log('\n2 · Enviar');
-    const env = await model.enviarTraspaso(sol.id, null);
+    const codigo = (i) => `${MARCA}-B${i}`;
+    await esperaError('sin escanear no se envía', 'SIN_ESCANEAR', () =>
+      model.enviarTraspaso(sol.id, null)
+    );
+    // Los que agarró quien surte, no los más antiguos: 19.5 + 21.0 + 19.0.
+    const enviadoKg = 59.5;
+    const env = await model.enviarTraspaso(sol.id, null, { codigos: [codigo(0), codigo(3), codigo(4)] });
     check('pasa a en_transito', env.estado === 'en_transito', env.estado);
+    check('sale el peso REAL de los escaneados, no lo apartado', env.lineas[0].cantidad === enviadoKg,
+      env.lineas[0].cantidad);
     s = await kg(paquete, origen);
-    check('la mercancía SALIÓ del origen', s.cantidad === total - sumaTres, s);
+    check('la mercancía SALIÓ del origen', s.cantidad === round3(total - enviadoKg), s);
     check('y se liberó el apartado', s.reservada === 0, s);
     const d = await kg(paquete, destino);
     check('todavía NO entró al destino: va en camino', d.cantidad === 0, d);
@@ -156,14 +166,14 @@ async function main() {
     check('los 3 bultos ya apuntan a la sucursal', Number(bultosMovidos.n) === 3, bultosMovidos);
 
     await esperaError('no se puede enviar dos veces', 'ESTADO_INVALIDO', () =>
-      model.enviarTraspaso(sol.id, null)
+      model.enviarTraspaso(sol.id, null, { codigos: [codigo(1)] })
     );
 
     // ---- 3 · Recibir con faltante ----
     console.log('\n3 · Recibir, aceptando 2 de 3 paquetes');
     await esperaError('no se puede aceptar más de lo enviado', 'RECIBE_MAS_DE_LO_ENVIADO', () =>
       model.recibirTraspaso(sol.id, null, {
-        recibido: [{ detalle_id: env.lineas[0].detalle_id, cantidad: sumaTres + 5 }],
+        recibido: [{ detalle_id: env.lineas[0].detalle_id, cantidad: enviadoKg + 5 }],
       })
     );
 
@@ -173,7 +183,7 @@ async function main() {
     });
     check('queda recibido', rec.estado === 'recibido', rec.estado);
     check('reporta 1 línea con faltante', rec.faltantes === 1, rec.faltantes);
-    const esperadoRecibido = Math.round((sumaTres * 2) / 3 * 1000) / 1000;
+    const esperadoRecibido = Math.round((enviadoKg * 2) / 3 * 1000) / 1000;
     check('entró al destino solo lo aceptado', rec.lineas[0].recibida === esperadoRecibido,
       { recibida: rec.lineas[0].recibida, esperado: esperadoRecibido });
     const d2 = await kg(paquete, destino);
@@ -188,7 +198,7 @@ async function main() {
     check('la del faltante es una merma con el folio',
       movs[2].tipo === 'merma' && movs[2].motivo.includes(sol.folio), movs[2]);
     check('la merma es por la diferencia exacta',
-      Number(movs[2].cantidad) === -Math.round((sumaTres - esperadoRecibido) * 1000) / 1000,
+      Number(movs[2].cantidad) === -Math.round((enviadoKg - esperadoRecibido) * 1000) / 1000,
       movs[2].cantidad);
 
     await esperaError('un traspaso recibido ya no se cancela', 'ESTADO_INVALIDO', () =>
@@ -222,16 +232,14 @@ async function main() {
     check('sin paquetes: no se pidió por bultos', solKg.lineas[0].paquetes === null,
       solKg.lineas[0].paquetes);
 
-    const envKg = await model.enviarTraspaso(solKg.id, null);
-    check('salen los 30 kg exactos, sin redondear a bultos enteros',
-      envKg.lineas[0].cantidad === 30, envKg.lineas[0].cantidad);
-    check('el origen bajó exactamente 30 kg',
-      (await kg(paquete, origen)).cantidad === round3(antesKg - 30), await kg(paquete, origen));
-    // Los bultos se acomodan solos: los que caben sin pasarse de 30 kg.
-    const pesoBultos = envKg.lineas[0].bultos.reduce((s, b) => s + Number(b.peso_kg), 0);
-    check('mueve bultos completos sin pasarse de los kilos que salieron',
-      pesoBultos <= 30 && envKg.lineas[0].bultos.length > 0,
-      { bultos: envKg.lineas[0].bultos.length, peso: pesoBultos });
+    // Una solicitud en kilos (las de antes) también sale escaneando: sale lo
+    // que se escaneó, con su peso real.
+    const envKg = await model.enviarTraspaso(solKg.id, null, { codigos: [codigo(1)] });
+    check('sale el peso real de lo escaneado (20.25), no los 30 pedidos',
+      envKg.lineas[0].cantidad === 20.25, envKg.lineas[0].cantidad);
+    check('la línea queda en paquetes: 1', envKg.lineas[0].paquetes === 1, envKg.lineas[0].paquetes);
+    check('el origen bajó exactamente eso',
+      (await kg(paquete, origen)).cantidad === round3(antesKg - 20.25), await kg(paquete, origen));
 
     // La campana del panel debe verlo pendiente de recepción.
     const notif = require('../src/modules/notificaciones/model');
@@ -249,18 +257,26 @@ async function main() {
 
     // ---- 5 · Cancelar en tránsito: la mercancía regresa ----
     console.log('\n5 · Cancelar en tránsito');
+    // En el origen queda un paquete, el B2 (18.75 kg): se pide y se escanea.
     const antes3 = (await kg(paquete, origen)).cantidad;
     const sol3 = await model.solicitarTraspaso(
-      { almacen_origen_id: origen, almacen_destino_id: destino, items: [{ variante_id: paquete, cantidad: 10 }] },
+      { almacen_origen_id: origen, almacen_destino_id: destino, items: [{ variante_id: paquete, cantidad: 5 }] },
       null
     );
     ids.traspasos.push(sol3.id);
-    await model.enviarTraspaso(sol3.id, null);
-    check('salió del origen', (await kg(paquete, origen)).cantidad === round3(antes3 - 10));
+    await model.enviarTraspaso(sol3.id, null, { codigos: [codigo(2)] });
+    check('salió del origen', (await kg(paquete, origen)).cantidad === round3(antes3 - 18.75));
     await model.cancelarTraspaso(sol3.id, null, 'se regresó el camión');
     const vuelta = await kg(paquete, origen);
     check('cancelar en tránsito REGRESA la mercancía', vuelta.cantidad === antes3, vuelta);
     check('y no deja nada apartado', vuelta.reservada === 0, vuelta);
+    const [[b2]] = await pool.query('SELECT almacen_id FROM variante_codigos WHERE codigo = :c', { c: codigo(2) });
+    check('y el paquete regresó al origen', b2.almacen_id === origen, b2);
+  } catch (e) {
+    // Sin esto, un error a media prueba se perdía: el `process.exit` del
+    // `finally` salía antes de que se viera y la corrida decía "0 fallos".
+    fallos++;
+    console.error(`  ✗ la prueba se detuvo con un error → ${e.code ?? ''} ${e.message}`);
   } finally {
     // ---- Limpieza ----
     console.log('\nLimpiando…');

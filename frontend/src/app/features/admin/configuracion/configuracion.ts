@@ -1,8 +1,9 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TiendaService } from '../../../core/services/tienda.service';
-import { OpcionConfiguracion } from '../../../core/models/tienda.models';
+import { CuentaBancaria, OpcionConfiguracion } from '../../../core/models/tienda.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { CuentaBancariaModal, clabeLegible } from './cuenta-bancaria-modal';
 
 /** Cómo se dibuja un campo conocido. Los desconocidos usan su descripción. */
 interface Campo {
@@ -35,25 +36,34 @@ interface Grupo {
  * TIENDA EN LÍNEA APAGADA (2026-10). Quién lee cada clave hoy:
  *  · `envio_costo_fijo`: SOLO la tienda en línea (la cotización del pedido en
  *    línea y el checkout). Se ESCONDE —ver `OCULTAS` y el grupo comentado—.
- *  · `tienda_direccion`, `tienda_telefono` y `transferencia_*`: hoy solo los
- *    lee el checkout, pero el diseño aprobado los conserva como datos de la
- *    tienda (dirección y teléfono) y para darle la cuenta a un cliente que paga
- *    su crédito por transferencia. Se quedan.
+ *  · `tienda_direccion` y `tienda_telefono`: hoy solo los lee el checkout, pero
+ *    el diseño aprobado los conserva como datos de la tienda. Se quedan.
+ *
+ * CUENTAS PARA TRANSFERENCIAS (2026-10-06): ya no son tres claves sueltas
+ * (`transferencia_*`, una sola cuenta) sino una lista —tabla
+ * `cuentas_bancarias`— con banco, a nombre de, número de cuenta y CLABE. Se
+ * agregan y editan en un modal y se guardan al momento, aparte del botón
+ * Guardar de arriba, que es para los datos de la tienda.
  */
 @Component({
   selector: 'app-configuracion',
-  imports: [FormsModule],
+  imports: [FormsModule, CuentaBancariaModal],
   templateUrl: './configuracion.html',
   styles: `
     .campos { display: flex; flex-wrap: wrap; gap: 16px; }
     .campos > .field { flex: 1 1 240px; }
     .card.suave .card-head { margin-bottom: 0; align-items: center; }
+    .cuenta-num { font-family: var(--mono); font-size: 14px; white-space: nowrap; }
   `,
 })
 export class Configuracion implements OnInit {
   private readonly tienda = inject(TiendaService);
 
   readonly opciones = signal<OpcionConfiguracion[]>([]);
+  readonly cuentas = signal<CuentaBancaria[]>([]);
+  /** La cuenta abierta en el modal: null = cerrado, 'nueva' = alta. */
+  readonly cuentaAbierta = signal<CuentaBancaria | 'nueva' | null>(null);
+  readonly clabeLegible = clabeLegible;
   readonly cargando = signal(true);
   readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
@@ -70,33 +80,55 @@ export class Configuracion implements OnInit {
    */
   readonly grupos: Grupo[] = [
     { titulo: 'La tienda', prefijos: ['tienda_'] },
-    {
-      titulo: 'Para recibir depósitos',
-      sub: 'Los datos que se le dan a un cliente que paga su cuenta por transferencia.',
-      prefijos: ['transferencia_'],
-    },
+    // Las cuentas para transferencias ya no son claves: tienen su propia tarjeta (ver arriba).
     // TIENDA EN LÍNEA APAGADA (2026-10): la tarifa de envío solo la cobra el
     // pedido en línea. Para regresarla, descomentar este grupo y quitar
     // 'envio_' de OCULTAS.
     // { titulo: 'Envío a domicilio', sub: 'Lo que se cobra por enviar un pedido de la tienda en línea.', prefijos: ['envio_'] },
   ];
 
-  /** Prefijos que no se dibujan (ni en "Otros") mientras la tienda en línea esté apagada. */
-  private readonly OCULTAS = ['envio_'];
+  /**
+   * Prefijos que no se dibujan (ni en "Otros"): el envío mientras la tienda en
+   * línea esté apagada, y las claves viejas de la cuenta de banco por si la
+   * migración de cuentas todavía no corre en esa base.
+   */
+  private readonly OCULTAS = ['envio_', 'transferencia_'];
 
   /** Las etiquetas del diseño para las claves conocidas. */
   private readonly CAMPOS: Record<string, Campo> = {
     tienda_direccion: { etiqueta: 'Dirección', placeholder: 'Calle, número, colonia y ciudad', ancho: '2 1 360px' },
     tienda_telefono: { etiqueta: 'Teléfono', placeholder: '445 000 0000', tipo: 'tel', ancho: '1 1 220px' },
-    transferencia_banco: { etiqueta: 'Banco', ancho: '1 1 220px' },
-    transferencia_titular: { etiqueta: 'A nombre de', ancho: '1 1 260px' },
-    transferencia_clabe: { etiqueta: 'CLABE', ancho: '1 1 260px' },
     // El costo de envío es dinero: se captura como número (oculto mientras la tienda esté apagada).
     envio_costo_fijo: { etiqueta: 'Costo de envío ($)', tipo: 'number', ancho: '1 1 220px' },
   };
 
   ngOnInit(): void {
     this.cargar();
+    this.cargarCuentas();
+  }
+
+  cargarCuentas(): void {
+    this.tienda.cuentasBancarias().subscribe({
+      next: (c) => this.cuentas.set(c),
+      error: (e) => this.error.set(this.msg(e)),
+    });
+  }
+
+  abrirCuenta(c: CuentaBancaria | 'nueva'): void {
+    this.mensaje.set(null);
+    this.error.set(null);
+    this.cuentaAbierta.set(c);
+  }
+
+  /** El modal no puede pasar el tipo unión por un input: aquí se separa. */
+  cuentaDelModal(): CuentaBancaria | null {
+    const c = this.cuentaAbierta();
+    return c === 'nueva' ? null : c;
+  }
+
+  cuentaGuardada(texto: string): void {
+    this.mensaje.set(texto);
+    this.cargarCuentas();
   }
 
   cargar(): void {

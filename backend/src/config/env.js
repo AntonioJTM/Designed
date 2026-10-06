@@ -20,6 +20,18 @@ function optional(name, fallback) {
 
 const path = require('node:path');
 
+/**
+ * LA HORA DE LA TIENDA: México centro, UTC-6 fijo (sin horario de verano desde
+ * 2022). El servidor (VPS) y su MariaDB corren en UTC; sin esto, después de las
+ * 18:00 el sistema ya creía que era mañana: una venta de las 23:09 quedaba con
+ * fecha del día siguiente y Pedidos no la enseñaba (2026-10-06).
+ *  · `TZ` pone a Node en esa hora (lo que se calcula en JS: "hoy", la semana).
+ *  · `DB_TIMEZONE` la pone en cada conexión a la base (NOW(), CURDATE(),
+ *    CURRENT_TIMESTAMP), ver config/db.js.
+ * Si un script ya fijó su TZ (los de la muestra usan UTC), se respeta.
+ */
+if (!process.env.TZ) process.env.TZ = optional('TZ_TIENDA', 'America/Mexico_City');
+
 const env = {
   nodeEnv: optional('NODE_ENV', 'development'),
   port: Number(optional('PORT', '3000')),
@@ -40,6 +52,8 @@ const env = {
     password: optional('DB_PASSWORD', ''),
     database: required('DB_NAME'),
     connectionLimit: Number(optional('DB_CONNECTION_LIMIT', '10')),
+    // Desfase con que habla cada conexión: la hora de la tienda (ver arriba).
+    timezone: optional('DB_TIMEZONE', '-06:00'),
   },
 
   jwt: {

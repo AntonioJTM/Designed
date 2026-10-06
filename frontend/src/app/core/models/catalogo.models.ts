@@ -191,7 +191,7 @@ export interface Producto {
   disponible?: string | null;
   /**
    * No se puede vender: su presentación en kilos está en $0. Así entran los
-   * hilos que crea la lista completa del proveedor (Recibir remesa).
+   * hilos que crea la lista completa del proveedor (Surtir inventario).
    */
   sin_precio?: boolean | number;
   /** Cuándo entró su primera carga de mercancía; null si nunca ha entrado. */

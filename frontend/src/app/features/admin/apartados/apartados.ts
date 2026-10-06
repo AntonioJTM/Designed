@@ -181,10 +181,16 @@ export class ApartadosPantalla {
     return `${d} ${MESES[m - 1]}${String(y) === hoyLocal().slice(0, 4) ? '' : ' ' + y}`;
   }
 
-  readonly abonoEsEfectivo = computed(() => {
+  /**
+   * ¿El abono es en efectivo? MÉTODO, no `computed`: lee `metodoAbono`, que es
+   * un campo de ngModel, y un `computed` se quedaba con el valor de cuando se
+   * abrió el modal (vacío) — el efectivo nunca llevaba su turno y el servidor
+   * contestaba "abre un turno" con el turno abierto (2026-10-06).
+   */
+  abonoEsEfectivo(): boolean {
     const m = this.metodos().find((x) => x.id === Number(this.metodoAbono));
     return (m?.nombre ?? '').toLowerCase().includes('efectivo');
-  });
+  }
 
   // ------------------------------------------------------------------ abonar
 

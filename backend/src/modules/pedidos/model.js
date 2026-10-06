@@ -481,13 +481,15 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         { pedido_id: pedidoId, ...d }
       );
 
+      let pesoBultos = 0;
       for (const b of bultos) {
         // El bulto se bloquea para que dos cajas no puedan venderlo a la vez.
         const [brows] = await conn.query(
-          'SELECT id, lote, estado FROM variante_codigos WHERE codigo = :c LIMIT 1 FOR UPDATE',
+          'SELECT id, lote, estado, peso_kg FROM variante_codigos WHERE codigo = :c LIMIT 1 FOR UPDATE',
           { c: b.codigo }
         );
         const bulto = brows[0];
+        pesoBultos += Number(bulto?.peso_kg ?? b.peso_kg ?? 0);
 
         // Un bulto es una pieza física única: si ya salió, no se vuelve a vender.
         // Al lanzar aquí se revierte la venta completa, que es lo correcto: no
@@ -529,6 +531,16 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
             { pedido: pedidoId, id: bulto.id, almacen: almacenId }
           );
         }
+      }
+
+      // Los bultos de la línea no pueden pesar más de lo que se cobra: si el
+      // cajero bajó los kilos (se llevó 2 de 3), el tercero quedaba "vendido"
+      // estando en la bodega y ya no se podía vender ni bajar a conos
+      // (2026-10-06). Más kilos que bultos sí se puede: el resto va a granel.
+      if (round3(pesoBultos) > round3(d.cantidad) + 0.0005) {
+        throw new AppError(422, 'BULTOS_EXCEDEN_CANTIDAD',
+          `Los bultos escaneados de "${d.descripcion}" pesan ${round3(pesoBultos)} kg y se ` +
+          `cobran ${round3(d.cantidad)} kg: quita del ticket el bulto que no se lleva.`);
       }
     }
 
@@ -636,6 +648,9 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         numeroPedido: numero,
         usuarioId,
       });
+      // Si tenía saldo a favor (se le canceló una venta que ya había abonado),
+      // eso paga esta: queda 'pagado' desde ya.
+      await clientesModel.liquidarVentasACredito(conn, datos.cliente_id);
     }
 
     // 11. Consumir un uso del cupón.
@@ -757,6 +772,16 @@ async function _obtenerConn(ejecutor, id) {
     { id }
   );
   pedido.credito = credito;
+  // Cuánto de lo fiado en ESTA venta ya se pagó con abonos a la cuenta, con la
+  // misma regla que la da por pagada (lo más antiguo primero).
+  pedido.credito_pagado = null;
+  pedido.credito_por_pagar = null;
+  if (credito.length && pedido.cliente_id) {
+    const deuda = (await clientesModel.aplicarAbonos(ejecutor, pedido.cliente_id))
+      .find((d) => d.pedidoId === Number(id));
+    pedido.credito_pagado = deuda ? deuda.pagado : 0;
+    pedido.credito_por_pagar = deuda ? deuda.porPagar : 0;
+  }
   // Los abonos a la CUENTA después de la venta. No son de este pedido —lo fiado
   // se paga en la cuenta, no venta por venta— pero sin ellos el pedido parece
   // que nadie lo ha pagado. Solo los últimos cinco: es contexto, no el estado
@@ -807,7 +832,7 @@ async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, lim
   // falta de cada venta sin pedir el detalle de cada una.
   const [rows] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.canal, p.metodo_entrega, p.estado, p.total, p.creado_en,
-            p.inventario_descontado,
+            p.inventario_descontado, p.cliente_id,
             c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial,
             u.nombre AS usuario, cj.nombre AS caja,
             (SELECT COALESCE(SUM(pg.monto), 0) FROM pagos pg
@@ -823,9 +848,25 @@ async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, lim
   // Qué se llevó: los hilos de cada pedido, con su CALIBRE (dos ROJO de distinto
   // calibre son dos hilos) y marcando el cono. Va en una segunda consulta y no
   // con GROUP_CONCAT, que se corta a 1,024 caracteres.
+  // Lo fiado se paga con abonos a la CUENTA, que no son `pagos` de la venta:
+  // se reparten de lo más antiguo a lo más nuevo (la misma cuenta que la da por
+  // pagada). Sin esto una fiada ya pagada salía con "Falta" el total.
+  const pagadoConAbonos = new Map();
+  if (rows.length) {
+    const [fiadas] = await pool.query(
+      `SELECT DISTINCT cliente_id FROM credito_movimientos
+        WHERE tipo = 'cargo' AND pedido_id IN (:ids)`,
+      { ids: rows.map((r) => r.id) }
+    );
+    for (const { cliente_id } of fiadas) {
+      for (const d of await clientesModel.aplicarAbonos(pool, cliente_id)) {
+        if (d.pedidoId != null) pagadoConAbonos.set(d.pedidoId, d.pagado);
+      }
+    }
+  }
   for (const r of rows) {
     r.hilos = [];
-    const pagado = Number(r.pagado);
+    const pagado = Number(r.pagado) + (pagadoConAbonos.get(Number(r.id)) ?? 0);
     r.falta = INACTIVOS.includes(r.estado) ? 0 : Math.max(0, round2(Number(r.total) - pagado));
   }
   if (rows.length) {
@@ -1066,6 +1107,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
 
     const pedido = prev[0];
     _validarCaminoApartado(pedido, estado);
+    const clienteFiado = await _validarCaminoFiado(conn, id, pedido, estado);
     const { estado: antes, numero_pedido: numero, almacen_id: almacenId } = pedido;
     const eraInactivo = INACTIVOS.includes(antes);
     const esInactivo = INACTIVOS.includes(estado);
@@ -1215,8 +1257,54 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
         { id }
       );
 
+      // Al REACTIVAR se vuelve a sacar lo que REGRESÓ, no lo vendido: si se
+      // vendieron 10 kg y regresaron 4, sacar 10 dejaba el inventario 6 kg por
+      // debajo de lo real (2026-10-06). Lo que regresó sale del propio kardex
+      // del pedido: lo vendido más el neto de sus movimientos de ese hilo.
+      const porRegresar = new Map();
+      if (!esInactivo) {
+        // Si volvió en OTRA presentación (se vendió el paquete y devolvieron los
+        // conos), ese paquete ya no existe: deshacerlo automáticamente dejaría el
+        // inventario mintiendo, así que se para aquí. "Otra" es un hilo que NO
+        // se vendió en este pedido: antes se comparaba cada línea contra todas
+        // las demás entradas y una venta de dos hilos cancelada normal ya no se
+        // podía reactivar (2026-10-06).
+        const vendidas = [...new Set(lineas.map((l) => Number(l.variante_id)))];
+        const [otras] = await conn.query(
+          `SELECT DISTINCT variante_id FROM movimientos_inventario
+            WHERE referencia_tipo = 'pedido' AND referencia_id = :id
+              AND tipo = 'entrada' AND variante_id NOT IN (:vendidas)`,
+          { id, vendidas }
+        );
+        if (otras.length) {
+          throw new AppError(409, 'DEVUELTO_EN_OTRA_PRESENTACION',
+            `${numero} se devolvió en otra presentación, así que no se puede reactivar ` +
+            `automáticamente: la mercancía ya no está como se vendió. Ajusta el inventario a mano.`);
+        }
+        const [netos] = await conn.query(
+          `SELECT variante_id, COALESCE(SUM(cantidad), 0) AS neto FROM movimientos_inventario
+            WHERE referencia_tipo = 'pedido' AND referencia_id = :id GROUP BY variante_id`,
+          { id }
+        );
+        const neto = new Map(netos.map((n) => [Number(n.variante_id), Number(n.neto)]));
+        for (const l of lineas) {
+          const v = Number(l.variante_id);
+          porRegresar.set(v, (porRegresar.get(v) ?? 0) + Number(l.cantidad));
+        }
+        for (const [v, vendido] of porRegresar) {
+          porRegresar.set(v, Math.min(vendido, Math.max(0, round3(vendido + (neto.get(v) ?? 0)))));
+        }
+      }
+
       for (const l of lineas) {
-        const cant = Number(l.cantidad);
+        let cant = Number(l.cantidad);
+        if (!esInactivo) {
+          // Lo que regresó de este hilo, repartido entre sus líneas.
+          const queda = porRegresar.get(Number(l.variante_id)) ?? 0;
+          cant = round3(Math.min(cant, queda));
+          porRegresar.set(Number(l.variante_id), round3(queda - cant));
+          if (cant <= 0) continue;
+        }
 
         if (esInactivo) {
           // Cancelado o devuelto: regresa al inventario. Puede volver en OTRA
@@ -1255,21 +1343,8 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
             }
           );
         } else {
-          // Se reactiva: la mercancía vuelve a salir, así que hay que tenerla.
-          // Si volvió en OTRA presentación (se vendió el paquete y devolvieron
-          // los conos), ese paquete ya no existe: deshacerlo automáticamente
-          // dejaría el inventario mintiendo, así que se para aquí.
-          const [otras] = await conn.query(
-            `SELECT DISTINCT variante_id FROM movimientos_inventario
-              WHERE referencia_tipo = 'pedido' AND referencia_id = :id
-                AND tipo = 'entrada' AND variante_id <> :v`,
-            { id, v: l.variante_id }
-          );
-          if (otras.length) {
-            throw new AppError(409, 'DEVUELTO_EN_OTRA_PRESENTACION',
-              `${numero} se devolvió en otra presentación, así que no se puede reactivar ` +
-              `automáticamente: la mercancía ya no está como se vendió. Ajusta el inventario a mano.`);
-          }
+          // Se reactiva: la mercancía vuelve a salir, así que hay que tenerla
+          // (lo de otra presentación ya se revisó arriba).
           const [srows] = await conn.query(
             `SELECT cantidad FROM inventario
               WHERE variante_id = :v AND almacen_id = :a FOR UPDATE`,
@@ -1344,8 +1419,47 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     // existencias para reactivar), el pedido no se mueve.
     await conn.query('UPDATE pedidos SET estado = :estado WHERE id = :id', { estado, id });
 
+    // Cancelar o reactivar una fiada cambia lo que se debe: los abonos se
+    // vuelven a repartir. Cancelar la más antigua deja libre lo que se le había
+    // abonado y eso paga la siguiente; si no hay siguiente, queda a su favor.
+    if (clienteFiado && eraInactivo !== esInactivo) {
+      await clientesModel.liquidarVentasACredito(conn, clienteFiado);
+    }
+
     return _obtenerConn(conn, id);
   });
+}
+
+/**
+ * Una venta FIADA no se marca pagada a mano: se da por pagada SOLA cuando los
+ * abonos a la cuenta la cubren (clientes/model.js → liquidarVentasACredito). Si
+ * se dejara, el pedido diría "pagado" con la cuenta debiéndolo, sin que entrara
+ * un peso (2026-10-06). Por lo mismo, una ya pagada con abonos no regresa a
+ * 'pendiente'. Cancelar, devolver y reactivar siguen su camino de siempre.
+ * Devuelve el cliente de la fiada (o null si no se fió).
+ */
+async function _validarCaminoFiado(conn, id, pedido, estado) {
+  const [[cargo]] = await conn.query(
+    "SELECT cliente_id FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo' LIMIT 1",
+    { id }
+  );
+  if (!cargo) return null;
+  const antes = pedido.estado;
+  if (INACTIVOS.includes(antes) || INACTIVOS.includes(estado) || antes === estado) return cargo.cliente_id;
+
+  const deuda = (await clientesModel.aplicarAbonos(conn, cargo.cliente_id))
+    .find((d) => d.pedidoId === Number(id));
+  const porPagar = deuda ? deuda.porPagar : 0;
+  if (antes === 'pendiente' && POR_COBRADO.includes(estado) && porPagar > 0.004) {
+    throw new AppError(409, 'VENTA_FIADA_SIN_PAGAR',
+      `${pedido.numero_pedido} se fió y todavía se deben $${porPagar.toFixed(2)} de ella. ` +
+      'Se da por pagada sola cuando el cliente abona a su cuenta (en su expediente).');
+  }
+  if (estado === 'pendiente' && POR_COBRADO.includes(antes) && porPagar <= 0.004) {
+    throw new AppError(409, 'VENTA_FIADA_PAGADA',
+      `${pedido.numero_pedido} ya se pagó con abonos a la cuenta del cliente: no puede volver a pendiente.`);
+  }
+  return cargo.cliente_id;
 }
 
 /** Estados que dicen que el pedido ya se cobró. */
@@ -1876,9 +1990,11 @@ async function resumen() {
   const [[fiado]] = await pool.query(
     `SELECT COUNT(*) AS ventas, COALESCE(SUM(saldo), 0) AS monto FROM v_clientes_saldo WHERE saldo > 0`
   );
+  // Las que se CANCELARON este mes (su última modificación es la cancelación),
+  // no las que se vendieron este mes y luego se cancelaron.
   const [[canceladas]] = await pool.query(
     `SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total FROM pedidos
-      WHERE estado IN ('cancelado', 'devuelto') AND creado_en >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`
+      WHERE estado IN ('cancelado', 'devuelto') AND actualizado_en >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`
   );
   const n = (x) => ({ ventas: Number(x.ventas), total: round2(Number(x.total ?? x.monto)) });
   return { hoy: n(hoy), semana: n(semana), por_cobrar: n(fiado), canceladas_mes: n(canceladas) };

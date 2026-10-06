@@ -113,7 +113,9 @@ export class PedidosList {
       {
         etiqueta: 'Canceladas',
         valor: String(r.canceladas_mes.ventas),
-        pie: `este mes · ${d(r.canceladas_mes.total)} devueltos`,
+        // Es lo que valían esas ventas, no dinero devuelto: en una fiada o un
+        // apartado no se devolvió eso.
+        pie: `este mes · ${d(r.canceladas_mes.total)} en ventas`,
         punto: '#C2410C',
       },
     ];

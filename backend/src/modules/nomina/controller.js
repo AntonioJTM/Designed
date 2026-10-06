@@ -23,6 +23,35 @@ async function guardarEmpleado(req, res, next) {
   }
 }
 
+// ---- Vacaciones ----
+
+async function vacacionesDe(req, res, next) {
+  try {
+    const data = await service.vacacionesDe(Number(req.params.usuarioId));
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function registrarVacaciones(req, res, next) {
+  try {
+    const data = await service.registrarVacaciones(Number(req.params.usuarioId), req.body, req.auth.sub);
+    return res.status(201).json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function eliminarVacaciones(req, res, next) {
+  try {
+    const data = await service.eliminarVacaciones(Number(req.params.id));
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 // ---- Periodos ----
 
 async function periodoActual(req, res, next) {
@@ -94,6 +123,24 @@ async function agregarConcepto(req, res, next) {
   }
 }
 
+async function fijarDiasTrabajados(req, res, next) {
+  try {
+    const data = await service.fijarDiasTrabajados(Number(req.params.id), Number(req.body.dias_trabajados));
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function agregarHorasExtra(req, res, next) {
+  try {
+    const data = await service.agregarHorasExtra(Number(req.params.id), req.body);
+    return res.status(201).json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 async function eliminarConcepto(req, res, next) {
   try {
     const data = await service.eliminarConcepto(Number(req.params.conceptoId));
@@ -106,6 +153,11 @@ async function eliminarConcepto(req, res, next) {
 module.exports = {
   listarEmpleados,
   guardarEmpleado,
+  vacacionesDe,
+  registrarVacaciones,
+  eliminarVacaciones,
+  fijarDiasTrabajados,
+  agregarHorasExtra,
   periodoActual,
   crearPeriodo,
   listarPeriodos,

@@ -1,6 +1,8 @@
 'use strict';
 
 const model = require('./model');
+// Los datos de la carga se validan y limpian igual que en la carga de un hilo.
+const { datosDeCarga, validarDatosCarga } = require('./service');
 const almacenesModel = require('../almacenes/model');
 const { pool } = require('../../config/db');
 const { leerLibro } = require('../../utils/xlsx');
@@ -522,11 +524,15 @@ async function confirmarLista(datos, usuarioId, avisar = () => {}) {
     grupos.get(k).bultos.push(...h.bultos);
   }
 
+  await validarDatosCarga(datos);
+
   return model.crearLista(
     {
       almacen_id: datos.almacen_id,
       categoria_id: datos.categoria_id ?? null,
       linea_id: datos.linea_id ?? null,
+      // Los datos de la carga son los mismos para todos los hilos de la lista.
+      ...datosDeCarga(datos),
       archivo: datos.archivo ?? null,
       notas: [_textoDocumento(datos.documento), datos.notas?.trim()].filter(Boolean).join(' · ') || null,
       hilos: [...grupos.values()].map((h) => ({

@@ -9,10 +9,12 @@ import {
   DesgloseVentas,
   EmpleadoNomina,
   EstadoPeriodoNomina,
+  NuevasHorasExtra,
   NuevoConcepto,
   PeriodoNomina,
   PeriodoResumen,
   SemanaActual,
+  VacacionesEmpleado,
 } from '../models/nomina.models';
 
 /** Extrae `data` o lanza el error del API. */
@@ -45,6 +47,30 @@ export class NominaService {
   guardarEmpleado(usuarioId: number, body: ConfigEmpleadoInput): Observable<EmpleadoNomina> {
     return this.http
       .put<ApiResponse<EmpleadoNomina>>(`${this.base}/empleados/${usuarioId}`, body)
+      .pipe(map(data));
+  }
+
+  // ---- Vacaciones ----
+
+  /** Su saldo (por ley, según su antigüedad) y las vacaciones que ha tomado. */
+  vacaciones(usuarioId: number): Observable<VacacionesEmpleado> {
+    return this.http
+      .get<ApiResponse<VacacionesEmpleado>>(`${this.base}/empleados/${usuarioId}/vacaciones`)
+      .pipe(map(data));
+  }
+
+  registrarVacaciones(
+    usuarioId: number,
+    body: { fecha_inicio: string; fecha_fin: string; notas?: string }
+  ): Observable<VacacionesEmpleado> {
+    return this.http
+      .post<ApiResponse<VacacionesEmpleado>>(`${this.base}/empleados/${usuarioId}/vacaciones`, body)
+      .pipe(map(data));
+  }
+
+  quitarVacaciones(id: number): Observable<VacacionesEmpleado> {
+    return this.http
+      .delete<ApiResponse<VacacionesEmpleado>>(`${this.base}/vacaciones/${id}`)
       .pipe(map(data));
   }
 
@@ -97,6 +123,22 @@ export class NominaService {
   agregarConcepto(reciboId: number, body: NuevoConcepto): Observable<PeriodoNomina> {
     return this.http
       .post<ApiResponse<PeriodoNomina>>(`${this.base}/recibos/${reciboId}/conceptos`, body)
+      .pipe(map(data));
+  }
+
+  /** Días que trabajó en la semana; los de su horario que falten son faltas. */
+  fijarDias(reciboId: number, diasTrabajados: number): Observable<PeriodoNomina> {
+    return this.http
+      .patch<ApiResponse<PeriodoNomina>>(`${this.base}/recibos/${reciboId}/dias`, {
+        dias_trabajados: diasTrabajados,
+      })
+      .pipe(map(data));
+  }
+
+  /** Horas extra de un día, calculadas contra su horario y pagadas al doble. */
+  agregarHorasExtra(reciboId: number, body: NuevasHorasExtra): Observable<PeriodoNomina> {
+    return this.http
+      .post<ApiResponse<PeriodoNomina>>(`${this.base}/recibos/${reciboId}/horas-extra`, body)
       .pipe(map(data));
   }
 

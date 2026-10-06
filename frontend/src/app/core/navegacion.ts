@@ -64,7 +64,7 @@ export const MENU: GrupoMenu[] = [
     titulo: 'Mercancía',
     opciones: [
       { clave: 'inventario', nombre: 'Inventario', ruta: '/admin/inventario', icono: I.existencias, permiso: 'ver:inventario' },
-      { clave: 'remesa', nombre: 'Recibir remesa', ruta: '/admin/remesas', icono: I.recibir, permiso: 'ver:remesa' },
+      { clave: 'remesa', nombre: 'Surtir inventario', ruta: '/admin/remesas', icono: I.recibir, permiso: 'ver:remesa' },
       { clave: 'surtir', nombre: 'Surtir sucursal', ruta: '/admin/traspasos', icono: I.mandar, permiso: 'ver:surtir' },
       { clave: 'kardex', nombre: 'Kardex', ruta: '/admin/kardex', icono: I.movimientos, permiso: 'ver:kardex' },
     ],

@@ -16,13 +16,25 @@ const pool = mysql.createPool({
   queueLimit: 0,
   namedPlaceholders: true,
   charset: 'utf8mb4',
-  // El servidor MySQL corre en hora local (time_zone = SYSTEM) y CURRENT_TIMESTAMP
-  // guarda esa hora de pared. Con `dateStrings` las fechas vuelven tal cual
-  // ('2026-07-25 11:59:39') en vez de que mysql2 las reinterprete como UTC y las
-  // recorra 6 horas. Todo el sistema opera en una sola zona horaria.
+  // Las fechas se guardan y se leen en la HORA DE LA TIENDA (ver abajo y
+  // config/env.js). Con `dateStrings` vuelven tal cual ('2026-07-25 11:59:39')
+  // en vez de que mysql2 las reinterprete. Todo el sistema opera en una sola
+  // zona horaria.
   dateStrings: true,
   // Evita que DECIMAL vuelva como number y pierda precisión en montos.
   decimalNumbers: false,
+});
+
+// Cada conexión habla en la hora de la tienda. El MariaDB del servidor corre en
+// UTC (time_zone = SYSTEM): sin esto NOW() y CURRENT_TIMESTAMP guardaban la hora
+// UTC y CURDATE() cambiaba de día a las 18:00 de México. Antes la base vivía en
+// una máquina en hora local y no hacía falta; al pasarla al servidor se adelantó
+// todo 6 horas (lo corrigió scripts/ajustar-hora.js el 2026-10-06).
+if (!/^[+-]\d{2}:\d{2}$/.test(env.db.timezone)) {
+  throw new Error(`DB_TIMEZONE inválida: "${env.db.timezone}" (se espera algo como -06:00)`);
+}
+pool.pool.on('connection', (conn) => {
+  conn.query(`SET time_zone = '${env.db.timezone}'`);
 });
 
 /** Verifica que la BD sea alcanzable; se llama al arrancar el servidor. */

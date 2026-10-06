@@ -27,4 +27,11 @@ async function cortesCaja(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { ventas, masVendidos, porReabastecer, cortesCaja };
+async function ventaPorColor(req, res, next) {
+  try {
+    const { desde, hasta, q } = req.query;
+    res.json({ data: await service.ventaPorColor(desde, hasta, q), error: null });
+  } catch (err) { next(err); }
+}
+
+module.exports = { ventas, masVendidos, porReabastecer, cortesCaja, ventaPorColor };

@@ -49,6 +49,7 @@
           <div>
             <span>{{ c.etiqueta }}</span>
             <b class="cifra" [class.alerta]="c.alerta">{{ c.valor | dinero }}</b>
+            @if (c.pie) { <small class="pie" [class.alerta]="c.alerta">{{ c.pie }}</small> }
           </div>
         }
       </div>

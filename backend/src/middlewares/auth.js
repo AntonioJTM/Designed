@@ -85,7 +85,7 @@ function requirePermiso(clave) {
 
 /**
  * Como `requirePermiso`, pero basta con UNO de varios. Para lo que se usa desde
- * dos pantallas distintas: el PDF de una carga se pide en Recibir remesa
+ * dos pantallas distintas: el PDF de una carga se pide en Surtir inventario
  * (`ver:remesa`) y en las presentaciones del producto (`ver:catalogo`).
  */
 function requirePermisoAlguno(...claves) {
