@@ -85,8 +85,14 @@
     </label>
     <label class="field ancho">
       <span>Notas <span class="muted">(opcional)</span></span>
-      <input type="text" [(ngModel)]="notas" placeholder="Ej. Factura 4821, llegó el martes" />
+      <input type="text" [(ngModel)]="notas" placeholder="Ej. Llegó con dos cajas golpeadas" />
     </label>
+  </div>
+
+  <!-- Los papeles de la lista: los mismos para todos sus hilos. El proveedor que trae
+       el archivo (hoja DOCUMENTO) se propone solo. -->
+  <div style="margin: 16px 0">
+    <app-datos-carga [(datos)]="datosCarga" [conCosto]="false" [sugerido]="previa()?.documento?.proveedor ?? null" />
   </div>
 
   <input #archivoLista type="file" accept=".xlsx" class="oculto" tabindex="-1" aria-hidden="true"
@@ -237,6 +243,7 @@
             <th class="num">Bultos</th>
             <th class="num">Kilos</th>
             <th class="num">Peso por bulto</th>
+            @if (veCostos()) { <th class="num">Costo por kg</th> }
           </tr>
         </thead>
         <tbody>
@@ -270,6 +277,15 @@
               <td class="num">{{ h.num_bultos | cantidad }}</td>
               <td class="num"><b>{{ h.kg_total | cantidad: 'kg' }}</b></td>
               <td class="num">{{ rango(h) }} kg</td>
+              <!-- Solo administración y contabilidad: cada color pudo costar distinto. -->
+              @if (veCostos()) {
+                <td class="num">
+                  <span class="costo-hilo">
+                    $<input type="number" min="0" step="0.01" [(ngModel)]="costos[h.clave]" placeholder="0.00"
+                            [attr.aria-label]="'Costo por kilo de ' + h.nombre + ' ' + h.calibre" />
+                  </span>
+                </td>
+              }
             </tr>
           }
         </tbody>

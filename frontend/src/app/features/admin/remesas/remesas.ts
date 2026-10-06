@@ -14,11 +14,12 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { cotejarArchivo, hiloDelArchivo, textoAviso } from '../../../shared/remesa-archivo';
 import { DineroPipe } from '../../../shared/dinero.pipe';
-import { CuandoPipe } from '../inventario/cuando.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
 import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
-import { SE_LLEVA_COSTO } from '../../../core/costos';
 import { CargaLista } from './carga-lista';
+import { DatosCargaCampos, datosCargaVacios, datosParaEnviar } from './datos-carga';
+import { DatosCargaModal } from './datos-carga-modal';
+import { DatosCarga } from '../../../core/services/inventario.service';
 
 /** Las dos formas de cargar: la lista completa del proveedor o la de un solo hilo. */
 type Modo = 'lista' | 'hilo';
@@ -28,7 +29,8 @@ const CLAVE_MODO = 'remesa_modo';
 const BULTOS_A_LA_VISTA = 6;
 
 /**
- * Recepción de remesas: se sube la lista de empaque del proveedor y cada
+ * SURTIR INVENTARIO (antes "Recibir remesa"; el usuario la renombró el
+ * 2026-10-06). Se sube la lista de empaque del proveedor y cada
  * renglón entra como un bulto de la presentación elegida, con su peso real y su
  * lote. El total en kilos se da de entrada al almacén.
  *
@@ -37,7 +39,7 @@ const BULTOS_A_LA_VISTA = 6;
  */
 @Component({
   selector: 'app-remesas',
-  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, DineroPipe, CuandoPipe, CargaLista],
+  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, DineroPipe, CargaLista, DatosCargaCampos, DatosCargaModal],
   templateUrl: './remesas.html',
   styleUrl: './remesas.scss',
 })
@@ -66,23 +68,19 @@ export class Remesas {
   readonly generandoPdf = signal<number | null>(null);
 
   /**
-   * Capturar el precio de compra es de quien recibe la remesa; VER costos ya
-   * guardados (el del historial, el promedio que quedó) es de quien tiene
-   * `hacer:ver_costos`.
+   * El costo por kilo —capturarlo y verlo— es solo de quien tiene
+   * `hacer:ver_costos`: administración y contabilidad (2026-10-06).
    */
   readonly veCostos = computed(() => this.auth.puede('hacer:ver_costos'));
-  /** ¿Se pide el precio de compra al cargar? No: la tienda no lleva el costo (core/costos.ts). */
-  readonly seLlevaCosto = SE_LLEVA_COSTO;
+
+  /** Proveedor, factura, pedimento, contenedor, fecha de ingreso y costo de la carga. */
+  readonly datosCarga = signal<DatosCarga>(datosCargaVacios());
+  /** La carga del historial cuyos datos se están corrigiendo. */
+  readonly corrigiendo = signal<Remesa | null>(null);
 
   varianteSel: number | '' = '';
   almacenSel: number | '' = '';
   notas = '';
-  /**
-   * A cómo salió el kilo en esta compra. Vacío = no se captura y el costo del
-   * hilo se queda como estaba: es opcional a propósito, para no frenar una
-   * entrada de mercancía por no tener la factura a mano.
-   */
-  costoKg: number | null = null;
   archivo: File | null = null;
 
   /** Los avisos que impiden cargar (códigos ya registrados). */
@@ -201,14 +199,20 @@ export class Remesas {
     () => this.historial().filter((r) => this.avisoHistorial(r) !== null).length
   );
 
-  /** Una remesa sin precio de compra no mueve el costo: el margen de ese hilo no es de fiar. */
+  /**
+   * Una carga sin costo no mueve el costo del hilo: el margen de ese hilo no es
+   * de fiar. Solo se avisa a quien lleva el costo (administración y contabilidad).
+   */
   sinCosto(r: Remesa): boolean {
-    // Sin llevar costo, que una carga no lo traiga es lo normal: no se avisa.
-    if (!this.seLlevaCosto) return false;
-    // La lista con varios colores ya no pide precio de compra (los precios se
-    // ponen en Productos): avisar en cada una de sus cargas sería ruido.
-    if (r.archivo && this.archivosDeLista().has(r.archivo)) return false;
+    if (!this.veCostos()) return false;
     return r.costo_kg == null;
+  }
+
+  /** Se guardaron los datos corregidos de una carga: se recarga el historial. */
+  alCorregir(): void {
+    this.corrigiendo.set(null);
+    this.mensaje.set('Datos de la carga guardados.');
+    this.cargarHistorial();
   }
 
   private static modoGuardado(): Modo {
@@ -308,7 +312,7 @@ export class Remesas {
         almacen_id: Number(this.almacenSel),
         archivo: p.archivo,
         notas: this.notas.trim() || undefined,
-        costo_kg: this.costoKg != null && this.costoKg > 0 ? Number(this.costoKg) : null,
+        ...datosParaEnviar(this.datosCarga(), this.veCostos()),
         bultos: p.bultos,
       })
       .subscribe({
@@ -321,7 +325,7 @@ export class Remesas {
           this.previa.set(null);
           this.archivo = null;
           this.notas = '';
-          this.costoKg = null;
+          this.datosCarga.set(datosCargaVacios());
           this.enviando.set(false);
           this.cargarHistorial();
         },

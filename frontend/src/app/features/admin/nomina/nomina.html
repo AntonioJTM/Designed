@@ -54,7 +54,10 @@
         <div class="kpi">
           <span class="kpi-label"><span class="punto" style="background: #2457C5"></span>Sueldos</span>
           <span class="kpi-valor">{{ totales().sueldos | dinero }}</span>
-          <span class="kpi-pie">{{ totales().empleados }} {{ totales().empleados === 1 ? 'persona' : 'personas' }}</span>
+          <span class="kpi-pie">
+            {{ totales().empleados }} {{ totales().empleados === 1 ? 'persona' : 'personas' }}
+            @if (totales().vacaciones > 0) { · incluye {{ totales().vacaciones | dinero }} de vacaciones }
+          </span>
         </div>
         <div class="kpi">
           <span class="kpi-label"><span class="punto" style="background: #1baf7a"></span>Comisiones</span>
@@ -123,7 +126,7 @@
           <thead>
             <tr>
               <th>Empleado</th>
-              <th class="num">Sueldo base</th>
+              <th class="num">Sueldo</th>
               <th class="num">Venta neta</th>
               <th class="num">Comisión</th>
               <th class="num">Extras</th>
@@ -139,7 +142,17 @@
                   <div style="font-weight: 500">{{ r.usuario }}</div>
                   <div class="muted" style="font-size: 13px; text-transform: capitalize">{{ r.rol }}</div>
                 </td>
-                <td class="num">{{ r.sueldo_base | dinero }}</td>
+                <td class="num">
+                  {{ num(r.sueldo_base) + num(r.pago_vacaciones) | dinero }}
+                  @if (r.dias_laborales !== null) {
+                    <div class="sub2">
+                      {{ num(r.dias_trabajados) }} de {{ num(r.dias_laborales) }} días
+                      @if (num(r.dias_vacaciones) > 0) { · {{ num(r.dias_vacaciones) }} de vacaciones }
+                    </div>
+                  } @else {
+                    <div class="sub2">sin horario</div>
+                  }
+                </td>
                 <td class="num">
                   @if (num(r.ventas_netas) > 0) {
                     {{ r.ventas_netas | dinero }}
@@ -225,6 +238,7 @@
   <app-recibo-modal
     [recibo]="r"
     [periodoId]="periodo()!.id"
+    [semanaInicio]="periodo()!.fecha_inicio"
     [editable]="editable()"
     (cerrado)="reciboAbierto.set(null)"
     (actualizado)="periodoActualizado($event)"

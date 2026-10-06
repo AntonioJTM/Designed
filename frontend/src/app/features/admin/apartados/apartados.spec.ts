@@ -55,8 +55,10 @@ describe('ApartadosPantalla', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(ApartadosPantalla);
     fixture.detectChanges();
+    ultimoFixture = fixture;
     return fixture.componentInstance;
   }
+  let ultimoFixture: { detectChanges: () => void; nativeElement: HTMLElement };
 
   beforeEach(() => {
     abonoEnviado = null;
@@ -87,6 +89,20 @@ describe('ApartadosPantalla', () => {
     c.abrirAbono(c.pendientes()[0]);
     c.montoAbono = 200;
     c.metodoAbono = 1;
+    c.registrarAbono();
+    expect(abonoEnviado!.sesion_caja_id).toBe(40);
+  });
+
+  it('elegir "Efectivo" DESPUÉS de abrir el modal también lleva el turno', async () => {
+    localStorage.setItem('caja_sel', '2');
+    const c = await montar();
+    // Como una persona: abre el modal, la pantalla se pinta y luego elige.
+    c.abrirAbono(c.pendientes()[0]);
+    ultimoFixture.detectChanges();
+    c.montoAbono = 200;
+    c.metodoAbono = 1;
+    ultimoFixture.detectChanges();
+    expect(ultimoFixture.nativeElement.textContent).toContain('Caja 2');
     c.registrarAbono();
     expect(abonoEnviado!.sesion_caja_id).toBe(40);
   });

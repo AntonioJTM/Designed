@@ -445,19 +445,38 @@ async function registrarMovimiento(datos, usuarioId) {
  * ligadas por el mismo folio de `variante_conversiones`.
  */
 /**
- * Los bultos disponibles de una variante en un almacén, del más antiguo al más
- * nuevo. Es el orden en que salen (FIFO): quien surte pide "5 paquetes" y el
- * sistema toma estos cinco, sin que nadie busque un bulto concreto en la bodega.
+ * Cuánto pesa "un paquete" de una variante en un almacén, para pedir por
+ * paquetes: el PROMEDIO real de los bultos que hay ahí, o el peso del catálogo
+ * si no hay ninguno con peso (`nominal: true`).
+ *
+ * Es un promedio y no "los N más antiguos" porque quien surte agarra los
+ * paquetes de ese color y calibre que tenga a la mano, no los busca por fecha
+ * (usuario, 2026-10-06). N paquetes son, más o menos, N × este peso: eso se
+ * aparta al solicitar y eso sale al enviar. La pantalla usa la MISMA cifra
+ * (`peso_referencia` de `GET /inventario/equivalencia-paquetes`), así lo que
+ * enseña es lo que valida el servidor.
  */
-async function bultosDisponibles(conn, varianteId, almacenId, limite = null) {
-  const sql =
-    `SELECT id, codigo, peso_kg, lote
-       FROM variante_codigos
+async function pesoPorPaquete(conn, v, almacenId) {
+  const [[f]] = await (conn ?? pool).query(
+    `SELECT COUNT(*) AS paquetes, COALESCE(SUM(peso_kg), 0) AS kg FROM variante_codigos
       WHERE variante_id = :v AND almacen_id = :a AND estado = 'disponible'
-        AND peso_kg IS NOT NULL
-      ORDER BY id` + (limite ? ' LIMIT :limite FOR UPDATE' : '');
-  const [rows] = await (conn ?? pool).query(sql, { v: varianteId, a: almacenId, limite });
-  return rows;
+        AND peso_kg IS NOT NULL`,
+    { v: v.id, a: almacenId }
+  );
+  const paquetes = Number(f?.paquetes ?? 0);
+  const kg = round3(f?.kg ?? 0);
+  if (paquetes > 0 && kg > 0) {
+    return {
+      peso: round3(kg / paquetes),
+      nominal: false,
+      // Se multiplica por kg ÷ paquetes SIN redondear: con el promedio a tres
+      // decimales, pedir TODOS los paquetes daba unos gramos más de los que hay
+      // y no dejaba (683 × 18.963 > 12,951.4). La pantalla hace igual.
+      kilos: (n) => round3((n * kg) / paquetes),
+    };
+  }
+  const nominal = round3(v.peso_kg ?? 0);
+  return { peso: nominal, nominal: true, kilos: (n) => round3(n * nominal) };
 }
 
 /**
@@ -716,7 +735,7 @@ async function desarmar(datos, usuarioId) {
 async function _varianteParaTraspaso(conn, varianteId) {
   const [rows] = await conn.query(
     `SELECT pv.id, pv.sku, pv.tipo_presentacion, pv.peso_kg, pv.activo,
-            prod.nombre AS producto
+            prod.nombre AS producto, prod.grosor_calibre AS calibre
        FROM producto_variantes pv
        JOIN productos prod ON prod.id = pv.producto_id
       WHERE pv.id = :id`,
@@ -784,16 +803,11 @@ async function solicitarTraspaso(datos, usuarioId) {
             `"${v.producto} · ${v.sku}" no tiene peso de paquete configurado`);
         }
         paquetes = Number(item.paquetes);
-        // Se PREVÉ con los bultos que hay hoy, pero no se apartan todavía: los
-        // definitivos se eligen al enviar, porque de aquí a entonces el mostrador
-        // pudo haber vendido alguno.
-        const bultos = await bultosDisponibles(conn, v.id, almacen_origen_id, paquetes);
-        if (bultos.length >= paquetes) {
-          cantidad = round3(bultos.reduce((acc, b) => acc + Number(b.peso_kg), 0));
-        } else {
-          cantidad = round3(paquetes * Number(v.peso_kg));
-          estimado = true;
-        }
+        // N × el peso promedio de los paquetes del origen: quien surte agarra los
+        // que tenga a la mano, así que es un aproximado y se dice así.
+        const ref = await pesoPorPaquete(conn, v, almacen_origen_id);
+        cantidad = ref.kilos(paquetes);
+        estimado = ref.nominal;
       } else if (item.cantidad != null) {
         cantidad = round3(item.cantidad);
       } else {
@@ -820,8 +834,9 @@ async function solicitarTraspaso(datos, usuarioId) {
       await _moverReserva(conn, v.id, almacen_origen_id, cantidad);
 
       const [d] = await conn.query(
-        `INSERT INTO traspaso_detalle (traspaso_id, variante_id, paquetes, cantidad)
-         VALUES (:traspaso_id, :variante_id, :paquetes, :cantidad)`,
+        `INSERT INTO traspaso_detalle
+            (traspaso_id, variante_id, paquetes_solicitados, cantidad_solicitada, paquetes, cantidad)
+         VALUES (:traspaso_id, :variante_id, :paquetes, :cantidad, :paquetes, :cantidad)`,
         { traspaso_id: traspasoId, variante_id: v.id, paquetes, cantidad }
       );
 
@@ -852,13 +867,81 @@ async function solicitarTraspaso(datos, usuarioId) {
 }
 
 /**
+ * Los paquetes ESCANEADOS al surtir, bloqueados y revisados. Al surtir se
+ * escanea cada paquete que sube a la camioneta (usuario, 2026-10-06: "aquí
+ * cuando se surte sí se escanean los paquetes que salen"), así que se sabe cuáles
+ * son y cuánto pesan de verdad.
+ *
+ * NO se valida que el paquete estuviera en el origen: la ubicación del bulto es
+ * aproximada y validarla frenaría un envío legítimo (la misma regla que al
+ * vender). Se le corrige al moverlo. Sí se exige que esté disponible, que tenga
+ * peso y que sea de un hilo del traspaso.
+ */
+async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe) {
+  const limpios = codigos.map((c) => String(c).trim()).filter(Boolean);
+  const vistos = new Set();
+  for (const c of limpios) {
+    if (vistos.has(c)) {
+      throw new AppError(422, 'BULTO_REPETIDO', `El paquete ${c} está escaneado dos veces.`);
+    }
+    vistos.add(c);
+  }
+  if (!limpios.length) return [];
+
+  const [rows] = await conn.query(
+    `SELECT id, variante_id, codigo, peso_kg, lote, estado
+       FROM variante_codigos WHERE codigo IN (:c) FOR UPDATE`,
+    { c: limpios }
+  );
+  const porCodigo = new Map(rows.map((r) => [r.codigo, r]));
+  for (const c of limpios) {
+    const b = porCodigo.get(c);
+    if (!b) {
+      const [[pres]] = await conn.query(
+        'SELECT id FROM producto_variantes WHERE codigo_barras = :c LIMIT 1',
+        { c }
+      );
+      throw pres
+        ? new AppError(422, 'CODIGO_NO_ES_PAQUETE',
+          `El código ${c} es el de la presentación, no el de un paquete: escanea la etiqueta del paquete.`)
+        : new AppError(422, 'CODIGO_DESCONOCIDO', `El código ${c} no está registrado.`);
+    }
+    if (!variantesDelTraspaso.has(Number(b.variante_id))) {
+      throw new AppError(422, 'BULTO_NO_ES_DEL_TRASPASO',
+        `El paquete ${c} es de otro hilo: no está en este traspaso.`);
+    }
+    if (b.estado !== 'disponible') {
+      throw new AppError(409, 'BULTO_NO_DISPONIBLE',
+        `El paquete ${c} de ${nombreDe(b.variante_id)} ya ${b.estado === 'vendido' ? 'se vendió' : 'se bajó a conos'}.`);
+    }
+    if (b.peso_kg == null || Number(b.peso_kg) <= 0) {
+      throw new AppError(422, 'BULTO_SIN_PESO',
+        `El paquete ${c} no tiene peso registrado: no se puede saber cuánto sale.`);
+    }
+  }
+  return limpios.map((c) => porCodigo.get(c));
+}
+
+/**
  * ENVIAR: la mercancía sale del origen y queda en camino.
  *
- * Los bultos se eligen AQUÍ y no al solicitar: entre la solicitud y el envío el
- * mostrador pudo vender alguno, y el que sale es el que de verdad está. Por eso se
- * vuelve a validar la existencia; si ya no alcanza, 409 y no se envía nada.
+ * SOLO con los paquetes ESCANEADOS (`codigos`): "aquí cada cosa que sale se
+ * escanea, no se puede enviar si no se escanea" (usuario, 2026-10-06). De cada
+ * hilo sale EXACTAMENTE el peso real de sus paquetes escaneados, y esos —no
+ * otros— pasan a la sucursal. Pueden ser más o menos de los que se pidieron:
+ * sale lo que se subió a la camioneta, y la línea queda con esos paquetes y esos
+ * kilos. Sin ningún código, 422 SIN_ESCANEAR: lo que no se escanea no sale.
+ *
+ * SE MANDA LO QUE HAY (usuario, 2026-10-06): "si pido 20 de negro 1/30 y solo
+ * tengo 15, que se envíen esos y nada más". Un hilo con menos paquetes que los
+ * pedidos sale con los que se escanearon; uno sin ninguno NO sale (su línea
+ * queda en 0 para que se vea). Lo pedido sigue en `paquetes_solicitados` y lo que
+ * no salió completo se anota solo en `envio_notas` ("…era lo único que había"),
+ * junto con lo que escriba quien surte (`notas`).
+ *
+ * Se vuelve a validar la existencia; si ya no alcanza, 409 y no se envía nada.
  */
-async function enviarTraspaso(id, usuarioId) {
+async function enviarTraspaso(id, usuarioId, datos = {}) {
   return withTransaction(async (conn) => {
     const [trows] = await conn.query('SELECT * FROM traspasos WHERE id = :id FOR UPDATE', { id });
     const t = trows[0];
@@ -874,43 +957,53 @@ async function enviarTraspaso(id, usuarioId) {
     );
     const lineas = [];
 
-    for (const d of det) {
-      const v = await _varianteParaTraspaso(conn, d.variante_id);
-      const solicitado = Number(d.cantidad);
-      let cantidad = solicitado;
-      let bultos = [];
-      let estimado = false;
+    // Los paquetes escaneados, agrupados por hilo.
+    const variantes = new Map();
+    for (const d of det) variantes.set(Number(d.variante_id), await _varianteParaTraspaso(conn, d.variante_id));
+    const nombreDe = (vid) => {
+      const v = variantes.get(Number(vid));
+      return v ? `${v.producto}${v.calibre ? ' ' + v.calibre : ''}` : 'otro hilo';
+    };
+    const escaneados = await _bultosEscaneados(
+      conn, datos.codigos ?? [], new Set(variantes.keys()), nombreDe
+    );
+    const escaneadosDe = (vid) => escaneados.filter((b) => Number(b.variante_id) === Number(vid));
 
-      if (v.tipo_presentacion === 'paquete' && d.paquetes != null) {
-        // Se pidió por PAQUETES: se rehace la cuenta con los bultos que hay AHORA
-        // y lo que sale es su peso real.
-        const paquetes = Number(d.paquetes);
-        bultos = await bultosDisponibles(conn, v.id, t.almacen_origen_id, paquetes);
-        if (bultos.length >= paquetes) {
-          cantidad = round3(bultos.reduce((acc, b) => acc + Number(b.peso_kg), 0));
-        } else {
-          bultos = [];
-          cantidad = round3(paquetes * Number(v.peso_kg));
-          estimado = true;
-        }
-      } else if (v.tipo_presentacion === 'paquete') {
-        // Se pidió por KILOS, que es como pide la sucursal ("mándame 100 kg de
-        // negro"). Los kilos son EXACTOS: se manda lo que dice la solicitud, sin
-        // redondear a bultos enteros.
-        //
-        // Los bultos se acomodan igual, aunque nadie los escanee: se toman los más
-        // antiguos que caben SIN pasarse de los kilos que salen, para que la cuenta
-        // de paquetes por almacén no se quede pegada. Es aproximado a propósito —la
-        // ubicación del bulto siempre lo ha sido, los saldos son la verdad— y se
-        // corrige sola cuando en la sucursal escanean uno al vender.
-        const enOrigen = await bultosDisponibles(conn, v.id, t.almacen_origen_id);
-        let acumulado = 0;
-        for (const b of enOrigen) {
-          const siguiente = round3(acumulado + Number(b.peso_kg));
-          if (siguiente > cantidad) break;
-          acumulado = siguiente;
-          bultos.push(b);
-        }
+    // Lo que no se escanea no sale.
+    if (!escaneados.length) {
+      throw new AppError(422, 'SIN_ESCANEAR',
+        'Escanea los paquetes que salen: sin escanear no se puede enviar.');
+    }
+    const incompletos = [];
+
+    for (const d of det) {
+      const v = variantes.get(Number(d.variante_id));
+      const solicitado = Number(d.cantidad);
+      const pedidos = d.paquetes_solicitados != null ? Number(d.paquetes_solicitados)
+        : d.paquetes != null ? Number(d.paquetes) : null;
+      // Sale su peso REAL y viajan ESOS paquetes.
+      const bultos = escaneadosDe(v.id);
+      const paquetes = bultos.length;
+      const cantidad = round3(bultos.reduce((acc, b) => acc + Number(b.peso_kg), 0));
+
+      if (paquetes === 0) {
+        // De este hilo no había: NO sale. Se suelta lo que tenía apartado y la
+        // línea se queda en 0 para que se vea que se pidió y no salió.
+        await _moverReserva(conn, v.id, t.almacen_origen_id, -solicitado);
+        await conn.query(
+          'UPDATE traspaso_detalle SET cantidad = 0, paquetes = 0 WHERE id = :id',
+          { id: d.id }
+        );
+        incompletos.push(`${nombreDe(v.id)}: no salió${pedidos != null ? ` (se pidieron ${pedidos})` : ''}`);
+        lineas.push({
+          detalle_id: d.id, variante_id: v.id, sku: v.sku, producto: v.producto,
+          paquetes: 0, paquetes_pedidos: pedidos, cantidad: 0, solicitado,
+          no_salio: true, bultos: [],
+        });
+        continue;
+      }
+      if (pedidos != null && paquetes < pedidos) {
+        incompletos.push(`${nombreDe(v.id)}: salieron ${paquetes} de ${pedidos}`);
       }
 
       const fila = await _leerCantidad(conn, v.id, t.almacen_origen_id);
@@ -926,18 +1019,22 @@ async function enviarTraspaso(id, usuarioId) {
       // Se libera el apartado de ESTA solicitud, que ya se convirtió en salida.
       await _moverReserva(conn, v.id, t.almacen_origen_id, -solicitado);
 
-      // Los bultos ya apuntan a la sucursal: su ubicación es aproximada a
-      // propósito (nadie escanea al salir) y los saldos son la verdad.
-      if (bultos.length) {
-        await conn.query(
-          'UPDATE variante_codigos SET almacen_id = :destino WHERE id IN (:ids)',
-          { destino: t.almacen_destino_id, ids: bultos.map((b) => b.id) }
-        );
-      }
-
+      // Los paquetes escaneados ya apuntan a la sucursal.
       await conn.query(
-        'UPDATE traspaso_detalle SET cantidad = :cantidad WHERE id = :id',
-        { cantidad, id: d.id }
+        'UPDATE variante_codigos SET almacen_id = :destino WHERE id IN (:ids)',
+        { destino: t.almacen_destino_id, ids: bultos.map((b) => b.id) }
+      );
+      // Y queda escrito cuáles viajaron: si el envío se cancela, regresan ESOS y
+      // no los que la sucursal ya tenía de traspasos anteriores.
+      await conn.query(
+        'INSERT INTO traspaso_bultos (detalle_id, variante_codigo_id) VALUES ?',
+        [bultos.map((b) => [d.id, b.id])]
+      );
+
+      // La línea queda con lo que de verdad salió: cuántos paquetes y cuántos kilos.
+      await conn.query(
+        'UPDATE traspaso_detalle SET cantidad = :cantidad, paquetes = :paquetes WHERE id = :id',
+        { cantidad, paquetes, id: d.id }
       );
 
       await _insertarMovimiento(conn, {
@@ -957,23 +1054,29 @@ async function enviarTraspaso(id, usuarioId) {
         variante_id: v.id,
         sku: v.sku,
         producto: v.producto,
-        paquetes: d.paquetes != null ? Number(d.paquetes) : null,
+        paquetes,
+        paquetes_pedidos: pedidos,
         cantidad,
         solicitado,
         ajustado: cantidad !== solicitado,
-        peso_estimado: estimado,
         bultos: bultos.map((b) => ({ codigo: b.codigo, peso_kg: b.peso_kg, lote: b.lote })),
         saldo_origen: round3(saldo - cantidad),
       });
     }
 
+    // Lo que no salió completo se anota solo, y después lo que escriba quien surte.
+    const automatica = incompletos.length
+      ? `${incompletos.join('; ')}. Era lo único que había.`
+      : null;
+    const notas = [automatica, (datos.notas ?? '').trim() || null].filter(Boolean).join(' ');
     await conn.query(
-      `UPDATE traspasos SET estado = 'en_transito', enviado_en = NOW(), enviado_por = :u
+      `UPDATE traspasos SET estado = 'en_transito', enviado_en = NOW(), enviado_por = :u,
+                            envio_notas = :notas
         WHERE id = :id`,
-      { u: usuarioId ?? null, id }
+      { u: usuarioId ?? null, notas: notas || null, id }
     );
 
-    return { id: t.id, folio: t.folio, estado: 'en_transito', lineas };
+    return { id: t.id, folio: t.folio, estado: 'en_transito', envio_notas: notas || null, lineas };
   });
 }
 
@@ -1008,6 +1111,19 @@ async function recibirTraspaso(id, usuarioId, datos = {}) {
       const v = await _varianteParaTraspaso(conn, d.variante_id);
       const enviado = Number(d.cantidad);
       const dicho = porDetalle.get(d.id);
+
+      // Un hilo que no salió (no había) no entra ni falta: no se mueve nada.
+      if (enviado === 0) {
+        await conn.query(
+          'UPDATE traspaso_detalle SET cantidad_recibida = 0, paquetes_recibidos = 0 WHERE id = :id',
+          { id: d.id }
+        );
+        lineas.push({
+          detalle_id: d.id, variante_id: v.id, sku: v.sku, producto: v.producto,
+          enviado: 0, recibida: 0, faltante: 0, paquetes: 0, paquetes_recibidos: 0, no_salio: true,
+        });
+        continue;
+      }
 
       // Lo que llegó, en la unidad que sea más natural: paquetes si así se pidió.
       let recibida = enviado;
@@ -1130,7 +1246,8 @@ async function cancelarTraspaso(id, usuarioId, motivo) {
         await _moverReserva(conn, d.variante_id, t.almacen_origen_id, -cantidad);
         continue;
       }
-      // Iba en camino: la mercancía vuelve a donde salió.
+      // Iba en camino: la mercancía vuelve a donde salió (un hilo que no salió, no).
+      if (cantidad === 0) continue;
       const fila = await _leerCantidad(conn, d.variante_id, t.almacen_origen_id);
       const saldo = fila ? Number(fila.cantidad) : 0;
       await _aplicarSaldo(conn, d.variante_id, t.almacen_origen_id, round3(saldo + cantidad));
@@ -1145,11 +1262,17 @@ async function cancelarTraspaso(id, usuarioId, motivo) {
         usuario_id: usuarioId ?? null,
         motivo: `Cancelación del traspaso ${t.folio}: la mercancía regresó`,
       });
-      // Y los bultos que ya apuntaban a la sucursal se regresan al origen.
+      // Y regresan al origen los bultos que viajaron en ESTE envío
+      // (`traspaso_bultos`), no todos los de ese hilo que haya en la sucursal:
+      // los de traspasos anteriores ya recibidos son de allá. Un envío anterior
+      // a esa tabla no tiene renglones y sus bultos se quedan donde están (su
+      // ubicación es aproximada a propósito; los saldos son la verdad).
       await conn.query(
-        `UPDATE variante_codigos SET almacen_id = :origen
-          WHERE variante_id = :v AND almacen_id = :destino AND estado = 'disponible'`,
-        { origen: t.almacen_origen_id, destino: t.almacen_destino_id, v: d.variante_id }
+        `UPDATE variante_codigos vc
+           JOIN traspaso_bultos tb ON tb.variante_codigo_id = vc.id
+            SET vc.almacen_id = :origen
+          WHERE tb.detalle_id = :detalle AND vc.almacen_id = :destino AND vc.estado = 'disponible'`,
+        { origen: t.almacen_origen_id, destino: t.almacen_destino_id, detalle: d.id }
       );
     }
 
@@ -1174,7 +1297,7 @@ async function listarTraspasos({ almacen_destino_id, limit, offset }) {
     `SELECT t.id, t.folio, t.estado, t.notas, t.creado_en,
             t.almacen_origen_id, t.almacen_destino_id,
             t.enviado_en, t.recibido_en, t.cancelado_en,
-            t.recepcion_notas, t.motivo_cancelacion,
+            t.envio_notas, t.recepcion_notas, t.motivo_cancelacion,
             ao.nombre AS almacen_origen, ad.nombre AS almacen_destino,
             u.nombre AS usuario, ue.nombre AS enviado_por, ur.nombre AS recibido_por,
             uc.nombre AS cancelado_por,
@@ -1198,7 +1321,8 @@ async function listarTraspasos({ almacen_destino_id, limit, offset }) {
 
   if (rows.length) {
     const [det] = await pool.query(
-      `SELECT d.id AS detalle_id, d.traspaso_id, d.variante_id, d.paquetes, d.cantidad,
+      `SELECT d.id AS detalle_id, d.traspaso_id, d.variante_id, d.paquetes_solicitados, d.cantidad_solicitada,
+              d.paquetes, d.cantidad,
               d.cantidad_recibida, d.paquetes_recibidos,
               pv.sku, pv.tipo_presentacion, pv.peso_kg, prod.nombre AS producto,
               prod.grosor_calibre AS calibre, cat.nombre AS material, lin.nombre AS linea
@@ -1224,7 +1348,7 @@ async function obtenerTraspaso(id) {
     `SELECT t.id, t.folio, t.estado, t.notas, t.creado_en,
             t.almacen_origen_id, t.almacen_destino_id,
             t.enviado_en, t.recibido_en, t.cancelado_en,
-            t.recepcion_notas, t.motivo_cancelacion,
+            t.envio_notas, t.recepcion_notas, t.motivo_cancelacion,
             ao.nombre AS almacen_origen, ad.nombre AS almacen_destino,
             u.nombre AS usuario, ue.nombre AS enviado_por, ur.nombre AS recibido_por,
             uc.nombre AS cancelado_por
@@ -1242,7 +1366,8 @@ async function obtenerTraspaso(id) {
   if (!traspaso) return null;
 
   const [lineas] = await pool.query(
-    `SELECT d.id AS detalle_id, d.variante_id, d.paquetes, d.cantidad,
+    `SELECT d.id AS detalle_id, d.variante_id, d.paquetes_solicitados, d.cantidad_solicitada,
+              d.paquetes, d.cantidad,
             d.cantidad_recibida, d.paquetes_recibidos,
             pv.sku, pv.tipo_presentacion, pv.peso_kg, prod.nombre AS producto,
             prod.grosor_calibre AS calibre, cat.nombre AS material, lin.nombre AS linea
@@ -1318,8 +1443,8 @@ module.exports = {
   registrarMovimiento,
   desarmar,
   conoDe,
-  bultosDisponibles,
   disponibilidadEnPaquetes,
+  pesoPorPaquete,
   existenciasDe,
   listarConversiones,
   solicitarTraspaso,

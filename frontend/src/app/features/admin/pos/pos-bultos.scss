@@ -1,0 +1,7 @@
+// Los bultos escaneados de cada línea, con su ✕ (2026-10-06). Hoja aparte:
+// pos.scss ya está en el límite de 4 kB por hoja.
+.cant input[readonly] { background: var(--superficie-2); color: var(--tinta-2); }
+.bultos-linea { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.bulto-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px 1px 8px; border-radius: 6px; background: var(--superficie-2); }
+.bulto-chip button { border: 0; background: none; color: var(--tinta-3); cursor: pointer; font: inherit; padding: 0 4px; }
+.bulto-chip button:hover { color: var(--alerta-t); }

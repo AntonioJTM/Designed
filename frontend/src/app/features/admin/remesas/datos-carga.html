@@ -1,0 +1,64 @@
+<!-- De quién llegó y con qué papeles. Todo opcional: se completa después desde el historial. -->
+<div class="datos-carga">
+  <div class="field proveedor">
+    <label for="dc-proveedor">Proveedor</label>
+    @if (agregando()) {
+      <span class="nuevo">
+        <input id="dc-proveedor" type="text" [(ngModel)]="nuevoNombre" placeholder="Nombre del proveedor"
+               (keydown.enter)="$event.preventDefault(); guardarNuevo()" />
+        <button type="button" class="btn btn-primary btn-sm" [disabled]="guardando()" (click)="guardarNuevo()">
+          {{ guardando() ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="agregando.set(false)">Cancelar</button>
+      </span>
+    } @else {
+      <span class="nuevo">
+        <select id="dc-proveedor" [ngModel]="datos().proveedor_id" (ngModelChange)="cambiar('proveedor_id', $event)">
+          <option [ngValue]="null">— Sin proveedor —</option>
+          @for (p of proveedores(); track p.id) {
+            <option [ngValue]="p.id">{{ p.nombre }}</option>
+          }
+        </select>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="abrirNuevo()">Nuevo</button>
+      </span>
+    }
+    @if (error()) { <span class="ayuda neg">{{ error() }}</span> }
+    @if (!agregando() && sugeridoNuevo(); as s) {
+      <span class="ayuda">
+        El archivo dice «{{ s }}».
+        <button type="button" class="btn-enlace" (click)="abrirNuevo(s)">Darlo de alta</button>
+      </span>
+    }
+  </div>
+  <label class="field">
+    Factura
+    <input type="text" maxlength="60" [ngModel]="datos().factura" (ngModelChange)="cambiar('factura', $event)"
+           placeholder="Ej. A-4821" />
+  </label>
+  <label class="field">
+    Número de pedimento
+    <input type="text" maxlength="40" [ngModel]="datos().pedimento" (ngModelChange)="cambiar('pedimento', $event)"
+           placeholder="Ej. 26 07 3456 6001234" />
+  </label>
+  <label class="field">
+    Número de contenedor
+    <input type="text" maxlength="40" [ngModel]="datos().contenedor" (ngModelChange)="cambiar('contenedor', $event)"
+           placeholder="Ej. MSCU1234567" />
+  </label>
+  <label class="field">
+    Fecha de ingreso
+    <input type="date" [max]="hoy" [ngModel]="datos().fecha_ingreso" (ngModelChange)="cambiar('fecha_ingreso', $event)" />
+  </label>
+  <!-- El costo es solo de administración y contabilidad: a los demás ni se les pide. -->
+  @if (conCosto()) {
+    <label class="field">
+      Costo por kilo
+      <span class="campo-moneda">
+        <span>$</span>
+        <input type="number" min="0" step="0.01" [ngModel]="datos().costo_kg"
+               (ngModelChange)="cambiar('costo_kg', $event)" placeholder="0.00" />
+      </span>
+      <span class="ayuda">Solo lo ven administración y contabilidad.</span>
+    </label>
+  }
+</div>

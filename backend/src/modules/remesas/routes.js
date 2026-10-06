@@ -21,6 +21,18 @@ const bultoSchema = z
   })
   .strict();
 
+// Los DATOS DE LA CARGA (2026-10-06, "surtir inventario"): de quién llegó y con
+// qué papeles. Todos opcionales al cargar: se completan después desde el
+// historial (PATCH /remesas/:id). La fecha de ingreso es el día que llegó la
+// mercancía; sin ella, el día de la captura.
+const datosCarga = {
+  proveedor_id: z.coerce.number().int().positive().nullable().optional(),
+  factura: z.string().trim().max(60).nullable().optional(),
+  pedimento: z.string().trim().max(40).nullable().optional(),
+  contenedor: z.string().trim().max(40).nullable().optional(),
+  fecha_ingreso: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida').nullable().optional(),
+};
+
 // Se manda `producto_id` (la pantalla del producto: crea la presentación si le
 // falta) o `variante_id` (la presentación exacta). Uno de los dos.
 const confirmarSchema = z
@@ -34,6 +46,7 @@ const confirmarSchema = z
     // entra igual, solo que ese margen no se podrá calcular.
     costo_kg: z.coerce.number().nonnegative().max(9999999).nullable().optional(),
     notas: z.string().trim().max(1000).optional(),
+    ...datosCarga,
     bultos: z.array(bultoSchema).min(1).max(5000),
   })
   .strict()
@@ -53,6 +66,7 @@ const listaSchema = z
     // exige si hay hilos nuevos (lo valida el modelo).
     categoria_id: z.coerce.number().int().positive().nullable().optional(),
     linea_id: z.coerce.number().int().positive().nullable().optional(),
+    ...datosCarga,
     documento: z
       .object({
         proveedor: z.string().trim().max(120).nullable().optional(),
@@ -81,6 +95,17 @@ const listaSchema = z
     message: 'Una lista admite hasta 5,000 bultos',
   });
 
+// Completar o corregir los datos de una carga ya hecha. `toda_la_lista` aplica
+// proveedor, factura, pedimento, contenedor y fecha a TODAS las cargas que
+// salieron del mismo archivo con varios colores (el costo es de cada hilo).
+const datosSchema = z
+  .object({
+    ...datosCarga,
+    costo_kg: z.coerce.number().nonnegative().max(9999999).nullable().optional(),
+    toda_la_lista: z.coerce.boolean().optional(),
+  })
+  .strict();
+
 // La vista previa recibe el .xlsx en crudo. Se acepta cualquier binario para no
 // depender de que el navegador mande el content-type exacto.
 const cuerpoBinario = express.raw({ type: () => true, limit: '15mb' });
@@ -98,5 +123,6 @@ router.post('/previa', ...soloStaff, requirePermiso('ver:remesa'), cuerpoBinario
 router.post('/', ...soloStaff, requirePermiso('ver:remesa'), validate(confirmarSchema), controller.confirmar);
 router.post('/lista/previa', ...soloStaff, requirePermiso('ver:remesa'), cuerpoBinario, controller.previaLista);
 router.post('/lista', ...soloStaff, requirePermiso('ver:remesa'), validate(listaSchema), controller.confirmarLista);
+router.patch('/:id', ...soloStaff, requirePermiso('ver:remesa'), validate(datosSchema), controller.editarDatos);
 
 module.exports = router;

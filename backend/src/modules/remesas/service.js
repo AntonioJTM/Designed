@@ -1,6 +1,8 @@
 'use strict';
 
 const model = require('./model');
+const proveedoresModel = require('../proveedores/model');
+const { hoyLocal } = require('../../utils/fechas');
 const variantesModel = require('../variantes/model');
 const variantesService = require('../variantes/service');
 const productosModel = require('../productos/model');
@@ -240,6 +242,7 @@ async function confirmar(datos, usuarioId) {
         .map((d) => d.codigo)
         .join(', ')}${duplicados.length > 5 ? '…' : ''}`);
   }
+  await validarDatosCarga(datos);
 
   return model.crearRemesa(
     {
@@ -250,6 +253,7 @@ async function confirmar(datos, usuarioId) {
       // A cómo salió el kilo. Con esto el modelo recalcula el costo promedio
       // del hilo, que es lo que permite ver el margen.
       costo_kg: datos.costo_kg ?? null,
+      ...datosDeCarga(datos),
       bultos: datos.bultos.map((b) => ({
         codigo: String(b.codigo).trim(),
         peso_kg: round3(b.peso_kg),
@@ -266,4 +270,45 @@ async function listar(filtros) {
   return paginado(rows, total, filtros.page, filtros.limit);
 }
 
-module.exports = { analizar, previa, confirmar, listar };
+/** Solo los datos de la carga, limpios (un texto vacío es "no se sabe"). */
+function datosDeCarga(d) {
+  const texto = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+  return {
+    proveedor_id: d.proveedor_id ?? null,
+    factura: texto(d.factura),
+    pedimento: texto(d.pedimento),
+    contenedor: texto(d.contenedor),
+    fecha_ingreso: texto(d.fecha_ingreso),
+  };
+}
+
+/** El proveedor tiene que existir, y la fecha de ingreso no puede ser futura. */
+async function validarDatosCarga(d) {
+  if (d.proveedor_id != null && !(await proveedoresModel.obtener(d.proveedor_id))) {
+    throw new AppError(422, 'PROVEEDOR_INVALIDO', 'Ese proveedor no existe');
+  }
+  if (d.fecha_ingreso && d.fecha_ingreso > hoyLocal()) {
+    throw new AppError(422, 'FECHA_FUTURA', 'La fecha de ingreso no puede ser después de hoy');
+  }
+}
+
+/**
+ * Completa o corrige los datos de una carga (proveedor, factura, pedimento,
+ * contenedor, fecha de ingreso y, para quien ve costos, el costo por kilo).
+ * Con `toda_la_lista`, todo menos el costo va a las demás cargas del mismo
+ * archivo. Si cambió el costo, se rehace el costo promedio del hilo.
+ */
+async function editarDatos(id, datos, usuarioId) {
+  const actual = await model.obtener(id);
+  if (!actual) throw new AppError(404, 'NO_ENCONTRADO', 'Esa carga no existe');
+  await validarDatosCarga(datos);
+  const cambios = {};
+  for (const k of ['proveedor_id', 'factura', 'pedimento', 'contenedor', 'fecha_ingreso']) {
+    if (datos[k] !== undefined) cambios[k] = datosDeCarga({ [k]: datos[k] })[k];
+  }
+  if (datos.costo_kg !== undefined) cambios.costo_kg = datos.costo_kg;
+  await model.editarDatos(id, cambios, { todaLaLista: !!datos.toda_la_lista, usuarioId });
+  return model.obtener(id);
+}
+
+module.exports = { analizar, previa, confirmar, listar, editarDatos, datosDeCarga, validarDatosCarga };

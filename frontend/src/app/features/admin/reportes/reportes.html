@@ -28,7 +28,7 @@
     @for (t of pestanas; track t.clave) {
       <button type="button" [class.on]="pestana() === t.clave"
               [attr.aria-current]="pestana() === t.clave ? 'page' : null"
-              (click)="pestana.set(t.clave)">
+              (click)="elegir(t.clave)">
         {{ t.nombre }}
       </button>
     }
@@ -181,6 +181,137 @@
           </div>
         }
       </section>
+    }
+
+    <!-- ===================================================== VENTA POR COLOR -->
+    @case ('color') {
+      <div class="filtros-barra">
+        <label class="buscador crece">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
+          </svg>
+          <span class="oculto">Buscar color</span>
+          <input type="search" name="busca-color" [ngModel]="buscaColor()" (ngModelChange)="buscarColor($event)"
+                 (keydown.enter)="buscarColorYa()" placeholder="Color, calibre o material (rojo 2/30)" />
+        </label>
+        <label class="field">
+          Periodo
+          <select name="periodo-color" [ngModel]="periodoActual()" (ngModelChange)="usarPeriodo($event)">
+            <option value="" [disabled]="periodoActual() !== ''">Otras fechas (las de arriba)</option>
+            @for (p of periodosRapidos; track p.clave) {
+              <option [value]="p.clave">{{ p.opcion }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          Orden
+          <select name="orden-color" [ngModel]="ordenColor()" (ngModelChange)="ordenColor.set($event)">
+            <option value="kg">Lo más vendido en el periodo</option>
+            <option value="pct_vendido">El que más se ha vendido (% ya vendido)</option>
+            <option value="existencia">El que más queda en inventario</option>
+          </select>
+        </label>
+      </div>
+
+      @if (ventaColor(); as vc) {
+        <div class="kpis">
+          @for (k of kpisColor(); track k.etiqueta) {
+            <div class="kpi">
+              <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+              <span class="kpi-valor">{{ k.valor }}</span>
+              <span class="kpi-pie">{{ k.pie }}</span>
+            </div>
+          }
+        </div>
+
+        <section class="card" [class.recargando]="cargandoColor()">
+          <div class="card-head">
+            <div>
+              <h2>Kilos vendidos por color</h2>
+              <p>
+                {{ rangoTexto() }}. Cada hilo es un color en su calibre, con el paquete y el cono sumados.
+                Lo vendido es lo que salió del inventario: no cuenta lo cancelado, lo devuelto ni los
+                apartados que aún no se entregan. «% ya vendido» es lo vendido desde siempre contra eso
+                más lo que queda hoy.
+              </p>
+            </div>
+          </div>
+
+          @if (filasColor().length === 0) {
+            <p class="vacio">
+              @if (vc.q) {
+                Ningún hilo con «{{ vc.q }}» se vendió en estas fechas ni tiene existencias.
+              } @else {
+                No hubo ventas en estas fechas y no hay existencias.
+              }
+            </p>
+          } @else {
+            <div class="tabla-scroll">
+              <table class="grid tabla-color">
+                <thead>
+                  <tr>
+                    <th>Hilo</th>
+                    <th class="num" [attr.aria-sort]="ordenColor() === 'kg' ? 'descending' : null">Kg vendidos</th>
+                    <th class="num" title="Sus kilos contra todo lo vendido en el periodo">% del periodo</th>
+                    <th class="num">Importe</th>
+                    <th class="num">Vendido desde siempre</th>
+                    <th class="num" [attr.aria-sort]="ordenColor() === 'existencia' ? 'descending' : null">Queda en inventario</th>
+                    <th class="num" title="Lo vendido desde siempre contra eso más lo que queda"
+                        [attr.aria-sort]="ordenColor() === 'pct_vendido' ? 'descending' : null">% ya vendido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (h of filasColor(); track h.producto_id) {
+                    <tr [class.sin-ventas]="h.kg_vendidos === 0">
+                      <td>
+                        <div class="hilo">{{ h.color }}{{ h.calibre ? ' ' + h.calibre : '' }}</div>
+                        @if (detalleHilo(h)) { <div class="muted chico">{{ detalleHilo(h) }}</div> }
+                      </td>
+                      <td class="num"><b>{{ h.kg_vendidos | cantidad: 'kg' }}</b></td>
+                      <td class="num">
+                        <div class="pct-celda">
+                          <span class="carril" aria-hidden="true"><span [style.width.%]="barra(h.pct_del_periodo)"></span></span>
+                          <span class="pct-num">{{ pctTexto(h.pct_del_periodo) }}</span>
+                        </div>
+                      </td>
+                      <td class="num">{{ h.importe | dinero }}</td>
+                      <td class="num">
+                        {{ h.vendido_total | cantidad: 'kg' }}
+                        <div class="muted chico">
+                          {{ h.ultima_venta ? 'última venta ' + (h.ultima_venta | fecha: true) : 'nunca se ha vendido' }}
+                        </div>
+                      </td>
+                      <td class="num">{{ h.existencia | cantidad: 'kg' }}</td>
+                      <td class="num">
+                        <div class="pct-celda">
+                          <span class="carril" aria-hidden="true"><span [style.width.%]="barra(h.pct_vendido)"></span></span>
+                          <span class="pct-num">{{ pctTexto(h.pct_vendido) }}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+                @if (filasColor().length > 1) {
+                  <tfoot>
+                    <tr>
+                      <td>Total · {{ vc.totales.num_hilos }} hilos</td>
+                      <td class="num">{{ vc.totales.kg_vendidos | cantidad: 'kg' }}</td>
+                      <td class="num">{{ pctTexto(vc.totales.pct_del_periodo) }}</td>
+                      <td class="num">{{ vc.totales.importe | dinero }}</td>
+                      <td class="num">{{ vc.totales.vendido_total | cantidad: 'kg' }}</td>
+                      <td class="num">{{ vc.totales.existencia | cantidad: 'kg' }}</td>
+                      <td class="num">{{ pctTexto(vc.totales.pct_vendido) }}</td>
+                    </tr>
+                  </tfoot>
+                }
+              </table>
+            </div>
+          }
+        </section>
+      } @else {
+        <p class="muted">Cargando…</p>
+      }
     }
 
     <!-- ===================================================== POR REABASTECER -->

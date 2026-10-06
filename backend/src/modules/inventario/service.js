@@ -242,8 +242,8 @@ async function equivalenciaPaquetes({ variante_id, almacen_id, kg }) {
 
   const d = await model.disponibilidadEnPaquetes(variante_id, almacen_id);
   // Sin bultos ubicados se cae al peso nominal de la presentación, y se avisa.
-  const promedio = d.peso_promedio || Number(v.peso_kg) || 0;
-  const nominal = d.paquetes === 0;
+  // Es el MISMO peso con que se aparta una solicitud en paquetes.
+  const { peso: promedio, nominal } = await model.pesoPorPaquete(null, v, almacen_id);
 
   const resp = {
     sku: v.sku,
@@ -288,8 +288,8 @@ async function solicitarTraspaso(datos, usuarioId) {
   return model.solicitarTraspaso(datos, usuarioId);
 }
 
-async function enviarTraspaso(id, usuarioId) {
-  return model.enviarTraspaso(id, usuarioId);
+async function enviarTraspaso(id, usuarioId, datos) {
+  return model.enviarTraspaso(id, usuarioId, datos ?? {});
 }
 
 async function recibirTraspaso(id, usuarioId, datos) {

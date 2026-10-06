@@ -300,14 +300,16 @@
                         <div class="hilo">{{ i.producto }}{{ i.presentacion ? ' · ' + i.presentacion : '' }}</div>
                         <div class="muted mono">
                           @if (i.bultos?.length) {
-                            @if (i.bultos!.length === 1) {
-                              bulto {{ i.bultos![0].codigo }} · {{ i.bultos![0].peso_kg | cantidad: 'kg' }}
-                            } @else {
-                              {{ i.bultos!.length }} bultos:
+                            <!-- Cada bulto con su ✕: para cobrar menos se quita el que no se lleva. -->
+                            <span class="bultos-linea">
                               @for (b of i.bultos; track b.codigo) {
-                                {{ b.codigo }} ({{ b.peso_kg | cantidad }}){{ $last ? '' : ' + ' }}
+                                <span class="bulto-chip">
+                                  {{ b.codigo }} · {{ b.peso_kg | cantidad: 'kg' }}
+                                  <button type="button" (click)="quitarBulto(i, b.codigo)"
+                                          [attr.aria-label]="'Quitar el bulto ' + b.codigo">✕</button>
+                                </span>
                               }
-                            }
+                            </span>
                           } @else {
                             a granel · {{ i.sku }}
                           }
@@ -317,6 +319,8 @@
                         <span class="cant">
                           <input type="number" step="0.001" min="0.001" [ngModel]="i.cantidad"
                                  (ngModelChange)="cambiarCantidad(i, $event)"
+                                 [readonly]="!!i.bultos?.length"
+                                 [title]="i.bultos?.length ? 'Son los kilos de los bultos escaneados: para cobrar menos, quita un bulto' : ''"
                                  [attr.aria-label]="'Kilos de ' + i.producto" />
                           <span class="muted">{{ i.unidad || 'kg' }}</span>
                         </span>
@@ -516,7 +520,7 @@
       <div class="modal-body columna" style="gap: 16px">
         @if (errorAbono()) { <p class="alert" style="margin: 0">{{ errorAbono() }}</p> }
         <p class="muted" style="margin: 0">
-          Debe <b>{{ c.saldo | dinero }}</b>. El abono va a su cuenta, no a una venta en particular.
+          Debe <b>{{ c.saldo | dinero }}</b>. El abono va a su cuenta y paga primero lo más antiguo que deba.
         </p>
         <div class="form-grid">
           <label class="field">

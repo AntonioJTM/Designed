@@ -1,0 +1,120 @@
+<!--
+  No se cierra al hacer clic en el fondo: se sale con la ✕, con "Cerrar" o con
+  Escape. Tampoco al registrar: dar varios periodos seguidos es normal.
+-->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-vac-titulo">
+    <div class="modal-head">
+      <h2 id="modal-vac-titulo">Vacaciones de {{ empleado().nombre }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      @if (cargando()) {
+        <p class="muted" style="margin: 0">Cargando…</p>
+      } @else if (datos(); as d) {
+        <div class="columna" style="gap: 20px">
+          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (mensaje()) { <p class="ok-msg" style="margin: 0">{{ mensaje() }}</p> }
+
+          @if (!d.fecha_ingreso) {
+            <p class="aviso" style="margin: 0">
+              Falta su <b>fecha de ingreso</b>: con ella se cuentan los días que le tocan. Captúrala en
+              <b>Editar</b>, en esta misma tabla.
+            </p>
+          } @else if (d.horario.length === 0) {
+            <p class="aviso" style="margin: 0">
+              Falta su <b>horario</b>: con él se cuentan los días de vacaciones (sus descansos no cuentan).
+              Captúralo en <b>Editar</b>.
+            </p>
+          }
+
+          @if (d.saldo; as s) {
+            <div>
+              <p class="muted" style="margin: 0 0 10px; font-size: 14px">
+                Entró el {{ d.fecha_ingreso | fecha }} ·
+                @if (s.anios === 0) {
+                  todavía no cumple su primer año: lo cumple el {{ s.proximo_aniversario | fecha }} y desde
+                  entonces le tocan {{ s.dias_proximo_anio }} días.
+                } @else {
+                  lleva {{ s.anios }} {{ s.anios === 1 ? 'año' : 'años' }}. Su año de vacaciones va del
+                  {{ s.desde | fecha }} al {{ finDeAnio(s.hasta) | fecha }}; el siguiente le tocan {{ s.dias_proximo_anio }}.
+                }
+              </p>
+              <div class="saldo">
+                <div><span>Le tocan por ley</span><b>{{ s.corresponden }}</b></div>
+                <div><span>Ha tomado</span><b>{{ s.tomados }}</b></div>
+                <div class="queda"><span>Le quedan</span><b>{{ s.restan }}</b></div>
+              </div>
+            </div>
+          }
+
+          <!-- Registrar unas vacaciones por fechas. -->
+          @if (d.fecha_ingreso && d.horario.length > 0) {
+            <section>
+              <h3>Registrar vacaciones</h3>
+              <div class="form-vac">
+                <label class="field">
+                  Desde
+                  <input type="date" [(ngModel)]="desde" name="desde" />
+                </label>
+                <label class="field">
+                  Hasta
+                  <input type="date" [(ngModel)]="hasta" name="hasta" [min]="desde" />
+                </label>
+                <label class="field ancho">
+                  Nota
+                  <input type="text" [(ngModel)]="notas" name="notas" maxlength="255" placeholder="Opcional" />
+                </label>
+                <button type="button" class="btn btn-primary" [disabled]="ocupado() || !desde" (click)="registrar()">
+                  Registrar
+                </button>
+              </div>
+              @if (desde) {
+                <p class="nota-info" style="margin: 10px 0 0">
+                  <span>
+                    Son <b>{{ diasElegidos() }} {{ diasElegidos() === 1 ? 'día' : 'días' }} de trabajo</b> (sus descansos
+                    no cuentan). Se pagan como días normales en la nómina de esa semana.
+                  </span>
+                </p>
+              }
+            </section>
+          }
+
+          <section>
+            <h3>Las que ha tomado</h3>
+            @if (d.registros.length === 0) {
+              <p class="muted" style="margin: 0; font-size: 14px">Todavía no ha tomado vacaciones.</p>
+            } @else {
+              <div class="tabla-scroll">
+                <table class="grid">
+                  <thead>
+                    <tr><th>Del</th><th>Al</th><th class="num">Días</th><th>Nota</th><th><span class="oculto">Acciones</span></th></tr>
+                  </thead>
+                  <tbody>
+                    @for (r of d.registros; track r.id) {
+                      <tr>
+                        <td>{{ r.fecha_inicio | fecha }}</td>
+                        <td>{{ r.fecha_fin | fecha }}</td>
+                        <td class="num"><b>{{ num(r.dias) }}</b></td>
+                        <td class="muted">{{ r.notas || '—' }}</td>
+                        <td class="acciones">
+                          <button type="button" class="btn btn-danger btn-sm" [disabled]="ocupado()" (click)="quitar(r)">Quitar</button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </section>
+        </div>
+      }
+    </div>
+
+    <div class="modal-foot">
+      <span class="muted" style="margin-right: auto; font-size: 13px">Por ley (art. 76 LFT): 12 días el primer año, 2 más cada año hasta 20.</span>
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+    </div>
+  </div>
+</div>

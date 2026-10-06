@@ -4,7 +4,10 @@ import { NominaService } from '../../../core/services/nomina.service';
 import { EmpleadoNomina } from '../../../core/models/nomina.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
+import { FechaPipe } from '../../../shared/fecha.pipe';
 import { EmpleadoNominaModal } from './empleado-nomina-modal';
+import { VacacionesModal } from './vacaciones-modal';
+import { DIAS_CORTOS, ORDEN_SEMANA } from './jornada';
 
 /**
  * Configuración de nómina del personal: sueldo semanal, comisión y valor de
@@ -16,7 +19,7 @@ import { EmpleadoNominaModal } from './empleado-nomina-modal';
  */
 @Component({
   selector: 'app-nomina-config',
-  imports: [RouterLink, DineroPipe, EmpleadoNominaModal],
+  imports: [RouterLink, DineroPipe, FechaPipe, EmpleadoNominaModal, VacacionesModal],
   templateUrl: './nomina-config.html',
 })
 export class NominaConfig {
@@ -28,6 +31,8 @@ export class NominaConfig {
   readonly mensaje = signal<string | null>(null);
   /** Empleado abierto en el modal. */
   readonly editando = signal<EmpleadoNomina | null>(null);
+  /** Empleado con el modal de vacaciones abierto. */
+  readonly vacacionesDe = signal<EmpleadoNomina | null>(null);
 
   /** Cuántos entran hoy en la nómina, para el título de la tarjeta. */
   readonly enNomina = computed(() => this.empleados().filter((e) => e.en_nomina && e.activo).length);
@@ -54,6 +59,29 @@ export class NominaConfig {
     this.mensaje.set(null);
     this.error.set(null);
     this.editando.set(e);
+  }
+
+  abrirVacaciones(e: EmpleadoNomina): void {
+    this.mensaje.set(null);
+    this.error.set(null);
+    this.vacacionesDe.set(e);
+  }
+
+  /** "Lun a Sáb", "Lun a Vie y Dom"…: qué días trabaja, en corto. */
+  diasDe(e: EmpleadoNomina): string {
+    const tiene = new Set(e.horario.map((d) => d.dia_semana));
+    const orden = ORDEN_SEMANA.filter((d) => tiene.has(d));
+    // Tramos seguidos en el orden lunes → domingo.
+    const tramos: number[][] = [];
+    for (const d of orden) {
+      const ult = tramos[tramos.length - 1];
+      if (ult && ORDEN_SEMANA.indexOf(d) === ORDEN_SEMANA.indexOf(ult[ult.length - 1]) + 1) ult.push(d);
+      else tramos.push([d]);
+    }
+    const textos = tramos.map((t) =>
+      t.length === 1 ? DIAS_CORTOS[t[0]] : t.length === 2 ? `${DIAS_CORTOS[t[0]]} y ${DIAS_CORTOS[t[1]]}` : `${DIAS_CORTOS[t[0]]} a ${DIAS_CORTOS[t[t.length - 1]]}`
+    );
+    return textos.length > 1 ? `${textos.slice(0, -1).join(', ')} y ${textos[textos.length - 1]}` : textos[0] ?? '';
   }
 
   guardado(texto: string): void {

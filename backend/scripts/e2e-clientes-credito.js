@@ -275,6 +275,71 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
     ck('y no deja el saldo en negativo',
       negativo.status === 422 && negativo.error.code === 'SALDO_NEGATIVO', negativo.error?.code);
 
+    // ------------------------------------- 6. Pagar lo fiado da la venta por pagada
+    // "Pedí a crédito, lo aboné y la venta aún seguía pendiente" (usuario,
+    // 2026-10-06). Los abonos se aplican a lo más antiguo primero.
+    console.log('\n6 · Lo que se termina de pagar queda PAGADO');
+    const estadoDe = async (id) => (await api('GET', `/pedidos/${id}`)).data.estado;
+    let debe = Number((await api('GET', `/clientes/${cli.id}`)).data.saldo);
+    ck('la venta mixta sigue pendiente mientras se deba algo', (await estadoDe(mixta.data.id)) === 'pendiente',
+      `debe ${debe}`);
+    let ab = await api('POST', `/clientes/${cli.id}/abonos`, { monto: debe, metodo_pago_id: transferencia, referencia: 'SPEI-TMPCC-2' });
+    ck('al abonar lo que falta, la venta mixta pasa a PAGADO', (await estadoDe(mixta.data.id)) === 'pagado',
+      `${await estadoDe(mixta.data.id)} · liquidadas ${JSON.stringify(ab.data?.liquidadas)}`);
+    ck('y el abono dice qué ventas quedaron pagadas', ab.data?.liquidadas?.includes(mixta.data.numero_pedido),
+      JSON.stringify(ab.data?.liquidadas));
+    ck('la cancelada sigue cancelada', (await estadoDe(fiado.data.id)) === 'cancelado');
+
+    // Dos ventas fiadas: un abono que solo alcanza para la primera.
+    const vieja = await vender(hilos[0].variante, 1, { a_credito: 100 });
+    const nueva = await vender(hilos[0].variante, 2, { a_credito: 200 });
+    ck('se fían dos ventas (100 y 200)', vieja.status === 201 && nueva.status === 201, `${vieja.status} ${nueva.status}`);
+    ab = await api('POST', `/clientes/${cli.id}/abonos`, { monto: 100, metodo_pago_id: transferencia, referencia: 'SPEI-TMPCC-3' });
+    ck('un abono de 100 paga la MÁS ANTIGUA', (await estadoDe(vieja.data.id)) === 'pagado' && (await estadoDe(nueva.data.id)) === 'pendiente',
+      `vieja ${await estadoDe(vieja.data.id)} · nueva ${await estadoDe(nueva.data.id)}`);
+    ab = await api('POST', `/clientes/${cli.id}/abonos`, { monto: 150, metodo_pago_id: transferencia, referencia: 'SPEI-TMPCC-4' });
+    ck('un abono parcial no la da por pagada', (await estadoDe(nueva.data.id)) === 'pendiente', await estadoDe(nueva.data.id));
+    // El último tramo se condona con un ajuste: también cuenta como pagado.
+    const condona = await api('POST', `/clientes/${cli.id}/ajustes`, { monto: -50, notas: 'TMPCC se le perdona el resto' });
+    ck('condonar el resto con un ajuste la da por pagada', condona.status === 200 && (await estadoDe(nueva.data.id)) === 'pagado',
+      `${condona.status} ${await estadoDe(nueva.data.id)}`);
+    debe = Number((await api('GET', `/clientes/${cli.id}`)).data.saldo);
+    ck('y el cliente ya no debe nada', cerca(debe, 0), debe);
+
+    // ------------------- 7. Cancelar, el cambio a mano y lo que "falta" en la lista
+    console.log('\n7 · Cancelar una fiada, cambiarla a mano y lo que falta');
+    const faltaDe = async (id) =>
+      Number(((await api('GET', `/pedidos?cliente_id=${cli.id}&limit=100`)).data.items.find((x) => x.id === id) ?? {}).falta);
+    const a1 = await vender(hilos[0].variante, 1, { a_credito: 100 });
+    const a2 = await vender(hilos[0].variante, 2, { a_credito: 200 });
+    await api('POST', `/clientes/${cli.id}/abonos`, { monto: 200, metodo_pago_id: transferencia, referencia: 'SPEI-TMPCC-5' });
+    ck('con 200 abonados: la de 100 pagada y a la de 200 le faltan 100',
+      (await estadoDe(a1.data.id)) === 'pagado' && (await estadoDe(a2.data.id)) === 'pendiente' && cerca(await faltaDe(a2.data.id), 100),
+      `${await estadoDe(a1.data.id)} · ${await estadoDe(a2.data.id)} falta ${await faltaDe(a2.data.id)}`);
+    ck('la lista ya no dice que falta en la pagada', cerca(await faltaDe(a1.data.id), 0), await faltaDe(a1.data.id));
+    let r = await api('PATCH', `/pedidos/${a2.data.id}/estado`, { estado: 'pagado' });
+    ck('a mano no se marca pagada una fiada que se debe', r.status === 409 && r.error?.code === 'VENTA_FIADA_SIN_PAGAR',
+      `${r.status} ${r.error?.message}`);
+    r = await api('PATCH', `/pedidos/${a1.data.id}/estado`, { estado: 'pendiente' });
+    ck('ni se regresa a pendiente una ya pagada con abonos', r.status === 409 && r.error?.code === 'VENTA_FIADA_PAGADA',
+      `${r.status} ${r.error?.code}`);
+    r = await api('PATCH', `/pedidos/${a1.data.id}/estado`, { estado: 'cancelado' });
+    ck('cancelar la más antigua libera su abono y paga la siguiente', r.status === 200 && (await estadoDe(a2.data.id)) === 'pagado',
+      `${r.status} ${await estadoDe(a2.data.id)}`);
+    ck('y no queda debiendo nada', cerca(Number((await api('GET', `/clientes/${cli.id}`)).data.saldo), 0));
+
+    // Cancelar una fiada que ya se había abonado deja saldo A FAVOR, y eso paga
+    // lo próximo que se le fíe.
+    const b = await vender(hilos[0].variante, 3, { a_credito: 300 });
+    await api('POST', `/clientes/${cli.id}/abonos`, { monto: 100, metodo_pago_id: transferencia, referencia: 'SPEI-TMPCC-6' });
+    await api('PATCH', `/pedidos/${b.data.id}/estado`, { estado: 'cancelado' });
+    const aFavor = Number((await api('GET', `/clientes/${cli.id}`)).data.saldo);
+    ck('cancelar una fiada ya abonada deja lo abonado a su favor', cerca(aFavor, -100), aFavor);
+    const cnueva = await vender(hilos[0].variante, 0.5, { a_credito: 50 });
+    ck('lo próximo que se le fía lo paga su saldo a favor: nace PAGADA', cnueva.status === 201 && cnueva.data?.estado === 'pagado',
+      `${cnueva.status} ${cnueva.data?.estado}`);
+    ck('y le queda a favor lo que sobró', cerca(Number((await api('GET', `/clientes/${cli.id}`)).data.saldo), -50));
+
     if (abriYo) await api('POST', `/caja/sesiones/${sesion.id}/cerrar`, { monto_final: 0 });
 
   } catch (e) {

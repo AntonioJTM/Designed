@@ -323,8 +323,34 @@ describe('PedidoDetalle', () => {
 
     expect(c.cifras().map((x) => x.etiqueta)).toEqual(['Total', 'Pagó al comprar', 'Se fió a su cuenta']);
     expect(c.cifras()[2].valor).toBe(300);
-    // Lo fiado aparece como un pago más, en su cuenta.
-    expect(c.filasPago().some((f) => f.estado === 'En su cuenta' && f.monto === 300)).toBe(true);
+    // Sin saber de abonos, se debe todo.
+    expect(c.cifras()[2].pie).toBe('debe $300.00');
+    // Lo fiado aparece como un pago más, por pagar.
+    expect(c.filasPago().some((f) => f.estado === 'Por pagar' && f.monto === 300)).toBe(true);
     expect(c.historia().some((h) => h.que.includes('a la cuenta de Tejidos JC'))).toBe(true);
+  });
+
+  it('una venta fiada que ya se pagó con abonos lo dice (2026-10-06)', async () => {
+    const fiada = {
+      ...pedidoBase(), canal: 'punto_venta', inventario_descontado: 1, cliente_id: 7, cliente: 'Tejidos JC',
+      credito: [{ tipo: 'cargo', monto: '300.00', notas: 'Venta a crédito POS-1', creado_en: '2026-09-05 10:00:00' }],
+    };
+    actual = { ...fiada, estado: 'pagado', credito_pagado: 300, credito_por_pagar: 0 } as Pedido;
+    let c = (await montar()).componentInstance;
+    expect(c.cifras()[2].pie).toBe('ya está pagado');
+    expect(c.cifras()[2].alerta).toBe(false);
+    expect(c.filasPago().some((f) => f.estado === 'Pagado con abonos' && f.tono === 'verde')).toBe(true);
+    // Ya pagada con abonos: no se ofrece regresarla a pendiente.
+    expect(c.opcionesEstado()).not.toContain('pendiente');
+    TestBed.resetTestingModule();
+
+    // A medias: debe lo que falta de ESTA venta.
+    actual = { ...fiada, estado: 'pendiente', credito_pagado: 100, credito_por_pagar: 200 } as Pedido;
+    c = (await montar()).componentInstance;
+    expect(c.cifras()[2].pie).toBe('debe $200.00');
+    expect(c.filasPago().some((f) => f.estado === 'Debe $200.00')).toBe(true);
+    // Mientras se deba, no se ofrece marcarla pagada ni entregada a mano.
+    expect(c.opcionesEstado()).not.toContain('pagado');
+    expect(c.opcionesEstado()).not.toContain('entregado');
   });
 });

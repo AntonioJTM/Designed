@@ -5,6 +5,8 @@ import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
 import {
   ConfiguracionTienda,
+  CuentaBancaria,
+  CuentaBancariaInput,
   Cotizacion,
   Direccion,
   DireccionInput,
@@ -48,6 +50,32 @@ export class TiendaService {
       .get<ApiResponse<OpcionConfiguracion[]>>(`${this.base}/configuracion/completa`)
       .pipe(map(data));
   }
+  // ---- Cuentas de banco para transferencias (varias) ----
+
+  cuentasBancarias(): Observable<CuentaBancaria[]> {
+    return this.http
+      .get<ApiResponse<CuentaBancaria[]>>(`${this.base}/configuracion/cuentas`)
+      .pipe(map(data));
+  }
+
+  crearCuentaBancaria(body: CuentaBancariaInput): Observable<CuentaBancaria> {
+    return this.http
+      .post<ApiResponse<CuentaBancaria>>(`${this.base}/configuracion/cuentas`, body)
+      .pipe(map(data));
+  }
+
+  actualizarCuentaBancaria(id: number, body: CuentaBancariaInput): Observable<CuentaBancaria> {
+    return this.http
+      .put<ApiResponse<CuentaBancaria>>(`${this.base}/configuracion/cuentas/${id}`, body)
+      .pipe(map(data));
+  }
+
+  eliminarCuentaBancaria(id: number): Observable<CuentaBancaria[]> {
+    return this.http
+      .delete<ApiResponse<CuentaBancaria[]>>(`${this.base}/configuracion/cuentas/${id}`)
+      .pipe(map(data));
+  }
+
   guardarConfiguracion(cambios: Record<string, string | null>): Observable<OpcionConfiguracion[]> {
     return this.http
       .put<ApiResponse<OpcionConfiguracion[]>>(`${this.base}/configuracion`, cambios)

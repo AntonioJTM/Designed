@@ -294,9 +294,51 @@ export interface Remesa {
   kg_total: string;
   lotes?: string | null;
   archivo?: string | null;
-  /** A cómo salió el kilo en esa compra; null si no se capturó. */
+  /** A cómo salió el kilo en esa compra; null si no se capturó. Solo llega a quien ve costos. */
   costo_kg?: string | null;
   creado_en: string;
+  /** De quién llegó y con qué papeles (2026-10-06, "surtir inventario"). */
+  proveedor_id?: number | null;
+  proveedor?: string | null;
+  factura?: string | null;
+  pedimento?: string | null;
+  contenedor?: string | null;
+  /** El día que llegó la mercancía ('YYYY-MM-DD'). */
+  fecha_ingreso?: string | null;
+  /** Marca de las cargas que salieron de un mismo archivo con varios colores. */
+  lista?: string | null;
+  cargas_en_lista?: number;
+}
+
+/** Un proveedor: se eligen de una lista al surtir inventario. */
+export interface Proveedor {
+  id: number;
+  nombre: string;
+  num_cargas?: number;
+}
+
+/**
+ * Los datos de una carga, como los captura la pantalla. Los textos vacíos son
+ * "no se sabe" (ver `datosParaEnviar` en remesas/datos-carga.ts).
+ */
+export interface DatosCarga {
+  proveedor_id: number | null;
+  factura: string;
+  pedimento: string;
+  contenedor: string;
+  fecha_ingreso: string;
+  /** Solo para quien ve costos (administración y contabilidad). */
+  costo_kg: number | null;
+}
+
+/** Lo que viaja al servidor: lo vacío no se manda. */
+export interface DatosCargaEnvio {
+  proveedor_id?: number | null;
+  factura?: string | null;
+  pedimento?: string | null;
+  contenedor?: string | null;
+  fecha_ingreso?: string | null;
+  costo_kg?: number | null;
 }
 
 /** Cuántos paquetes son X kilos, con los pesos reales de la bodega. */
@@ -357,6 +399,13 @@ export interface TraspasoLinea {
   bultos?: { codigo: string; peso_kg: string; lote?: string | null }[];
   /** True cuando el peso salió del nominal por no haber bultos ubicados. */
   peso_estimado?: boolean;
+  /** Solo al enviar: cuántos paquetes se habían pedido (salen los escaneados). */
+  paquetes_pedidos?: number | null;
+  /** Solo al enviar: de ese hilo no había y no salió. */
+  no_salio?: boolean;
+  /** Lo que se PIDIÓ; `paquetes` y `cantidad` dicen lo que salió, ya enviado. */
+  paquetes_solicitados?: number | string | null;
+  cantidad_solicitada?: number | string | null;
   peso_nominal?: number | null;
   unidad?: string;
   tipo_presentacion?: string;
@@ -388,6 +437,8 @@ export interface ResultadoTraspaso {
   almacen_destino_id?: number;
   /** Cuántas líneas llegaron incompletas, al recibir. */
   faltantes?: number;
+  /** Al enviar: la nota que quedó (lo que no salió completo y lo que se escribió). */
+  envio_notas?: string | null;
   lineas: TraspasoLinea[];
 }
 
@@ -414,6 +465,8 @@ export interface Traspaso {
   recibido_en?: string | null;
   cancelado_en?: string | null;
   notas?: string | null;
+  /** Lo que no salió completo (lo escribe el sistema) y lo que añadió quien surtió. */
+  envio_notas?: string | null;
   recepcion_notas?: string | null;
   motivo_cancelacion?: string | null;
   num_lineas: number | string;
@@ -480,7 +533,7 @@ export class InventarioService {
      */
     costo_kg?: number | null;
     bultos: BultoRemesa[];
-  }): Observable<ResultadoRemesa> {
+  } & DatosCargaEnvio): Observable<ResultadoRemesa> {
     return this.http
       .post<ApiResponse<ResultadoRemesa>>(`${this.base}/remesas`, body)
       .pipe(map(data));
@@ -514,8 +567,8 @@ export class InventarioService {
     categoria_id?: number | null;
     linea_id?: number | null;
     documento?: PreviaLista['documento'];
-    hilos: { nombre: string; calibre: string; bultos: BultoRemesa[] }[];
-  }): Observable<EventoCarga> {
+    hilos: { nombre: string; calibre: string; costo_kg?: number | null; bultos: BultoRemesa[] }[];
+  } & Omit<DatosCargaEnvio, 'costo_kg'>): Observable<EventoCarga> {
     return new Observable<EventoCarga>((obs) => {
       let leido = 0;
       // Saca los renglones completos que no se han leído. Al final también el
@@ -584,6 +637,26 @@ export class InventarioService {
     return this.http
       .get<ApiResponse<Paginado<Remesa>>>(`${this.base}/remesas`, { params })
       .pipe(map(data));
+  }
+
+  /**
+   * Completa o corrige los datos de una carga ya hecha. Con `toda_la_lista`,
+   * todo menos el costo va a las demás cargas del mismo archivo.
+   */
+  editarDatosCarga(remesaId: number, body: DatosCargaEnvio & { toda_la_lista?: boolean }): Observable<Remesa> {
+    return this.http
+      .patch<ApiResponse<Remesa>>(`${this.base}/remesas/${remesaId}`, body)
+      .pipe(map(data));
+  }
+
+  /** Los proveedores, por nombre. */
+  proveedores(): Observable<Proveedor[]> {
+    return this.http.get<ApiResponse<Proveedor[]>>(`${this.base}/proveedores`).pipe(map(data));
+  }
+
+  /** Da de alta un proveedor con solo su nombre. 409 PROVEEDOR_REPETIDO si ya está. */
+  crearProveedor(nombre: string): Observable<Proveedor> {
+    return this.http.post<ApiResponse<Proveedor>>(`${this.base}/proveedores`, { nombre }).pipe(map(data));
   }
 
   /** El PDF de UNA carga: el hilo, el almacén y cada bulto con su peso real. */
@@ -745,9 +818,16 @@ export class InventarioService {
   }
 
   /** Paso 2: sale del origen y queda en camino. */
-  enviarTraspaso(id: number): Observable<ResultadoTraspaso> {
+  /**
+   * Paso 2: sale. Con los paquetes ESCANEADOS al surtir: sale su peso real y
+   * esos quedan en la sucursal. Sin escanear no se envía.
+   */
+  enviarTraspaso(id: number, codigos: string[], notas?: string): Observable<ResultadoTraspaso> {
     return this.http
-      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/enviar`, {})
+      .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/enviar`, {
+        codigos,
+        ...(notas ? { notas } : {}),
+      })
       .pipe(map(data));
   }
 

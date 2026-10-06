@@ -1,6 +1,8 @@
 'use strict';
 
 const model = require('./model');
+const { hoyLocal } = require('../../utils/fechas');
+const { withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const { hashPassword, verificarPassword } = require('../../utils/password');
 const { firmarToken } = require('../../utils/jwt');
@@ -92,7 +94,7 @@ function _normalizar(datos, actual = {}) {
     fecha_nacimiento: tomar('fecha_nacimiento'),
     // Un cliente de años es cliente desde antes de capturarlo. Si no se dice,
     // se asume hoy, pero el campo está para corregirlo.
-    cliente_desde: tomar('cliente_desde') || new Date().toISOString().slice(0, 10),
+    cliente_desde: tomar('cliente_desde') || hoyLocal(),
     limite_credito: Number(tomar('limite_credito', 0)) || 0,
     notas: tomar('notas'),
     activo: datos.activo !== undefined ? (datos.activo ? 1 : 0) : (actual.activo ?? 1),
@@ -249,9 +251,14 @@ async function ajustarCredito(id, datos, usuarioId) {
       'Un saldo negativo se leería como crédito a favor.');
   }
 
-  await model.agregarMovimiento({
-    cliente_id: id, tipo: 'ajuste', monto,
-    notas: String(datos.notas).trim(), usuario_id: usuarioId,
+  // Un ajuste que baja la deuda (condonar) también puede terminar de pagar
+  // ventas fiadas: van en la misma transacción.
+  await withTransaction(async (conn) => {
+    await model.agregarMovimiento({
+      cliente_id: id, tipo: 'ajuste', monto,
+      notas: String(datos.notas).trim(), usuario_id: usuarioId,
+    }, conn);
+    await model.liquidarVentasACredito(conn, id);
   });
   return estadoDeCuenta(id);
 }

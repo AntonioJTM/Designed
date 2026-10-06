@@ -28,7 +28,8 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
 import { ProductoFormModal } from './producto-form-modal';
 import { EntradasModal } from './entradas-modal';
 import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
-import { SE_LLEVA_COSTO } from '../../../core/costos';
+import { DatosCargaCampos, datosCargaVacios, datosParaEnviar } from '../remesas/datos-carga';
+import { DatosCarga } from '../../../core/services/inventario.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 /** Qué modal está abierto. Uno a la vez; se crea al abrirlo y se destruye al cerrarlo. */
@@ -60,9 +61,9 @@ const BULTOS_A_LA_VISTA = 30;
  */
 @Component({
   selector: 'app-producto-presentaciones',
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe, DineroPipe, ProductoFormModal, EntradasModal],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe, DineroPipe, ProductoFormModal, EntradasModal, DatosCargaCampos],
   templateUrl: './producto-presentaciones.html',
-  styleUrl: './producto-presentaciones.scss',
+  styleUrls: ['./producto-presentaciones.scss', './bultos-filtros.scss'],
   host: { '(document:keydown.escape)': 'cerrarModal()' },
 })
 export class ProductoPresentaciones {
@@ -80,9 +81,7 @@ export class ProductoPresentaciones {
   readonly puedeCambiarPrecios = computed(() => this.auth.puede('hacer:cambiar_precios'));
   /** El costo es información interna: no todo el personal lo ve. */
   readonly puedeVerCostos = computed(() => this.auth.puede('hacer:ver_costos'));
-  /** ¿Se pide el precio de compra al cargar? No: la tienda no lleva el costo (core/costos.ts). */
-  readonly seLlevaCosto = SE_LLEVA_COSTO;
-  /** Subir el Excel del proveedor da ENTRADA a mercancía: es lo de Recibir remesa. */
+  /** Subir el Excel del proveedor da ENTRADA a mercancía: es lo de Surtir inventario. */
   readonly puedeCargarRemesa = computed(() => this.auth.puede('ver:remesa'));
   readonly veInventario = computed(() => this.auth.puede('ver:inventario'));
   /** Las listas de precio se administran en su pantalla (Administración). */
@@ -120,6 +119,12 @@ export class ProductoPresentaciones {
   readonly codigos = signal<Record<number, VarianteCodigo[]>>({});
   readonly filtroBultos = signal<FiltroBultos>('disponibles');
   readonly verTodosLosBultos = signal(false);
+  // Filtros por lote, peso y conos (2026-10-06). Son SEÑALES —no campos con
+  // ngModel— porque los lee un `computed`: con campos sueltos no se enteraría.
+  readonly loteBultos = signal('');
+  readonly pesoDesde = signal<number | null>(null);
+  readonly pesoHasta = signal<number | null>(null);
+  readonly conosBultos = signal('');
 
   // ---- Bulto a mano (modal) ----
   nuevoCodigo = '';
@@ -198,13 +203,71 @@ export class ProductoPresentaciones {
 
   readonly bultosFiltrados = computed(() => {
     const f = this.filtroBultos();
+    const lote = this.loteBultos();
+    const desde = this.pesoDesde();
+    const hasta = this.pesoHasta();
+    const conos = this.conosBultos();
     return this.bultos().filter((b) => {
-      if (f === 'todos') return true;
-      if (f === 'disponibles') return this.estaDisponible(b);
-      if (f === 'vendidos') return b.estado === 'vendido';
-      return b.estado === 'desarmado';
+      if (f === 'disponibles' && !this.estaDisponible(b)) return false;
+      if (f === 'vendidos' && b.estado !== 'vendido') return false;
+      if (f === 'desarmados' && b.estado !== 'desarmado') return false;
+      if (lote && (b.lote?.trim() || 'Sin lote') !== lote) return false;
+      const peso = Number(b.peso_kg ?? 0);
+      if (desde != null && (desde as unknown) !== '' && peso < Number(desde)) return false;
+      if (hasta != null && (hasta as unknown) !== '' && peso > Number(hasta)) return false;
+      if (conos && String(b.conos ?? 'sin') !== conos) return false;
+      return true;
     });
   });
+
+  /** Cuántos bultos y kilos quedan con los filtros: lo que se está mirando. */
+  readonly resumenFiltrados = computed(() => {
+    const b = this.bultosFiltrados();
+    return { bultos: b.length, kg: Math.round(b.reduce((s, x) => s + Number(x.peso_kg ?? 0), 0) * 1000) / 1000 };
+  });
+
+  /** Los conos que rinden sus bultos (12, 7…), con cuántos bultos hay de cada uno, para el filtro. */
+  readonly opcionesConos = computed(() => {
+    const cuenta = new Map<string, number>();
+    for (const b of this.bultos()) {
+      const k = String(b.conos ?? 'sin');
+      cuenta.set(k, (cuenta.get(k) ?? 0) + 1);
+    }
+    return [...cuenta.entries()]
+      .map(([valor, n]) => ({ valor, n, etiqueta: valor === 'sin' ? 'Sin dato' : `${valor} conos` }))
+      .sort((a, b) => Number(b.valor === 'sin' ? -1 : b.valor) - Number(a.valor === 'sin' ? -1 : a.valor));
+  });
+
+  /** Lo más ligero y lo más pesado, para orientar el filtro de peso. */
+  readonly rangoPesos = computed(() => {
+    const p = this.bultos().map((b) => Number(b.peso_kg ?? 0)).filter((x) => x > 0);
+    return p.length ? { min: Math.min(...p), max: Math.max(...p) } : null;
+  });
+
+  readonly hayFiltrosBultos = computed(
+    () => !!this.loteBultos() || this.pesoDesde() != null || this.pesoHasta() != null || !!this.conosBultos()
+  );
+
+  limpiarFiltrosBultos(): void {
+    this.loteBultos.set('');
+    this.pesoDesde.set(null);
+    this.pesoHasta.set(null);
+    this.conosBultos.set('');
+    this.verTodosLosBultos.set(false);
+  }
+
+  /** Tocar la ficha de un lote lo filtra; tocarla otra vez lo quita. */
+  alternarLote(lote: string): void {
+    this.loteBultos.set(this.loteBultos() === lote ? '' : lote);
+    this.verTodosLosBultos.set(false);
+  }
+
+  /** Un campo de peso vacío quita ese límite (ngModel manda null o ''). */
+  fijarPeso(cual: 'desde' | 'hasta', v: number | string | null): void {
+    const n = v === '' || v === null || v === undefined ? null : Number(v);
+    (cual === 'desde' ? this.pesoDesde : this.pesoHasta).set(n === null || Number.isNaN(n) ? null : n);
+    this.verTodosLosBultos.set(false);
+  }
 
   readonly bultosVisiblesTabla = computed(() => {
     const b = this.bultosFiltrados();
@@ -247,11 +310,11 @@ export class ProductoPresentaciones {
   readonly arrastrando = signal(false);
   almacenCarga: number | '' = '';
   /**
-   * A cómo salió el kilo en esta compra. Opcional a propósito: no se frena una
-   * entrada de mercancía por no tener la factura a mano. Sin él, el costo del
-   * hilo se queda como estaba.
+   * Proveedor, factura, pedimento, contenedor, fecha de ingreso y —solo
+   * administración y contabilidad— el costo por kilo. Todo opcional: se
+   * completa después desde el historial de Surtir inventario.
    */
-  costoKg: number | null = null;
+  readonly datosCarga = signal<DatosCarga>(datosCargaVacios());
   archivo: File | null = null;
 
   /** Los avisos que impiden cargar (códigos ya registrados). */
@@ -377,7 +440,7 @@ export class ProductoPresentaciones {
         producto_id: id,
         almacen_id: Number(this.almacenCarga),
         archivo: p.archivo,
-        costo_kg: this.costoKg != null && this.costoKg > 0 ? Number(this.costoKg) : null,
+        ...datosParaEnviar(this.datosCarga(), this.puedeVerCostos()),
         bultos: p.bultos,
       })
       .subscribe({
@@ -387,7 +450,7 @@ export class ProductoPresentaciones {
           // Cada carga deja su comprobante en PDF: se baja solo al terminar.
           this.descargarPdfCarga(r.id, r.folio);
           this.previa.set(null);
-          this.costoKg = null;
+          this.datosCarga.set(datosCargaVacios());
           this.archivo = null;
           this.cargandoRemesa.set(false);
           this.recargar();

@@ -258,4 +258,27 @@ describe('Pos', () => {
     c.quitarCliente();
     expect(c.modo()).toBe('cobrar');
   });
+
+  it('con bultos escaneados, para cobrar menos se quita un bulto (no se teclean los kilos)', async () => {
+    const { c } = await montar();
+    c.carrito.set([
+      { variante_id: 5, sku: 'ROJO', producto: 'ROJO 2/30', precio: 200, unidad: 'kg', cantidad: 56.5,
+        bultos: [
+          { codigo: 'B1', peso_kg: 18.65, lote: null },
+          { codigo: 'B2', peso_kg: 19.2, lote: null },
+          { codigo: 'B3', peso_kg: 18.65, lote: null },
+        ] },
+    ]);
+    // Teclear menos kilos no hace nada: el tercer bulto quedaría "vendido" en la bodega.
+    c.cambiarCantidad(c.carrito()[0], 37.85);
+    expect(c.carrito()[0].cantidad).toBe(56.5);
+    // Se quita el que no se lleva: bajan sus kilos y deja de ir en la venta.
+    c.quitarBulto(c.carrito()[0], 'B3');
+    expect(c.carrito()[0].cantidad).toBe(37.85);
+    expect(c.carrito()[0].bultos!.map((b) => b.codigo)).toEqual(['B1', 'B2']);
+    // Sin bultos, la línea se va.
+    c.quitarBulto(c.carrito()[0], 'B1');
+    c.quitarBulto(c.carrito()[0], 'B2');
+    expect(c.carrito().length).toBe(0);
+  });
 });

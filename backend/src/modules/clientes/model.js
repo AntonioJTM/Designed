@@ -560,8 +560,96 @@ async function registrarAbono(clienteId, datos, usuarioId) {
       );
     }
 
-    return { movimiento_id: movId, saldo_nuevo: await saldo(clienteId, conn) };
+    // Las ventas fiadas que este abono termina de pagar pasan a 'pagado'.
+    const liquidadas = await liquidarVentasACredito(conn, clienteId);
+
+    return { movimiento_id: movId, saldo_nuevo: await saldo(clienteId, conn), liquidadas };
   });
+}
+
+/**
+ * Reparte lo que el cliente ha pagado entre lo que debe, de lo MÁS ANTIGUO a lo
+ * más nuevo (FIFO), que es como se cobra. Las deudas son lo que debe cada venta
+ * (su cargo con sus ajustes; una cancelada queda en 0) y los ajustes a la
+ * cuenta que la suben; se pagan con los abonos y los ajustes que la bajan
+ * (condonar). Devuelve cada deuda con cuánto se ha pagado y cuánto falta.
+ *
+ * La usan la liquidación (abajo) y el detalle del pedido, para que "pagada" y
+ * "debe tanto" salgan de la misma cuenta.
+ */
+async function aplicarAbonos(ejecutor, clienteId) {
+  const [movs] = await ejecutor.query(
+    `SELECT id, tipo, monto, pedido_id, creado_en
+       FROM credito_movimientos WHERE cliente_id = :id
+      ORDER BY creado_en, id`,
+    { id: clienteId }
+  );
+
+  // Lo que debe cada venta, en el orden de su primer movimiento.
+  const porPedido = new Map();
+  const deudas = [];
+  let pago = 0;
+  for (const m of movs) {
+    const firmado = SIGNO_CREDITO[m.tipo] * Number(m.monto);
+    if (m.pedido_id != null) {
+      const d = porPedido.get(m.pedido_id);
+      if (d) d.monto += firmado;
+      else {
+        const nueva = { pedidoId: Number(m.pedido_id), monto: firmado };
+        porPedido.set(m.pedido_id, nueva);
+        deudas.push(nueva);
+      }
+    } else if (firmado > 0) {
+      deudas.push({ pedidoId: null, monto: firmado });
+    } else {
+      pago += -firmado;
+    }
+  }
+
+  for (const d of deudas) {
+    d.monto = Math.max(0, Math.round(d.monto * 100) / 100);
+    const aplica = Math.min(d.monto, Math.max(0, Math.round(pago * 100) / 100));
+    d.pagado = aplica;
+    d.porPagar = Math.round((d.monto - aplica) * 100) / 100;
+    pago -= aplica;
+  }
+  return deudas;
+}
+
+/**
+ * Da por PAGADAS las ventas a crédito que los abonos ya cubren.
+ *
+ * El crédito es un libro de la CUENTA, no venta por venta: el abono no dice a
+ * qué venta va. Pero una venta fiada nace 'pendiente' y sin esto se quedaba así
+ * para siempre, aunque el cliente ya hubiera pagado todo (lo vio el usuario el
+ * 2026-10-06: "lo aboné y la venta aún seguía pendiente").
+ *
+ * Los abonos se aplican a lo MÁS ANTIGUO primero (`aplicarAbonos`), que es como
+ * se cobra: con $100 abonados sobre una venta de $100 del día 1 y otra de $200
+ * del día 3, la del día 1 queda pagada y la del 3 sigue debiendo.
+ *
+ * Solo mueve 'pendiente' → 'pagado'. Nunca regresa una venta a pendiente: lo
+ * más antiguo se cubre primero, así que una deuda nueva no destapa una vieja.
+ * Va DENTRO de la transacción del abono (o del ajuste). Devuelve los folios que
+ * quedaron pagados.
+ */
+async function liquidarVentasACredito(conn, clienteId) {
+  const cubiertas = (await aplicarAbonos(conn, clienteId))
+    .filter((d) => d.pedidoId != null && d.monto > 0 && d.porPagar === 0)
+    .map((d) => d.pedidoId);
+  if (!cubiertas.length) return [];
+
+  const [pendientes] = await conn.query(
+    `SELECT id, numero_pedido FROM pedidos
+      WHERE id IN (:ids) AND estado = 'pendiente' FOR UPDATE`,
+    { ids: cubiertas }
+  );
+  if (!pendientes.length) return [];
+  await conn.query(
+    "UPDATE pedidos SET estado = 'pagado' WHERE id IN (:ids)",
+    { ids: pendientes.map((p) => p.id) }
+  );
+  return pendientes.map((p) => p.numero_pedido);
 }
 
 /**
@@ -796,5 +884,7 @@ module.exports = {
   registrarAbono,
   cargarVentaACredito,
   ajustarCreditoPorPedido,
+  liquidarVentasACredito,
+  aplicarAbonos,
   SIGNO_CREDITO,
 };

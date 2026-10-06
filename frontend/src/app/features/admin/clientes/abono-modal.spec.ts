@@ -8,16 +8,29 @@ import { VentasService } from '../../../core/services/ventas.service';
  * El abono:
  *   · en EFECTIVO sin turno abierto no se manda (el corte no cuadraría);
  *   · no se abona más de lo que debe (se leería como saldo a favor);
- *   · con turno, el efectivo entra a ESE turno.
+ *   · con turno, el efectivo entra a ESE turno;
+ *   · con dos tiendas abiertas, entra al de la caja con que se trabaja, y si no
+ *     hay una elegida, hay que escoger (antes caía en la primera de la lista).
  */
 describe('AbonoModal', () => {
   let enviados: { monto: number; metodo_pago_id?: number; sesion_caja_id?: number }[];
   let turnoAbierto: boolean;
+  let dosTiendas: boolean;
 
   const ventasFalso = {
     metodosPago: () => of([{ id: 1, nombre: 'Efectivo' }, { id: 3, nombre: 'Transferencia' }]),
-    cajas: () => of([{ id: 4, almacen_id: 1, nombre: 'Caja 1', activo: 1 }]),
-    sesionAbierta: () => of(turnoAbierto ? { id: 88, caja_id: 4, caja: 'Caja 1', estado: 'abierta' } : null),
+    cajas: () =>
+      of(
+        dosTiendas
+          ? [{ id: 4, almacen_id: 1, nombre: 'Caja 1', activo: 1 }, { id: 5, almacen_id: 2, nombre: 'Caja Moroleón', activo: 1 }]
+          : [{ id: 4, almacen_id: 1, nombre: 'Caja 1', activo: 1 }]
+      ),
+    sesionAbierta: (cajaId: number) =>
+      of(
+        !turnoAbierto ? null
+          : cajaId === 5 ? { id: 99, caja_id: 5, caja: 'Caja Moroleón', estado: 'abierta' }
+          : { id: 88, caja_id: 4, caja: 'Caja 1', estado: 'abierta' }
+      ),
   };
   const clientesFalso = {
     abonar: (_id: number, b: { monto: number }) => {
@@ -48,8 +61,37 @@ describe('AbonoModal', () => {
   beforeEach(() => {
     enviados = [];
     turnoAbierto = false;
+    dosTiendas = false;
+    try { localStorage.removeItem('caja_sel'); } catch { /* sin almacenamiento */ }
   });
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    try { localStorage.removeItem('caja_sel'); } catch { /* sin almacenamiento */ }
+  });
+
+  it('con dos tiendas abiertas, el efectivo entra a la caja con que se trabaja', async () => {
+    turnoAbierto = true;
+    dosTiendas = true;
+    localStorage.setItem('caja_sel', '5');
+    const c = (await montar()).componentInstance;
+    expect(c.turnoId).toBe(99);
+    c.metodoId = 1;
+    c.monto = 100;
+    c.registrar();
+    expect(enviados[0].sesion_caja_id).toBe(99);
+  });
+
+  it('con dos tiendas abiertas y ninguna elegida, hay que escoger la caja', async () => {
+    turnoAbierto = true;
+    dosTiendas = true;
+    const c = (await montar()).componentInstance;
+    expect(c.turnoId).toBeNull();
+    c.metodoId = 1;
+    c.monto = 100;
+    c.registrar();
+    expect(enviados).toEqual([]);
+    expect(c.error()).toContain('Elige a qué caja');
+  });
 
   it('propone abonar todo lo que debe', async () => {
     const f = await montar();

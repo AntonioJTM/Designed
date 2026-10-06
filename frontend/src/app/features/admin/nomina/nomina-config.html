@@ -9,8 +9,8 @@
     <div>
       <h1>Sueldos y comisiones</h1>
       <p class="sub">
-        Solo quien está en nómina entra en el cálculo de la semana. Un cambio aquí no toca las semanas
-        ya calculadas: su recibo quedó congelado.
+        Solo quien está en nómina entra en el cálculo de la semana. Del horario de cada quien salen los días
+        que se le pagan, lo que vale su día y su hora extra. Una semana ya pagada no cambia.
       </p>
     </div>
   </header>
@@ -34,14 +34,16 @@
       <p class="vacio">No hay personal registrado. Se da de alta en Personal.</p>
     } @else {
       <div class="tabla-scroll">
-        <table class="grid" style="min-width: 820px">
+        <table class="grid" style="min-width: 960px">
           <thead>
             <tr>
               <th>Empleado</th>
-              <th>Puesto</th>
               <th class="num">Sueldo semanal</th>
-              <th class="num">Comisión</th>
+              <th>Horario</th>
+              <th class="num">Su día</th>
               <th class="num">Hora extra</th>
+              <th class="num">Comisión</th>
+              <th>Vacaciones</th>
               <th>En nómina</th>
               <th><span class="oculto">Acciones</span></th>
             </tr>
@@ -51,12 +53,41 @@
               <tr [class.fila-inactiva]="!e.usuario_activo">
                 <td>
                   <div style="font-weight: 500">{{ e.nombre }}</div>
-                  <div class="muted" style="font-size: 13px">{{ e.correo }}</div>
+                  <div class="muted" style="font-size: 13px; text-transform: capitalize">{{ e.rol }}</div>
                 </td>
-                <td><span class="pill gris" style="text-transform: capitalize">{{ e.rol }}</span></td>
                 <td class="num">{{ e.en_nomina ? (e.sueldo_base_semanal | dinero) : '—' }}</td>
+                <td>
+                  @if (!e.en_nomina) {
+                    <span class="muted">—</span>
+                  } @else if (e.dias_laborales > 0) {
+                    {{ e.dias_laborales }} {{ e.dias_laborales === 1 ? 'día' : 'días' }} · {{ e.horas_semana }} h
+                    <div class="muted" style="font-size: 12px">{{ diasDe(e) }}</div>
+                  } @else {
+                    <span class="pill ambar">Sin horario</span>
+                  }
+                </td>
+                <td class="num">{{ e.en_nomina && e.salario_diario !== null ? (e.salario_diario | dinero) : '—' }}</td>
+                <td class="num">
+                  @if (e.en_nomina && e.valor_hora_extra_calculado !== null) {
+                    {{ e.valor_hora_extra_calculado | dinero }}
+                    <div class="muted" style="font-size: 12px">al doble de {{ e.valor_hora | dinero }}</div>
+                  } @else { — }
+                </td>
                 <td class="num">{{ e.paga_comision ? num(e.porcentaje_comision) + '%' : '—' }}</td>
-                <td class="num">{{ e.en_nomina ? (e.valor_hora_extra | dinero) : '—' }}</td>
+                <td>
+                  @if (!e.en_nomina) {
+                    <span class="muted">—</span>
+                  } @else if (e.vacaciones; as v) {
+                    @if (v.anios === 0) {
+                      <span class="muted" style="font-size: 13px">desde el {{ v.proximo_aniversario | fecha }}</span>
+                    } @else {
+                      Le quedan <b>{{ v.restan }}</b> de {{ v.corresponden }}
+                      <div class="muted" style="font-size: 12px">{{ v.anios }} {{ v.anios === 1 ? 'año' : 'años' }} de antigüedad</div>
+                    }
+                  } @else {
+                    <span class="pill gris">Sin fecha de ingreso</span>
+                  }
+                </td>
                 <td>
                   @if (e.en_nomina && e.activo) {
                     <span class="pill verde">Sí</span>
@@ -66,6 +97,9 @@
                   @if (!e.usuario_activo) { <div class="muted" style="font-size: 12px; margin-top: 4px">sin acceso al sistema</div> }
                 </td>
                 <td class="acciones">
+                  @if (e.en_nomina) {
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="abrirVacaciones(e)">Vacaciones</button>
+                  }
                   <button type="button" class="btn btn-ghost btn-sm" (click)="abrir(e)">
                     {{ e.en_nomina ? 'Editar' : 'Dar de alta' }}
                   </button>
@@ -85,5 +119,12 @@
     [empleado]="emp"
     (cerrado)="editando.set(null)"
     (guardado)="guardado($event)"
+  />
+}
+@if (vacacionesDe(); as emp) {
+  <app-vacaciones-modal
+    [empleado]="emp"
+    (cerrado)="vacacionesDe.set(null)"
+    (cambiado)="cargar()"
   />
 }

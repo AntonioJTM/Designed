@@ -68,9 +68,8 @@
               </div>
               <div class="traspaso-acciones">
                 @if (t.estado === 'solicitado' && puedeEnviar()) {
-                  <button type="button" class="btn btn-primary btn-sm" [disabled]="ocupado() === t.id"
-                          (click)="enviarTraspaso(t)">
-                    {{ ocupado() === t.id ? 'Enviando…' : 'Enviar' }}
+                  <button type="button" class="btn btn-primary btn-sm" (click)="enviarTraspaso(t)">
+                    Enviar
                   </button>
                 } @else if (t.estado === 'en_transito' && puedeRecibir()) {
                   <button type="button" class="btn btn-primary btn-sm" (click)="abrirRecepcion(t)">
@@ -84,12 +83,17 @@
             <ul class="lineas">
               @for (l of t.lineas; track l.variante_id) {
                 <li>
-                  <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
-                  @if (l.paquetes) { <span class="muted">({{ l.paquetes | cantidad }} paq)</span> }
+                  @if (noSalio(l)) {
+                    <span class="muted">{{ etiquetaHilo(l) }} · no salió (no había)</span>
+                  } @else {
+                    <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
+                    @if (paquetesTexto(l); as p) { <span class="muted">({{ p }})</span> }
+                  }
                 </li>
               }
             </ul>
             @if (t.notas) { <p class="notas muted">{{ t.notas }}</p> }
+            @if (t.envio_notas) { <p class="notas muted">Al enviar: {{ t.envio_notas }}</p> }
           </div>
         }
       </div>
@@ -116,8 +120,12 @@
               <tr>
                 <td>{{ etiquetaHilo(l) }} <span class="muted mono">· {{ l.sku }}</span></td>
                 <td class="num">
-                  {{ l.cantidad | cantidad: 'kg' }}
-                  @if (l.paquetes) { <div class="sub">{{ l.paquetes | cantidad }} paquetes</div> }
+                  @if (l.paquetes) {
+                    {{ l.paquetes | cantidad }} paquetes
+                    <div class="sub">≈ {{ l.cantidad | cantidad: 'kg' }}{{ l.peso_estimado ? ' (con el peso del catálogo)' : '' }}</div>
+                  } @else {
+                    {{ l.cantidad | cantidad: 'kg' }}
+                  }
                 </td>
                 <td class="num muted">{{ l.saldo_origen | cantidad: 'kg' }}</td>
               </tr>
@@ -129,15 +137,15 @@
   }
 
   <!--
-    Nueva solicitud. Se pide en KILOS —"cuando me hacen un pedido no me dicen
-    cuántos paquetes, yo mando por kilos"—; los paquetes son solo referencia,
-    con el peso promedio REAL de los bultos que hay en el origen.
+    Nueva solicitud. Se pide en PAQUETES (2026-10-06; antes en kilos) y al lado
+    dice MÁS O MENOS cuántos kilos son: paquetes × el peso promedio de los que hay
+    en el origen. Quien surte agarra los que tenga a la mano.
   -->
   <section class="card" id="nueva">
     <div class="card-head">
       <div>
         <h2>Nueva solicitud</h2>
-        <p>Se pide en kilos. Los paquetes son solo para leerlo como lo cuenta la tienda.</p>
+        <p>Se pide en paquetes. Al lado dice más o menos cuántos kilos son, con el peso promedio de los paquetes que hay en la bodega.</p>
       </div>
     </div>
 
@@ -200,8 +208,8 @@
           <thead>
             <tr>
               <th>Hilo</th>
-              <th class="num">Kilos que se piden</th>
-              <th class="num">Equivale a</th>
+              <th class="num">Paquetes que se piden</th>
+              <th class="num">Son aprox.</th>
               <th class="num">Hay libre</th>
               <th><span class="oculto">Quitar</span></th>
             </tr>
@@ -220,25 +228,26 @@
                     · <span class="mono">{{ l.variante.sku }}</span>
                   </div>
                 </td>
-                <!-- Se pide en KILOS: es como pide la sucursal y es la unidad del inventario. -->
+                <!-- Se pide en PAQUETES, enteros. -->
                 <td class="num">
                   <span class="cant-kg">
-                    <input type="number" step="0.001" min="0" [ngModel]="l.kg"
-                           (ngModelChange)="cambiarKg(l, $event)" placeholder="0"
-                           [attr.aria-label]="'Kilos de ' + etiquetaHilo(l.variante)" />
-                    <span class="muted">kg</span>
+                    <input type="number" step="1" min="1" [ngModel]="l.paquetes"
+                           (ngModelChange)="cambiarPaquetes(l, $event)" placeholder="0"
+                           [attr.aria-label]="'Paquetes de ' + etiquetaHilo(l.variante)" />
+                    <span class="muted">paq.</span>
                   </span>
                 </td>
-                <!-- Los paquetes son solo referencia, para leerlo como lo cuenta la tienda. -->
+                <!-- Más o menos cuántos kilos son: paquetes × el peso promedio del origen. -->
                 <td class="num">
-                  @if (enPaquetes(l); as paq) {
-                    ≈ {{ paq | cantidad }} paquetes
-                    @if (rangoPeso(l); as r) { <div class="sub">{{ r }}</div> }
+                  @if (kgAprox(l); as kg) {
+                    ≈ <b>{{ kg | cantidad: 'kg' }}</b>
+                    @if (pesoDeCatalogo(l)) {
+                      <div class="sub">con el peso del catálogo, {{ pesoPaquete(l) | cantidad: 'kg' }} por paquete</div>
+                    } @else {
+                      <div class="sub">{{ pesoPaquete(l) | cantidad: 'kg' }} por paquete, en promedio</div>
+                    }
                   } @else {
                     <span class="muted">—</span>
-                  }
-                  @if (disponibles(l); as hay) {
-                    <div class="sub">hay {{ hay }} bultos en el origen</div>
                   }
                 </td>
                 <!--
@@ -247,7 +256,8 @@
                 -->
                 <td class="num">
                   @if (kilosLibres(l) !== null) {
-                    <b [class.neg]="insuficiente(l)">{{ kilosLibres(l) | cantidad: 'kg' }}</b>
+                    <b [class.neg]="insuficiente(l)">{{ paquetesLibres(l) }} paq.</b>
+                    <div class="sub">{{ kilosLibres(l) | cantidad: 'kg' }}</div>
                     @if (kilosApartados(l) > 0) {
                       <div class="sub">{{ kilosApartados(l) | cantidad: 'kg' }} ya apartados</div>
                     }
@@ -286,7 +296,8 @@
       <div class="total-solicitud">
         <span>
           {{ lineas().length }} {{ lineas().length === 1 ? 'hilo' : 'hilos' }} ·
-          <b>{{ totalKg() | cantidad: 'kg' }}</b> de {{ nombreAlmacen(origen) }} a
+          <b>{{ totalPaquetes() }} {{ totalPaquetes() === 1 ? 'paquete' : 'paquetes' }}</b>
+          (≈ {{ totalKg() | cantidad: 'kg' }}) de {{ nombreAlmacen(origen) }} a
           {{ nombreAlmacen(destino) }}. Se aparta en {{ nombreAlmacen(origen) }}; el envío es el paso siguiente.
         </span>
         <button type="button" class="btn btn-primary" [disabled]="enviando() || hayInsuficientes()"
@@ -327,11 +338,16 @@
                 <td class="llevo">
                   @for (l of t.lineas; track l.variante_id) {
                     <div>
-                      {{ etiquetaHilo(l) }} · <b>{{ l.cantidad | cantidad: 'kg' }}</b>
-                      @if (recibidoDe(l); as r) { <span class="muted">— {{ r }}</span> }
+                      @if (noSalio(l)) {
+                        {{ etiquetaHilo(l) }} · <span class="muted">no salió (no había)</span>
+                      } @else {
+                        {{ etiquetaHilo(l) }} · <b>{{ l.cantidad | cantidad: 'kg' }}</b>
+                        @if (recibidoDe(l); as r) { <span class="muted">— {{ r }}</span> }
+                      }
                     </div>
                   }
                   @if (t.notas) { <div class="sub">{{ t.notas }}</div> }
+                  @if (t.envio_notas) { <div class="sub">Al enviar: {{ t.envio_notas }}</div> }
                   @if (t.recepcion_notas) { <div class="sub">Al recibir: {{ t.recepcion_notas }}</div> }
                   @if (t.motivo_cancelacion) { <div class="sub">Cancelado: {{ t.motivo_cancelacion }}</div> }
                 </td>
@@ -377,6 +393,7 @@
           verdad bajaron de la camioneta y corrige lo que falte: entra al inventario solo lo que
           aceptes, y la diferencia queda asentada como merma con tu nombre.
         </p>
+        @if (t.envio_notas) { <p class="aviso">Nota del envío: {{ t.envio_notas }}</p> }
 
         @if (error()) { <p class="alert">{{ error() }}</p> }
 
@@ -431,6 +448,11 @@
       </div>
     </div>
   </div>
+}
+
+<!-- Enviar: se escanean los paquetes que suben a la camioneta. -->
+@if (porEnviar(); as t) {
+  <app-envio-modal [traspaso]="t" (cerrado)="porEnviar.set(null)" (enviado)="alEnviar($event)" />
 }
 
 <!-- Cancelar un traspaso. Cerrar sin confirmar NO cancela nada. -->

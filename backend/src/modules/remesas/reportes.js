@@ -56,6 +56,8 @@ async function _carga(id) {
   const [[r]] = await pool.query(
     `SELECT r.id, r.folio, r.num_bultos, r.kg_total, r.costo_kg, r.lotes, r.archivo, r.notas,
             DATE_FORMAT(r.creado_en, '%Y-%m-%d %H:%i:%s') AS creado_en,
+            DATE_FORMAT(r.fecha_ingreso, '%Y-%m-%d') AS fecha_ingreso,
+            prv.nombre AS proveedor, r.factura, r.pedimento, r.contenedor,
             pv.sku, pv.tipo_presentacion, pv.precio, prod.id AS producto_id, prod.nombre AS producto,
             prod.grosor_calibre AS calibre, cat.nombre AS material, l.nombre AS linea,
             a.nombre AS almacen, u.nombre AS usuario
@@ -66,6 +68,7 @@ async function _carga(id) {
        LEFT JOIN lineas l         ON l.id = prod.linea_id
        JOIN almacenes a           ON a.id = r.almacen_id
        LEFT JOIN usuarios u       ON u.id = r.usuario_id
+       LEFT JOIN proveedores prv  ON prv.id = r.proveedor_id
       WHERE r.id = :id`,
     { id }
   );
@@ -105,7 +108,12 @@ function _dibujarCarga(doc, c, veCostos) {
     ['Material y línea', [c.material, c.linea].filter(Boolean).join(' · ')],
     ['Presentación', `${c.sku} · ${c.tipo_presentacion}`],
     ['Entró a', c.almacen],
-    ['Fecha', pdf.fecha(c.creado_en)],
+    ['Proveedor', c.proveedor],
+    ['Factura', c.factura],
+    ['Pedimento', c.pedimento],
+    ['Contenedor', c.contenedor],
+    ['Fecha de ingreso', c.fecha_ingreso ? pdf.fecha(c.fecha_ingreso, { conHora: false }) : null],
+    ['Se capturó', pdf.fecha(c.creado_en)],
     ['La cargó', c.usuario],
     ['Archivo', c.archivo],
     ['Lotes', c.lotes],
@@ -184,7 +192,12 @@ async function pdfCargas(ids, { usuarioId, veCostos }) {
   pdf.datos(doc, [
     ['Archivo', primera.archivo],
     ['Entró a', almacenes.join(', ')],
-    ['Fecha', pdf.fecha(primera.creado_en)],
+    ['Proveedor', primera.proveedor],
+    ['Factura', primera.factura],
+    ['Pedimento', primera.pedimento],
+    ['Contenedor', primera.contenedor],
+    ['Fecha de ingreso', primera.fecha_ingreso ? pdf.fecha(primera.fecha_ingreso, { conHora: false }) : null],
+    ['Se capturó', pdf.fecha(primera.creado_en)],
     ['La cargó', usuarios.join(', ')],
     ['Notas', primera.notas],
   ]);

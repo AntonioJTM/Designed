@@ -45,7 +45,23 @@ async function previaLista(req, res, next) {
  *
  * Los errores de validación (zod) salen antes, como siempre: con 422 y JSON.
  */
+/**
+ * El costo por kilo es solo de quien ve costos (administrador y contabilidad):
+ * si alguien más lo manda, 403 y no se carga nada. La pantalla ni lo enseña.
+ */
+async function _exigirCostoSiLoMandan(req, costos) {
+  if (!costos.some((c) => c != null)) return;
+  if (!(await permisos.veCostos(req))) {
+    throw new AppError(403, 'SIN_PERMISO', 'El costo por kilo solo lo capturan administración y contabilidad.');
+  }
+}
+
 async function confirmarLista(req, res, next) {
+  try {
+    await _exigirCostoSiLoMandan(req, (req.body.hilos ?? []).map((h) => h.costo_kg));
+  } catch (err) {
+    return next(err);
+  }
   if (req.query.progreso !== '1') {
     try {
       res.status(201).json({ data: await lista.confirmarLista(req.body, req.auth.sub), error: null });
@@ -85,10 +101,35 @@ async function confirmarLista(req, res, next) {
 
 async function confirmar(req, res, next) {
   try {
+    await _exigirCostoSiLoMandan(req, [req.body.costo_kg]);
     res.status(201).json({ data: await service.confirmar(req.body, req.auth.sub), error: null });
   } catch (err) {
     next(err);
   }
+}
+
+/** Completar o corregir proveedor, factura, pedimento, contenedor, fecha y costo. */
+async function editarDatos(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError(404, 'NO_ENCONTRADO', 'Esa carga no existe');
+    if (req.body.costo_kg !== undefined) {
+      if (!(await permisos.veCostos(req))) {
+        throw new AppError(403, 'SIN_PERMISO', 'El costo por kilo solo lo capturan administración y contabilidad.');
+      }
+    }
+    const data = await service.editarDatos(id, req.body, req.auth.sub);
+    res.json({ data: await _sinCostoSiNoVe(req, data), error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** El historial no enseña el costo a quien no lo ve: tampoco lo manda. */
+async function _sinCostoSiNoVe(req, filas) {
+  if (await permisos.veCostos(req)) return filas;
+  for (const f of [].concat(filas ?? [])) if (f && typeof f === 'object') delete f.costo_kg;
+  return filas;
 }
 
 async function listar(req, res, next) {
@@ -98,10 +139,12 @@ async function listar(req, res, next) {
       variante_id: req.query.variante_id ? Number(req.query.variante_id) : null,
       // Las cargas de un hilo (todas sus presentaciones): para su reporte.
       producto_id: req.query.producto_id ? Number(req.query.producto_id) : null,
+      proveedor_id: req.query.proveedor_id ? Number(req.query.proveedor_id) : null,
       page,
       limit,
       offset,
     });
+    await _sinCostoSiNoVe(req, data.items);
     res.json({ data, error: null });
   } catch (err) {
     next(err);
@@ -173,4 +216,4 @@ async function pdfProducto(req, res, next) {
   }
 }
 
-module.exports = { previa, confirmar, previaLista, confirmarLista, listar, pdfCarga, pdfCargas, pdfProducto };
+module.exports = { previa, confirmar, previaLista, confirmarLista, listar, editarDatos, pdfCarga, pdfCargas, pdfProducto };

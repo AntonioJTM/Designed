@@ -78,3 +78,6 @@ table.grid.hilos td:first-child { min-width: 220px; max-width: 340px; }
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: 12px; margin-top: 14px; font-size: 13px;
 }
+
+.costo-hilo { display: inline-flex; align-items: center; gap: 4px; }
+.costo-hilo input { width: 90px; text-align: right; }

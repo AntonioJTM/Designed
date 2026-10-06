@@ -80,3 +80,49 @@ export interface ReporteCortes {
   rango: RangoFechas;
   cortes: CorteCaja[];
 }
+
+/**
+ * Un hilo (color + calibre) en "Venta por color": todas sus presentaciones
+ * sumadas, en kilos. Los porcentajes van de 0 a 100 con dos decimales, o en
+ * null cuando no hay contra qué medir.
+ */
+export interface HiloVentaColor {
+  producto_id: number;
+  color: string;
+  calibre: string | null;
+  material: string | null;
+  linea: string | null;
+  /** Kilos que salieron en el rango. */
+  kg_vendidos: number;
+  /** Lo que se cobró por esos kilos, sin IVA. */
+  importe: number;
+  /** Sus kilos contra TODO lo vendido en el rango (todos los hilos). */
+  pct_del_periodo: number | null;
+  /** Kilos vendidos desde siempre. */
+  vendido_total: number;
+  /** Lo que queda hoy, en todos los almacenes. */
+  existencia: number;
+  /** Lo vendido desde siempre contra eso más lo que queda. */
+  pct_vendido: number | null;
+  /** 'YYYY-MM-DD' de su última venta, o null si nunca se ha vendido. */
+  ultima_venta: string | null;
+}
+
+export interface ReporteVentaColor {
+  rango: RangoFechas;
+  q: string | null;
+  /** Lo vendido en el rango por TODOS los hilos: contra esto se mide el %. */
+  periodo: { kg_vendidos: number; importe: number };
+  /** Los hilos de la lista (con la búsqueda, si la hay). */
+  totales: {
+    kg_vendidos: number;
+    importe: number;
+    pct_del_periodo: number | null;
+    vendido_total: number;
+    existencia: number;
+    pct_vendido: number | null;
+    num_hilos: number;
+    num_con_venta: number;
+  };
+  hilos: HiloVentaColor[];
+}
