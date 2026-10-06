@@ -44,6 +44,11 @@ if (!ARGS.base || ARGS.base !== process.env.DB_NAME) {
   );
   process.exit(1);
 }
+// La muestra es INVENTADA: en la base de producción no se siembra, nunca.
+if (require('../_produccion').esProduccion(process.env.DB_NAME)) {
+  console.error(`\n  ✗ "${process.env.DB_NAME}" es la base de PRODUCCIÓN: ahí no se siembra la muestra.\n`);
+  process.exit(1);
+}
 
 const { pool } = require('../../src/config/db');
 const reloj = require('./_reloj');

@@ -1120,9 +1120,30 @@ tienda-hilos/
       en Chrome headless (el panel se vio a media carga). Sin desplegar.
 
 ## Pendientes concretos para el usuario
-- **El REDISEÑO está aplicado y SIN DESPLEGAR (2026-10-02).** El usuario pidió "no subas nada a
-  servidor hasta que yo te diga" y revisar al final lo que se agregó en la base. Lo único que tocó
-  la base fue la migración de permisos (solo datos). Esperan su visto bueno: los permisos de
+- **DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (2026-10-05).** "Créame ahora sí la base de producción
+  solo con el usuario admin… y esta me la dejas para hacer pruebas; que la base se llame hitex".
+  · **Producción**: https://devtristan.cloud → servicio `tienda-hilos-api` (puerto 3000) → base
+    **`hitex`**. Nació con la estructura clonada de `desarrollo` (idéntica en `information_schema`)
+    y SOLO con lo que no tiene pantalla: roles, permisos y `rol_permisos`, unidades, métodos de
+    pago, IVA, líneas, paqueterías, el tipo de cliente "Público" y las claves de `configuracion`
+    vacías; y un solo usuario, el administrador (id 1, mismo correo y contraseña). Todo lo demás
+    lo captura el usuario desde el panel.
+  · **Pruebas**: https://devtristan.cloud:8443 → servicio `tienda-hilos-pruebas` (puerto 3001,
+    mismo código, `/etc/tienda-hilos/pruebas.env` con `DB_NAME`, `PORT`, `UPLOADS_DIR` y un
+    `JWT_SECRET` propio) → base **`desarrollo`**, con la muestra. nginx le pone "PRUEBAS ·" al
+    título y una etiqueta roja (`sub_filter` en `conf.d/tienda-hilos-pruebas.conf`).
+  · El `.env` LOCAL apunta a `desarrollo`: lo que se hace desde aquí es PRUEBA.
+  · **Ninguna E2E ni el sembrado corren contra `hitex`**, ni con `E2E_ACEPTO_PRODUCCION`
+    (`backend/scripts/_produccion.js`). El seguro anterior miraba solo el host, y ahora las dos
+    bases viven en el mismo.
+  · **Una migración nueva se aplica en LAS DOS bases** (y se audita en las dos).
+  · `npm run deploy` reinicia los dos servicios; ver `deploy/README.md`.
+- **TODO ESTÁ DESPLEGADO (2026-10-04, despliegue 20261004-181551)**: el rediseño y todo lo del
+  2026-10-03 (cargas en PDF, lista completa del proveedor con avance, costo apagado, hilo parado a
+  precio de venta, Clientes → Dejaron de venir, frecuencia en kilos y dinero). El usuario lo pidió:
+  "súbeme cambios al servidor, ahora sí sube todo". Se aplicó también la migración
+  `2026-10_alertas_stock_con_minimo.sql` (la base está al día). NO se hizo commit: el despliegue
+  sube el working tree. Siguen esperando su visto bueno: los permisos de
   fábrica (al cajero se le dejaron fuera "confirmar que llegó un envío" y "bajar conos", que el
   diseño le marcaba, porque no ve Surtir ni Inventario), si se esconden también los datos de
   depósito en Configuración (hoy solo los lee el checkout apagado), y que el almacén marcado
@@ -1132,8 +1153,9 @@ tienda-hilos/
   "Vendido hoy". Arreglarlo cambia cómo se guardan las horas: decidirlo con el usuario.
 - **El efectivo de un pedido en línea pagado en el mostrador no entra a ningún turno.** Se marca
   pagado, pero el corte no lo espera. Falta decidir si se cobra por la caja.
-- **Las E2E se pueden correr contra producción** con `E2E_ACEPTO_PRODUCCION=si` (lo autorizó
-  el usuario el 2026-10-01 y se hizo: las 16 pasaron y la base quedó idéntica). Apartados,
+- **Las E2E corren contra la base de PRUEBAS (`desarrollo`, remota)** con `E2E_ACEPTO_PRODUCCION=si`
+  (lo autorizó el usuario el 2026-10-01 cuando esa era la de producción; desde el 2026-10-05 la
+  real es `hitex` y ahí no corren nunca). Apartados,
   crédito y margen abren su PROPIA caja temporal —antes vendían en el turno REAL 88 de
   Cuautepec— y borran los movimientos por turno, no por `referencia_id`. Las que limpiaban con
   `nuevos(tabla)` —TODO lo creado durante la corrida— ahora borran solo lo nuevo que es suyo:
@@ -1142,7 +1164,7 @@ tienda-hilos/
   caja, borra sus turnos con `borrarTurnosPropios` y sus cajas con `borrarCajasSinTurnos`, que
   respetan el turno donde alguien más cobró: el 2026-10-03 un abono hecho desde el panel cayó en
   la caja de una prueba, porque el modal de abono propone el primer turno abierto (era una prueba
-  del usuario; se borró). **No se corren contra producción mientras alguien use el sistema.**
+  del usuario; se borró). **No se corren mientras alguien use el sistema de pruebas.**
   Para correrlas TODAS contra un solo servidor hay que pasar `BASE=http://localhost:3210/api/v1`:
   cada script trae su propio puerto por omisión (3210, 3216… 3234) y sin `BASE` la mitad sale
   con ECONNREFUSED sin haber probado nada. La del 2026-10-02: 20 pasan (492 comprobaciones), la
@@ -1151,12 +1173,9 @@ tienda-hilos/
   las pruebas que toman "la primera caja activa" usan la de Moroleón.
   Para comprobar que no tocaron nada: una foto de conteos y sumas de ids por tabla antes y
   después.
-- **Aplicar `db/migrations/2026-10_alertas_stock_con_minimo.sql`** en la base del servidor y
-  desplegar. El usuario pidió esperar: vienen más cambios. Hasta entonces "Por reabastecer" sigue contando hilos sin mínimo.
-  `node scripts/estado-migraciones.js` dice si ya está.
-- **La base de producción tiene una MUESTRA sembrada (2026-10-01):** 18 hilos, 40 clientes y
-  tres meses de ventas INVENTADOS, mezclados con lo real, para enseñarle el sistema a un
-  cliente. No los tomes por datos del negocio. Todo está anotado en `_demo_registros`. Se borra
+- **La base de PRUEBAS (`desarrollo`) tiene una MUESTRA sembrada (2026-10-01):** 18 hilos, 40
+  clientes y tres meses de ventas INVENTADOS, mezclados con lo capturado antes, para enseñarle el
+  sistema a un cliente. (Hasta el 2026-10-05 era la de producción; `hitex` nació sin ella.) No los tomes por datos del negocio. Todo está anotado en `_demo_registros`. Se borra
   con `node scripts/demo/limpiar.js --base desarrollo --confirmar` (desde `backend/`), que
   además regresa la configuración, vuelve a desactivar "tienda moroleon" y recalcula la nómina
   real que tocó. Las ventas de la muestra solo usan hilos de la muestra: nunca le cargues una
@@ -1168,9 +1187,9 @@ tienda-hilos/
 - Los materiales se llaman `ACRILAN` y `VISCOSA`, en mayúsculas. Conviene renombrarlos a
   "Acrilán" y "Viscosa". (El duplicado `ACRILAN2` y el producto `TR1GRAFITO` ya se
   eliminaron.)
-- **La configuración de la tienda está vacía.** El checkout ya funciona, pero el envío sale
-  en $0.00 y no hay datos de depósito, así que al cliente que elija transferencia se le pide
-  que llame. Va en Admin → Configuración.
+- **La configuración de la tienda está vacía en `hitex`.** El checkout ya funciona, pero el envío
+  sale en $0.00 y no hay datos de depósito, así que al cliente que elija transferencia se le pide
+  que llame. Va en Admin → Configuración. (En pruebas tiene datos de demostración.)
 - **Cambiar dos contraseñas.** La contraseña de root de MySQL del servidor y la
   llave de la API de Google Gemini se escribieron en el chat del asistente de
   código, así que quedaron en un historial de conversación. Al cambiarlas,
@@ -1184,7 +1203,9 @@ tienda-hilos/
 - **Comprobar las migraciones antes de dar una por aplicada.** El 2026-09-05 se descubrió que
   `2026-07_traspasos_estados.sql` nunca corrió en "desarrollo" pese a que la bitácora la daba
   por aplicada: la campana y Surtir sucursal devolvían 500. Se auditan contra
-  `information_schema`, no contra `CAMBIOS.txt`.
+  `information_schema`, no contra `CAMBIOS.txt`, y desde el 2026-10-05 en LAS DOS bases
+  (`hitex` y `desarrollo`): `/root/comparar_bases.sh` en el servidor dice si sus estructuras
+  siguen idénticas.
 
 ## Roadmap sugerido (en este orden)
 1. Backend: conexión a BD + auth (registro/login usuarios y clientes con JWT).

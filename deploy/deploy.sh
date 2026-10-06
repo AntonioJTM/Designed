@@ -15,6 +15,8 @@
 #       no existen, pero SIN tocar .env ni node_modules.
 #    5. Reinstala dependencias solo si cambió package-lock.json.
 #    6. Reinicia el servicio y verifica /health.  Si no responde, ROLLBACK.
+#    7. Reinicia también el sistema de PRUEBAS (mismo código, base desarrollo,
+#       https://devtristan.cloud:8443) si existe en el servidor.
 #
 #  Requisitos en local: node/npm, tar, ssh, scp (todo ya presente en Git Bash).
 #  Requisitos en el servidor: ninguno nuevo (usa node, npm, tar, rsync).
@@ -32,6 +34,11 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/hostinger_vps}"
 REMOTE_DIR="${REMOTE_DIR:-/var/www/tienda-hilos}"
 SERVICE="${SERVICE:-tienda-hilos-api}"
 BASE_URL="${BASE_URL:-https://devtristan.cloud}"
+# Desde 2026-10-05 el mismo código corre dos veces en el servidor: producción
+# (SERVICE, base hitex, puerto 3000) y pruebas (base desarrollo, puerto 3001,
+# configurado en /etc/tienda-hilos/pruebas.env). Las dos sirven el mismo frontend.
+SERVICE_PRUEBAS="${SERVICE_PRUEBAS:-tienda-hilos-pruebas}"
+URL_PRUEBAS="${URL_PRUEBAS:-https://devtristan.cloud:8443}"
 
 TARGET="${1:-all}"
 
@@ -122,6 +129,7 @@ paso "Aplicando cambios en el servidor"
 # restauración funciona, sin desplegar código roto de verdad.
 ssh -i "$SSH_KEY" -o BatchMode=yes "$SSH_HOST" \
     REMOTE_TMP="$REMOTE_TMP" REMOTE_DIR="$REMOTE_DIR" SERVICE="$SERVICE" TARGET="$TARGET" \
+    SERVICE_PRUEBAS="$SERVICE_PRUEBAS" \
     HEALTH_PORT="${HEALTH_PORT:-3000}" \
     'bash -s' <<'REMOTO'
 set -euo pipefail
@@ -200,6 +208,24 @@ if [ -f backend.tar.gz ]; then
     exit 1
   fi
   echo "  · backend: arriba"
+
+  # El sistema de pruebas corre el MISMO código: se reinicia para que no se
+  # quede con la versión anterior. Si no levanta, avisa pero no revierte nada:
+  # producción ya quedó verificada arriba.
+  # is-enabled falla también si el servicio no existe: entonces no hay pruebas.
+  if systemctl is-enabled "$SERVICE_PRUEBAS" >/dev/null 2>&1; then
+    systemctl restart "$SERVICE_PRUEBAS"
+    OKP=no
+    for i in $(seq 1 15); do
+      sleep 2
+      if curl -fsS --max-time 3 http://127.0.0.1:3001/health >/dev/null 2>&1; then OKP=si; break; fi
+    done
+    if [ "$OKP" = si ]; then
+      echo "  · pruebas: arriba"
+    else
+      echo "  ⚠ pruebas: no respondió. Revisa: journalctl -u $SERVICE_PRUEBAS -n 40"
+    fi
+  fi
 fi
 
 # Conserva solo los 5 paquetes de despliegue más recientes.
@@ -226,6 +252,14 @@ else
   rojo  "  /api/v1/productos → $P"
   rojo  "  El proceso vive pero la consulta falla (suele ser desajuste código/esquema)."
   rojo  "  Revisa:  ssh -i $SSH_KEY $SSH_HOST 'journalctl -u $SERVICE -n 40 --no-pager'"
+fi
+
+# El sistema de pruebas (si existe): mismo frontend, su propia API y su base.
+HP=$(code "$URL_PRUEBAS/health")
+if [ "$HP" = 200 ]; then
+  verde "  pruebas $URL_PRUEBAS/health → 200"
+else
+  azul  "  pruebas $URL_PRUEBAS/health → $HP (no afecta a producción)"
 fi
 
 echo

@@ -36,6 +36,33 @@ ssh -i ~/.ssh/hostinger_vps root@72.60.112.92 'systemctl restart tienda-hilos-ap
 
 Destino: **https://devtristan.cloud** (`72.60.112.92`).
 
+## Dos sistemas en el servidor: producción y pruebas (desde 2026-10-05)
+
+El mismo código corre dos veces, cada uno con su base:
+
+| | Producción | Pruebas |
+|---|---|---|
+| Dirección | https://devtristan.cloud | https://devtristan.cloud:8443 |
+| Base | `hitex` | `desarrollo` (con la muestra sembrada) |
+| Servicio | `tienda-hilos-api` (puerto 3000) | `tienda-hilos-pruebas` (puerto 3001) |
+| Configuración | `backend/.env` | `backend/.env` + `/etc/tienda-hilos/pruebas.env` |
+| Comprobantes | `backend/uploads/` | `/var/www/tienda-hilos/uploads-pruebas/` |
+| nginx | `conf.d/tienda-hilos.conf` | `conf.d/tienda-hilos-pruebas.conf` |
+
+- `pruebas.env` solo trae lo que cambia (`DB_NAME`, `PORT`, `UPLOADS_DIR` y su
+  propio `JWT_SECRET`): gana sobre el `.env` porque dotenv no pisa las variables
+  que ya vienen del entorno. Vive fuera del código para que el `rsync --delete`
+  del despliegue no lo toque.
+- Las dos sirven **el mismo frontend**. En pruebas, nginx le agrega a la página
+  la etiqueta roja "SISTEMA DE PRUEBAS" y el título "PRUEBAS ·" (`sub_filter`),
+  sin tocar el código.
+- La llave de sesiones es distinta: una sesión de pruebas no sirve en
+  producción, ni al revés.
+- `npm run deploy` reinicia los dos servicios y revisa los dos `/health`. Si el
+  de pruebas no levanta, avisa pero no revierte: producción ya quedó verificada.
+- Las pruebas automáticas (`backend/scripts/e2e-*.js`) y el sembrado de la
+  muestra se niegan a correr contra `hitex` (`backend/scripts/_produccion.js`).
+
 ## Qué hace
 
 1. **Compila Angular en local** con `--configuration production`. El servidor no
@@ -104,7 +131,9 @@ Todo se puede sobreescribir por variables de entorno, sin editar el script:
 - **El `.env` del servidor nunca se toca.** Tiene las credenciales reales de
   MariaDB y el `JWT_SECRET`. Si hay que cambiar una variable, se edita allá:
   `/var/www/tienda-hilos/backend/.env`, y luego `systemctl restart
-  tienda-hilos-api`.
+  tienda-hilos-api`. Lo que cambia solo en pruebas va en
+  `/etc/tienda-hilos/pruebas.env` y se aplica con `systemctl restart
+  tienda-hilos-pruebas`.
 - **La base de datos no se toca nunca.** El despliegue solo mueve código.
 - `/api/v1/productos` en rojo con `/health` en verde significa que el proceso
   vive pero la consulta falla: casi siempre es desajuste entre el código y el
