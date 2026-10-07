@@ -44,7 +44,17 @@ describe('Pos', () => {
     credito_disponible: '5000',
   };
 
-  let pedidoEnviado: { pagos?: { metodo_pago_id: number; monto: number }[]; a_credito?: number } | null = null;
+  let pedidoEnviado: {
+    pagos?: { metodo_pago_id: number; monto: number }[];
+    a_credito?: number;
+    items?: { variante_id: number; cantidad: number; piezas?: number }[];
+    encargo?: boolean;
+    metodo_entrega?: string;
+    entrega_direccion?: string;
+    costo_envio?: number;
+    entrega_para?: string;
+    cliente_id?: number;
+  } | null = null;
   let cajaPedida: number | null = null;
   let permisos: Set<string>;
 
@@ -65,7 +75,7 @@ describe('Pos', () => {
       ]),
     apartados: () => of({ items: [], num_apartados: 0, total_apartado: 0, total_abonado: 0 }),
     crearPedido: (body: { pagos?: { metodo_pago_id: number; monto: number }[] }) => {
-      pedidoEnviado = body;
+      pedidoEnviado = body as typeof pedidoEnviado;
       return of({ id: 1, numero_pedido: 'POS-1', estado: 'pagado', total: '432.00', cambio: 68 });
     },
   };
@@ -280,5 +290,85 @@ describe('Pos', () => {
     c.quitarBulto(c.carrito()[0], 'B1');
     c.quitarBulto(c.carrito()[0], 'B2');
     expect(c.carrito().length).toBe(0);
+  });
+
+  // ---- Pesar: conos y venta por kilo (2026-10-06: "vengo por 6 conos") ----
+
+  const conoRojo = { id: 7, sku: 'ROJO-2-30-CONO', producto: 'ROJO 2/30', tipo: 'cono', precio: 200, unidad: 'kg' };
+
+  it('"Agregar" ya no mete 1 kg: abre la báscula', async () => {
+    const { c } = await montar();
+    c.agregar(conoRojo);
+    expect(c.pesando()).toEqual(conoRojo);
+    expect(c.carrito().length).toBe(0);
+  });
+
+  it('lo que pesaron entra al carrito con sus conos, y otra pesada se suma', async () => {
+    const { c } = await montar();
+    c.alPesar(conoRojo, { kg: 9.35, piezas: 6 });
+    expect(c.pesando()).toBeNull();
+    expect(c.carrito()[0]).toEqual(jasmine.objectContaining({ variante_id: 7, cantidad: 9.35, piezas: 6, tipo: 'cono' }));
+    expect(c.comoSeVende(c.carrito()[0])).toBe('6 conos · pesados');
+    c.alPesar(conoRojo, { kg: 1.552, piezas: 1 });
+    expect(c.carrito()[0]).toEqual(jasmine.objectContaining({ cantidad: 10.902, piezas: 7 }));
+  });
+
+  it('la venta manda los conos junto con los kilos', async () => {
+    const { c } = await montar();
+    c.alPesar(conoRojo, { kg: 9.35, piezas: 6 });
+    c.totalReal.set(1870);
+    c.metodoSel = 2;
+    c.cobrar();
+    expect(pedidoEnviado!.items).toEqual([jasmine.objectContaining({ variante_id: 7, cantidad: 9.35, piezas: 6 })]);
+  });
+
+  it('la búsqueda junta paquete y conos del mismo hilo, y avisa si no tiene conos', async () => {
+    const { c } = await montar();
+    c.resultados.set([
+      { ...conoRojo, producto_id: 1, aqui: { cantidad: 12.5, paquetes: null } },
+      { id: 6, producto_id: 1, sku: 'ROJO-2-30', producto: 'ROJO 2/30', tipo: 'paquete', precio: 200, aqui: { cantidad: 390, paquetes: 20 } },
+      { id: 9, producto_id: 2, sku: 'NEGRO-1-30', producto: 'NEGRO 1/30', tipo: 'paquete', precio: 180, aqui: { cantidad: 0, paquetes: 0 } },
+    ]);
+    const [rojo, negro] = c.hilosEncontrados();
+    expect(rojo.filas.map((f) => f.tipo)).toEqual(['paquete', 'cono']);
+    expect(rojo.sinConos).toBe(false);
+    expect(negro.sinConos).toBe(true);
+    expect(c.hayAqui(rojo.filas[0])).toBe('20 paquetes · 390 kg');
+    expect(c.hayAqui(rojo.filas[1])).toBe('12.5 kg enconados');
+    expect(c.hayAqui(negro.filas[0])).toBe('no hay aquí');
+  });
+
+  // ---- Pedido: se entrega después (2026-10-06) ----
+
+  it('el pedido pide al cliente, y propone su dirección si lo lleva el chofer', async () => {
+    const { c } = await montar();
+    c.elegirModo('pedido');
+    expect(c.modo()).toBe('cobrar');
+    c.elegirCliente({ ...mayoreo, direccion: 'Calle Hidalgo 5' });
+    c.elegirModo('pedido');
+    expect(c.pidiendo()).toBe(true);
+    expect(c.direccionPedido).toBe('Calle Hidalgo 5');
+    expect(c.textoBoton()).toBe('Tomar el pedido');
+  });
+
+  it('tomar el pedido manda la entrega, lo que deja y no cobra el resto', async () => {
+    const { c } = await montar();
+    c.elegirCliente(mayoreo);
+    llenarCarrito(c);
+    c.elegirModo('pedido');
+    c.entregaPedido.set('envio');
+    c.direccionPedido = '';
+    c.cobrar();
+    expect(c.error()).toContain('a dónde');
+    c.direccionPedido = 'Calle Hidalgo 5';
+    c.costoEnvio.set(50);
+    c.paraCuando = '2030-01-15';
+    c.anticipo = 100;
+    c.metodoSel = 1;
+    c.cobrar();
+    expect(pedidoEnviado).toEqual(jasmine.objectContaining({
+      encargo: true, metodo_entrega: 'envio', entrega_direccion: 'Calle Hidalgo 5', costo_envio: 50,
+      entrega_para: '2030-01-15', cliente_id: 20, pagos: [{ metodo_pago_id: 1, monto: 100 }],
+    }));
   });
 });

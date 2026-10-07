@@ -162,20 +162,43 @@ tienda-hilos/
   el servidor rechaza una línea cuyos bultos pesen más de lo que se cobra (422
   `BULTOS_EXCEDEN_CANTIDAD`, con el peso guardado del bulto): bajar los kilos dejaba "vendido" un
   bulto que seguía en la bodega. Más kilos que bultos sí se puede (el resto va a granel).
+- **Conos y venta por kilo en la caja: se PESAN** (2026-10-06: "la gente solo dice 'vengo por 6
+  conos de tal color'; se pesan y se calcula con los precios por kilo"). La búsqueda del punto de
+  venta va POR HILO (paquete y conos juntos) y dice qué hay en el almacén de la caja
+  (`GET /variantes?almacen_id=` → `aqui: { cantidad, paquetes }`); un hilo con paquete y sin
+  conos avisa que se bajan en Inventario. "Por kilo" (paquete) y "Agregar conos" abren la
+  BÁSCULA (`pos/pesar-modal.ts`): se teclea lo que pesaron y, si son conos, cuántos eran; NUNCA
+  se agrega 1 kg a ciegas. Se cobra y descuenta en KILOS; los conos van en `items[].piezas` y se
+  guardan en `pedido_detalle.piezas` (informativo, como `piezas_generadas`; migración
+  `2026-10_piezas_en_venta.sql`), y el detalle del pedido dice "· 6 conos". El paquete COMPLETO
+  se sigue vendiendo escaneando su código. Teclear el color ("rojo") resuelve al código de la
+  presentación (el código es el nombre): eso ahora BUSCA en vez de agregar.
+  `e2e-venta-conos.js` recorre bajar a conos → buscar → vender 6 conos.
 - **El pedido guarda de qué bultos salió.** `pedido_detalle_bultos` liga cada línea con los bultos
   que se entregaron. El código, el peso y el lote se **congelan** ahí, igual que
   `pedido_detalle.precio_unitario`: `variante_codigo_id` es la referencia viva y queda en `NULL`
   si el bulto se borra, pero el pedido sigue diciendo qué se entregó. Se insertan dentro de la
   MISMA transacción de la venta. Es opcional: la tienda en línea y las ventas a granel no mandan
   bultos.
-- **Un bulto se consume UNA vez.** `variante_codigos.estado` es `disponible` | `vendido` |
-  `desarmado`, con `consumido_en`, `consumido_tipo` (`'pedido'`|`'conversion'`) y `consumido_id`.
+- **Un bulto se consume UNA vez.** `variante_codigos.estado` es `disponible` | `apartado` |
+  `vendido` | `desarmado`, con `consumido_en`, `consumido_tipo` (`'pedido'`|`'conversion'`) y
+  `consumido_id`. **`apartado`** (2026-10-06, migración `2026-10_bulto_apartado.sql`) = ligado a un
+  PEDIDO o un APARTADO que no se ha entregado: sigue en la tienda (el saldo lo incluye, el
+  `consumido_en` va en NULL) pero ya tiene dueño, así que la caja, el desarme y el envío lo
+  rechazan como a uno vendido (el 409 dice para qué pedido y de quién). Pasa a `vendido` al
+  entregarse; cancelar lo regresa a `disponible`; reactivar lo vuelve a apartar.
   Vender o desarmar exige que esté `disponible` y bloquea la fila con `SELECT … FOR UPDATE` dentro
   de la transacción: si no lo está, 409 `BULTO_NO_DISPONIBLE` y se revierte la operación completa.
   Cancelar o devolver el pedido regresa sus bultos a `disponible`; reactivarlo retoma solo los que
   nadie más haya tomado. Un bulto `desarmado` no vuelve: ya son conos.
   El bulto SABE en qué almacén está (`variante_codigos.almacen_id`): lo pone la remesa que lo trajo
   y lo cambia el traspaso. Los capturados a mano quedan en NULL.
+  **EXCEPCIÓN: para BAJAR CONOS el paquete tiene que estar en esa tienda** (usuario, 2026-10-06:
+  "si no, que mande una alerta de que el paquete en esa sucursal no existe"). Si el sistema lo
+  tiene en otro almacén, 409 `PAQUETE_EN_OTRA_SUCURSAL` (dice dónde está); si viene en camino en un
+  traspaso enviado sin recibir, 409 `PAQUETE_EN_CAMINO`. Sin almacén (capturado a mano) se
+  permite. La vista previa del desarme trae `bulto.almacen_id/almacen/en_tienda/en_camino_folio`
+  y el modal avisa en un recuadro rojo y apaga "Bajar a mostrador". La VENTA sigue sin validarlo.
   **La ubicación del bulto es APROXIMADA; los saldos por almacén son la verdad.** Se escanea al
   vender, al desarmar y al SURTIR (desde el 2026-10-06), pero nada se escanea al recibir ni al
   acomodar en la bodega, y los capturados a mano no tienen almacén. Por eso vender o desarmar **no valida** que el
@@ -232,10 +255,21 @@ tienda-hilos/
   mover nada. `POST /inventario/desarmes` acepta SOLO `codigo_bulto`: resuelve el paquete, toma los
   kilos y los conos del bulto, y CREA la presentación de cono si el producto no la tiene. No hay
   que configurar nada antes de bajar el primer paquete.
-- **El DESTARE lo captura la tienda.** Al enconar, el hilo pesa más porque cada cono lleva su tubo.
-  `POST /inventario/desarmes` acepta `destare_kg` (opcional, total en kilos del desarme, no por
-  cono) y se guarda en `variante_conversiones.destare_kg` —NO en la presentación, porque cada
-  desarme puede llevar uno distinto—. `kg_consumidos` no cambia: del paquete sale su peso real y eso
+  **SOLO EN TIENDAS y donde está el paquete** (usuario, 2026-10-06: "solo se pueden bajar conos en
+  tiendas, en bodega eso no se puede"). El almacén debe tener mostrador (`es_punto_venta`; si no,
+  422 `SOLO_EN_TIENDA`) y el origen es el MISMO que el destino (422 `DESARME_EN_OTRO_ALMACEN`): un
+  paquete que está en la bodega primero va a la tienda por Surtir sucursal —el traspaso es el único
+  camino entre almacenes— y allá se abre. El modal ofrece solo tiendas ("Se abre en la tienda") y
+  propone la tienda donde ESTÁ el paquete escaneado; si no está ahí, no se abre (ver la excepción
+  en "Un bulto se consume UNA vez"). (`e2e-bajar-a-mostrador.js`, que no corre
+  sin las listas de `muestras/`, todavía baja de bodega a mostrador: al recuperarla, ajustarla.)
+- **El DESTARE lo captura la tienda, POR CONO.** Al enconar, el hilo pesa más porque cada cono lleva
+  su tubo. El modal pide "Destare por cono" (lo que pesa UN tubo, en kg, con los gramos al lado; se
+  recuerda en `localStorage['destare_por_cono']`) y `POST /inventario/desarmes` acepta
+  `destare_por_cono_kg`, que el servidor multiplica por los conos que salen ("eso se le suma a cada
+  cono", 2026-10-06); `destare_kg` (el total) se sigue aceptando. El total se guarda en
+  `variante_conversiones.destare_kg` —NO en la presentación, porque cada desarme puede llevar uno
+  distinto—. `kg_consumidos` no cambia: del paquete sale su peso real y eso
   es lo que se descuenta. El destare solo dice cuánto pesó el resultado
   (`kg_enconados = kg_consumidos + destare_kg`) y queda escrito en las dos patas del kardex.
   NO cambia el precio del cono (que es el del paquete, por kilo) ni su `peso_kg`, que queda como
@@ -599,6 +633,58 @@ tienda-hilos/
     cobrar". Son dos acciones distintas y la pantalla las separa.
   · El ticket del POS distingue los tres casos —venta, apartado y entrega a crédito—: decir
     "Venta" y "Cambio $0.00" en un apartado sería mentir sobre lo que acaba de pasar.
+- **PEDIDOS de clientes (encargos) y VENTAS (2026-10-06).** "Eso que se llama Pedidos en realidad
+  son ventas… hacer un apartado para realizar pedidos; tenemos chofer que los lleva, o hacen el
+  pedido por WhatsApp y después van por él; no es un apartado, es una venta" (usuario). La pantalla
+  de siempre (`/admin/ventas`, permiso `ver:pedidos`, rotulado "Ventas") es TODO lo vendido; los
+  enlaces viejos `/admin/pedidos/:id` redirigen a `/admin/ventas/:id`. **Pedidos** (`/admin/pedidos`,
+  permiso nuevo `ver:encargos`, `encargos/encargos.ts`) son los encargos.
+  · Es un `pedidos` con `encargo = 1` (la venta es unificada, como el apartado), migración
+    `2026-10_pedidos_encargo.sql`: `entrega_direccion` (texto libre, a dónde lo lleva el chofer),
+    `entrega_para` (DATE) y el estado nuevo `listo`.
+  · Se TOMA en el punto de venta (modo "Pedido" junto a Cobrar/Fiar/Apartar): exige cliente (422
+    `PEDIDO_SIN_CLIENTE`), "Pasa por él" (`recoger`) o "Lo lleva el chofer" (`envio`, exige
+    `entrega_direccion` al tomarlo —la cotización no—, `costo_envio` opcional que fija el
+    mostrador), para cuándo, notas y lo que deja pagado (entra al turno como 'venta'). No se fía al
+    tomarlo (422 `PEDIDO_A_CREDITO`). La mercancía se APARTA (`inventario_descontado = 0`,
+    `cantidad_reservada`) igual que el apartado, y la venta del mostrador la respeta
+    (`_apartadoEnAlmacen` suma TODO lo vendido sin entregar).
+  · Pasos: `en_preparacion` (Por preparar) → `listo` → `enviado` (En camino, SOLO si va con el
+    chofer: 409 `PEDIDO_SE_RECOGE`) por `PATCH /estado` (`_validarCaminoEncargo`). Se ENTREGA con
+    `POST /pedidos/:id/entregar` (`entregar-modal.ts`), que cobra lo que falte (`pagos`, solo el
+    efectivo da cambio, entra al turno `sesion_caja_id` como 'ingreso') y/o lo fía (`a_credito`,
+    pide `hacer:fiar`; queda 'pendiente' como cualquier fiada); ahí descuenta del inventario. Sin
+    cubrir lo que falta, 409 `PAGO_INSUFICIENTE`. Pasarlo a entregado a mano: 409
+    `PEDIDO_SE_ENTREGA`. Se puede abonar antes (`POST /:id/abonos`, p.ej. transferencia).
+  · Cancelado libera lo apartado y devuelve el efectivo; se reactiva SOLO como "por preparar" (409
+    `REACTIVAR_COMO_PEDIDO`). Entregado ya no vuelve a los pasos (409 `PEDIDO_YA_ENTREGADO`).
+  · `GET /pedidos/encargos?estado&q` (lista con qué lleva, cuánto falta, `a_favor` y conteo por
+    paso; cada hilo trae `escaneados`). `etiquetaEstado(estado, canal, encargo)` dice "Por
+    preparar / Listo / En camino". `e2e-pedidos-encargo.js` recorre todo (61).
+  · **Queda LISTO al PREPARARLO, y sin prepararlo no se entrega** (2026-10-06: "cuando se pone el
+    pedido se tienen que escanear los paquetes o pesar los conos que pidió, para corroborar").
+    Al TOMARLO se pone lo que pidió aunque sea aproximado ("6 conos ≈ 9 kg"). `POST
+    /pedidos/:id/preparar` (`ver:encargos`, `encargos/preparar-modal.ts`, botón "Preparar" /
+    "Corregir") recibe `lineas: [{detalle_id, codigos?, cantidad?, piezas?}]`: los PAQUETES se
+    escanean (sin ninguno, 422 `SIN_ESCANEAR`) y la línea queda con la suma de sus pesos reales;
+    los conos y lo que va por kilo se pesan (`cantidad`). La línea se recalcula con su precio
+    CONGELADO, lo apartado (`cantidad_reservada`) sigue a los kilos (si sube, tiene que haber:
+    409 `STOCK_INSUFICIENTE`), los paquetes quedan ligados (`pedido_detalle_bultos`) y en
+    `apartado` —los que ya no van se sueltan— y el total se rehace (`subtotal − descuento +
+    impuestos + envío`). Valida como el envío: código desconocido, de presentación, de otro hilo
+    (`BULTO_DE_OTRO_HILO`), repetido, tomado o sin peso; NO valida en qué almacén estaba. Se
+    puede volver a preparar en "por preparar" o "listo" (409 `NO_SE_PREPARA` en camino o
+    entregado). Marcarlo listo o en camino a mano desde "por preparar": 409 `PEDIDO_SE_PREPARA`;
+    entregarlo sin preparar: 409 `PEDIDO_SIN_PREPARAR`.
+  · **Si pesó MENOS de lo que dejó pagado**, la lista dice "A favor $X" y al ENTREGARLO se le
+    devuelve en efectivo: `movimientos_caja` 'devolucion' del turno que se elija (sin turno, 409
+    `FALTA_SESION_CAJA`; mandar pagos o crédito, 422 `NADA_POR_COBRAR`) y sus `pagos` se reducen
+    a lo cobrado (primero el efectivo; uno devuelto completo se borra), para que cancelar
+    después no devuelva la diferencia otra vez. La respuesta trae `devuelto`.
+  · El POS manda los paquetes escaneados también al tomar un PEDIDO o un APARTADO: quedan
+    `apartado` y pasan a `vendido` al entregarlos (antes no se mandaban y al entregar quedaban
+    "disponibles": el conteo de paquetes no cuadraba).
+  · Pendiente: el PEDIDO AL PROVEEDOR (compras), que el usuario también llama "pedido".
 - **Precio de lista en el producto.** `productos.precio_kg` es el precio del HILO por unidad de
   peso, que es como lo piensa la tienda. NO es el que se cobra —ese sigue siendo
   `producto_variantes.precio`, y es el que congela el pedido— pero las presentaciones que se creen
@@ -649,6 +735,10 @@ tienda-hilos/
   precio del tipo > `precio_oferta` > público. `pedidos.tipo_cliente_id` deja constancia de con qué
   lista se cerró, y `pedido_detalle.precio_unitario` lo congela. El tipo marcado `es_publico` NO
   guarda filas en `variante_precios`: su precio vive en la variante y no se duplica.
+  `GET /productos/:id` trae `variantes[].precios` SOLO al personal (token `usuario`; la ruta es
+  pública y un visitante no ve a cuánto se vende a mayoreo). La pantalla de presentaciones recarga
+  con esa ruta: sin los precios ahí, los guardaba y los volvía a enseñar vacíos (2026-10-06,
+  `e2e-precios-lista.js`).
 - **Banderas del producto.** `multipresentacion` habilita las presentaciones paquete/cono: sin ella
   el backend rechaza crear variantes que no sean `simple`. `por_lotes` habilita capturar
   `producto_variantes.lote`, que es solo una ETIQUETA de remesa: el inventario NO se separa por
@@ -805,9 +895,22 @@ tienda-hilos/
     nunca se quede nadie sin poder entrar a Permisos. Permisos es solo suyo.
   · **Solo un administrador da —o toca— el puesto de administrador** (403 `SOLO_ADMINISTRADOR` en
     `usuarios/controller.js`): Personal se puede abrir a otros puestos, y sin esto quien lo
-    tuviera podría darse el puesto que lo puede todo.
+    tuviera podría darse el puesto que lo puede todo. Vale también como puesto EXTRA: no se da
+    como "también trabaja como", y a quien lo tiene de extra solo lo edita un administrador.
   · Los permisos de cada puesto se cachean en memoria y se invalidan al guardar: lo que valida el
     servidor cambia en el acto; el menú, cuando la persona vuelve a entrar.
+  · **Una persona puede tener VARIOS puestos (2026-10-06**: "que una persona pueda tener más de 2
+    puestos; ese cambio va en Personal"). `usuarios.rol_id` es el PRINCIPAL (el de nómina y el que
+    sale junto a su nombre) y `usuario_roles` guarda los DEMÁS, sin repetir el principal (migración
+    `2026-10_varios_puestos.sql`). Puede la SUMA de lo de todos, y si alguno es administrador, lo
+    puede todo. En Personal: "Puesto principal" + casillas "También trabaja como"; la API manda y
+    recibe `otros_roles`. **Los puestos se leen de la BASE por el id del token**
+    (`permisos/service.js → puestosDe`, en caché que se tira al guardar a alguien), NO del `rol` del
+    token: dar o quitar un puesto vale en el acto, y quien queda "Sin acceso" ya no pasa ninguna
+    guarda aunque su token siga vivo. Por eso `esAdmin` es async y `requireRol` mira todos los
+    puestos. Una E2E que firme un token tiene que usar el id de alguien que DE VERDAD tenga ese
+    puesto (`e2e-surtir-inventario.js` firmaba como almacenista con el id del administrador).
+    `scripts/e2e-varios-puestos.js` lo prueba (28 comprobaciones).
   · `scripts/e2e-permisos.js` prueba cada guarda sin escribir nada (ids que no existen o cuerpos
     inválidos: 403 al que no tiene, 404/422 al que sí).
 - **El COSTO no sale en las rutas públicas ni a quien no tiene `hacer:ver_costos`.** (Hoy lo
@@ -923,6 +1026,20 @@ tienda-hilos/
   almacén; (3) *el detalle exacto* → tabla agrupada por hilo y buscador. **Las presentaciones del
   mismo hilo van JUNTAS** en la tabla, con el nombre una sola vez: antes cada una era un
   renglón suelto con el nombre repetido y parecía que la tabla tenía duplicados.
+- **Tocar un hilo en Inventario abre su DETALLE** (2026-10-06: "cuando doy clic en cualquier hilo,
+  que me diga los bultos que están y su lote; selecciono el lote y me da las presentaciones que
+  tiene cada uno"). El nombre del hilo en "Detalle por hilo" es un botón, y al lado va "Lotes y
+  paquetes ›"; abren `inventario/hilo-modal.ts`, que SOLO MIRA. Dos vistas: el HILO (cuánto hay
+  por presentación y almacén —los saldos, que son la verdad— con los paquetes que se cree que
+  están ahí y "no cuadra con lo que hay" si sus kilos difieren más de medio kilo; y sus LOTES con
+  lo que queda en paquete y dónde, lo que ya se bajó a conos o se vendió, y en qué carga llegó) y
+  un LOTE (las mismas cifras y sus paquetes uno por uno, con filtro En paquete / A conos /
+  Vendidos / Todos, almacén y código). Sale de `GET /inventario/hilos/:productoId` y
+  `GET /inventario/hilos/:productoId/bultos?lote=|sin_lote=1` (`inventario/hilo.js`). El cono NO se
+  lleva por lote: del lote se dice cuántos paquetes se bajaron a conos y cuántos conos salieron, no
+  cuántos quedan. `e2e-detalle-hilo.js` (solo lectura) cuadra todo contra la base.
+  OJO con los nombres de clase en esa ventana: `.cifra`, `.dato` y `.pie` son GLOBALES en
+  `styles.scss` y la descomponían; las suyas son `.hilo-datos`/`.hilo-dato`/`.dato-pie`.
 - **El hilo se nombra con su CALIBRE en todas partes, también ante el cliente.** El catálogo y
   la página del producto de la tienda, el carrito (el nombre se guarda con calibre), el carrito
   del POS y "Más vendidos" dicen "ROJO 2/30", no "ROJO": había dos tarjetas "ROJO" con precios
@@ -1013,6 +1130,10 @@ tienda-hilos/
   abren un modal. No dejes formularios desplegados en la pantalla: Inventario llegó a tener siete
   bloques apilados y no se encontraba nada. El modal se crea al abrirlo y se destruye al cerrarlo,
   así arranca limpio.
+  · **Un `<form>` que envuelve cuerpo y botones encoge con el modal** (`.modal > form` en
+    `styles.scss`, 2026-10-06): sin eso, con más contenido que pantalla, el recuadro blanco se
+    acababa a media ventana y el resto —y los botones— se salía sobre el fondo oscuro (el horario
+    de nómina). El form va como hijo DIRECTO de `.modal`, como en los diez modales que lo usan.
   · **Nunca cierra al hacer clic en el fondo** (se pierde la captura). Sale con la ✕, con
     "Cancelar"/"Cerrar" o con **Escape**.
   · **Los datos que ya tiene el listado entran por input**, no se vuelven a pedir: así el modal
@@ -1239,28 +1360,50 @@ tienda-hilos/
       en Chrome headless (el panel se vio a media carga). Sin desplegar.
 
 ## Pendientes concretos para el usuario
-- **SURTIR INVENTARIO Y VENTA POR COLOR (2026-10-06): SIN DESPLEGAR.** La migración
-  `2026-10_carga_proveedor_costo.sql` está aplicada solo en `desarrollo` (al desplegar, también en
-  `hitex`): columnas de la carga, proveedores sin repetir, el puesto Contabilidad y el costo fuera
-  del gerente. Reportes → "Venta por color" (`GET /reportes/venta-por-color`) no necesita nada en
-  la base. Para dar el puesto a alguien: Personal → su puesto "contabilidad".
+- **`hitex` SE LIMPIÓ (2026-10-06, a petición del usuario: "configuración se queda tal cual; se
+  borra lo que está en inventario y las ventas, y el cliente que se hizo; siguen siendo
+  pruebas").** Se borraron los 3 hilos (CAMEL, OPTIK, MARINO 2/30) con sus presentaciones, sus
+  718 paquetes, existencias y mínimos, las 3 cargas, el kardex, el traspaso, la venta POS-8FE6, el
+  cliente "la esperanza" con su crédito, el turno de caja abierto y la semana de nómina de prueba;
+  los contadores de esas tablas volvieron a 1. Se quedaron: configuración, cuentas de banco,
+  almacenes, la caja, el personal (5), puestos y permisos, materiales, líneas, listas de precio,
+  métodos de pago, paqueterías y los empleados de nómina con su horario. Respaldo previo:
+  `/root/respaldos/hitex_antes_de_limpiar_20261006-202201.sql.gz`. La próxima carga de la lista
+  del proveedor vuelve a crear los hilos SIN precio.
+- **SE SUBE TODO LO QUE SE TERMINA (2026-10-06).** "Todo lo que vayas haciendo lo vas subiendo"
+  (usuario): cada cambio terminado y probado se despliega sin preguntar (con su migración en las
+  dos bases y respaldo previo de `hitex`). El commit sigue siendo solo cuando lo pida.
+- **DETALLE DE UN HILO EN INVENTARIO (2026-10-06): DESPLEGADO** (20261006-141455). No necesita nada
+  en la base. En producción, OPTIK 2/30 sale "no cuadra" por 1 kg: la venta POS-8FE6 se cobró por
+  kilos sin escanear un paquete.
+- **VARIOS PUESTOS POR PERSONA (2026-10-06): DESPLEGADO** (despliegue 20261006-131654, a petición
+  del usuario: "hazlo y súbelo al servidor"). La migración `2026-10_varios_puestos.sql` está en
+  LAS DOS bases (respaldo previo: `/root/respaldos/hitex_antes_varios_puestos_20261006-191639.sql.gz`).
+  Nadie tiene puestos extra todavía: se dan en Personal → Editar → "También trabaja como".
+- **TODO DESPLEGADO OTRA VEZ (2026-10-06, despliegue 20261006-124453).** "Ahora vas a subir cambios
+  y ya no utilizaremos el de pruebas, ahora vamos a trabajar con producción 100%" (usuario).
+  Subió todo lo del 2026-10-06: nómina por días/horario/horas extra/vacaciones, varias cuentas de
+  banco, filtros de bultos, Surtir sucursal (en paquetes, se escanea al enviar, sale lo que hay),
+  Vender revisado (hora de la tienda y lo fiado que se liquida solo), Surtir inventario (proveedor
+  y papeles de la carga, costo solo para administración y Contabilidad) y Reportes → Venta por
+  color. Se hizo con el servicio de producción PARADO: respaldo
+  (`/root/respaldos/hitex_antes_despliegue_20261006-184304.sql.gz`), las cinco migraciones en
+  `hitex` (nómina, cuentas, traspaso_bultos, traspaso_lo_que_salio, carga_proveedor_costo),
+  `ajustar-hora.js --base hitex --confirmar` (764 filas en 20 tablas), `remesas.fecha_ingreso`
+  recalculada con la hora ya local, código, y `liquidar-ventas-credito` (nada que liquidar).
+  `estado-migraciones.js` dice que `hitex` está al día; el servicio contesta en `-06:00`.
+  Las tres cargas de `hitex` se marcaron como una sola lista; ya no existen (ver la limpieza de
+  abajo). Sin commit (el despliegue sube el working tree).
+  Para dar el puesto Contabilidad a alguien: Personal → su puesto "contabilidad".
+  **Falta decidir qué se hace con el sistema de pruebas** (8443, base `desarrollo`): el usuario
+  ya no lo va a usar, pero las E2E solo corren ahí (en `hitex` nunca).
 - **El usuario quitó 8 listas de `muestras/` el 2026-10-06** (dejó NEGRO 2-30 y puso seis
   `HTX … INVENTARIO.xlsx`). Siete E2E las usan y no corren sin ellas: remesas, cancelacion,
   carga-por-producto, bultos-estado, trazabilidad (MARINO OSCURO 2-30), traspaso-paquetes
   (BLANCO 2-30) y bajar-a-mostrador (ROJO 1-30). Siguen en git: preguntar si se recuperan o si se
   cambian las pruebas (`e2e-surtir-inventario.js` ya arma sus bultos en el código).
-- **FILTROS DE BULTOS Y SURTIR SUCURSAL (2026-10-06): SIN DESPLEGAR.** La tarjeta Bultos de
-  Presentaciones filtra por lote, peso real y conos (solo pantalla). Surtir pide en paquetes
-  (kilos aproximados con el promedio), al enviar se ESCANEA todo lo que sale y se manda lo que
-  hay. Las migraciones `2026-10_traspaso_bultos.sql` y `2026-10_traspaso_lo_que_salio.sql` están
-  aplicadas solo en `desarrollo` (al desplegar, también en `hitex`, en ese orden);
-  `scripts/estado-migraciones.js` ya revisa las cuatro del 2026-10-06. Al desplegar, un
-  traspaso que ya esté "solicitado" en `hitex` se surte escaneando como cualquier otro.
-- **VARIAS CUENTAS DE BANCO (2026-10-06): SIN DESPLEGAR.** `2026-10_cuentas_bancarias.sql` está
-  aplicada solo en `desarrollo` (al desplegar, también en `hitex`).
-- **NÓMINA POR DÍAS, HORARIO, HORAS EXTRA Y VACACIONES (2026-10-06): SIN DESPLEGAR.** La migración
-  `2026-10_nomina_dias_vacaciones_horario.sql` está aplicada solo en `desarrollo`: al desplegar
-  va también en `hitex`. Falta capturar el horario y la fecha de ingreso de cada empleado.
+- **Nómina:** falta capturar el horario y la fecha de ingreso de cada empleado (sin horario, el
+  recibo paga la semana completa como antes; sin fecha de ingreso no hay vacaciones).
 - **DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (2026-10-05).** "Créame ahora sí la base de producción
   solo con el usuario admin… y esta me la dejas para hacer pruebas; que la base se llame hitex".
   · **Producción**: https://devtristan.cloud → servicio `tienda-hilos-api` (puerto 3000) → base
@@ -1288,14 +1431,10 @@ tienda-hilos/
   fábrica (al cajero se le dejaron fuera "confirmar que llegó un envío" y "bajar conos", que el
   diseño le marcaba, porque no ve Surtir ni Inventario), y que el almacén marcado
   `es_tienda_linea` no se puede dar de baja mientras esa marca siga escondida.
-- **VENDER REVISADO Y LA HORA CORREGIDA (2026-10-06): SIN DESPLEGAR.** Al desplegar, EN ESTE
-  ORDEN y con el servicio de producción PARADO (si no, lo que entre entre el script y el código
-  nuevo queda con la hora mal): (1) las migraciones pendientes en `hitex`; (2)
-  `node --env-file=.env.produccion scripts/ajustar-hora.js --base hitex --confirmar` (en `hitex`
-  recorre TODO 6 h: ahí todo se guardó en UTC); (3) subir el código y arrancar; (4)
-  `scripts/liquidar-ventas-credito.js --base hitex` (hoy no hay nada que liquidar). En `desarrollo`
-  ya se hizo; el sistema de pruebas (8443) sigue con el código viejo y lo que escriba antes de
-  desplegar queda en UTC. Ver "2026-10-06 (8)" en CAMBIOS.txt.
+- **LA HORA DE LA TIENDA YA SE CORRIGIÓ EN LAS DOS BASES (2026-10-06).** `ajustar-hora.js` dejó su
+  marca `_zona_horaria` en `desarrollo` y en `hitex`, y no se vuelve a correr. Lo que escriben los
+  scripts con conexión propia (E2E, `aplicar-migracion.js`) sigue en UTC: un `NOW()` dentro de
+  una migración nueva queda 6 h adelante. Ver "2026-10-06 (8)" y "(10)" en CAMBIOS.txt.
 - **El efectivo de un pedido en línea pagado en el mostrador no entra a ningún turno.** Se marca
   pagado, pero el corte no lo espera. Falta decidir si se cobra por la caja.
 - **Las E2E corren contra la base de PRUEBAS (`desarrollo`, remota)** con `E2E_ACEPTO_PRODUCCION=si`

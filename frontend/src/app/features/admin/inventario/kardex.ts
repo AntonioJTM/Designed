@@ -138,7 +138,7 @@ export class Kardex {
   /** Una venta se abre en su pedido, si el puesto puede verlo. */
   enlaceVenta(m: Movimiento): string | null {
     return m.detalle_tipo === 'pedido' && m.detalle_id && this.vePedidos()
-      ? `/admin/pedidos/${m.detalle_id}`
+      ? `/admin/ventas/${m.detalle_id}`
       : null;
   }
 

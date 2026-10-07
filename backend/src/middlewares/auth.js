@@ -7,6 +7,9 @@ const { AppError } = require('./error');
  * Middleware de autenticación JWT.
  * Extrae el token del header `Authorization: Bearer <token>`, lo verifica y
  * coloca el payload en `req.auth` = { sub, tipo, rol_id?, rol? }.
+ * `rol` es el puesto PRINCIPAL al momento de entrar: para decidir qué puede
+ * hacer alguien no se usa (tiene varios puestos y pueden cambiar); eso lo
+ * resuelve `permisos/service.js` con la base.
  */
 function authRequired(req, res, next) {
   const header = req.headers.authorization || '';
@@ -42,18 +45,24 @@ function requireTipo(...tipos) {
 }
 
 /**
- * Restringe el acceso a ciertos roles de staff (por nombre de rol).
- * Implica tipo 'usuario'. Debe usarse después de authRequired.
+ * Restringe el acceso a ciertos puestos de staff (por nombre). Basta con que la
+ * persona tenga UNO de ellos entre todos sus puestos —el principal o los demás—,
+ * leídos de la base. Implica tipo 'usuario'. Debe usarse después de authRequired.
  */
 function requireRol(...roles) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!req.auth || req.auth.tipo !== 'usuario') {
       return next(new AppError(403, 'PROHIBIDO', 'Recurso exclusivo de personal (staff)'));
     }
-    if (roles.length && !roles.includes(req.auth.rol)) {
+    if (!roles.length) return next();
+    try {
+      const { puestosDe } = require('../modules/permisos/service');
+      const tiene = (await puestosDe(req.auth)).map((p) => p.nombre);
+      if (roles.some((r) => tiene.includes(r))) return next();
       return next(new AppError(403, 'PROHIBIDO', 'Tu rol no tiene permiso para esta acción'));
+    } catch (err) {
+      return next(err);
     }
-    return next();
   };
 }
 

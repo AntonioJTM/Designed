@@ -23,8 +23,13 @@ export const ADMIN_ROUTES: Routes = [
       // ---- Vender
       { path: 'pos', ...p('ver:pos'), loadComponent: () => import('./pos/pos').then((m) => m.Pos) },
       { path: 'caja', ...p('ver:caja'), loadComponent: () => import('./caja/caja').then((m) => m.CajaPantalla) },
-      { path: 'pedidos', ...p('ver:pedidos'), loadComponent: () => import('./pedidos/pedidos-list').then((m) => m.PedidosList) },
-      { path: 'pedidos/:id', ...p('ver:pedidos'), loadComponent: () => import('./pedidos/pedido-detalle').then((m) => m.PedidoDetalle) },
+      // Las VENTAS (antes "Pedidos"). Los enlaces viejos a una venta
+      // (/admin/pedidos/123) llevan a su nuevo lugar.
+      { path: 'ventas', ...p('ver:pedidos'), loadComponent: () => import('./pedidos/pedidos-list').then((m) => m.PedidosList) },
+      { path: 'ventas/:id', ...p('ver:pedidos'), loadComponent: () => import('./pedidos/pedido-detalle').then((m) => m.PedidoDetalle) },
+      { path: 'pedidos/:id', redirectTo: 'ventas/:id' },
+      // Los PEDIDOS de clientes (encargos): por preparar, listos, en camino.
+      { path: 'pedidos', ...p('ver:encargos'), loadComponent: () => import('./encargos/encargos').then((m) => m.EncargosPantalla) },
       { path: 'apartados', ...p('ver:apartados'), loadComponent: () => import('./apartados/apartados').then((m) => m.ApartadosPantalla) },
 
       // ---- Clientes: seis pestañas (rutas literales, ANTES de ':id' para que

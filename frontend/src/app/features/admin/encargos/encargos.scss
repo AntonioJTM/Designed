@@ -1,0 +1,16 @@
+/* Pedidos de clientes (encargos). Las piezas comunes (tarjeta, tabs, tabla, pills)
+   vienen del sistema de diseño en styles.scss. */
+.encabezado-lista { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.encabezado-lista .tabs { margin: 0; }
+.encabezado-lista .buscador { flex: 0 1 320px; min-width: 0; }
+
+table.grid.pedidos { min-width: 980px; }
+table.grid.pedidos .sub { font-size: 12px; color: var(--tinta-3); margin-top: 2px; }
+table.grid.pedidos .pill { margin-top: 4px; }
+table.grid.pedidos .quien { font-weight: 600; }
+table.grid.pedidos .nota { font-style: italic; }
+table.grid.pedidos .atrasado { color: var(--peligro-t); font-weight: 500; }
+table.grid.pedidos .falta { color: var(--aviso-t); }
+table.grid.pedidos td.acciones { text-align: right; }
+table.grid.pedidos td.acciones .btn + .btn { margin-left: 6px; }
+.mono { font-family: var(--mono); font-size: 13px; }

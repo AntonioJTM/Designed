@@ -71,7 +71,7 @@
                   } @else {
                     <b class="quien">{{ a.nombre_comercial || a.cliente || 'Sin cliente' }}</b>
                   }
-                  <a class="mono folio" [routerLink]="['/admin/pedidos', a.pedido_id]" [title]="a.numero_pedido">{{ a.numero_pedido | folio }}</a>
+                  <a class="mono folio" [routerLink]="['/admin/ventas', a.pedido_id]" [title]="a.numero_pedido">{{ a.numero_pedido | folio }}</a>
                 </div>
                 @if (queSeAparto(a); as que) { <span class="que">{{ que }}</span> }
                 @if (a.telefono) { <span class="muted tel">{{ a.telefono }}</span> }
@@ -134,7 +134,7 @@
                       @if (a.telefono) { <div class="muted tel">{{ a.telefono }}</div> }
                       @if (queSeAparto(a); as que) { <div class="muted que-chico">{{ que }}</div> }
                     </td>
-                    <td><a class="mono folio" [routerLink]="['/admin/pedidos', a.pedido_id]" [title]="a.numero_pedido">{{ a.numero_pedido | folio }}</a></td>
+                    <td><a class="mono folio" [routerLink]="['/admin/ventas', a.pedido_id]" [title]="a.numero_pedido">{{ a.numero_pedido | folio }}</a></td>
                     <td class="num" [attr.title]="'hace ' + a.dias_apartado + (a.dias_apartado === 1 ? ' día' : ' días')">{{ desde(a) }}</td>
                     <td class="num">{{ a.total | dinero }}</td>
                     <td class="num">{{ a.abonado | dinero }}</td>

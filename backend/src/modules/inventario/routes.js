@@ -42,6 +42,9 @@ const desarmarSchema = z
     // Lo que GANA de peso el hilo al enconarse (el tubo de cada cono). Lo captura
     // la tienda: no se calcula. Se suma a los kilos y queda en el kardex.
     destare_kg: z.coerce.number().nonnegative().max(100000).nullable().optional(),
+    // O por CONO (lo que pesa el tubo de uno): se multiplica por los conos que
+    // salen (2026-10-06: "eso se le suma a cada cono"). Si viene, manda.
+    destare_por_cono_kg: z.coerce.number().nonnegative().max(1).nullable().optional(),
     // Bulto que se desarmó, para dejar el rastro en el kardex.
     codigo_bulto: z.string().trim().max(60).nullable().optional(),
     motivo: z.string().trim().max(255).optional(),
@@ -122,6 +125,9 @@ router.get('/', ...soloStaff, controller.listarStock);
 router.get('/alertas', ...soloStaff, controller.alertas);
 // Panorama de qué hay en cada almacén (totales + matriz producto × almacén).
 router.get('/resumen', ...soloStaff, controller.resumenPorAlmacen);
+// El detalle de un hilo: cuánto hay por presentación, sus lotes y los bultos de cada uno.
+router.get('/hilos/:productoId', ...soloStaff, controller.detalleHilo);
+router.get('/hilos/:productoId/bultos', ...soloStaff, controller.bultosDeLote);
 router.get('/movimientos', ...soloStaff, controller.listarMovimientos);
 router.get('/conversiones', ...soloStaff, controller.listarConversiones);
 // Lo que trae un bulto, para mostrarlo antes de bajarlo a mostrador.

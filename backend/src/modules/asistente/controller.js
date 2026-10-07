@@ -10,7 +10,7 @@ const permisos = require('../permisos/service');
  * cliente, cualquiera podría pedir el margen diciendo que es administrador.
  */
 async function rolParaAsistente(auth) {
-  if (auth?.rol === 'administrador') return 'administrador';
+  if (await permisos.esAdmin(auth)) return 'administrador';
   return (await permisos.puede(auth, 'hacer:ver_costos')) ? 'gerente' : 'cajero';
 }
 

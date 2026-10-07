@@ -1,0 +1,115 @@
+<!-- No se cierra al tocar el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="preparar-titulo">
+    <div class="modal-head">
+      <h2 id="preparar-titulo">Preparar el pedido · {{ pedido().nombre_comercial || pedido().cliente }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p class="explica">
+        Escanea los paquetes que van y pesa los conos (o lo que va por kilo). El pedido queda con el
+        <b>peso real</b>: el total se ajusta y esos paquetes quedan apartados para
+        <b>{{ pedido().nombre_comercial || pedido().cliente }}</b> hasta que se entregue.
+      </p>
+
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+
+      @if (cargando()) {
+        <p class="muted">Cargando el pedido…</p>
+      } @else {
+        @if (hayPaquetes()) {
+          <label class="field">
+            Código del paquete
+            <span class="escaneo">
+              <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
+                     (keydown.enter)="$event.preventDefault(); leer()"
+                     placeholder="Escanea la etiqueta del paquete" />
+              <button type="button" class="btn btn-ghost" (click)="leer()">Agregar</button>
+            </span>
+          </label>
+          @if (ultimo()) { <p class="ultimo">✓ {{ ultimo() }}</p> }
+        }
+
+        <div class="lineas-prep">
+          @for (l of lineas(); track l.d.id) {
+            <section class="linea-prep">
+              <div class="linea-cabeza">
+                <div>
+                  <b>{{ hilo(l.d) }}</b>
+                  <span class="muted"> · {{ l.d.tipo_presentacion === 'cono' ? 'conos' : esPaquete(l) ? 'paquete' : 'por kilo' }}</span>
+                  <div class="sub">Pidió {{ pidio(l) }}</div>
+                </div>
+                <div class="linea-va">
+                  @if (kgDe(l); as kg) {
+                    <b>{{ kg | cantidad: 'kg' }}</b>
+                    <div class="sub">{{ importe(l) | dinero }}</div>
+                  } @else {
+                    <span class="pill ambar">{{ esPaquete(l) ? 'Sin escanear' : 'Sin pesar' }}</span>
+                  }
+                </div>
+              </div>
+
+              @if (esPaquete(l)) {
+                @if (l.paquetes.length > 0) {
+                  <ul class="escaneados" [attr.aria-label]="'Paquetes de ' + hilo(l.d)">
+                    @for (p of l.paquetes; track p.codigo) {
+                      <li>
+                        <span class="mono">{{ p.codigo }}</span>
+                        <span class="muted">{{ p.lote ? 'lote ' + p.lote : '' }}</span>
+                        <b>{{ p.peso_kg | cantidad: 'kg' }}</b>
+                        <button type="button" class="btn btn-ghost btn-sm" (click)="quitar(l, p.codigo)"
+                                [attr.aria-label]="'Quitar el paquete ' + p.codigo">Quitar</button>
+                      </li>
+                    }
+                  </ul>
+                  <p class="sub">{{ l.paquetes.length }} {{ l.paquetes.length === 1 ? 'paquete escaneado' : 'paquetes escaneados' }}</p>
+                } @else {
+                  <p class="sub">Escanea los paquetes de este hilo que van en el pedido.</p>
+                }
+              } @else {
+                <div class="pesar">
+                  <label class="field">
+                    {{ l.d.tipo_presentacion === 'cono' ? 'Pesaron' : 'Pesó' }}
+                    <span class="con-unidad">
+                      <input type="number" min="0" step="0.001" [(ngModel)]="l.kg" [name]="'kg-' + l.d.id"
+                             [placeholder]="'≈ ' + (l.d.cantidad | cantidad)" />
+                      <span>kg</span>
+                    </span>
+                  </label>
+                  @if (l.d.tipo_presentacion === 'cono') {
+                    <label class="field">
+                      Conos
+                      <input type="number" min="0" step="1" [(ngModel)]="l.conos" [name]="'conos-' + l.d.id" />
+                    </label>
+                  }
+                </div>
+              }
+            </section>
+          }
+        </div>
+
+        <div class="previa-entrega">
+          <div><span>Total como se tomó</span><span>{{ pedido().total | dinero }}</span></div>
+          <div><span>Total con el peso real</span><b>{{ total() | dinero }}</b></div>
+          @if (pagado() > 0) {
+            <div><span>Ya dejó pagado</span><span>{{ pagado() | dinero }}</span></div>
+          }
+          @if (pagado() > total() + 0.004) {
+            <div class="renglon-falta"><span>Pagó de más: se le devuelven al entregar</span><b>{{ pagado() - total() | dinero }}</b></div>
+          } @else {
+            <div class="renglon-falta"><span>Falta</span><b>{{ total() - pagado() | dinero }}</b></div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="modal-foot">
+      @if (motivo(); as m) { <span class="nota">{{ m }}</span> }
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" [disabled]="guardando() || cargando() || !!motivo()" (click)="guardar()">
+        {{ guardando() ? 'Guardando…' : 'Ya está listo' }}
+      </button>
+    </div>
+  </div>
+</div>

@@ -153,8 +153,25 @@ async function abonarApartado(req, res, next) {
 
 async function entregarApartado(req, res, next) {
   try {
-    const data = await service.entregarApartado(Number(req.params.id), req.auth?.sub);
+    // Fiar lo que falta de un pedido al entregarlo es fiar: pide su permiso.
+    if (Number(req.body?.a_credito ?? 0) > 0 && !(await permisos.puede(req.auth, 'hacer:fiar'))) {
+      throw new AppError(403, 'SIN_PERMISO', 'Tu puesto no tiene permiso para «Fiar». Pídeselo al administrador.');
+    }
+    const data = await service.entregarApartado(Number(req.params.id), req.auth?.sub, req.body ?? {});
     res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+async function prepararEncargo(req, res, next) {
+  try {
+    const data = await service.prepararEncargo(Number(req.params.id), req.body ?? {}, req.auth?.sub);
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+async function encargos(req, res, next) {
+  try {
+    res.json({ data: await service.encargos(req.query), error: null });
   } catch (err) { next(err); }
 }
 
@@ -168,5 +185,5 @@ module.exports = {
   resumen,
   crear, obtener, listar, misPedidos, cambiarEstado, cotizar,
   subirComprobante, verComprobante, eliminarComprobante,
-  apartados, abonarApartado, entregarApartado,
+  apartados, abonarApartado, entregarApartado, prepararEncargo, encargos,
 };

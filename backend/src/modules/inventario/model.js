@@ -544,10 +544,50 @@ async function existenciasDe(varianteId) {
   return rows;
 }
 
+/**
+ * Dónde está un bulto según el sistema, y si viene EN CAMINO en un traspaso
+ * enviado y todavía no recibido (el envío ya lo apunta al destino). Para bajar
+ * conos el paquete tiene que estar en la tienda (usuario, 2026-10-06).
+ */
+async function ubicacionBulto(ejecutor, bultoId) {
+  const [[u]] = await (ejecutor ?? pool).query(
+    `SELECT vc.almacen_id, a.nombre AS almacen, a.es_punto_venta,
+            (SELECT t.folio
+               FROM traspaso_bultos tb
+               JOIN traspaso_detalle td ON td.id = tb.detalle_id
+               JOIN traspasos t         ON t.id = td.traspaso_id
+              WHERE tb.variante_codigo_id = vc.id AND t.estado = 'en_transito'
+              ORDER BY t.id DESC LIMIT 1) AS en_camino_folio
+       FROM variante_codigos vc
+       LEFT JOIN almacenes a ON a.id = vc.almacen_id
+      WHERE vc.id = :id`,
+    { id: bultoId }
+  );
+  return u ?? null;
+}
+
 async function desarmar(datos, usuarioId) {
   const { cono_variante_id, almacen_origen_id, almacen_destino_id, paquetes } = datos;
 
   return withTransaction(async (conn) => {
+    // LOS CONOS SOLO SE BAJAN EN UNA TIENDA (2026-10-06: "solo se pueden bajar
+    // conos en tiendas, en bodega eso no se puede"). Y el paquete se abre donde
+    // está: si sigue en la bodega, primero va a la tienda por un traspaso —el
+    // único camino entre almacenes—, no se brinca con el desarme.
+    const [[tienda]] = await conn.query(
+      'SELECT id, nombre, es_punto_venta FROM almacenes WHERE id = :id', { id: almacen_destino_id }
+    );
+    if (!tienda) throw new AppError(422, 'ALMACEN_INVALIDO', 'Ese almacén no existe');
+    if (!Number(tienda.es_punto_venta)) {
+      throw new AppError(422, 'SOLO_EN_TIENDA',
+        `Los conos se bajan en una tienda; en «${tienda.nombre}» no se puede porque no tiene mostrador.`);
+    }
+    if (Number(almacen_origen_id) !== Number(almacen_destino_id)) {
+      throw new AppError(422, 'DESARME_EN_OTRO_ALMACEN',
+        `El paquete se abre en la tienda donde está. Si está en otro almacén, primero mándalo a ` +
+        `«${tienda.nombre}» con Surtir sucursal.`);
+    }
+
     // Datos del cono y de su paquete de origen, bloqueados para no competir
     // con otra conversión simultánea.
     const [crows] = await conn.query(
@@ -589,6 +629,24 @@ async function desarmar(datos, usuarioId) {
         throw new AppError(409, 'BULTO_NO_DISPONIBLE',
           `El bulto ${bulto.codigo} ya está ${bulto.estado}; no se puede desarmar.`);
       }
+      // EL PAQUETE TIENE QUE ESTAR EN ESA TIENDA (usuario, 2026-10-06: "si no,
+      // que mande una alerta de que el paquete en esa sucursal no existe").
+      // Al vender NO se valida —la ubicación se corrige al escanear—, pero un
+      // paquete se abre donde está: si el sistema lo tiene en otro almacén o
+      // viene en camino, no se abre aquí. Sin almacén (capturado a mano) se
+      // permite: no hay nada que contradiga.
+      const u = await ubicacionBulto(conn, bulto.id);
+      if (u?.en_camino_folio) {
+        throw new AppError(409, 'PAQUETE_EN_CAMINO',
+          `El paquete ${bulto.codigo} viene en camino (${u.en_camino_folio}): primero recibe el envío en Surtir sucursal.`);
+      }
+      if (u?.almacen_id != null && Number(u.almacen_id) !== Number(almacen_destino_id)) {
+        throw new AppError(409, 'PAQUETE_EN_OTRA_SUCURSAL',
+          `El paquete ${bulto.codigo} no está en «${tienda.nombre}»: el sistema lo tiene en «${u.almacen}». ` +
+          (Number(u.es_punto_venta)
+            ? 'Bájalo en esa tienda, o mándalo con Surtir sucursal.'
+            : 'Primero mándalo a la tienda con Surtir sucursal.'));
+      }
     }
 
     const pesoPaquete = Number(cono.paquete_peso_kg);
@@ -616,7 +674,12 @@ async function desarmar(datos, usuarioId) {
     // cono. Lo captura la tienda; el sistema no lo calcula porque depende del
     // tubo que se use. Solo dice cuánto pesó el resultado: del paquete sale
     // `kgConsumidos` y eso es lo que se descuenta del inventario.
-    const destareKg = datos.destare_kg != null ? round3(datos.destare_kg) : null;
+    // Se captura POR CONO (lo que pesa un tubo) y se multiplica por los conos
+    // que salen; el total sigue aceptándose tal cual (2026-10-06).
+    const destareKg =
+      datos.destare_por_cono_kg != null
+        ? round3(Number(datos.destare_por_cono_kg) * piezasGeneradas)
+        : datos.destare_kg != null ? round3(datos.destare_kg) : null;
     if (destareKg != null && destareKg < 0) {
       throw new AppError(422, 'DESTARE_INVALIDO', 'El destare no puede ser negativo');
     }
@@ -703,12 +766,16 @@ async function desarmar(datos, usuarioId) {
       motivo:
         datos.motivo ??
         `Enconado de ${paquetes} paquete(s) de ${cono.paquete_sku}: ${piezasGeneradas} cono(s)` +
-        (destareKg ? ` · ${kgConsumidos} kg + ${destareKg} de destare` : ''),
+        (destareKg
+          ? ` · ${kgConsumidos} kg + ${destareKg} de destare` +
+            (datos.destare_por_cono_kg != null ? ` (${round3(datos.destare_por_cono_kg)} kg por cono)` : '')
+          : ''),
     });
 
     return {
       conversion_id: conv.insertId,
       destare_kg: destareKg,
+      destare_por_cono_kg: datos.destare_por_cono_kg != null ? round3(datos.destare_por_cono_kg) : null,
       kg_enconados: kgEnconados,
       producto: cono.producto,
       paquetes,
@@ -911,8 +978,9 @@ async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe) 
         `El paquete ${c} es de otro hilo: no está en este traspaso.`);
     }
     if (b.estado !== 'disponible') {
+      const que = { vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: 'está apartado para un pedido de un cliente' };
       throw new AppError(409, 'BULTO_NO_DISPONIBLE',
-        `El paquete ${c} de ${nombreDe(b.variante_id)} ya ${b.estado === 'vendido' ? 'se vendió' : 'se bajó a conos'}.`);
+        `El paquete ${c} de ${nombreDe(b.variante_id)} ${que[b.estado] ?? 'no está disponible'}.`);
     }
     if (b.peso_kg == null || Number(b.peso_kg) <= 0) {
       throw new AppError(422, 'BULTO_SIN_PESO',
@@ -1442,6 +1510,7 @@ module.exports = {
   ultimosMovimientos,
   registrarMovimiento,
   desarmar,
+  ubicacionBulto,
   conoDe,
   disponibilidadEnPaquetes,
   pesoPorPaquete,

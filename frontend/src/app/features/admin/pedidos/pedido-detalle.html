@@ -1,8 +1,9 @@
 <div class="pagina">
-  <a class="volver" routerLink="/admin/pedidos">
+  <!-- Un pedido de cliente regresa a Pedidos; cualquier otra venta, a Ventas. -->
+  <a class="volver" [routerLink]="pedido() && esEncargo(pedido()!) && veEncargos() ? '/admin/pedidos' : '/admin/ventas'">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
-    Pedidos
+    {{ pedido() && esEncargo(pedido()!) && veEncargos() ? 'Pedidos' : 'Ventas' }}
   </a>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
@@ -20,18 +21,24 @@
             <span [class]="'pill grande ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal) }}</span>
           </div>
           <p class="sub">{{ fechaLarga(p.creado_en) }} · {{ dondeYQuien(p) }}</p>
+          @if (esEncargo(p)) {
+            <p class="sub"><b>Pedido</b> · {{ entregaDelPedido(p) }}</p>
+          }
         </div>
         <div class="acciones">
           <button type="button" class="btn btn-ghost" (click)="imprimirTicket()">Imprimir ticket</button>
           @if (p.estado === 'apartado' && veApartados()) {
             <a class="btn btn-ghost" routerLink="/admin/apartados">Abonar o entregar</a>
           }
+          @if (esEncargo(p) && esApartadoSinEntregar(p) && !inactivo(p) && veEncargos()) {
+            <a class="btn btn-ghost" routerLink="/admin/pedidos">Entregar o cobrar</a>
+          }
           @if (puedeDevolverEste(p)) {
             <button type="button" class="btn btn-ghost" (click)="abrirDevolver()">Devolver mercancía</button>
           }
           @if (puedeCancelarEste(p)) {
             <button type="button" class="btn btn-danger" (click)="abrirCancelar()">
-              {{ esApartadoSinEntregar(p) ? 'Cancelar apartado' : 'Cancelar venta' }}
+              {{ esEncargo(p) && esApartadoSinEntregar(p) ? 'Cancelar pedido' : esApartadoSinEntregar(p) ? 'Cancelar apartado' : 'Cancelar venta' }}
             </button>
           }
         </div>
@@ -102,7 +109,10 @@
                   }
                 </span>
               </div>
-              <span class="num">{{ d.cantidad | cantidad: 'kg' }}</span>
+              <span class="num">
+                {{ d.cantidad | cantidad: 'kg' }}
+                @if (d.piezas) { <span class="tenue"> · {{ d.piezas }} {{ d.piezas === 1 ? 'cono' : 'conos' }}</span> }
+              </span>
               <span class="num tenue">{{ d.precio_unitario | dinero }} / kg</span>
               <b class="num">{{ d.subtotal | dinero }}</b>
             </div>

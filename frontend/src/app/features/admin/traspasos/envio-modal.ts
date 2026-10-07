@@ -208,6 +208,9 @@ export class EnvioModal implements OnInit {
       return `El paquete ${cod} es de ${v.producto}${v.calibre ? ' ' + v.calibre : ''}, que no está en este traspaso.`;
     }
     if (b.estado && b.estado !== 'disponible') {
+      if (b.estado === 'apartado') {
+        return `El paquete ${cod} está apartado para un pedido${b.consumido_folio ? ` (${b.consumido_folio})` : ''}: escanea otro.`;
+      }
       return b.estado === 'vendido'
         ? `El paquete ${cod} ya se vendió${b.consumido_folio ? ` (${b.consumido_folio})` : ''}.`
         : `El paquete ${cod} ya se bajó a conos.`;

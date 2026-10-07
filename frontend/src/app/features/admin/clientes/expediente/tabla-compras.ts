@@ -37,7 +37,7 @@ import { FolioPipe } from '../../../../shared/folio.pipe';
               <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ fechaCorta(p.creado_en) }}</td>
               <td class="mono">
                 @if (vePedidos()) {
-                  <a [routerLink]="['/admin/pedidos', p.id]" [title]="p.numero_pedido" style="text-decoration: none">{{ p.numero_pedido | folio }}</a>
+                  <a [routerLink]="['/admin/ventas', p.id]" [title]="p.numero_pedido" style="text-decoration: none">{{ p.numero_pedido | folio }}</a>
                 } @else { <span [title]="p.numero_pedido">{{ p.numero_pedido | folio }}</span> }
               </td>
               <td>{{ hilos(p) }}</td>

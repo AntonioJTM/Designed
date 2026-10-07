@@ -1,0 +1,59 @@
+/* El detalle de un hilo (Inventario → clic en el hilo). El marco del modal, las
+   tablas, las pills y el segmentado vienen del sistema de diseño. */
+
+.subtitulo { margin: 2px 0 0; font-size: 13px; color: var(--tinta-3); }
+
+h3 { margin: 22px 0 10px; font-size: 15px; font-weight: 600; }
+h3:first-child { margin-top: 0; }
+
+/* Datos del hilo o del lote, chicos porque viven en un modal. No se llaman
+   `.cifra`, `.dato` ni `.pie`: esas son globales (styles.scss) y le movían el acomodo. */
+.hilo-datos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;
+  margin-bottom: 6px;
+}
+.hilo-dato {
+  border: 1px solid var(--borde); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.dato-etiqueta { font-size: 12px; color: var(--tinta-3); }
+.hilo-dato b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.hilo-dato b.chica { font-size: 17px; }
+.dato-pie { font-size: 12px; color: var(--tinta-3); line-height: 1.4; }
+
+table.grid.compacta td, table.grid.compacta th { padding-top: 8px; padding-bottom: 8px; }
+table.grid.compacta .sub { font-size: 12px; color: var(--tinta-3); margin-top: 1px; }
+table.grid.compacta .pill { margin-top: 2px; }
+table.grid.lotes { min-width: 760px; }
+.mono { font-family: var(--mono); font-size: 13px; }
+
+.nota { margin: 10px 0 0; font-size: 12px; color: var(--tinta-3); line-height: 1.5; }
+.nota.arriba { margin: 0 0 10px; }
+
+/* Un lote se abre tocando su renglón (o su nombre, que es el botón). */
+tr.clic { cursor: pointer; }
+tr.clic:hover td { background: var(--superficie-2); }
+tr.agotado td { color: var(--tinta-3); }
+.lote-boton {
+  border: 0; background: none; padding: 0; font: inherit; font-weight: 600;
+  color: var(--acento); cursor: pointer; text-align: left;
+}
+.lote-boton:hover { color: var(--acento-oscuro); text-decoration: underline; }
+
+.volver { margin-bottom: 6px; }
+h3.lote-titulo { margin-top: 6px; }
+h3.lote-titulo .muted { font-weight: 400; font-size: 14px; }
+
+.filtros-lote { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 12px; }
+.filtros-lote .seg > button { min-height: 38px; font-size: 13px; }
+.filtros-fila { display: flex; flex-wrap: wrap; gap: 10px; }
+.filtros-fila > * { flex: 1 1 200px; min-width: 0; }
+
+/* La lista de paquetes no brinca mientras carga. */
+.bultos-caja { min-height: 160px; }
+.donde { margin-left: 6px; font-size: 13px; color: var(--tinta-2); }
+
+@media (max-width: 640px) {
+  .filtros-lote .seg { flex-wrap: wrap; }
+  .filtros-lote .seg > button { flex: 1 1 40%; }
+}

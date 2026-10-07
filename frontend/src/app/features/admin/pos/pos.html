@@ -37,7 +37,19 @@
     <section class="card verde ticket" aria-live="polite">
       <!-- Un apartado no es una venta cobrada y no tiene cambio: decir "Venta" y
            "Cambio $0.00" sería mentir sobre lo que acaba de pasar. -->
-      @if (t.pedido.estado === 'apartado') {
+      @if (t.pedido.encargo) {
+        <h2>Pedido <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
+        <p>
+          Pedido de <b>{{ t.pedido.total | dinero }}</b>: {{ entregaDe(t.pedido) }}.
+          @if (t.pagadoHoy > 0) { Dejó <b>{{ t.pagadoHoy | dinero }}</b>; el resto se cobra al entregarlo. }
+          @else { Se cobra al entregarlo. }
+          La mercancía queda apartada.
+        </p>
+        <div class="acciones">
+          <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+          @if (veEncargos()) { <a class="btn btn-ghost" routerLink="/admin/pedidos">Ver pedidos</a> }
+        </div>
+      } @else if (t.pedido.estado === 'apartado') {
         <h2>Apartado <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
         <p>
           Apartado de <b>{{ t.pedido.total | dinero }}</b>
@@ -234,30 +246,55 @@
           <p class="muted nota">
             Al escanear un bulto se cobra por lo que pesa ESE bulto. El mismo bulto dos veces no se cobra doble.
           </p>
-          @if (resultados().length) {
+          <!--
+            La búsqueda, por HILO: su paquete y sus conos juntos, con lo que hay en
+            esta tienda. El paquete completo se escanea; "Por kilo" y "Agregar
+            conos" abren la báscula (se cobra lo que pesaron).
+          -->
+          @if (hilosEncontrados().length) {
             <div class="tabla-scroll">
-              <table class="grid">
+              <table class="grid busqueda">
                 <thead>
-                  <tr><th>Hilo</th><th class="num">Precio por kg</th><th><span class="oculto">Acciones</span></th></tr>
+                  <tr>
+                    <th>Hilo</th><th>Hay aquí</th><th class="num">Precio por kg</th>
+                    <th><span class="oculto">Acciones</span></th>
+                  </tr>
                 </thead>
                 <tbody>
-                  @for (r of resultados(); track r.id) {
-                    <tr>
-                      <td>
-                        <div class="hilo">{{ r.producto }}{{ r.presentacion ? ' · ' + r.presentacion : '' }}</div>
-                        <div class="muted mono">{{ r.sku }}</div>
-                      </td>
-                      <!-- En $0 = entró con la lista del proveedor y todavía no tiene precio: no se vende. -->
-                      @if (r.precio > 0) {
-                        <td class="num">{{ r.precio | dinero }}<span class="muted"> / {{ r.unidad || 'kg' }}</span></td>
-                        <td class="acciones"><button class="btn btn-ghost btn-sm" (click)="agregar(r)">Agregar</button></td>
-                      } @else {
-                        <td class="num"><span class="pill ambar">Sin precio</span></td>
-                        <td class="acciones">
-                          <button class="btn btn-ghost btn-sm" disabled title="Todavía no tiene precio: se le pone en Productos">Agregar</button>
+                  @for (h of hilosEncontrados(); track h.producto_id) {
+                    <tr class="hilo-fila"><td colspan="4"><b>{{ h.nombre }}</b></td></tr>
+                    @for (r of h.filas; track r.id) {
+                      <tr>
+                        <td>
+                          {{ r.tipo === 'cono' ? 'Conos' : r.tipo === 'paquete' ? 'Paquete' : (r.presentacion || 'Por kilo') }}
+                          <div class="muted mono">{{ r.sku }}</div>
                         </td>
-                      }
-                    </tr>
+                        <td [class.muted]="!r.aqui || r.aqui.cantidad <= 0">{{ hayAqui(r) }}</td>
+                        <!-- En $0 = entró con la lista del proveedor y todavía no tiene precio: no se vende. -->
+                        @if (r.precio > 0) {
+                          <td class="num">{{ r.precio | dinero }}<span class="muted"> / kg</span></td>
+                          <td class="acciones">
+                            <button class="btn btn-ghost btn-sm" (click)="agregar(r)">
+                              {{ r.tipo === 'cono' ? 'Agregar conos' : 'Por kilo' }}
+                            </button>
+                            @if (r.tipo === 'paquete') { <div class="muted pista">o escanea el paquete</div> }
+                          </td>
+                        } @else {
+                          <td class="num"><span class="pill ambar">Sin precio</span></td>
+                          <td class="acciones">
+                            <button class="btn btn-ghost btn-sm" disabled title="Todavía no tiene precio: se le pone en Productos">Agregar</button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                    @if (h.sinConos) {
+                      <tr class="sin-conos">
+                        <td>Conos</td>
+                        <td colspan="3" class="muted">
+                          Todavía no hay conos de este hilo: se bajan a mostrador en Inventario → Bajar conos a mostrador.
+                        </td>
+                      </tr>
+                    }
                   }
                 </tbody>
               </table>
@@ -311,7 +348,7 @@
                               }
                             </span>
                           } @else {
-                            a granel · {{ i.sku }}
+                            {{ comoSeVende(i) }} · {{ i.sku }}
                           }
                         </div>
                       </td>
@@ -389,10 +426,13 @@
           <button type="button" role="radio" [attr.aria-checked]="modo() === 'apartar'"
                   [class.on]="modo() === 'apartar'" [disabled]="!!motivoSinApartar()"
                   (click)="elegirModo('apartar')">Apartar</button>
+          <button type="button" role="radio" [attr.aria-checked]="modo() === 'pedido'"
+                  [class.on]="modo() === 'pedido'" [disabled]="!!motivoSinPedido()"
+                  (click)="elegirModo('pedido')">Pedido</button>
         </div>
         @if (modo() === 'cobrar') {
           @if (!clienteSel()) {
-            <p class="ayuda-modo">{{ puedeFiar() ? 'Fiar y apartar' : 'Apartar' }} piden elegir primero al cliente.</p>
+            <p class="ayuda-modo">{{ puedeFiar() ? 'Fiar, apartar y pedido' : 'Apartar y pedido' }} piden elegir primero al cliente.</p>
           } @else if (puedeFiar() && motivoSinFiar(); as m) {
             <p class="ayuda-modo">{{ m }}</p>
           }
@@ -408,6 +448,52 @@
             </label>
             <div class="dato"><span>Paga hoy</span><span>{{ aPagarHoy() | dinero }}</span></div>
           </div>
+        }
+
+        @if (pidiendo()) {
+          <!-- PEDIDO: se entrega después; la mercancía se aparta. -->
+          <div class="bloque-modo">
+            <div class="seg" role="radiogroup" aria-label="Cómo se entrega">
+              <button type="button" role="radio" [class.on]="entregaPedido() === 'recoger'"
+                      [attr.aria-checked]="entregaPedido() === 'recoger'" (click)="entregaPedido.set('recoger')">Pasa por él</button>
+              <button type="button" role="radio" [class.on]="entregaPedido() === 'envio'"
+                      [attr.aria-checked]="entregaPedido() === 'envio'" (click)="entregaPedido.set('envio')">Lo lleva el chofer</button>
+            </div>
+            @if (entregaPedido() === 'envio') {
+              <label class="field">
+                A dónde
+                <input type="text" [(ngModel)]="direccionPedido" name="ped-dir" maxlength="255" placeholder="Calle, número, colonia, referencias" />
+              </label>
+              <label class="field">
+                <span>Lo del envío <span class="muted">(opcional)</span></span>
+                <input type="number" min="0" step="0.01" [ngModel]="costoEnvio()" (ngModelChange)="costoEnvio.set($event)"
+                       name="ped-envio" placeholder="0.00" />
+                <span class="ayuda">Se suma al total. Vacío = no se cobra.</span>
+              </label>
+            }
+            <label class="field">
+              <span>Para cuándo <span class="muted">(opcional)</span></span>
+              <input type="date" [(ngModel)]="paraCuando" name="ped-cuando" />
+            </label>
+            <label class="field">
+              <span>Notas <span class="muted">(opcional)</span></span>
+              <input type="text" [(ngModel)]="notasPedido" name="ped-notas" maxlength="300" placeholder="Ej. Pasa en la tarde; llamar antes" />
+            </label>
+            <label class="field">
+              <span>Deja pagado <span class="muted">(opcional)</span></span>
+              <input type="number" min="0" step="0.01" [(ngModel)]="anticipo" name="ped-deja" placeholder="0.00" />
+              <span class="ayuda">Lo que falte se cobra al entregarlo (o se le fía).</span>
+            </label>
+            <p class="ayuda" style="margin: 0">La mercancía se aparta: <b>no sale del inventario</b> hasta que se entrega.</p>
+          </div>
+          @if (num(anticipo) > 0) {
+            <label class="field">
+              Con qué deja el pago
+              <select [(ngModel)]="metodoSel" name="metodo-ped">
+                @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+              </select>
+            </label>
+          }
         }
 
         @if (apartando()) {
@@ -429,7 +515,7 @@
               </select>
             </label>
           }
-        } @else if (aPagarHoy() > 0) {
+        } @else if (!pidiendo() && aPagarHoy() > 0) {
           <label class="field">
             Método de pago
             <select [(ngModel)]="metodoSel" name="metodo">
@@ -459,7 +545,7 @@
                 [disabled]="carrito().length === 0">
           {{ textoBoton() }}
         </button>
-        @if (!apartando() && esEfectivoSel() && aPagarHoy() > 0) {
+        @if (!apartando() && !pidiendo() && esEfectivoSel() && aPagarHoy() > 0) {
           <p class="ayuda centro">Se guarda lo cobrado, no el billete.</p>
         }
       </section>
@@ -552,4 +638,9 @@
       </div>
     </div>
   </div>
+}
+
+<!-- La báscula: se teclea lo que pesaron y, si son conos, cuántos eran. -->
+@if (pesando(); as h) {
+  <app-pesar-modal [hilo]="h" (cerrado)="pesando.set(null)" (agregado)="alPesar(h, $event)" />
 }

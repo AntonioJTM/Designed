@@ -1,0 +1,10 @@
+/* Entregar un pedido: lo que vale, lo que ya dejó y lo que falta. */
+.previa-entrega {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 10px;
+  background: var(--superficie-2); border: 1px solid var(--borde); font-size: 14px;
+}
+.previa-entrega > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.previa-entrega > div > :last-child { font-variant-numeric: tabular-nums; text-align: right; }
+.previa-entrega .renglon-falta { border-top: 1px solid var(--borde); padding-top: 8px; font-size: 16px; }
+.mono { font-family: var(--mono); font-size: 13px; }
+.nota-modal { margin: 0; font-size: 13px; color: var(--tinta-3); }

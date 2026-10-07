@@ -1,8 +1,8 @@
 <div class="pagina">
   <header class="page-head">
     <div>
-      <h1>Pedidos</h1>
-      <p class="sub">Las ventas del mostrador, con su estado y lo que falta por cobrar.</p>
+      <h1>Ventas</h1>
+      <p class="sub">Todo lo vendido en el mostrador, con su estado y lo que falta por cobrar.</p>
     </div>
   </header>
 
@@ -50,12 +50,10 @@
         <option value="pagado">Pagado</option>
         <option value="pendiente">Pendiente · a crédito</option>
         <option value="apartado">Apartado</option>
+        <option value="en_preparacion">Pedido · por preparar</option>
+        <option value="listo">Pedido · listo</option>
+        <option value="enviado">Pedido · en camino</option>
         <option value="entregado">Entregado</option>
-        <!-- TIENDA EN LÍNEA APAGADA (2026-10): estos dos solo los usa el envío de la
-             tienda en línea. Descomentarlos al volver a abrirla.
-        <option value="en_preparacion">En preparación</option>
-        <option value="enviado">Enviado</option>
-        -->
         <option value="cancelado">Cancelado</option>
         <option value="devuelto">Devuelto</option>
       </select>
@@ -107,7 +105,7 @@
           <tbody>
             @for (p of pedidos(); track p.id) {
               <tr>
-                <td class="folio"><a [routerLink]="['/admin/pedidos', p.id]" [title]="p.numero_pedido">{{ p.numero_pedido | folio }}</a></td>
+                <td class="folio"><a [routerLink]="['/admin/ventas', p.id]" [title]="p.numero_pedido">{{ p.numero_pedido | folio }}</a></td>
                 <td class="num" style="text-align: left; white-space: nowrap">{{ cuando(p.creado_en) }}</td>
                 <td class="cliente">{{ cliente(p) }}</td>
                 <td class="tenue">{{ p.usuario || '—' }}</td>
@@ -118,8 +116,8 @@
                 <td class="num">
                   @if ((p.falta ?? 0) > 0) { <span class="falta">{{ p.falta | dinero }}</span> }
                 </td>
-                <td><span [class]="'pill ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal) }}</span></td>
-                <td class="acciones"><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/pedidos', p.id]">Ver</a></td>
+                <td><span [class]="'pill ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal, p.encargo) }}</span></td>
+                <td class="acciones"><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/ventas', p.id]">Ver</a></td>
               </tr>
             }
           </tbody>

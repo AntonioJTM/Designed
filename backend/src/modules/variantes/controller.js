@@ -12,6 +12,8 @@ async function listar(req, res, next) {
       q: req.query.q,
       activo: parseBool(req.query.activo),
       tipo_presentacion: req.query.tipo_presentacion,
+      // La caja busca con su almacén: así cada presentación dice cuánto hay AHÍ.
+      almacen_id: req.query.almacen_id ? Number(req.query.almacen_id) : undefined,
       page,
       limit,
       offset,

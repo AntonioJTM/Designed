@@ -439,6 +439,15 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .modal-cerrar:hover { background: var(--fondo); color: var(--tinta); }
 /* El cuerpo es el que hace scroll: la barra de botones queda siempre visible. */
 .modal-body { padding: 20px 24px; overflow-y: auto; }
+/*
+  Cuando un <form> envuelve el cuerpo y los botones (diez modales lo hacen), el
+  form tiene que encoger con el modal y dejarle el scroll al cuerpo. Sin esto,
+  con más contenido que pantalla, el recuadro blanco se acababa a media ventana y
+  lo de abajo —y los botones— se salía sobre el fondo oscuro (lo vio el usuario
+  en el horario de nómina, 2026-10-06).
+*/
+.modal > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.modal-head, .modal-foot { flex-shrink: 0; }
 .modal-foot {
   display: flex;
   align-items: center;

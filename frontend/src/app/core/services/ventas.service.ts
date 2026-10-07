@@ -15,6 +15,8 @@ import {
   Pedido,
   ResultadoAbono,
   SesionCaja,
+  Encargos,
+  LineaPreparada,
 } from '../models/ventas.models';
 
 function data<T>(r: ApiResponse<T>): T {
@@ -61,6 +63,15 @@ export interface CrearPedidoInput {
    * saber a quién se le guarda.
    */
   apartado?: boolean;
+  /**
+   * PEDIDO de cliente (encargo): se entrega después —pasa por él o lo lleva el
+   * chofer (`metodo_entrega: 'envio'` con `entrega_direccion`)—. La mercancía
+   * se aparta; lo que falte se cobra o se fía al entregar. Exige `cliente_id`.
+   */
+  encargo?: boolean;
+  entrega_direccion?: string;
+  /** 'YYYY-MM-DD'. Lo del chofer va en `costo_envio`. */
+  entrega_para?: string;
   /**
    * Cuánto de esta venta se va A CRÉDITO (se lo lleva y paga después). Admite
    * venta MIXTA: paga algo hoy y el resto queda a deber. Exige `cliente_id`:
@@ -249,6 +260,36 @@ export class VentasService {
     return this.http
       .post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/entregar`, {})
       .pipe(map(data));
+  }
+
+  /**
+   * PREPARA un pedido: los paquetes escaneados que van y lo que pesó lo demás.
+   * Queda 'listo' con el total al peso real.
+   */
+  prepararPedido(pedidoId: number, lineas: LineaPreparada[]): Observable<Pedido> {
+    return this.http
+      .post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/preparar`, { lineas })
+      .pipe(map(data));
+  }
+
+  /** Los PEDIDOS (encargos) sin entregar: por preparar, listos y en camino. */
+  encargos(f: { estado?: string; q?: string } = {}): Observable<Encargos> {
+    let p = new HttpParams();
+    if (f.estado) p = p.set('estado', f.estado);
+    if (f.q) p = p.set('q', f.q);
+    return this.http.get<ApiResponse<Encargos>>(`${this.base}/pedidos/encargos`, { params: p }).pipe(map(data));
+  }
+
+  /**
+   * Entrega un PEDIDO cobrando lo que falta (`pagos`: lo recibido; solo el
+   * efectivo da cambio y entra al turno `sesion_caja_id`) y/o fiándolo
+   * (`a_credito`). Aquí sale del inventario. Devuelve el pedido con `cambio`.
+   */
+  entregarPedido(
+    pedidoId: number,
+    body: { pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number }
+  ): Observable<Pedido> {
+    return this.http.post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/entregar`, body).pipe(map(data));
   }
 
   /**

@@ -55,7 +55,10 @@ export const MENU: GrupoMenu[] = [
     opciones: [
       { clave: 'pos', nombre: 'Punto de venta', ruta: '/admin/pos', icono: I.cobrar, permiso: 'ver:pos' },
       { clave: 'caja', nombre: 'Caja', ruta: '/admin/caja', icono: I.caja, permiso: 'ver:caja' },
-      { clave: 'pedidos', nombre: 'Pedidos', ruta: '/admin/pedidos', icono: I.pedidos, permiso: 'ver:pedidos' },
+      // "Pedidos" eran las ventas: se llaman Ventas desde el 2026-10-06, y Pedidos
+      // son los encargos de clientes (los recogen o los lleva el chofer).
+      { clave: 'ventas', nombre: 'Ventas', ruta: '/admin/ventas', icono: I.pedidos, permiso: 'ver:pedidos' },
+      { clave: 'pedidos', nombre: 'Pedidos', ruta: '/admin/pedidos', icono: I.mandar, permiso: 'ver:encargos' },
       { clave: 'apartados', nombre: 'Apartados', ruta: '/admin/apartados', icono: I.apartados, permiso: 'ver:apartados' },
     ],
   },

@@ -76,6 +76,8 @@ export class PedidoDetalle implements OnDestroy {
   readonly puedeCancelar = computed(() => this.auth.puede('hacer:cancelar_venta'));
   readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
   readonly veApartados = computed(() => this.auth.puede('ver:apartados'));
+  readonly veEncargos = computed(() => this.auth.puede('ver:encargos'));
+  private readonly fechaPipe = new FechaPipe();
 
   readonly etiquetaEstado = etiquetaEstado;
   readonly tonoEstado = tonoEstado;
@@ -95,6 +97,17 @@ export class PedidoDetalle implements OnDestroy {
    */
   readonly estados = computed<EstadoPedido[]>(() => {
     const p = this.pedido();
+    // Un PEDIDO sin entregar avanza por sus pasos o se cancela; cancelado, se
+    // reactiva como "por preparar". Queda LISTO al prepararlo (en Pedidos:
+    // paquetes escaneados y conos pesados), no desde aquí; se ENTREGA desde
+    // Pedidos (cobra y descuenta).
+    if (p && this.esEncargo(p) && this.esApartadoSinEntregar(p)) {
+      if (this.inactivo(p)) return [p.estado, 'en_preparacion'];
+      if (p.estado === 'en_preparacion') return ['en_preparacion', 'cancelado'];
+      const pasos: EstadoPedido[] = ['en_preparacion', 'listo'];
+      if (p.metodo_entrega === 'envio') pasos.push('enviado');
+      return [...pasos, 'cancelado'];
+    }
     if (p && this.esApartadoSinEntregar(p)) {
       return p.estado === 'apartado' ? ['apartado', 'cancelado'] : [p.estado, 'apartado'];
     }
@@ -113,6 +126,8 @@ export class PedidoDetalle implements OnDestroy {
     // "En preparación" y "Enviado" son del envío de la tienda en línea: en una
     // venta de mostrador no significan nada (y la tienda está apagada).
     const enLinea = p?.canal === 'tienda_linea';
+    // …salvo en un PEDIDO sin entregar, donde son sus pasos (por preparar, en camino).
+    const pasosDePedido = !!p && this.esEncargo(p) && this.esApartadoSinEntregar(p);
     // Una venta FIADA se da por pagada sola al abonar: no se ofrece marcarla
     // pagada (o entregada) mientras se deba, ni regresarla a pendiente si ya se
     // pagó. El servidor lo valida igual (VENTA_FIADA_SIN_PAGAR / _PAGADA).
@@ -121,12 +136,25 @@ export class PedidoDetalle implements OnDestroy {
     return this.estados().filter((e) => {
       if (e === actual) return true;
       if (!this.puedeCancelar() && (e === 'cancelado' || e === 'devuelto')) return false;
-      if (!enLinea && (e === 'en_preparacion' || e === 'enviado')) return false;
+      if (!enLinea && !pasosDePedido && (e === 'en_preparacion' || e === 'enviado')) return false;
       if (fiadaVigente && actual === 'pendiente' && debe && e !== 'cancelado' && e !== 'devuelto') return false;
       if (fiadaVigente && e === 'pendiente' && !debe) return false;
       return true;
     });
   });
+
+  /** ¿Es un PEDIDO de cliente (encargo)? */
+  esEncargo(p: Pedido): boolean {
+    return !!Number(p.encargo ?? 0);
+  }
+
+  /** Cómo se entrega un pedido, en palabras: "lo recoge" o "lo lleva el chofer a…", y para cuándo. */
+  entregaDelPedido(p: Pedido): string {
+    const como = p.metodo_entrega === 'envio'
+      ? `lo lleva el chofer${p.entrega_direccion ? ' a ' + p.entrega_direccion : ''}`
+      : 'lo recoge en la tienda';
+    return p.entrega_para ? `${como} · para el ${this.fechaPipe.transform(p.entrega_para, true)}` : como;
+  }
 
   /** Nunca descontó: es un apartado vigente, o uno que se canceló antes de entregarse. */
   esApartadoSinEntregar(p: Pedido): boolean {
@@ -479,7 +507,7 @@ export class PedidoDetalle implements OnDestroy {
 ${lineas}
 <hr>${renglon('Subtotal', e(this.dinero(p.subtotal)))}${Number(p.descuento) > 0 ? renglon('Descuento', '-' + e(this.dinero(p.descuento))) : ''}${renglon('IVA', e(this.dinero(p.impuestos)))}${Number(p.costo_envio) > 0 ? renglon('Envío', e(this.dinero(p.costo_envio))) : ''}${renglon('Total', e(this.dinero(p.total)), true)}
 <hr>${pagos}
-<p style="margin-top:8px">${e(etiquetaEstado(p.estado, p.canal))}</p>
+<p style="margin-top:8px">${e(etiquetaEstado(p.estado, p.canal, p.encargo))}</p>
 </body></html>`;
 
     const marco = document.createElement('iframe');
@@ -576,7 +604,7 @@ ${lineas}
               : `Apartado cancelado. Se liberó lo apartado en ${almacen}.`
             : estado === 'cancelado' || estado === 'devuelto'
               ? `${estado === 'cancelado' ? 'Venta cancelada' : 'Mercancía devuelta'}. Regresó al inventario de ${almacen}.`
-              : `Pedido marcado como ${etiquetaEstado(estado, p.canal).toLowerCase()}.`
+              : `Pedido marcado como ${etiquetaEstado(estado, p.canal, p.encargo).toLowerCase()}.`
         );
         // Se recarga: cambiaron los bultos, los pagos y las alternativas.
         this.cargar(p.id);

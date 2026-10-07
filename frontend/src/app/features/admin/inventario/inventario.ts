@@ -17,12 +17,15 @@ import { CuandoPipe } from './cuando.pipe';
 import { DesarmeModal } from './desarme-modal';
 import { MovimientoModal } from './movimiento-modal';
 import { MinimoModal } from './minimo-modal';
+import { HiloModal } from './hilo-modal';
 import { FolioPipe } from '../../../shared/folio.pipe';
 
 /** Un hilo (color + calibre) con sus renglones de existencias juntos. */
 interface GrupoHilo {
   /** Se agrupa por el producto, NO por el nombre: dos calibres son dos productos. */
   clave: string;
+  /** Para abrir su detalle (lotes y paquetes). Falta solo con un backend viejo. */
+  producto_id?: number;
   producto: string;
   calibre?: string | null;
   material?: string | null;
@@ -94,7 +97,7 @@ const POR_PAGINA = 100;
  */
 @Component({
   selector: 'app-inventario',
-  imports: [FolioPipe, FormsModule, RouterLink, CantidadPipe, CuandoPipe, DesarmeModal, MovimientoModal, MinimoModal],
+  imports: [FolioPipe, FormsModule, RouterLink, CantidadPipe, CuandoPipe, DesarmeModal, MovimientoModal, MinimoModal, HiloModal],
   templateUrl: './inventario.html',
   styleUrl: './inventario.scss',
 })
@@ -119,6 +122,8 @@ export class Inventario {
   readonly modal = signal<'desarme' | 'movimiento' | 'minimo' | null>(null);
   /** El renglón cuyo mínimo se está fijando. */
   readonly filaMinimo = signal<StockItem | null>(null);
+  /** El hilo cuyo detalle (lotes y paquetes) está abierto. */
+  readonly hiloAbierto = signal<GrupoHilo | null>(null);
 
   // Lo que el puesto puede hacer aquí. El servidor también lo rechaza (403);
   // esconderlo es para no ofrecer lo que va a fallar.
@@ -370,6 +375,7 @@ export class Inventario {
         porHilo.get(k) ??
         ({
           clave: k,
+          producto_id: s.producto_id,
           producto: s.producto,
           calibre: s.calibre,
           material: s.material,
@@ -443,6 +449,11 @@ export class Inventario {
   abrirMinimo(s: StockItem): void {
     this.filaMinimo.set(s);
     this.modal.set('minimo');
+  }
+
+  /** Abre el detalle del hilo: dónde está, sus lotes y los paquetes de cada uno. */
+  abrirHilo(g: GrupoHilo): void {
+    if (g.producto_id != null) this.hiloAbierto.set(g);
   }
 
   cerrarMinimo(): void {

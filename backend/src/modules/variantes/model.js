@@ -89,6 +89,36 @@ async function listar({ producto_id, q, activo, tipo_presentacion, limit, offset
   return { rows, total };
 }
 
+/**
+ * Le pega a cada presentación lo que hay de ella en UN almacén (`aqui`): los
+ * kilos y, si es paquete, cuántos paquetes cerrados se ubican ahí. Lo usa la
+ * caja al buscar: "hay 20 paquetes" o "hay 12.5 kg enconados" en ESA tienda,
+ * antes de pesar nada.
+ */
+async function conExistenciaEn(rows, almacenId) {
+  if (!rows.length) return rows;
+  const ids = rows.map((r) => r.id);
+  const [inv] = await pool.query(
+    `SELECT variante_id, cantidad FROM inventario WHERE almacen_id = :a AND variante_id IN (:ids)`,
+    { a: almacenId, ids }
+  );
+  const [paq] = await pool.query(
+    `SELECT variante_id, COUNT(*) AS n FROM variante_codigos
+      WHERE estado = 'disponible' AND almacen_id = :a AND variante_id IN (:ids)
+      GROUP BY variante_id`,
+    { a: almacenId, ids }
+  );
+  const kg = new Map(inv.map((x) => [x.variante_id, Number(x.cantidad)]));
+  const n = new Map(paq.map((x) => [x.variante_id, Number(x.n)]));
+  for (const r of rows) {
+    r.aqui = {
+      cantidad: kg.get(r.id) ?? 0,
+      paquetes: r.tipo_presentacion === 'cono' ? null : n.get(r.id) ?? 0,
+    };
+  }
+  return rows;
+}
+
 async function obtener(id) {
   const [rows] = await pool.query(`${SELECT_BASE} WHERE pv.id = :id LIMIT 1`, { id });
   const variante = rows[0] || null;
@@ -251,6 +281,26 @@ async function preciosDe(varianteId) {
   return rows;
 }
 
+/** Los precios por lista de varias variantes de una vez: Map variante_id → [...]. */
+async function preciosDeVarias(ids) {
+  const mapa = new Map();
+  if (!ids.length) return mapa;
+  const [rows] = await pool.query(
+    `SELECT vp.variante_id, vp.tipo_cliente_id, tc.nombre AS tipo_cliente, vp.precio
+       FROM variante_precios vp
+       JOIN tipos_cliente tc ON tc.id = vp.tipo_cliente_id
+      WHERE vp.variante_id IN (:ids)
+      ORDER BY tc.orden, tc.nombre`,
+    { ids }
+  );
+  for (const r of rows) {
+    const { variante_id, ...precio } = r;
+    if (!mapa.has(variante_id)) mapa.set(variante_id, []);
+    mapa.get(variante_id).push(precio);
+  }
+  return mapa;
+}
+
 /**
  * Fija el precio de una variante para un tipo de cliente. Un precio null borra
  * la fila, con lo que ese tipo vuelve a pagar el precio público.
@@ -295,6 +345,8 @@ module.exports = {
   derivadasDe,
   fijarPrecio,
   preciosDe,
+  preciosDeVarias,
+  conExistenciaEn,
   fijarPrecioTipo,
   codigosDe,
   porSku,

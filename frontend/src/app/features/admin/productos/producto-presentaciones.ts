@@ -36,7 +36,7 @@ import { ConfirmacionService } from '../../../core/services/confirmacion.service
 type ModalPresentaciones = 'producto' | 'precio' | 'bulto' | 'imagen' | 'manual' | 'entradas' | null;
 
 /** El selector de la tarjeta de bultos. */
-type FiltroBultos = 'disponibles' | 'todos' | 'vendidos' | 'desarmados';
+type FiltroBultos = 'disponibles' | 'todos' | 'apartados' | 'vendidos' | 'desarmados';
 
 /** Un bulto con lo que hace falta para pintarlo en la tabla. */
 interface BultoFila extends VarianteCodigo {
@@ -210,6 +210,7 @@ export class ProductoPresentaciones {
     return this.bultos().filter((b) => {
       if (f === 'disponibles' && !this.estaDisponible(b)) return false;
       if (f === 'vendidos' && b.estado !== 'vendido') return false;
+      if (f === 'apartados' && b.estado !== 'apartado') return false;
       if (f === 'desarmados' && b.estado !== 'desarmado') return false;
       if (lote && (b.lote?.trim() || 'Sin lote') !== lote) return false;
       const peso = Number(b.peso_kg ?? 0);
@@ -690,6 +691,9 @@ export class ProductoPresentaciones {
     if (this.estaDisponible(b)) return { texto: 'Disponible', clase: 'verde' };
     if (b.estado === 'vendido') {
       return { texto: 'Vendido' + (b.consumido_folio ? ' · ' + b.consumido_folio : ''), clase: 'azul' };
+    }
+    if (b.estado === 'apartado') {
+      return { texto: 'Apartado' + (b.consumido_folio ? ' · ' + b.consumido_folio : ''), clase: 'ambar' };
     }
     return { texto: 'Bajado a conos', clase: 'gris' };
   }

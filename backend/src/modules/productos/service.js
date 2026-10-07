@@ -2,6 +2,7 @@
 
 const model = require('./model');
 const variantesService = require('../variantes/service');
+const variantesModel = require('../variantes/model');
 const almacenesModel = require('../almacenes/model');
 const { AppError } = require('../../middlewares/error');
 const { paginado } = require('../../utils/query');
@@ -14,6 +15,18 @@ async function listar(filtros) {
   const almacenOnline = await almacenesModel.idTiendaLinea();
   const { rows, total } = await model.listar({ ...filtros, almacen_online: almacenOnline });
   return paginado(rows, total, filtros.page, filtros.limit);
+}
+
+/**
+ * Le pega a cada presentación sus precios por lista (`precios`, como en
+ * `GET /variantes/:id`). Sin esto, la pantalla de presentaciones guardaba los
+ * precios por lista y al recargar los enseñaba vacíos, como si no se hubieran
+ * guardado (2026-10-06).
+ */
+async function conPreciosLista(variantes) {
+  const mapa = await variantesModel.preciosDeVarias(variantes.map((v) => v.id));
+  for (const v of variantes) v.precios = mapa.get(v.id) ?? [];
+  return variantes;
 }
 
 /** Detalle del producto con sus variantes e imágenes anidadas. */
@@ -182,4 +195,4 @@ async function eliminar(id) {
   }
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar, eliminacion };
+module.exports = { listar, obtener, conPreciosLista, crear, actualizar, eliminar, eliminacion };

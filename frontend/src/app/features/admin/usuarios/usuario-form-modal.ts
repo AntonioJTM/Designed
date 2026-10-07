@@ -8,6 +8,11 @@ import { ApiError, Rol, Usuario } from '../../../core/models/auth.models';
  * nada al servidor: el renglón trae al usuario y el listado ya tiene los
  * puestos, así que entran por input y el modal abre armado.
  *
+ * Una persona puede tener VARIOS puestos (2026-10-06): el PRINCIPAL (el select:
+ * el que sale en nómina) y los que tiene ADEMÁS (las casillas de "También
+ * trabaja como"). Puede lo de todos juntos. Las casillas nunca ofrecen el
+ * principal, y al guardar se descarta si quedó marcado de antes.
+ *
  * La contraseña solo se TECLEA: al dar de alta es obligatoria y al editar sirve
  * para restablecerla. Nunca se muestra la que tiene, ni su hash (el backend no
  * los manda).
@@ -16,6 +21,7 @@ import { ApiError, Rol, Usuario } from '../../../core/models/auth.models';
   selector: 'app-usuario-form-modal',
   imports: [ReactiveFormsModule],
   templateUrl: './usuario-form-modal.html',
+  styleUrl: './usuario-form-modal.scss',
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class UsuarioFormModal implements OnInit {
@@ -34,6 +40,9 @@ export class UsuarioFormModal implements OnInit {
 
   readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
+
+  /** Los puestos que tiene ADEMÁS del principal (ids). */
+  readonly otros = signal<number[]>([]);
 
   readonly form = this.fb.nonNullable.group({
     rol_id: [null as number | null, Validators.required],
@@ -54,6 +63,7 @@ export class UsuarioFormModal implements OnInit {
       this.form.patchValue({ rol_id: this.rolPorOmision() });
       return;
     }
+    this.otros.set((u.otros_roles ?? []).map((r) => r.id));
     this.form.reset({
       rol_id: u.rol_id,
       nombre: u.nombre,
@@ -83,9 +93,11 @@ export class UsuarioFormModal implements OnInit {
 
     const v = this.form.getRawValue();
     const u = this.usuario();
+    const otros_roles = this.otrosParaGuardar(v.rol_id);
     const obs = u
       ? this.api.actualizar(u.id, {
           rol_id: v.rol_id!,
+          otros_roles,
           nombre: v.nombre.trim(),
           telefono: v.telefono.trim() || null,
           activo: v.activo,
@@ -93,6 +105,7 @@ export class UsuarioFormModal implements OnInit {
         })
       : this.api.crear({
           rol_id: v.rol_id!,
+          otros_roles,
           nombre: v.nombre.trim(),
           correo: v.correo.trim(),
           telefono: v.telefono.trim() || undefined,
@@ -115,6 +128,30 @@ export class UsuarioFormModal implements OnInit {
   /** "cajero" → "Cajero": los puestos se guardan en minúscula. */
   nombrePuesto(r: Rol): string {
     return r.nombre ? r.nombre.charAt(0).toUpperCase() + r.nombre.slice(1) : '';
+  }
+
+  /**
+   * Los puestos que se pueden marcar como "además": todos menos el principal.
+   * Es un MÉTODO y no un `computed`: el principal es un control del formulario,
+   * no una señal, y un `computed` se quedaría con el primero que vio.
+   */
+  otrosDisponibles(): Rol[] {
+    const principal = this.form.controls.rol_id.value;
+    return this.roles().filter((r) => r.id !== principal);
+  }
+
+  tieneOtro(id: number): boolean {
+    return this.otros().includes(id);
+  }
+
+  alternarOtro(id: number, marcado: boolean): void {
+    this.otros.update((o) => (marcado ? [...new Set([...o, id])] : o.filter((x) => x !== id)));
+  }
+
+  /** Lo que se manda: sin el principal y solo de los puestos que esta sesión puede dar. */
+  private otrosParaGuardar(principal: number | null): number[] {
+    const asignables = new Set(this.roles().map((r) => r.id));
+    return this.otros().filter((id) => id !== principal && asignables.has(id));
   }
 
   cerrar(): void {

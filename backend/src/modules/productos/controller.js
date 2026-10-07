@@ -27,6 +27,9 @@ async function obtener(req, res, next) {
     const data = await service.obtener(Number(req.params.id));
     // La ruta es pública (la usaba la tienda en línea): el precio de compra no.
     await permisos.sinCostosSiNoVe(req, data.variantes);
+    // Los precios por lista, solo al personal: un visitante no ve a cuánto se
+    // le vende a mayoreo. La pantalla de presentaciones los necesita.
+    if (permisos.authOpcional(req)?.tipo === 'usuario') await service.conPreciosLista(data.variantes);
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);

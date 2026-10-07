@@ -21,18 +21,32 @@
               <input type="text" formControlName="nombre" placeholder="Nombre completo" />
             </label>
             <label class="field">
-              Puesto
+              Puesto principal
               <select formControlName="rol_id">
                 @for (r of roles(); track r.id) {
                   <option [ngValue]="r.id">{{ nombrePuesto(r) }}</option>
                 }
               </select>
-              <span class="ayuda">Lo que puede hacer cada puesto se decide en Permisos.</span>
+              <span class="ayuda">El que sale en nómina.</span>
             </label>
             <label class="field">
               Teléfono <span class="muted" style="font-weight: 400">(opcional)</span>
               <input type="tel" formControlName="telefono" />
             </label>
+            <!-- Los demás puestos: puede lo de todos juntos. -->
+            <fieldset class="field full otros-puestos">
+              <legend>También trabaja como <span class="muted" style="font-weight: 400">(opcional)</span></legend>
+              <div class="casillas">
+                @for (r of otrosDisponibles(); track r.id) {
+                  <label class="field check">
+                    <input type="checkbox" [checked]="tieneOtro(r.id)"
+                           (change)="alternarOtro(r.id, $any($event.target).checked)" />
+                    {{ nombrePuesto(r) }}
+                  </label>
+                }
+              </div>
+              <span class="ayuda">Puede lo de todos sus puestos juntos. Lo que puede cada puesto se decide en Permisos.</span>
+            </fieldset>
             <label class="field full">
               Correo
               <input type="email" formControlName="correo" placeholder="correo@tienda.mx" autocomplete="off" />
