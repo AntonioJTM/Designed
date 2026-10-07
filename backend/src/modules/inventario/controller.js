@@ -1,7 +1,9 @@
 'use strict';
 
 const service = require('./service');
+const hilo = require('./hilo');
 const { parsePagination, parseBool } = require('../../utils/query');
+const { AppError } = require('../../middlewares/error');
 
 /** Un día 'YYYY-MM-DD' o undefined: el filtro de fechas del kardex. */
 function fechaDia(v) {
@@ -113,6 +115,29 @@ async function listarConversiones(req, res, next) {
 }
 
 /** Cuántos paquetes son X kilos, con los pesos reales de la bodega. */
+/** El detalle de un hilo: saldos por presentación y almacén, y sus lotes. */
+async function detalleHilo(req, res, next) {
+  try {
+    const data = await hilo.detalleHilo(Number(req.params.productoId));
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** Los bultos de un lote del hilo. `?sin_lote=1` trae los que no traen lote. */
+async function bultosDeLote(req, res, next) {
+  try {
+    const sinLote = req.query.sin_lote === '1' || req.query.sin_lote === 'true';
+    const lote = sinLote ? null : String(req.query.lote ?? '').trim();
+    if (!sinLote && !lote) throw new AppError(422, 'FALTA_LOTE', 'Falta decir de qué lote');
+    const data = await hilo.bultosDeLote(Number(req.params.productoId), lote);
+    return res.json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 async function equivalenciaPaquetes(req, res, next) {
   try {
     const data = await service.equivalenciaPaquetes({
@@ -210,6 +235,8 @@ module.exports = {
   recibirTraspaso,
   cancelarTraspaso,
   equivalenciaPaquetes,
+  detalleHilo,
+  bultosDeLote,
   listarTraspasos,
   obtenerTraspaso,
   configurar,

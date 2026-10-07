@@ -1,0 +1,61 @@
+<!-- No se cierra al tocar el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="pesar-titulo">
+    <div class="modal-head">
+      <h2 id="pesar-titulo">
+        {{ hilo().producto }}
+        <span class="muted tipo">· {{ esCono ? 'Conos' : 'Por kilo' }}</span>
+      </h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form (ngSubmit)="agregar()">
+      <div class="modal-body">
+        <p class="explica">
+          @if (esCono) {
+            Pon los conos en la báscula y escribe lo que marca. Se cobra por kilo, al precio de la
+            lista del cliente.
+          } @else {
+            Pesa lo que se lleva y escribe lo que marca la báscula. Para vender un paquete completo,
+            mejor escanea su código: se cobra lo que pesa ese paquete.
+          }
+        </p>
+
+        <div class="campos">
+          <label class="field">
+            ¿Cuánto {{ esCono ? 'pesaron' : 'pesó' }}?
+            <span class="con-unidad">
+              <input #peso type="number" step="0.001" min="0.001" name="kg" [(ngModel)]="kg"
+                     placeholder="0.000" inputmode="decimal" />
+              <span class="muted">kg</span>
+            </span>
+          </label>
+          @if (esCono) {
+            <label class="field">
+              ¿Cuántos conos son?
+              <input type="number" step="1" min="1" name="piezas" [(ngModel)]="piezas" placeholder="Opcional · ej. 6" />
+            </label>
+          }
+        </div>
+
+        <!-- Con cero también se dice: es justo cuando no se va a poder cobrar. -->
+        @if (hay() !== null) {
+          <p class="hay" [class.no-alcanza]="noAlcanza()">
+            @if (hay() === 0) {
+              En esta tienda no hay{{ esCono ? ' conos de este hilo: primero se bajan a mostrador en Inventario' : ' de este hilo' }}.
+            } @else if (noAlcanza()) {
+              En esta tienda solo hay {{ hay() | cantidad: 'kg' }}{{ esCono ? ' enconados' : '' }}: así no se va a poder cobrar.
+            } @else {
+              En esta tienda hay {{ hay() | cantidad: 'kg' }}{{ esCono ? ' enconados' : '' }}.
+            }
+          </p>
+        }
+      </div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" [disabled]="!puedeAgregar()">Agregar al carrito</button>
+      </div>
+    </form>
+  </div>
+</div>

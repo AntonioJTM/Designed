@@ -62,6 +62,8 @@ export interface PedidoLinea {
    * campos de abajo, que se leen vivos del catálogo.
    */
   descripcion: string;
+  /** Cuántos conos eran, si se contaron al pesarlos (solo informativo: se cobran kilos). */
+  piezas?: number | null;
   /** Qué hilo es. Vivos del catálogo, no congelados: sirven para atender dudas. */
   producto?: string;
   calibre?: string | null;
@@ -137,7 +139,61 @@ export type CanalVenta = 'tienda_linea' | 'punto_venta';
 export type EstadoPedido =
   // 'apartado' = anticipo dejado, mercancía reservada y sin entregar.
   | 'apartado'
-  | 'pendiente' | 'pagado' | 'en_preparacion' | 'enviado' | 'entregado' | 'cancelado' | 'devuelto';
+  // 'listo' = un PEDIDO (encargo) preparado, esperando que pasen por él o que
+  // salga el chofer.
+  | 'pendiente' | 'pagado' | 'en_preparacion' | 'listo' | 'enviado' | 'entregado' | 'cancelado' | 'devuelto';
+
+/** Lo que lleva un pedido, para leerlo de un vistazo. */
+export interface EncargoHilo {
+  hilo: string;
+  tipo_presentacion: string | null;
+  kg: number;
+  /** Conos, si se contaron al pesarlos. */
+  piezas: number | null;
+  /** Cuántos paquetes van: los escaneados al prepararlo, o un aproximado. */
+  paquetes: number | null;
+  /** Paquetes ya escaneados (ligados al pedido); 0 = el número es aproximado. */
+  escaneados?: number;
+}
+
+/**
+ * Un PEDIDO de cliente (encargo) sin entregar: una venta que se tomó en el
+ * mostrador, con la mercancía apartada, que se entrega después (pasa por él o
+ * lo lleva el chofer) cobrando lo que falte.
+ */
+export interface Encargo {
+  id: number;
+  numero_pedido: string;
+  estado: 'en_preparacion' | 'listo' | 'enviado';
+  metodo_entrega: MetodoEntrega;
+  /** A dónde lo lleva el chofer. */
+  entrega_direccion: string | null;
+  /** Para cuándo lo quiere ('YYYY-MM-DD'). */
+  entrega_para: string | null;
+  total: number;
+  costo_envio: string;
+  notas: string | null;
+  creado_en: string;
+  almacen_id: number;
+  almacen: string | null;
+  cliente_id: number;
+  cliente: string | null;
+  nombre_comercial: string | null;
+  telefono: string | null;
+  vendedor: string | null;
+  pagado: number;
+  falta: number;
+  /** Pesó menos de lo que dejó pagado: se le devuelve al entregarlo. */
+  a_favor?: number;
+  hilos: EncargoHilo[];
+  kg: number;
+}
+
+export interface Encargos {
+  items: Encargo[];
+  conteo: { en_preparacion: number; listo: number; enviado: number };
+  por_cobrar: number;
+}
 
 /**
  * Un apartado vigente: la mercancía está guardada y el cliente va abonando.
@@ -203,6 +259,12 @@ export interface Pedido {
   canal: CanalVenta;
   /** Cómo llega la mercancía: recogen en tienda o se envía a domicilio. */
   metodo_entrega: MetodoEntrega;
+  /** 1 = PEDIDO de cliente (encargo): se entrega después, cobrando lo que falte. */
+  encargo?: number | boolean;
+  /** A dónde lo lleva el chofer (pedido con entrega 'envio'). */
+  entrega_direccion?: string | null;
+  /** Para cuándo lo quiere el cliente ('YYYY-MM-DD'). */
+  entrega_para?: string | null;
   estado: EstadoPedido;
   /** Si ya salió del inventario. Un apartado vigente está en 0. */
   inventario_descontado?: number | boolean;
@@ -250,6 +312,19 @@ export interface Pedido {
    * —no es dinero de la tienda— pero el ticket lo muestra.
    */
   cambio?: number;
+  /** Al entregar un pedido que pesó menos de lo que dejó: lo que se le devolvió. */
+  devuelto?: number;
+  /** Al prepararlo: el total de antes, lo que lleva pagado, lo que falta o lo que tiene a favor. */
+  total_antes?: number;
+  a_favor?: number;
+}
+
+/** Una línea al PREPARAR un pedido: los paquetes que van, o lo que pesó. */
+export interface LineaPreparada {
+  detalle_id: number;
+  codigos?: string[];
+  cantidad?: number;
+  piezas?: number | null;
 }
 
 /** Un movimiento del libro de crédito ligado a un pedido. */
@@ -270,6 +345,13 @@ export interface ItemCarrito {
   /** Unidad de peso en que se vende (kg por omisión). La cantidad es decimal. */
   unidad?: string;
   cantidad: number;
+  /** Paquete, cono o simple: dice cómo se nombra la línea ("6 conos", "por kilo"). */
+  tipo?: string | null;
+  /**
+   * Cuántos conos se pesaron ("vengo por 6 conos"). Solo informativo: se cobra
+   * y se descuenta `cantidad`, que son los kilos que marcó la báscula.
+   */
+  piezas?: number;
   /**
    * Bultos escaneados que forman esta cantidad. Cada bulto pesa distinto, así
    * que la cantidad es la SUMA de sus pesos reales, no un múltiplo del nominal.

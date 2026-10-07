@@ -26,6 +26,15 @@ describe('Usuarios (Personal)', () => {
       // Si el backend lo mandara por error, la pantalla no tiene dónde pintarlo.
       contrasena_hash: '$2b$10$secretosecretosecreto',
     },
+    // Cajera que además es administradora (varios puestos, 2026-10-06).
+    {
+      id: 3, rol_id: 3, rol: 'cajero', nombre: 'Rosa', correo: 'rosa@x.mx', activo: true,
+      otros_roles: [{ id: 1, nombre: 'administrador' }], creado_en: '', actualizado_en: '',
+    },
+    {
+      id: 4, rol_id: 3, rol: 'cajero', nombre: 'Toño', correo: 'tono@x.mx', activo: true,
+      otros_roles: [{ id: 2, nombre: 'gerente' }], creado_en: '', actualizado_en: '',
+    },
   ] as unknown as Usuario[];
 
   const apiFalso = { listar: () => of(usuarios), roles: () => of(roles) };
@@ -62,6 +71,23 @@ describe('Usuarios (Personal)', () => {
     expect(c.rolesAsignables().map((r) => r.nombre)).not.toContain('administrador');
     expect(c.puedeEditar(usuarios[0])).toBe(false);
     expect(c.puedeEditar(usuarios[1])).toBe(true);
+  });
+
+  it('pinta todos los puestos de cada quien, el principal primero', async () => {
+    const fixture = await montar(true);
+    const c = fixture.componentInstance;
+    expect(c.puestos(usuarios[3])).toEqual(['cajero', 'gerente']);
+    const fila = [...(fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr')]
+      .find((tr) => tr.textContent?.includes('Toño'))!;
+    expect([...fila.querySelectorAll('.pill')].map((p) => p.textContent?.trim()).slice(0, 2))
+      .toEqual(['Cajero', 'Gerente']);
+  });
+
+  it('a quien tiene el puesto de administrador además de otro, solo lo edita un administrador', async () => {
+    const fixture = await montar(false);
+    const c = fixture.componentInstance;
+    expect(c.puedeEditar(usuarios[2])).toBe(false);
+    expect(c.puedeEditar(usuarios[3])).toBe(true);
   });
 
   it('no pinta contraseñas ni hashes', async () => {

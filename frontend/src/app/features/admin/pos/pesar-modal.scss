@@ -1,0 +1,9 @@
+/* Pesar antes de agregar (conos o venta por kilo). El marco es el del sistema de diseño. */
+h2 .tipo { font-weight: 400; font-size: 16px; }
+.explica { margin: 0 0 16px; font-size: 14px; color: var(--tinta-2); line-height: 1.5; }
+.campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 560px) { .campos { grid-template-columns: minmax(0, 1fr); } }
+.con-unidad { display: flex; align-items: center; gap: 8px; }
+.con-unidad input { flex: 1; font-size: 22px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.hay { margin: 16px 0 0; font-size: 13px; color: var(--tinta-3); }
+.hay.no-alcanza { color: var(--peligro-t); font-weight: 500; }

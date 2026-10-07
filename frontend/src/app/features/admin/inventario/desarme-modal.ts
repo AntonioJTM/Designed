@@ -47,25 +47,31 @@ export class DesarmeModal implements OnInit {
   codigo = '';
   /** Lo que trae el bulto escaneado, tal como lo resolvió el backend. */
   readonly previaBulto = signal<PreviaDesarme | null>(null);
-  /** Almacén al que bajan los conos (el mostrador). */
-  bajarA: number | '' = '';
-  origen: number | '' = '';
   /**
-   * Lo que GANA de peso el hilo al enconarse: el tubo de cada cono. Lo captura la
-   * tienda porque depende del tubo que use; el sistema no lo adivina. Vacío = 0.
+   * La TIENDA donde se abre el paquete: ahí estaba y ahí quedan los conos. Los
+   * conos solo se bajan en tiendas; en la bodega no (usuario, 2026-10-06). Si el
+   * paquete está en la bodega, primero se manda con Surtir sucursal.
    */
-  destare: number | null = null;
+  tienda: number | '' = '';
+  /**
+   * DESTARE POR CONO: lo que pesa el tubo de UN cono. Se multiplica por los conos
+   * que salen y se suma a los kilos del mostrador ("eso se le suma a cada cono").
+   * Lo captura la tienda porque depende del tubo; se recuerda para la próxima.
+   */
+  destarePorCono: number | null = null;
   motivo = '';
 
   /** Captura a mano, cuando no hay lector o el bulto no tiene código. */
   manual = {
     cono_id: '' as number | '',
-    origen: '' as number | '',
-    destino: '' as number | '',
+    tienda: '' as number | '',
     paquetes: 1 as number | null,
     kg: null as number | null,
     conos: null as number | null,
   };
+
+  /** Solo las tiendas (almacenes con mostrador): en la bodega no se bajan conos. */
+  readonly tiendas = computed(() => this.almacenes().filter((a) => !!Number(a.es_punto_venta)));
 
   /** Solo las últimas: el histórico completo está en el Kardex. */
   readonly ultimas = computed(() => this.conversiones().slice(0, 5));
@@ -93,6 +99,8 @@ export class DesarmeModal implements OnInit {
     piezasAjustadas: boolean;
     paqueteSku?: string | null;
     conoSku: string;
+    destare: number;
+    kgEnconados: number;
   } | null {
     const c = this.conoSel();
     const n = Number(this.manual.paquetes);
@@ -102,6 +110,7 @@ export class DesarmeModal implements OnInit {
     const kg = this.manual.kg != null ? Number(this.manual.kg) : nominal;
     const piezasNominal = Number(c.piezas_por_origen) * n;
     const piezas = this.manual.conos != null ? Number(this.manual.conos) : piezasNominal;
+    const destare = this.destareTotal(piezas);
     return {
       kg,
       nominal,
@@ -112,17 +121,73 @@ export class DesarmeModal implements OnInit {
       piezasAjustadas: piezas !== piezasNominal,
       paqueteSku: c.paquete_sku,
       conoSku: c.sku,
+      destare,
+      kgEnconados: Math.round((kg + destare) * 1000) / 1000,
     };
+  }
+
+  /** Destare de todos los conos: lo que pesa un tubo × cuántos conos salen. */
+  destareTotal(conos: number | null | undefined): number {
+    const d = Number(this.destarePorCono ?? 0);
+    if (!d || !conos) return 0;
+    return Math.round(d * Number(conos) * 1000) / 1000;
+  }
+
+  /** El destare de un cono en gramos, que es como se pesa un tubo. */
+  gramos(): number {
+    return Math.round(Number(this.destarePorCono ?? 0) * 1000);
   }
 
   /** Los inputs se leen aquí, no en el constructor: ahí todavía no están puestos. */
   ngOnInit(): void {
     const primerCono = this.conos()[0];
     if (primerCono) this.manual.cono_id = primerCono.id;
-    const bodega = this.almacenes().find((a) => !a.es_punto_venta) ?? this.almacenes()[0];
-    if (bodega) this.manual.origen = bodega.id;
-    const mostrador = this.almacenes().find((a) => a.es_punto_venta);
-    if (mostrador) this.manual.destino = mostrador.id;
+    const tienda = this.tiendas()[0];
+    if (tienda) this.manual.tienda = tienda.id;
+    // El tubo casi siempre es el mismo: se propone el último destare usado.
+    try {
+      const d = Number(localStorage.getItem('destare_por_cono'));
+      if (d > 0) this.destarePorCono = d;
+    } catch {
+      /* sin almacenamiento: se captura cada vez */
+    }
+  }
+
+  private recordarDestare(): void {
+    try {
+      if (this.destarePorCono && this.destarePorCono > 0) {
+        localStorage.setItem('destare_por_cono', String(this.destarePorCono));
+      }
+    } catch {
+      /* sin almacenamiento */
+    }
+  }
+
+  /**
+   * Por qué ESTE paquete no se puede abrir en la tienda elegida, o null. Tiene
+   * que estar ahí (usuario, 2026-10-06: "si no, que mande una alerta de que el
+   * paquete en esa sucursal no existe"). El servidor lo exige igual.
+   */
+  problemaUbicacion(): string | null {
+    const b = this.previaBulto()?.bulto;
+    if (!b) return null;
+    if (b.en_camino_folio) {
+      return `Este paquete viene en camino (${b.en_camino_folio}): primero recibe el envío en Surtir sucursal.`;
+    }
+    if (b.almacen_id != null && b.almacen_id !== Number(this.tienda)) {
+      const aqui = this.tiendas().find((t) => t.id === Number(this.tienda))?.nombre ?? 'esta tienda';
+      return (
+        `Este paquete no está en «${aqui}»: el sistema lo tiene en «${b.almacen}». ` +
+        (b.en_tienda ? 'Elige esa tienda para bajarlo ahí.' : 'Primero mándalo a la tienda con Surtir sucursal.')
+      );
+    }
+    return null;
+  }
+
+  /** Lo que hay del paquete escaneado en esa tienda (null si no hay). */
+  existenciaEn(tiendaId: number | ''): number | null {
+    const e = this.previaBulto()?.existencias.find((x) => x.almacen_id === Number(tiendaId));
+    return e ? Number(e.cantidad) : null;
   }
 
   /**
@@ -140,13 +205,12 @@ export class DesarmeModal implements OnInit {
       next: (p) => {
         this.previaBulto.set(p);
         this.codigo = '';
-        this.destare = null;
-        // Origen: donde de verdad está la mercancía. Destino: un mostrador.
-        this.origen = p.existencias.length ? p.existencias[0].almacen_id : '';
-        const mostrador =
-          this.almacenes().find((a) => a.es_punto_venta && a.id !== this.origen) ??
-          this.almacenes().find((a) => a.es_punto_venta);
-        this.bajarA = mostrador?.id ?? '';
+        // La tienda donde ESTÁ el paquete; si no está en una tienda, la que tenga
+        // saldo de él, o la primera (y entonces avisa que no está ahí).
+        const ids = new Set(this.tiendas().map((t) => t.id));
+        const conPaquete = p.existencias.find((e) => ids.has(e.almacen_id) && Number(e.cantidad) > 0);
+        const donde = p.bulto.almacen_id != null && ids.has(p.bulto.almacen_id) ? p.bulto.almacen_id : null;
+        this.tienda = donde ?? conPaquete?.almacen_id ?? this.tiendas()[0]?.id ?? '';
       },
       error: (e) => {
         this.previaBulto.set(null);
@@ -155,13 +219,12 @@ export class DesarmeModal implements OnInit {
     });
   }
 
-  /** Peso que va a quedar enconado: el del bulto más el destare capturado. */
+  /** Peso que va a quedar enconado: el del bulto más el destare de sus conos. */
   pesoEnconado(): number | null {
     const p = this.previaBulto();
     if (!p) return null;
     const kg = Number(p.bulto.peso_kg);
-    const d = this.destare != null ? Number(this.destare) : 0;
-    return Math.round((kg + d) * 1000) / 1000;
+    return Math.round((kg + this.destareTotal(p.conos_a_generar)) * 1000) / 1000;
   }
 
   olvidarBulto(): void {
@@ -177,8 +240,13 @@ export class DesarmeModal implements OnInit {
   bajar(): void {
     const p = this.previaBulto();
     if (!p) return;
-    if (!this.origen || !this.bajarA) {
-      this.error.set('Elige de qué bodega sale y a qué mostrador baja.');
+    if (!this.tienda) {
+      this.error.set('Elige en qué tienda se abre el paquete.');
+      return;
+    }
+    const problema = this.problemaUbicacion();
+    if (problema) {
+      this.error.set(problema);
       return;
     }
     this.bajando.set(true);
@@ -186,9 +254,10 @@ export class DesarmeModal implements OnInit {
     this.inv
       .desarmar({
         codigo_bulto: p.bulto.codigo,
-        almacen_origen_id: Number(this.origen),
-        almacen_destino_id: Number(this.bajarA),
-        destare_kg: this.destare != null && this.destare > 0 ? Number(this.destare) : undefined,
+        // Se abre donde está: la misma tienda de un lado y del otro.
+        almacen_origen_id: Number(this.tienda),
+        almacen_destino_id: Number(this.tienda),
+        destare_por_cono_kg: this.destarePorCono && this.destarePorCono > 0 ? Number(this.destarePorCono) : undefined,
         motivo: this.motivo.trim() || undefined,
       })
       .subscribe({
@@ -199,8 +268,8 @@ export class DesarmeModal implements OnInit {
               `(${r.piezas_generadas} conos)` +
               (r.destare_kg ? ` · incluye ${r.destare_kg} kg de destare.` : '.')
           );
+          this.recordarDestare();
           this.previaBulto.set(null);
-          this.destare = null;
           this.motivo = '';
           this.bajando.set(false);
           // El modal NO se cierra: bajar varios paquetes seguidos es lo normal.
@@ -216,8 +285,8 @@ export class DesarmeModal implements OnInit {
   /** Desarme capturado a mano, sin escanear: usa los nominales del cono. */
   desarmarManual(): void {
     const c = this.conoSel();
-    if (!c || !this.manual.origen || !this.manual.destino || !this.manual.paquetes) {
-      this.error.set('Elige el cono, los almacenes y cuántos paquetes vas a desarmar.');
+    if (!c || !this.manual.tienda || !this.manual.paquetes) {
+      this.error.set('Elige el cono, la tienda y cuántos paquetes vas a desarmar.');
       return;
     }
     this.error.set(null);
@@ -226,11 +295,12 @@ export class DesarmeModal implements OnInit {
     this.inv
       .desarmar({
         cono_variante_id: c.id,
-        almacen_origen_id: Number(this.manual.origen),
-        almacen_destino_id: Number(this.manual.destino),
+        almacen_origen_id: Number(this.manual.tienda),
+        almacen_destino_id: Number(this.manual.tienda),
         paquetes: Number(this.manual.paquetes),
         kg: this.manual.kg != null ? Number(this.manual.kg) : undefined,
         conos: this.manual.conos != null ? Number(this.manual.conos) : undefined,
+        destare_por_cono_kg: this.destarePorCono && this.destarePorCono > 0 ? Number(this.destarePorCono) : undefined,
         motivo: this.motivo.trim() || undefined,
       })
       .subscribe({
@@ -239,6 +309,7 @@ export class DesarmeModal implements OnInit {
             `Se desarmaron ${r.paquetes} paquete(s): −${r.kg_consumidos} kg de ${r.paquete.sku}, ` +
               `+${r.kg_enconados ?? r.kg_consumidos} kg de ${r.cono.sku} (${r.piezas_generadas} conos).`
           );
+          this.recordarDestare();
           this.manual.kg = null;
           this.manual.conos = null;
           this.motivo = '';

@@ -5,7 +5,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -24,6 +24,9 @@ const itemSchema = z.object({
   // De qué bultos salió la cantidad. Opcional: una venta a granel o por pieza
   // no escanea bultos, y la tienda en línea nunca los manda.
   bultos: z.array(bultoVendidoSchema).max(500).optional(),
+  // Cuántas piezas eran (los conos que se pesaron). Solo informativo: se cobra y
+  // se descuenta por `cantidad`, que son kilos.
+  piezas: z.coerce.number().int().positive().max(100000).optional(),
 });
 
 const pagoSchema = z.object({
@@ -64,6 +67,15 @@ const crearSchema = z
      * El anticipo va en `pagos` y puede ser cualquier cosa, incluso nada.
      */
     apartado: z.coerce.boolean().optional(),
+    /**
+     * PEDIDO (encargo): una venta que se entrega después —la recoge o la lleva
+     * el chofer—. La mercancía se aparta; lo que falte se cobra (o se fía) al
+     * entregarla. `metodo_entrega` 'envio' = la lleva el chofer, a
+     * `entrega_direccion`.
+     */
+    encargo: z.boolean().optional(),
+    entrega_direccion: z.string().trim().max(255).optional(),
+    entrega_para: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   })
   .strict();
 
@@ -86,8 +98,9 @@ const devolucionSchema = z
 const estadoSchema = z
   .object({
     // 'apartado' solo para reactivar un apartado cancelado (lo valida el model).
+    // 'listo' solo para los pedidos (encargos); también lo valida el model.
     estado: z.enum([
-      'apartado', 'pendiente', 'pagado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto',
+      'apartado', 'pendiente', 'pagado', 'en_preparacion', 'listo', 'enviado', 'entregado', 'cancelado', 'devuelto',
     ]),
     devoluciones: z.array(devolucionSchema).max(200).optional(),
   })
@@ -106,6 +119,8 @@ router.get('/mis', authRequired, controller.misPedidos);
 // Los apartados vigentes. Va ANTES de '/:id' o Express lo tomaría por un id y
 // respondería 404 — el mismo cuidado que con '/mis' y '/cotizacion'.
 router.get('/apartados', ...soloStaff, controller.apartados);
+// Los PEDIDOS (encargos) sin entregar: por preparar, listos y en camino.
+router.get('/encargos', ...soloStaff, requirePermiso('ver:encargos'), controller.encargos);
 // Las cifras de arriba de Pedidos: hoy, la semana, lo fiado por cobrar y lo cancelado.
 router.get('/resumen', ...soloStaff, controller.resumen);
 
@@ -126,8 +141,37 @@ const abonoApartadoSchema = z
   .strict();
 
 router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), controller.abonarApartado);
-// Aquí es donde por fin se descuenta del inventario.
-router.post('/:id/entregar', ...soloStaff, controller.entregarApartado);
+// Aquí es donde por fin se descuenta del inventario. Un PEDIDO cobra (o fía)
+// aquí lo que le falte.
+const entregaSchema = z
+  .object({
+    pagos: z.array(pagoSchema).max(10).optional(),
+    sesion_caja_id: z.coerce.number().int().positive().optional(),
+    a_credito: z.coerce.number().positive().max(99999999).optional(),
+  })
+  .strict();
+router.post('/:id/entregar', ...soloStaff, validate(entregaSchema), controller.entregarApartado);
+
+// PREPARAR un pedido: los paquetes que van (escaneados) y lo que pesaron los
+// conos; queda listo con el total al peso real. Lo hace quien ve Pedidos.
+const prepararSchema = z
+  .object({
+    lineas: z
+      .array(
+        z
+          .object({
+            detalle_id: z.coerce.number().int().positive(),
+            codigos: z.array(z.string().trim().min(1).max(60)).max(500).optional(),
+            cantidad: z.coerce.number().positive().max(100000).optional(),
+            piezas: z.coerce.number().int().min(0).max(100000).nullable().optional(),
+          })
+          .strict()
+      )
+      .min(1)
+      .max(100),
+  })
+  .strict();
+router.post('/:id/preparar', ...soloStaff, requirePermiso('ver:encargos'), validate(prepararSchema), controller.prepararEncargo);
 
 // ---- Comprobante de pago ----
 // La captura que el cliente le manda al administrador cuando deposita. La sube

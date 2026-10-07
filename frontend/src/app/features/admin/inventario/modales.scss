@@ -47,4 +47,7 @@ details.a-mano[open] > summary { margin-bottom: 14px; }
 .recientes table.grid th, .recientes table.grid td { padding: 8px 10px; font-size: 13px; }
 .recientes p { margin: 8px 0 0; font-size: 13px; }
 .ayuda { font-size: 12px; font-weight: 400; color: var(--tinta-3); }
+/* El paquete no está en la tienda elegida: los conos solo se bajan donde está. */
+.ayuda.aviso-tienda { color: var(--aviso-t); }
+.modal-body > .alert.alerta-ubicacion { margin: 12px 0 16px; }
 .previa + .campos { margin-top: 16px; }

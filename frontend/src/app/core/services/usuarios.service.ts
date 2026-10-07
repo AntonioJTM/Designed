@@ -15,6 +15,8 @@ export interface CrearUsuarioInput {
   correo: string;
   telefono?: string;
   contrasena: string;
+  /** Sus DEMÁS puestos (el principal es `rol_id`). */
+  otros_roles?: number[];
 }
 
 export interface ActualizarUsuarioInput {
@@ -23,6 +25,7 @@ export interface ActualizarUsuarioInput {
   telefono?: string | null;
   activo?: boolean;
   contrasena?: string;
+  otros_roles?: number[];
 }
 
 /** Gestión de personal (staff). Todos los endpoints requieren rol administrador. */

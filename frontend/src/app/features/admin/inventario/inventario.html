@@ -229,16 +229,31 @@
           </thead>
           <tbody>
             @for (g of grupos(); track g.clave) {
+              <!-- Tocar el hilo abre su detalle: dónde está, sus lotes y los paquetes de cada uno. -->
               <tr class="grupo-fila">
                 <td colspan="6">
-                  <b class="hilo">{{ nombreCompleto(g) }}</b>
-                  <span class="muted">
-                    · {{ clasificacion(g) }} · {{ g.total | cantidad: 'kg' }}
-                    {{ filtroAlmacen ? 'en este almacén' : 'en total' }}
-                    @if (!filtroAlmacen && !filtroQ && vista === 'todo') {
-                      · {{ porcentajeDelTotal(g.total) }}% del inventario
+                  <div class="grupo-cabeza">
+                    <div>
+                      @if (g.producto_id != null) {
+                        <button type="button" class="hilo-boton" (click)="abrirHilo(g)"
+                                [attr.aria-label]="'Ver lotes y paquetes de ' + nombreCompleto(g)">
+                          <b class="hilo">{{ nombreCompleto(g) }}</b>
+                        </button>
+                      } @else {
+                        <b class="hilo">{{ nombreCompleto(g) }}</b>
+                      }
+                      <span class="muted">
+                        · {{ clasificacion(g) }} · {{ g.total | cantidad: 'kg' }}
+                        {{ filtroAlmacen ? 'en este almacén' : 'en total' }}
+                        @if (!filtroAlmacen && !filtroQ && vista === 'todo') {
+                          · {{ porcentajeDelTotal(g.total) }}% del inventario
+                        }
+                      </span>
+                    </div>
+                    @if (g.producto_id != null) {
+                      <button type="button" class="btn btn-ghost btn-sm" (click)="abrirHilo(g)">Lotes y paquetes ›</button>
                     }
-                  </span>
+                  </div>
                 </td>
               </tr>
               @for (s of g.filas; track s.id) {
@@ -329,6 +344,14 @@
     [almacenes]="almacenes()"
     (cerrado)="modal.set(null)"
     (hecho)="alMover()"
+  />
+}
+
+@if (hiloAbierto(); as h) {
+  <app-hilo-modal
+    [hilo]="{ producto_id: h.producto_id!, producto: h.producto, calibre: h.calibre, material: h.material, linea: h.linea }"
+    [almacenId]="filtroAlmacen || null"
+    (cerrado)="hiloAbierto.set(null)"
   />
 }
 

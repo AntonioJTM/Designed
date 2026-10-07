@@ -22,6 +22,8 @@ const crearSchema = z
     correo: z.string().trim().toLowerCase().email().max(160),
     telefono: z.string().trim().max(20).optional(),
     contrasena: z.string().min(8).max(72),
+    // Sus DEMÁS puestos (el principal es rol_id). Puede lo de todos.
+    otros_roles: z.array(z.coerce.number().int().positive()).max(30).optional(),
   })
   .strict();
 
@@ -32,6 +34,7 @@ const actualizarSchema = z
     telefono: z.string().trim().max(20).nullable().optional(),
     activo: z.coerce.boolean().optional(),
     contrasena: z.string().min(8).max(72).optional(),
+    otros_roles: z.array(z.coerce.number().int().positive()).max(30).optional(),
   })
   .strict();
 

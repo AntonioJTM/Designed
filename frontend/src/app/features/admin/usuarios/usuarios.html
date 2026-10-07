@@ -2,7 +2,7 @@
   <header class="page-head">
     <div>
       <h1>Personal</h1>
-      <p class="sub">Quién trabaja en la tienda y en qué puesto. Lo que puede hacer cada puesto se decide en Permisos.</p>
+      <p class="sub">Quién trabaja en la tienda y en qué puestos. Quien tiene varios puede lo de todos; lo que puede cada puesto se decide en Permisos.</p>
     </div>
     <div class="acciones">
       <!-- Permisos es solo del administrador: a los demás ni se les enlaza. -->
@@ -40,7 +40,7 @@
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>Puesto</th>
+              <th>Puestos</th>
               <th>Estado</th>
               <th>Último acceso</th>
               <th><span class="oculto">Acciones</span></th>
@@ -54,7 +54,13 @@
                   <div class="muted" style="font-size: 13px">{{ u.correo }}</div>
                 </td>
                 <td>
-                  <span class="pill" [class.azul]="puestoAzul(u)" [class.gris]="!puestoAzul(u)">{{ puesto(u) }}</span>
+                  <!-- El principal primero (el de nómina); después los demás. -->
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                    @for (p of puestos(u); track p; let primero = $first) {
+                      <span class="pill" [class.azul]="puestoAzul(p)" [class.gris]="!puestoAzul(p)"
+                            [attr.title]="primero ? 'Puesto principal' : 'También trabaja como ' + puesto(p)">{{ puesto(p) }}</span>
+                    }
+                  </div>
                 </td>
                 <td>
                   @if (u.activo) {

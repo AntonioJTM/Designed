@@ -57,7 +57,20 @@ export interface MovimientoInput {
  * con los conos que dice el bulto.
  */
 export interface PreviaDesarme {
-  bulto: { codigo: string; peso_kg: string; lote?: string | null; conos?: number | null; remesa_folio?: string | null };
+  bulto: {
+    codigo: string;
+    peso_kg: string;
+    lote?: string | null;
+    conos?: number | null;
+    remesa_folio?: string | null;
+    /** Dónde lo tiene el sistema (null = capturado a mano, sin almacén). */
+    almacen_id?: number | null;
+    almacen?: string | null;
+    /** ¿Ese almacén es una tienda? null si no tiene almacén. */
+    en_tienda?: boolean | null;
+    /** Folio del traspaso si viene en camino (enviado y sin recibir). */
+    en_camino_folio?: string | null;
+  };
   paquete: { variante_id: number; sku: string; producto: string; calibre?: string | null; presentacion?: string | null; peso_kg: string; precio: string };
   cono: { variante_id: number; sku: string; piezas_por_origen: number; precio: string } | null;
   conos_a_generar: number | null;
@@ -75,8 +88,10 @@ export interface DesarmeInput {
   kg?: number;
   /** Conos que rinde de verdad. Sin esto se usan los nominales del cono. */
   conos?: number;
-  /** Lo que gana de peso el hilo al enconarse (el tubo de cada cono). */
+  /** Lo que gana de peso el hilo al enconarse (el tubo de cada cono), en total. */
   destare_kg?: number;
+  /** O lo que pesa el tubo de UN cono: el servidor lo multiplica por los conos. */
+  destare_por_cono_kg?: number;
   /** Bulto que se desarmó, para dejar el rastro en el kardex. */
   codigo_bulto?: string;
   motivo?: string;
@@ -86,6 +101,7 @@ export interface ResultadoDesarme {
   conversion_id: number;
   /** El destare capturado, y el peso ya con él sumado. */
   destare_kg?: number | null;
+  destare_por_cono_kg?: number | null;
   kg_enconados?: number;
   producto: string;
   paquetes: number;
@@ -114,6 +130,86 @@ export interface ResumenAlmacen {
 }
 
 /** Renglón de la matriz: un producto y lo que hay de él en cada almacén. */
+/**
+ * El detalle de un hilo (Inventario → clic en el hilo, 2026-10-06): cuánto hay
+ * por presentación y almacén (los saldos, que son la verdad), y sus lotes. Los
+ * números llegan ya como número.
+ */
+export interface DetalleHilo {
+  hilo: {
+    producto_id: number;
+    producto: string;
+    calibre: string | null;
+    material: string | null;
+    linea: string | null;
+  };
+  presentaciones: {
+    variante_id: number;
+    sku: string;
+    tipo_presentacion: string | null;
+    peso_kg: string | null;
+    total: number;
+    existencias: {
+      almacen_id: number;
+      almacen: string;
+      cantidad: number;
+      reservada: number;
+      /** Bultos que se cree que están ahí (aproximado); null en el cono. */
+      bultos: number | null;
+      kg_en_bultos: number | null;
+    }[];
+  }[];
+  lotes: LoteHilo[];
+  resumen: {
+    /** Lotes con paquetes todavía. */
+    lotes: number;
+    lotes_total: number;
+    bultos_disponibles: number;
+    kg_en_bultos: number;
+    sin_ubicar: number;
+  };
+}
+
+/** Un lote del hilo y qué ha pasado con sus paquetes. `lote` null = sin lote. */
+export interface LoteHilo {
+  lote: string | null;
+  /** Todos los paquetes que llegaron de ese lote, y sus kilos. */
+  bultos: number;
+  kg: number;
+  disponibles: {
+    bultos: number;
+    kg: number;
+    conos: number;
+    por_almacen: { almacen_id: number | null; almacen: string | null; bultos: number; kg: number }[];
+  };
+  vendidos: { bultos: number; kg: number };
+  /** Apartados para un pedido: siguen ahí, pero ya tienen dueño. */
+  apartados: { bultos: number; kg: number };
+  desarmados: { bultos: number; kg: number; conos: number; destare_kg: number };
+  peso_min: number | null;
+  peso_max: number | null;
+  cargas: { remesa_id: number; folio: string; fecha_ingreso: string; proveedor: string | null; bultos: number }[];
+}
+
+/** Un bulto de un lote, con lo que pasó con él. */
+export interface BultoLote {
+  id: number;
+  codigo: string;
+  peso_kg: number | null;
+  conos: number | null;
+  estado: 'disponible' | 'apartado' | 'vendido' | 'desarmado';
+  almacen_id: number | null;
+  almacen: string | null;
+  sku: string;
+  carga_folio: string | null;
+  fecha_ingreso: string | null;
+  consumido_en: string | null;
+  consumido_tipo: 'pedido' | 'conversion' | null;
+  consumido_id: number | null;
+  pedido_folio: string | null;
+  conos_generados: number | null;
+}
+
 export interface ResumenFila {
   variante_id: number;
   sku: string;
@@ -673,6 +769,21 @@ export class InventarioService {
   }
 
   /** Panorama de qué hay en cada almacén: totales + matriz producto × almacén. */
+  /** El detalle de un hilo: saldos por presentación y almacén, y sus lotes. */
+  detalleHilo(productoId: number): Observable<DetalleHilo> {
+    return this.http
+      .get<ApiResponse<DetalleHilo>>(`${this.base}/inventario/hilos/${productoId}`)
+      .pipe(map(data));
+  }
+
+  /** Los bultos de un lote del hilo (`null` = los que no traen lote). */
+  bultosDeLote(productoId: number, lote: string | null): Observable<BultoLote[]> {
+    const params = lote === null ? new HttpParams().set('sin_lote', '1') : new HttpParams().set('lote', lote);
+    return this.http
+      .get<ApiResponse<BultoLote[]>>(`${this.base}/inventario/hilos/${productoId}/bultos`, { params })
+      .pipe(map(data));
+  }
+
   resumen(): Observable<ResumenAlmacenes> {
     return this.http
       .get<ApiResponse<ResumenAlmacenes>>(`${this.base}/inventario/resumen`)
@@ -699,8 +810,10 @@ export class InventarioService {
   }
 
   /** Búsqueda de variantes (SKU/código) para elegir en formularios. */
-  buscarVariantes(q: string): Observable<Variante[]> {
-    const params = new HttpParams().set('q', q).set('limit', 20);
+  /** Con `almacenId`, cada presentación dice cuánto hay en ese almacén (`aqui`). */
+  buscarVariantes(q: string, almacenId?: number | null): Observable<Variante[]> {
+    let params = new HttpParams().set('q', q).set('limit', 20);
+    if (almacenId) params = params.set('almacen_id', almacenId);
     return this.http
       .get<ApiResponse<Paginado<Variante>>>(`${this.base}/variantes`, { params })
       .pipe(map((r) => data(r).items));

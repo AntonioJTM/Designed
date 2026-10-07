@@ -113,13 +113,13 @@ describe('ClienteExpediente', () => {
 
   it('el folio solo enlaza al pedido si el puesto ve Pedidos', async () => {
     let f = await montar();
-    expect(f.nativeElement.querySelector('a[href="/admin/pedidos/90"]')).toBeNull();
+    expect(f.nativeElement.querySelector('a[href="/admin/ventas/90"]')).toBeNull();
     expect(textoDe(f.nativeElement)).toContain('POS-A1F3');
     TestBed.resetTestingModule();
 
     permisos = new Set(['ver:pedidos']);
     f = await montar();
-    expect(f.nativeElement.querySelector('a[href="/admin/pedidos/90"]')).not.toBeNull();
+    expect(f.nativeElement.querySelector('a[href="/admin/ventas/90"]')).not.toBeNull();
   });
 
   it('Venderle solo aparece para quien ve el punto de venta', async () => {

@@ -21,6 +21,12 @@ export interface DatosRegistroCliente {
   acepta_marketing?: boolean;
 }
 
+/** ¿Alguno de los puestos de la sesión es el de administrador? Entonces lo puede todo. */
+function esAdminSesion(s: SesionActual | null): boolean {
+  if (!s || s.tipo !== 'usuario') return false;
+  return s.rol === 'administrador' || (s.puestos ?? []).includes('administrador');
+}
+
 /**
  * Servicio central de autenticación. Habla con /usuarios y /clientes del API,
  * guarda el JWT vía TokenService y mantiene la sesión actual como signal.
@@ -62,14 +68,14 @@ export class AuthService {
     if (!s || s.tipo !== 'usuario') return false;
     // La tienda no lleva el costo (core/costos.ts): nadie lo ve.
     if (permiso === 'hacer:ver_costos' && !SE_LLEVA_COSTO) return false;
-    if (s.rol === 'administrador') return true;
+    if (esAdminSesion(s)) return true;
     if (permiso === null) return true;
     if (permiso === 'admin') return false;
     return (s.permisos ?? []).includes(permiso);
   }
 
   esAdmin(): boolean {
-    return this.sesion()?.rol === 'administrador';
+    return esAdminSesion(this.sesion());
   }
 
   private loginUsuario(correo: string, contrasena: string): Observable<SesionActual> {
@@ -141,6 +147,7 @@ export class AuthService {
       nombre: usuario.nombre,
       correo: usuario.correo,
       rol: usuario.rol,
+      puestos: [usuario.rol, ...(usuario.otros_roles ?? []).map((r) => r.nombre)],
       permisos: usuario.permisos ?? [],
     };
     this.sesion.set(sesion);

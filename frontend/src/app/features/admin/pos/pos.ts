@@ -15,6 +15,16 @@ import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { HiloAPesar, PesarModal } from './pesar-modal';
+
+/** Un hilo de la búsqueda con sus presentaciones (paquete y cono) juntas. */
+interface HiloEncontrado {
+  producto_id: number;
+  nombre: string;
+  filas: HiloAPesar[];
+  /** Tiene paquete pero todavía no tiene conos: se bajan en Inventario. */
+  sinConos: boolean;
+}
 
 /**
  * La caja con que se cobra. La MISMA clave la usa la pantalla Caja, para que
@@ -44,7 +54,8 @@ function guardarCaja(id: number): void {
  * Cómo se lleva la mercancía. Son excluyentes: fiar es ENTREGAR sin cobrar,
  * apartar es COBRAR sin entregar, y cobrar es las dos cosas a la vez.
  */
-export type ModoVenta = 'cobrar' | 'fiar' | 'apartar';
+// 'pedido' = un encargo: se entrega después (pasa por él o lo lleva el chofer).
+export type ModoVenta = 'cobrar' | 'fiar' | 'apartar' | 'pedido';
 
 /**
  * PUNTO DE VENTA (rediseño 2026-10): aquí solo se COBRA. El turno, el efectivo
@@ -55,9 +66,9 @@ export type ModoVenta = 'cobrar' | 'fiar' | 'apartar';
 @Component({
   selector: 'app-pos',
   host: { '(document:keydown.escape)': 'alEscape()' },
-  imports: [FormsModule, RouterLink, DineroPipe, CantidadPipe],
+  imports: [FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal],
+  styleUrls: ['./pos.scss', './pos-bultos.scss', './pos-busqueda.scss'],
   templateUrl: './pos.html',
-  styleUrls: ['./pos.scss', './pos-bultos.scss'],
 })
 export class Pos {
   private readonly ventas = inject(VentasService);
@@ -76,6 +87,7 @@ export class Pos {
   readonly veCaja = computed(() => this.auth.puede('ver:caja'));
   readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
   readonly veApartados = computed(() => this.auth.puede('ver:apartados'));
+  readonly veEncargos = computed(() => this.auth.puede('ver:encargos'));
   readonly puedeFiar = computed(() => this.auth.puede('hacer:fiar'));
 
   /** Listas de precio. Se cobra la elegida; por omisión, la del público. */
@@ -131,6 +143,18 @@ export class Pos {
    */
   readonly apartando = computed(() => this.modo() === 'apartar');
   /**
+   * PEDIDO (2026-10-06): "hacen el pedido por WhatsApp y después van por él, o se
+   * lo lleva el chofer; no es un apartado, es una venta". La mercancía se aparta
+   * y lo que falte se cobra al entregarlo, en la pantalla Pedidos.
+   */
+  readonly pidiendo = computed(() => this.modo() === 'pedido');
+  readonly entregaPedido = signal<'recoger' | 'envio'>('recoger');
+  /** Lo que se cobra por llevarlo (solo con chofer). Señal: mueve el total. */
+  readonly costoEnvio = signal<number | null>(null);
+  direccionPedido = '';
+  paraCuando = '';
+  notasPedido = '';
+  /**
    * Cuánto de esta venta se va a crédito. Vacío = todo lo que le alcance del
    * crédito: se puede elegir Fiar antes de escanear, y una cifra fija se
    * quedaba vieja en cuanto crecía el carrito.
@@ -157,16 +181,30 @@ export class Pos {
 
   // Búsqueda de variantes
   qVar = '';
-  resultados = signal<
-    {
-      id: number;
-      sku: string;
-      producto: string;
-      presentacion?: string | null;
-      precio: number;
-      unidad?: string;
-    }[]
-  >([]);
+  resultados = signal<(HiloAPesar & { producto_id: number })[]>([]);
+
+  /**
+   * La búsqueda agrupada por HILO: el paquete y el cono del mismo hilo juntos,
+   * cada uno con lo que hay en el almacén de esta caja. Así se ve de un golpe si
+   * hay conos que vender o si primero hay que bajarlos a mostrador.
+   */
+  readonly hilosEncontrados = computed<HiloEncontrado[]>(() => {
+    const porHilo = new Map<number, HiloEncontrado>();
+    for (const r of this.resultados()) {
+      const h = porHilo.get(r.producto_id) ?? { producto_id: r.producto_id, nombre: r.producto, filas: [], sinConos: false };
+      h.filas.push(r);
+      porHilo.set(r.producto_id, h);
+    }
+    const orden = (t?: string | null) => (t === 'paquete' ? 0 : t === 'cono' ? 1 : 2);
+    for (const h of porHilo.values()) {
+      h.filas.sort((a, b) => orden(a.tipo) - orden(b.tipo));
+      h.sinConos = h.filas.some((f) => f.tipo === 'paquete') && !h.filas.some((f) => f.tipo === 'cono');
+    }
+    return [...porHilo.values()];
+  });
+
+  /** La presentación que se está pesando (abre la ventana de la báscula). */
+  readonly pesando = signal<HiloAPesar | null>(null);
 
   // Carrito
   readonly carrito = signal<ItemCarrito[]>([]);
@@ -217,6 +255,10 @@ export class Pos {
       const items = this.carrito();
       const tipo = this.tipoClienteSel();
       const s = this.sesion();
+      // Un pedido con chofer suma lo del envío: el total lo dice el servidor.
+      const pedido = this.modo() === 'pedido';
+      const entrega = this.entregaPedido();
+      const envio = this.costoEnvio();
       if (items.length === 0 || !s) {
         this.totalReal.set(null);
         this.cotizacion.set(null);
@@ -230,6 +272,9 @@ export class Pos {
           sesion_caja_id: s.id,
           tipo_cliente_id: tipo ? Number(tipo) : undefined,
           items: items.map((i) => ({ variante_id: i.variante_id, cantidad: i.cantidad })),
+          ...(pedido
+            ? { encargo: true, metodo_entrega: entrega, costo_envio: entrega === 'envio' ? Number(envio ?? 0) : undefined }
+            : {}),
         })
         .subscribe({
           next: (c) => {
@@ -394,33 +439,31 @@ export class Pos {
     // vender. El backend también lo rechaza; esto es para avisar antes de que
     // el cajero cierre el ticket.
     if (r.bulto && r.bulto.estado && r.bulto.estado !== 'disponible') {
-      const donde = r.bulto.consumido_folio ? ` en ${r.bulto.consumido_folio}` : '';
+      // Apartado = es de un pedido o un apartado de otro cliente: sigue aquí,
+      // pero ya tiene dueño.
+      const folio = r.bulto.consumido_folio;
       this.error.set(
-        `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${donde}. Escanea otro.`
+        r.bulto.estado === 'apartado'
+          ? `El paquete ${r.bulto.codigo} está apartado${folio ? ' para ' + folio : ''}: es de un pedido. Escanea otro.`
+          : `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${folio ? ' en ' + folio : ''}. Escanea otro.`
       );
-      this.qVar = '';
-      return;
-    }
-
-    if (this.sinPrecio(this.nombreHilo(v), Number(v.precio_oferta ?? v.precio))) {
       this.qVar = '';
       return;
     }
 
     const peso = r.bulto?.peso_kg != null ? Number(r.bulto.peso_kg) : null;
 
-    // Código de la presentación (no de un bulto): se agrega como siempre.
+    // El código de una PRESENTACIÓN no es un paquete físico: se enseña el hilo
+    // con sus opciones (por kilo, conos) en vez de meter algo a ciegas. Pasa al
+    // escribir el color: "rojo" es también el código del paquete ROJO, y antes
+    // eso metía 1 kg sin preguntar (2026-10-06).
     if (!r.bulto || !peso || peso <= 0) {
-      this.agregar({
-        id: v.id,
-        sku: v.sku,
-        producto: this.nombreHilo(v),
-        presentacion: v.presentacion,
-        precio: Number(v.precio_oferta ?? v.precio),
-        unidad: v.unidad,
-      });
+      this.buscar();
+      return;
+    }
+
+    if (this.sinPrecio(this.nombreHilo(v), Number(v.precio_oferta ?? v.precio))) {
       this.qVar = '';
-      this.resultados.set([]);
       return;
     }
 
@@ -439,6 +482,7 @@ export class Pos {
             presentacion: v.presentacion,
             precio: Number(v.precio_oferta ?? v.precio),
             unidad: v.unidad,
+            tipo: v.tipo_presentacion,
             cantidad: peso,
             bultos: [bulto],
           },
@@ -489,20 +533,38 @@ export class Pos {
 
   buscar(): void {
     if (!this.qVar.trim()) return;
-    this.inv.buscarVariantes(this.qVar.trim()).subscribe({
+    // Con el almacén de la caja: cada presentación dice cuánto hay AQUÍ.
+    this.inv.buscarVariantes(this.qVar.trim(), this.cajaActual()?.almacen_id).subscribe({
       next: (vs) =>
         this.resultados.set(
-          vs.map((v) => ({
-            id: v.id,
-            sku: v.sku,
-            producto: this.nombreHilo(v),
-            presentacion: v.presentacion,
-            precio: Number(v.precio_oferta ?? v.precio),
-            unidad: v.unidad,
-          }))
+          vs
+            .filter((v) => v.activo !== false && (v.activo as unknown) !== 0)
+            .map((v) => ({
+              id: v.id,
+              producto_id: v.producto_id,
+              sku: v.sku,
+              producto: this.nombreHilo(v),
+              presentacion: v.presentacion,
+              tipo: v.tipo_presentacion,
+              precio: Number(v.precio_oferta ?? v.precio),
+              unidad: v.unidad,
+              aqui: v.aqui,
+            }))
         ),
       error: (e) => this.error.set(this.msg(e)),
     });
+  }
+
+  /** Cómo se lee lo que hay en esta tienda de una presentación de la búsqueda. */
+  hayAqui(r: HiloAPesar): string {
+    const a = r.aqui;
+    if (!a) return '';
+    const kg = Number(a.cantidad);
+    if (kg <= 0) return 'no hay aquí';
+    const kilos = `${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`;
+    if (r.tipo === 'cono') return `${kilos} enconados`;
+    if (a.paquetes) return `${a.paquetes.toLocaleString('es-MX')} ${a.paquetes === 1 ? 'paquete' : 'paquetes'} · ${kilos}`;
+    return kilos;
   }
 
   /**
@@ -513,19 +575,31 @@ export class Pos {
     return `${v.producto ?? ''}${v.calibre ? ' ' + v.calibre : ''}`;
   }
 
-  agregar(r: {
-    id: number;
-    sku: string;
-    producto: string;
-    presentacion?: string | null;
-    precio: number;
-    unidad?: string;
-  }): void {
+  /**
+   * Agregar sin escanear un paquete = PESAR. Abre la báscula: se teclea lo que
+   * marcó y, si son conos, cuántos eran (2026-10-06: "vengo por 6 conos"). Antes
+   * metía 1 kg y había que corregirlo en el carrito.
+   */
+  agregar(r: HiloAPesar): void {
     if (this.sinPrecio(r.producto, r.precio)) return;
+    this.pesando.set(r);
+  }
+
+  /** La báscula dio su peso: la línea se agrega, o se le suman los kilos y los conos. */
+  alPesar(r: HiloAPesar, e: { kg: number; piezas?: number }): void {
+    this.pesando.set(null);
     this.carrito.update((arr) => {
       const existe = arr.find((i) => i.variante_id === r.id);
       if (existe) {
-        return arr.map((i) => (i.variante_id === r.id ? { ...i, cantidad: i.cantidad + 1 } : i));
+        return arr.map((i) =>
+          i.variante_id === r.id
+            ? {
+                ...i,
+                cantidad: this.round3(i.cantidad + e.kg),
+                piezas: e.piezas || i.piezas ? (i.piezas ?? 0) + (e.piezas ?? 0) : undefined,
+              }
+            : i
+        );
       }
       return [
         ...arr,
@@ -534,12 +608,24 @@ export class Pos {
           sku: r.sku,
           producto: r.producto,
           presentacion: r.presentacion,
+          tipo: r.tipo,
           precio: r.precio,
           unidad: r.unidad,
-          cantidad: 1,
+          cantidad: e.kg,
+          piezas: e.piezas,
         },
       ];
     });
+    const conos = e.piezas ? ` (${e.piezas} ${e.piezas === 1 ? 'cono' : 'conos'})` : '';
+    this.mensaje.set(`${r.producto}: ${e.kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg${conos} al carrito.`);
+  }
+
+  /** Cómo se lee la línea del carrito que no lleva paquetes escaneados. */
+  comoSeVende(i: ItemCarrito): string {
+    if (i.tipo === 'cono') {
+      return i.piezas ? `${i.piezas} ${i.piezas === 1 ? 'cono' : 'conos'} · pesados` : 'conos, por kilo';
+    }
+    return 'por kilo';
   }
 
   /**
@@ -818,9 +904,23 @@ export class Pos {
     return this.clienteSel() ? null : 'Para apartar, primero elige al cliente.';
   }
 
+  /** Un pedido también: hay que saber de quién es (y a quién llamarle). */
+  motivoSinPedido(): string | null {
+    return this.clienteSel() ? null : 'Para tomar un pedido, primero elige al cliente.';
+  }
+
   elegirModo(m: ModoVenta): void {
     if (m === 'fiar' && (!this.puedeFiar() || this.motivoSinFiar())) return;
     if (m === 'apartar' && this.motivoSinApartar()) return;
+    if (m === 'pedido' && this.motivoSinPedido()) return;
+    if (m === 'pedido' && this.modo() !== 'pedido') {
+      // Arranca en "pasa por él"; si lo lleva el chofer, se propone su dirección.
+      this.entregaPedido.set('recoger');
+      this.costoEnvio.set(null);
+      this.direccionPedido = this.clienteSel()?.direccion ?? '';
+      this.paraCuando = '';
+      this.notasPedido = '';
+    }
     this.modo.set(m);
     this.aCredito = null;
     // Sin propuesta de anticipo: lo que deje es decisión del cliente, y poner
@@ -864,6 +964,10 @@ export class Pos {
 
   /** El texto del botón grande: dice exactamente lo que va a pasar. */
   textoBoton(): string {
+    if (this.pidiendo()) {
+      const a = Number(this.anticipo ?? 0);
+      return a > 0 ? `Tomar el pedido · deja ${this.dinero(a)}` : 'Tomar el pedido';
+    }
     if (this.apartando()) {
       const a = Number(this.anticipo ?? 0);
       return a > 0 ? `Apartar · deja ${this.dinero(a)}` : 'Apartar sin anticipo';
@@ -882,6 +986,30 @@ export class Pos {
       this.error.set('Agrega productos para poder cobrar.');
       return;
     }
+    // --- Pedido: se aparta la mercancía; lo que falte se cobra al entregar ---
+    if (this.pidiendo()) {
+      if (!this.clienteSel()) {
+        this.error.set('Para tomar un pedido hay que decir de quién es: busca al cliente arriba.');
+        return;
+      }
+      if (this.entregaPedido() === 'envio' && !this.direccionPedido.trim()) {
+        this.error.set('Si lo lleva el chofer, escribe a dónde.');
+        return;
+      }
+      const deja = Number(this.anticipo ?? 0);
+      if (deja > this.total() + 0.001) {
+        this.error.set(`Lo que deja (${this.dinero(deja)}) es más que el pedido (${this.dinero(this.total())}).`);
+        return;
+      }
+      if (deja > 0 && !this.metodoSel) {
+        this.error.set('Elige con qué deja el pago.');
+        return;
+      }
+      this.error.set(null);
+      this.tomarPedido(s, deja);
+      return;
+    }
+
     // --- Apartado: se guarda la mercancía y solo entra el anticipo ---
     if (this.apartando()) {
       if (!this.clienteSel()) {
@@ -944,6 +1072,8 @@ export class Pos {
           cantidad: i.cantidad,
           // Va el rastro de los bultos escaneados, si hubo.
           bultos: i.bultos?.length ? i.bultos : undefined,
+          // Cuántos conos eran: la venta lo dice ("6 conos"); se cobran los kilos.
+          piezas: i.piezas || undefined,
         })),
         // Sin nada que pagar hoy (todo a crédito) no se manda pago alguno. Se
         // manda lo RECIBIDO: el servidor asienta lo cobrado y devuelve el cambio.
@@ -1004,13 +1134,58 @@ export class Pos {
   }
 
   /**
+   * Toma el PEDIDO: la mercancía se aparta (no sale todavía) y entra solo lo que
+   * deje pagado. Se sigue en la pantalla Pedidos, donde se entrega cobrando lo
+   * que falte. Los paquetes escaneados van ligados al pedido y quedan
+   * APARTADOS para él (pasan a vendidos al entregarlo); al prepararlo se
+   * escanean los que de verdad van.
+   */
+  private tomarPedido(s: SesionCaja, deja: number): void {
+    const envio = this.entregaPedido() === 'envio';
+    this.ventas
+      .crearPedido({
+        canal: 'punto_venta',
+        sesion_caja_id: s.id,
+        cliente_id: this.clienteSel()!.id,
+        tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
+        encargo: true,
+        metodo_entrega: this.entregaPedido(),
+        entrega_direccion: envio ? this.direccionPedido.trim() : undefined,
+        costo_envio: envio && Number(this.costoEnvio() ?? 0) > 0 ? Number(this.costoEnvio()) : undefined,
+        entrega_para: this.paraCuando || undefined,
+        notas: this.notasPedido.trim() || undefined,
+        items: this.carrito().map((i) => ({
+          variante_id: i.variante_id,
+          cantidad: i.cantidad,
+          bultos: i.bultos?.length ? i.bultos : undefined,
+          piezas: i.piezas || undefined,
+        })),
+        pagos: deja > 0 ? [{ metodo_pago_id: Number(this.metodoSel), monto: deja }] : undefined,
+      })
+      .subscribe({
+        next: (pedido) => {
+          this.ticket.set({ pedido, cambio: 0, pagadoHoy: deja, fiado: 0 });
+          this.limpiarVenta();
+        },
+        error: (e) => this.error.set(this.msg(e)),
+      });
+  }
+
+  /** "lo recoge en la tienda" o "lo lleva el chofer a …", para el ticket. */
+  entregaDe(p: Pedido): string {
+    return p.metodo_entrega === 'envio'
+      ? `lo lleva el chofer${p.entrega_direccion ? ' a ' + p.entrega_direccion : ''}`
+      : 'pasa por él a la tienda';
+  }
+
+  /**
    * Crea el apartado. Va aparte de `cobrar()` porque no es un cobro: la
    * mercancía no sale del inventario, el anticipo puede ser cero, y el ticket
    * dice otra cosa.
    *
-   * Tampoco manda los bultos escaneados: el bulto se consume cuando la
-   * mercancía SALE, y aquí todavía no sale. Marcarlo ahora lo dejaría como
-   * vendido estando en la bodega.
+   * Los bultos escaneados van ligados al apartado y quedan APARTADOS (no
+   * vendidos: siguen en la tienda); pasan a vendidos al entregarlo, así el
+   * conteo de paquetes cuadra (2026-10-06).
    */
   private apartar(s: SesionCaja, anticipo: number): void {
     this.ventas
@@ -1023,6 +1198,8 @@ export class Pos {
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
           cantidad: i.cantidad,
+          bultos: i.bultos?.length ? i.bultos : undefined,
+          piezas: i.piezas || undefined,
         })),
         // Sin anticipo no se manda pago: hay clientes que apartan y vuelven a
         // pagar, y un pago de cero no significa nada.

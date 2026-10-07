@@ -17,6 +17,10 @@ export function nombrePuesto(rol: string | null | undefined): string {
  * que puede hacer cada puesto se decide en Permisos, que es solo del
  * administrador; por eso el botón "Ver permisos" solo le aparece a él.
  *
+ * Una persona puede tener VARIOS puestos (2026-10-06): el principal (el de
+ * nómina) y los demás; puede lo de todos juntos. La tabla los pinta todos, el
+ * principal primero.
+ *
  * NUNCA se muestra una contraseña ni su hash: el backend no los manda en el
  * listado (`CAMPOS_PUBLICOS`) y aquí solo se teclea una nueva al dar de alta o
  * para restablecerla.
@@ -81,18 +85,26 @@ export class Usuarios {
     });
   }
 
-  puesto(u: Usuario): string {
-    return nombrePuesto(u.rol);
+  /** Todos sus puestos, el principal primero. */
+  puestos(u: Usuario): string[] {
+    return [u.rol, ...(u.otros_roles ?? []).map((r) => r.nombre)];
+  }
+
+  puesto(rol: string): string {
+    return nombrePuesto(rol);
   }
 
   /** Administrador y gerente en azul (deciden); el resto en gris. */
-  puestoAzul(u: Usuario): boolean {
-    return u.rol === 'administrador' || u.rol === 'gerente';
+  puestoAzul(rol: string): boolean {
+    return rol === 'administrador' || rol === 'gerente';
   }
 
-  /** Solo un administrador edita a un administrador (ver la nota de la clase). */
+  /**
+   * Solo un administrador edita a un administrador (ver la nota de la clase),
+   * también a quien lo tiene como puesto ADEMÁS de otro.
+   */
   puedeEditar(u: Usuario): boolean {
-    return this.esAdmin() || u.rol !== 'administrador';
+    return this.esAdmin() || !this.puestos(u).includes('administrador');
   }
 
   /** "hoy 9:02", "ayer 18:30" o la fecha completa: así se lee de un vistazo quién entró. */

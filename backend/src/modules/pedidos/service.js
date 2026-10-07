@@ -75,9 +75,22 @@ async function abonarApartado(id, datos, usuarioId) {
   return model.abonarApartado(id, datos, usuarioId);
 }
 
-/** Entrega la mercancía. Exige que esté liquidado; lo valida el modelo. */
-async function entregarApartado(id, usuarioId) {
-  return model.entregarApartado(id, usuarioId);
+/**
+ * Entrega la mercancía. Un apartado exige estar liquidado; un PEDIDO cobra (o
+ * fía) lo que falte en ese momento. Lo valida el modelo.
+ */
+async function entregarApartado(id, usuarioId, datos = {}) {
+  return model.entregarApartado(id, usuarioId, datos);
+}
+
+/** Prepara un pedido: paquetes escaneados, conos pesados, total con el peso real. */
+async function prepararEncargo(id, datos, usuarioId) {
+  return model.prepararEncargo(id, datos, usuarioId);
+}
+
+/** Los pedidos (encargos) sin entregar. */
+async function encargos(filtros = {}) {
+  return model.listarEncargos({ estado: filtros.estado, q: filtros.q });
 }
 
 async function resumen() {
@@ -88,5 +101,5 @@ module.exports = {
   resumen,
   crear, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,
-  apartados, abonarApartado, entregarApartado,
+  apartados, abonarApartado, entregarApartado, prepararEncargo, encargos,
 };

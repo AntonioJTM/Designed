@@ -180,7 +180,7 @@ async function obtener(id) {
  */
 async function buscarParaVenta(q, limite = 10) {
   const [rows] = await pool.query(
-    `SELECT c.id, c.codigo, c.nombre, c.nombre_comercial, c.telefono,
+    `SELECT c.id, c.codigo, c.nombre, c.nombre_comercial, c.telefono, c.direccion,
             c.tipo_cliente_id, tc.nombre AS tipo_cliente,
             c.limite_credito,
             COALESCE(s.saldo, 0) AS saldo,

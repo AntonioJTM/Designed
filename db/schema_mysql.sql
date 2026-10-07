@@ -65,6 +65,18 @@ CREATE TABLE `usuarios` (
   CONSTRAINT `usuarios_ibfk_1` FOREIGN KEY (`rol_id`) REFERENCES `roles` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Los DEMÁS puestos de una persona (el principal es `usuarios.rol_id` y aquí no
+-- se repite). Puede lo de todos (2026-10-06, migración 2026-10_varios_puestos.sql).
+DROP TABLE IF EXISTS `usuario_roles`;
+CREATE TABLE `usuario_roles` (
+  `usuario_id` bigint(20) unsigned NOT NULL,
+  `rol_id` smallint(5) unsigned NOT NULL,
+  PRIMARY KEY (`usuario_id`,`rol_id`),
+  KEY `idx_usuario_roles_rol` (`rol_id`),
+  CONSTRAINT `usuario_roles_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `usuario_roles_rol` FOREIGN KEY (`rol_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------- Tabla: auditoria ----------
 DROP TABLE IF EXISTS `auditoria`;
 CREATE TABLE `auditoria` (
@@ -252,7 +264,7 @@ CREATE TABLE `variante_codigos` (
   KEY `idx_variante_codigos_almacen` (`almacen_id`),
   CONSTRAINT `fk_variante_codigos_almacen` FOREIGN KEY (`almacen_id`) REFERENCES `almacenes` (`id`),
   CONSTRAINT `variante_codigos_ibfk_1` FOREIGN KEY (`variante_id`) REFERENCES `producto_variantes` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `variante_codigos_chk_1` CHECK (`estado` in (_utf8mb4'disponible',_utf8mb4'vendido',_utf8mb4'desarmado'))
+  CONSTRAINT `variante_codigos_chk_1` CHECK (`estado` in (_utf8mb4'disponible',_utf8mb4'apartado',_utf8mb4'vendido',_utf8mb4'desarmado'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: variante_precios ----------
@@ -810,6 +822,7 @@ CREATE TABLE `pedidos` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `numero_pedido` varchar(40) NOT NULL,
   `canal` varchar(15) NOT NULL,
+  `encargo` tinyint(1) NOT NULL DEFAULT 0,
   `metodo_entrega` varchar(10) NOT NULL DEFAULT 'recoger',
   `cliente_id` bigint(20) unsigned DEFAULT NULL,
   `tipo_cliente_id` smallint(5) unsigned DEFAULT NULL,
@@ -817,6 +830,8 @@ CREATE TABLE `pedidos` (
   `sesion_caja_id` bigint(20) unsigned DEFAULT NULL,
   `almacen_id` smallint(5) unsigned DEFAULT NULL,
   `direccion_envio_id` bigint(20) unsigned DEFAULT NULL,
+  `entrega_direccion` varchar(255) DEFAULT NULL,
+  `entrega_para` date DEFAULT NULL,
   `cupon_id` bigint(20) unsigned DEFAULT NULL,
   `estado` varchar(20) NOT NULL DEFAULT 'pendiente',
   `inventario_descontado` tinyint(1) NOT NULL DEFAULT 1,
@@ -840,6 +855,7 @@ CREATE TABLE `pedidos` (
   KEY `idx_pedidos_estado` (`estado`),
   KEY `idx_pedidos_fecha` (`creado_en`),
   KEY `fk_pedidos_tipo_cliente` (`tipo_cliente_id`),
+  KEY `idx_pedidos_encargo` (`encargo`,`estado`),
   CONSTRAINT `fk_pedidos_tipo_cliente` FOREIGN KEY (`tipo_cliente_id`) REFERENCES `tipos_cliente` (`id`),
   CONSTRAINT `pedidos_ibfk_1` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`),
   CONSTRAINT `pedidos_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
@@ -849,7 +865,7 @@ CREATE TABLE `pedidos` (
   CONSTRAINT `pedidos_ibfk_6` FOREIGN KEY (`cupon_id`) REFERENCES `cupones` (`id`),
   CONSTRAINT `pedidos_chk_1` CHECK (`canal` in (_utf8mb4'tienda_linea',_utf8mb4'punto_venta')),
   CONSTRAINT `chk_pedidos_metodo_entrega` CHECK (`metodo_entrega` in ('recoger','envio')),
-  CONSTRAINT `pedidos_chk_2` CHECK (`estado` in ('apartado','pendiente','pagado','en_preparacion','enviado','entregado','cancelado','devuelto'))
+  CONSTRAINT `pedidos_chk_2` CHECK (`estado` in ('apartado','pendiente','pagado','en_preparacion','listo','enviado','entregado','cancelado','devuelto'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: pedido_detalle ----------
@@ -860,6 +876,7 @@ CREATE TABLE `pedido_detalle` (
   `variante_id` bigint(20) unsigned NOT NULL,
   `descripcion` varchar(200) NOT NULL,
   `cantidad` decimal(12,3) NOT NULL,
+  `piezas` int(10) unsigned DEFAULT NULL,
   `precio_unitario` decimal(12,2) NOT NULL,
   `costo_unitario` decimal(12,2) DEFAULT NULL,
   `descuento` decimal(12,2) NOT NULL DEFAULT 0.00,

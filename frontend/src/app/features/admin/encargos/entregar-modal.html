@@ -1,0 +1,105 @@
+<!-- No se cierra al tocar el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="entregar-titulo">
+    <div class="modal-head">
+      <h2 id="entregar-titulo">Entregar el pedido</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <form (ngSubmit)="entregar()">
+      <div class="modal-body columna" style="gap: 16px">
+        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+
+        <div class="previa-entrega">
+          <div><span>{{ pedido().nombre_comercial || pedido().cliente }}</span><span class="muted mono">{{ pedido().numero_pedido }}</span></div>
+          <div><span>Total del pedido</span><b>{{ pedido().total | dinero }}</b></div>
+          @if (pedido().pagado > 0) {
+            <div><span>Ya dejó pagado</span><span>{{ pedido().pagado | dinero }}</span></div>
+          }
+          @if (aFavor() > 0) {
+            <div class="renglon-falta"><span>Pesó menos: se le devuelven</span><b>{{ aFavor() | dinero }}</b></div>
+          } @else {
+            <div class="renglon-falta"><span>Falta</span><b>{{ falta() | dinero }}</b></div>
+          }
+        </div>
+
+        @if (aFavor() > 0) {
+          <!-- Pesó menos de lo que dejó pagado: la diferencia sale del cajón. -->
+          @if (turnos().length > 1) {
+            <label class="field">
+              Sale de la caja
+              <select [(ngModel)]="turnoId" name="turno">
+                <option [ngValue]="null">Elige la caja…</option>
+                @for (t of turnos(); track t.id) { <option [ngValue]="t.id">{{ t.caja || 'Caja ' + t.caja_id }}</option> }
+              </select>
+            </label>
+          } @else if (turnos().length === 1) {
+            <p class="nota-modal">Se le devuelven en efectivo del turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>.</p>
+          }
+        } @else if (falta() > 0) {
+          <div class="form-grid">
+            <label class="field">
+              Cobra ahora
+              <input type="number" min="0" step="0.01" [(ngModel)]="cobra" name="cobra" [placeholder]="falta().toFixed(2)" />
+              <span class="ayuda">Vacío = todo lo que falta.</span>
+            </label>
+            @if (aCobrar() > 0) {
+              <label class="field">
+                Con qué paga
+                <select [(ngModel)]="metodoId" name="metodo">
+                  @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+                </select>
+              </label>
+            }
+          </div>
+
+          @if (aCobrar() > 0 && esEfectivo()) {
+            <div class="form-grid">
+              <label class="field">
+                Recibido en efectivo
+                <input type="number" min="0" step="0.01" [(ngModel)]="recibido" name="recibido" [placeholder]="aCobrar().toFixed(2)" />
+                <span class="ayuda">Vacío = pagó justo. Cambio: {{ cambio() | dinero }}</span>
+              </label>
+              @if (turnos().length > 1) {
+                <label class="field">
+                  Entra a la caja
+                  <select [(ngModel)]="turnoId" name="turno">
+                    <option [ngValue]="null">Elige la caja…</option>
+                    @for (t of turnos(); track t.id) { <option [ngValue]="t.id">{{ t.caja || 'Caja ' + t.caja_id }}</option> }
+                  </select>
+                </label>
+              }
+            </div>
+            @if (turnos().length === 1) {
+              <p class="nota-modal">El efectivo entra al turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>.</p>
+            }
+          }
+
+          @if (resto() > 0) {
+            @if (puedeFiar()) {
+              <label class="field check">
+                <input type="checkbox" [(ngModel)]="fiarResto" name="fiar" />
+                Se le fían los {{ resto() | dinero }} que no paga hoy
+              </label>
+            }
+          }
+        } @else {
+          <p class="ok-msg" style="margin: 0">Ya está pagado: solo se entrega.</p>
+        }
+
+        <p class="nota-modal">Al entregarlo, la mercancía sale del inventario.</p>
+      </div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando() || !!motivo()">
+          @if (guardando()) { Entregando… }
+          @else if (aFavor() > 0) { Devolver {{ aFavor() | dinero }} y entregar }
+          @else if (falta() <= 0) { Entregar }
+          @else if (aCobrar() > 0) { Cobrar {{ aCobrar() | dinero }} y entregar }
+          @else { Entregar fiado }
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -90,7 +90,7 @@ describe('Kardex', () => {
 
   it('"Ver venta" solo para quien puede abrir el pedido', async () => {
     let fixture = await montar();
-    expect(fixture.componentInstance.enlaceVenta(venta)).toBe('/admin/pedidos/91');
+    expect(fixture.componentInstance.enlaceVenta(venta)).toBe('/admin/ventas/91');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Ver venta');
     TestBed.resetTestingModule();
 

@@ -9,12 +9,23 @@ import { CanalVenta, EstadoPedido } from '../../../core/models/ventas.models';
  * y el dinero no ha entrado), así que se dice así. En la tienda en línea es un
  * pedido que espera el depósito.
  */
-export function etiquetaEstado(estado: EstadoPedido | string, canal?: CanalVenta | null): string {
+export function etiquetaEstado(
+  estado: EstadoPedido | string,
+  canal?: CanalVenta | null,
+  encargo?: boolean | number | null
+): string {
+  // Un PEDIDO (encargo) habla de sus pasos: por preparar, listo, en camino.
+  if (encargo) {
+    if (estado === 'en_preparacion') return 'Por preparar';
+    if (estado === 'listo') return 'Listo';
+    if (estado === 'enviado') return 'En camino';
+  }
   switch (estado) {
     case 'apartado': return 'Apartado';
     case 'pendiente': return canal === 'tienda_linea' ? 'Pendiente de pago' : 'Pendiente · a crédito';
     case 'pagado': return 'Pagado';
     case 'en_preparacion': return 'En preparación';
+    case 'listo': return 'Listo';
     case 'enviado': return 'Enviado';
     case 'entregado': return 'Entregado';
     case 'cancelado': return 'Cancelado';

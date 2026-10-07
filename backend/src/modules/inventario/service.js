@@ -150,6 +150,8 @@ async function previaDesarmeBulto(codigo) {
   const cono = await model.conoDe(paquete.id);
   // Dónde hay existencias de ese paquete, para proponer el almacén de origen.
   const existencias = await model.existenciasDe(paquete.id);
+  // Dónde está ESTE paquete: tiene que estar en la tienda donde se abre.
+  const u = await model.ubicacionBulto(null, bulto.id);
 
   return {
     bulto: {
@@ -158,6 +160,10 @@ async function previaDesarmeBulto(codigo) {
       lote: bulto.lote,
       conos: bulto.conos,
       remesa_folio: bulto.remesa_folio,
+      almacen_id: u?.almacen_id ?? null,
+      almacen: u?.almacen ?? null,
+      en_tienda: u?.almacen_id != null ? !!Number(u.es_punto_venta) : null,
+      en_camino_folio: u?.en_camino_folio ?? null,
     },
     paquete: {
       variante_id: paquete.id,

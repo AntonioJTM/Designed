@@ -27,7 +27,12 @@ export interface Usuario {
   ultimo_acceso?: string | null;
   creado_en: string;
   actualizado_en: string;
-  /** Lo que su puesto puede ver y hacer (Administración → Permisos). */
+  /**
+   * Sus DEMÁS puestos (2026-10-06): `rol` es el principal —el de nómina— y estos
+   * los que tiene además. Puede lo de todos juntos.
+   */
+  otros_roles?: Rol[];
+  /** Lo que pueden ver y hacer sus puestos, sumados (Administración → Permisos). */
   permisos?: string[];
 }
 
@@ -65,7 +70,9 @@ export interface SesionActual {
   tipo: TipoAuth;
   nombre: string;
   correo: string;
-  rol?: string; // solo staff
+  rol?: string; // solo staff: su puesto principal
+  /** Todos sus puestos, el principal primero (solo staff). */
+  puestos?: string[];
   /** Claves de Permisos del puesto (solo staff). El administrador las trae todas. */
   permisos?: string[];
 }

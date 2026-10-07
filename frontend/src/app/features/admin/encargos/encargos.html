@@ -1,0 +1,156 @@
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Pedidos</h1>
+      <p class="sub">
+        Lo que encargaron los clientes: prepáralo, entrégalo y cóbralo. Se toman en el punto de venta con
+        el botón <b>Pedido</b>; la mercancía queda apartada hasta que se entrega.
+      </p>
+    </div>
+    @if (puedeVender()) {
+      <div class="acciones">
+        <a class="btn btn-primary" routerLink="/admin/pos">Tomar un pedido</a>
+      </div>
+    }
+  </header>
+
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+
+  <div class="kpis">
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" style="background: var(--aviso-t)"></span>Por preparar</span>
+      <span class="kpi-valor">{{ conteo().en_preparacion }}</span>
+      <span class="kpi-pie">hay que juntar la mercancía</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" style="background: var(--ok-t)"></span>Listos</span>
+      <span class="kpi-valor">{{ conteo().listo }}</span>
+      <span class="kpi-pie">esperan que pasen por ellos o el chofer</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto"></span>En camino</span>
+      <span class="kpi-valor">{{ conteo().enviado }}</span>
+      <span class="kpi-pie">los lleva el chofer</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" style="background: var(--tinta-3)"></span>Por cobrar</span>
+      <span class="kpi-valor">{{ datos()?.por_cobrar ?? 0 | dinero }}</span>
+      <span class="kpi-pie">de los pedidos que se ven</span>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="encabezado-lista">
+      <div class="tabs" role="tablist" aria-label="Paso del pedido">
+        <button type="button" role="tab" [class.on]="paso() === ''" [attr.aria-selected]="paso() === ''" (click)="elegirPaso('')">
+          Todos · {{ totalPedidos() }}
+        </button>
+        <button type="button" role="tab" [class.on]="paso() === 'en_preparacion'" [attr.aria-selected]="paso() === 'en_preparacion'"
+                (click)="elegirPaso('en_preparacion')">Por preparar · {{ conteo().en_preparacion }}</button>
+        <button type="button" role="tab" [class.on]="paso() === 'listo'" [attr.aria-selected]="paso() === 'listo'"
+                (click)="elegirPaso('listo')">Listos · {{ conteo().listo }}</button>
+        <button type="button" role="tab" [class.on]="paso() === 'enviado'" [attr.aria-selected]="paso() === 'enviado'"
+                (click)="elegirPaso('enviado')">En camino · {{ conteo().enviado }}</button>
+      </div>
+      <label class="buscador">
+        <span class="oculto">Buscar</span>
+        <input type="search" [(ngModel)]="q" (ngModelChange)="alTeclear()" placeholder="Folio, cliente, teléfono o dirección" />
+      </label>
+    </div>
+
+    @if (cargando() && !datos()) {
+      <p class="muted">Cargando…</p>
+    } @else if (items().length === 0) {
+      <p class="vacio">
+        @if (q || paso()) { Ningún pedido coincide. } @else { No hay pedidos por entregar. Se toman en el punto de venta con el botón «Pedido». }
+      </p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid pedidos">
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Cliente</th>
+              <th>Lleva</th>
+              <th>Entrega</th>
+              <th class="num">Total</th>
+              <th class="num">Falta</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (e of items(); track e.id) {
+              <tr>
+                <td>
+                  <a class="mono" [routerLink]="['/admin/ventas', e.id]" [title]="e.numero_pedido">{{ e.numero_pedido | folio }}</a>
+                  <div><span [class]="'pill ' + tonoPaso(e.estado)">{{ nombrePaso(e.estado) }}</span></div>
+                  <div class="sub">{{ e.creado_en | fecha }}</div>
+                </td>
+                <td>
+                  <b class="quien">{{ quien(e) }}</b>
+                  @if (e.nombre_comercial && e.cliente) { <div class="sub">{{ e.cliente }}</div> }
+                  @if (e.telefono) { <div class="sub mono">{{ e.telefono }}</div> }
+                </td>
+                <td>
+                  @for (h of e.hilos; track $index) { <div>{{ queLleva(h) }}</div> }
+                  @if (e.notas) { <div class="sub nota">“{{ e.notas }}”</div> }
+                </td>
+                <td>
+                  @if (e.metodo_entrega === 'envio') {
+                    <div>Lo lleva el chofer</div>
+                    @if (e.entrega_direccion) { <div class="sub">{{ e.entrega_direccion }}</div> }
+                  } @else {
+                    <div>Pasa por él</div>
+                  }
+                  @if (paraCuando(e); as pc) {
+                    <div class="sub" [class.atrasado]="atrasado(e)">{{ atrasado(e) ? 'atrasado · ' : '' }}{{ pc }}</div>
+                  }
+                </td>
+                <td class="num">{{ e.total | dinero }}</td>
+                <td class="num">
+                  @if (e.falta > 0) {
+                    <b class="falta">{{ e.falta | dinero }}</b>
+                  } @else if ((e.a_favor ?? 0) > 0) {
+                    <span class="pill ambar" title="Pesó menos de lo que dejó pagado: se le devuelve al entregar">A favor {{ e.a_favor | dinero }}</span>
+                  } @else {
+                    <span class="pill verde">Pagado</span>
+                  }
+                </td>
+                <td class="acciones">
+                  @if (e.estado === 'en_preparacion') {
+                    <!-- Queda listo al prepararlo: paquetes escaneados y conos pesados. -->
+                    <button type="button" class="btn btn-primary btn-sm" (click)="preparando.set(e)">Preparar</button>
+                  } @else {
+                    @if (e.estado === 'listo') {
+                      <button type="button" class="btn btn-ghost btn-sm" (click)="preparando.set(e)"
+                              title="Cambiar los paquetes o lo que pesaron los conos">Corregir</button>
+                    }
+                    @if (siguiente(e); as s) {
+                      <button type="button" class="btn btn-ghost btn-sm" [disabled]="moviendo() === e.id" (click)="avanzar(e, s.estado)">
+                        {{ s.texto }}
+                      </button>
+                    }
+                    <button type="button" class="btn btn-primary btn-sm" (click)="entregando.set(e)">
+                      {{ e.falta > 0 ? 'Entregar y cobrar' : 'Entregar' }}
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+<!-- Preparar: se escanean los paquetes y se pesan los conos; queda listo con el peso real. -->
+@if (preparando(); as e) {
+  <app-preparar-pedido-modal [pedido]="e" (cerrado)="preparando.set(null)" (preparado)="alPreparar($event)" />
+}
+
+<!-- Entregar: cobra lo que falta (o lo fía) y saca la mercancía del inventario. -->
+@if (entregando(); as e) {
+  <app-entregar-pedido-modal [pedido]="e" (cerrado)="entregando.set(null)" (entregado)="alEntregar($event)" />
+}

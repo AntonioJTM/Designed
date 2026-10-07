@@ -157,6 +157,8 @@ export interface ClienteParaVenta {
   nombre: string;
   nombre_comercial?: string | null;
   telefono?: string | null;
+  /** Su dirección: se propone cuando un pedido lo lleva el chofer. */
+  direccion?: string | null;
   tipo_cliente_id?: number | null;
   tipo_cliente?: string | null;
   limite_credito: Cifra;

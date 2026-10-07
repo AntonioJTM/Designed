@@ -20,16 +20,37 @@ const ADMIN = 'administrador';
 const SE_LLEVA_COSTO = true;
 const VER_COSTOS = 'hacer:ver_costos';
 
-/** True si el sujeto del token es el administrador: él lo puede todo. */
-function esAdmin(auth) {
-  return auth?.tipo === 'usuario' && auth?.rol === ADMIN;
+/**
+ * Los puestos de quien viene en el token: el principal y los demás (una persona
+ * puede tener varios desde el 2026-10-06). Se leen de la BASE por su id, no del
+ * token: así dar o quitar un puesto en Personal vale en el acto, y a quien se le
+ * quita el acceso ("Sin acceso") ya no le pasa ninguna guarda aunque su token
+ * siga vivo. El token solo dice QUIÉN es.
+ */
+async function puestosDe(auth) {
+  if (!auth || auth.tipo !== 'usuario' || !auth.sub) return [];
+  const { activo, puestos } = await model.puestosDeUsuario(auth.sub);
+  return activo ? puestos : [];
 }
 
-/** Las claves que tiene quien viene en el token (todas, si es el administrador). */
+/** True si alguno de sus puestos es el de administrador: entonces lo puede todo. */
+async function esAdmin(auth) {
+  return (await puestosDe(auth)).some((p) => p.nombre === ADMIN);
+}
+
+/**
+ * Las claves que tiene quien viene en el token: la SUMA de las de todos sus
+ * puestos (todas, si alguno es el de administrador).
+ */
 async function clavesDe(auth) {
-  if (!auth || auth.tipo !== 'usuario') return new Set();
-  // Copia: el Set del puesto es el del caché y no se debe tocar.
-  const claves = new Set(esAdmin(auth) ? CLAVES : await model.clavesDeRol(auth.rol_id));
+  const puestos = await puestosDe(auth);
+  // Copia: los Set de cada puesto son los del caché y no se deben tocar.
+  const claves = new Set();
+  if (puestos.some((p) => p.nombre === ADMIN)) {
+    for (const c of CLAVES) claves.add(c);
+  } else {
+    for (const p of puestos) for (const c of await model.clavesDeRol(p.id)) claves.add(c);
+  }
   if (!SE_LLEVA_COSTO) claves.delete(VER_COSTOS);
   return claves;
 }
@@ -37,7 +58,6 @@ async function clavesDe(auth) {
 async function puede(auth, clave) {
   // El costo no se lleva: nadie lo ve, tampoco el administrador.
   if (clave === VER_COSTOS && !SE_LLEVA_COSTO) return false;
-  if (esAdmin(auth)) return true;
   return (await clavesDe(auth)).has(clave);
 }
 
@@ -110,13 +130,22 @@ async function crearRol({ nombre, descripcion, copiar_de }) {
  * permiso, no.
  */
 async function veCostos(req) {
-  if (req.auth) return puede(req.auth, 'hacer:ver_costos');
+  const auth = authOpcional(req);
+  return auth ? puede(auth, 'hacer:ver_costos') : false;
+}
+
+/**
+ * Quién pregunta en una ruta que no exige sesión: el token si viene y es válido,
+ * o null. Para dar más a quien es del personal sin cerrarle la ruta al público.
+ */
+function authOpcional(req) {
+  if (req.auth) return req.auth;
   const [esquema, token] = (req.headers?.authorization || '').split(' ');
-  if (esquema !== 'Bearer' || !token) return false;
+  if (esquema !== 'Bearer' || !token) return null;
   try {
-    return await puede(require('../../utils/jwt').verificarToken(token), 'hacer:ver_costos');
+    return require('../../utils/jwt').verificarToken(token);
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -132,4 +161,4 @@ async function sinCostosSiNoVe(req, variantes) {
   return variantes;
 }
 
-module.exports = { esAdmin, clavesDe, puede, matriz, guardar, crearRol, veCostos, sinCostosSiNoVe, SE_LLEVA_COSTO };
+module.exports = { authOpcional, puestosDe, esAdmin, clavesDe, puede, matriz, guardar, crearRol, veCostos, sinCostosSiNoVe, SE_LLEVA_COSTO };

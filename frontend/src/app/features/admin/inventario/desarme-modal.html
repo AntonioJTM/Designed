@@ -9,9 +9,13 @@
     <div class="modal-body">
       <p class="explica">
         Escanea el paquete que vas a abrir: el sistema dice cuántos conos trae y, al confirmar, lo
-        deshace —descuenta sus kilos de la bodega y da entrada al mostrador—. El cono se vende por
-        kilo, al mismo precio; si le pones destare, esos kilos se suman.
+        deshace —descuenta sus kilos y da entrada a los conos, en la misma tienda—. El cono se vende
+        por kilo, al mismo precio; el destare de cada cono se suma.
+        <b>Solo en tiendas:</b> si el paquete está en la bodega, primero mándalo con Surtir sucursal.
       </p>
+      @if (tiendas().length === 0) {
+        <p class="alert">No hay ninguna tienda (almacén con mostrador): los conos solo se bajan en una tienda.</p>
+      }
 
       @if (error()) { <p class="alert">{{ error() }}</p> }
       @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
@@ -46,50 +50,47 @@
             </span>
             <b class="pos">+{{ pesoEnconado() | cantidad: 'kg' }}</b>
           </div>
-          @if (destare) {
+          @if (destareTotal(pb.conos_a_generar) > 0) {
             <div class="renglon">
               <span class="muted">
-                {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ destare | cantidad: 'kg' }} de destare
+                {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ pb.conos_a_generar }} conos ×
+                {{ destarePorCono | cantidad: 'kg' }} de destare = {{ destareTotal(pb.conos_a_generar) | cantidad: 'kg' }}
               </span>
               <span class="muted">se venden por kilo</span>
             </div>
           }
         </div>
 
+        <!-- El paquete tiene que estar en ESA tienda: si no, se avisa fuerte y no se deja bajar. -->
+        @if (problemaUbicacion(); as pu) {
+          <p class="alert alerta-ubicacion" role="alert">{{ pu }}</p>
+        }
+
         <div class="campos">
           <label class="field">
-            Sale de
-            <select [(ngModel)]="origen">
-              @for (e of pb.existencias; track e.almacen_id) {
-                <option [ngValue]="e.almacen_id">
-                  {{ e.almacen }} — hay {{ e.cantidad | cantidad: 'kg' }}
+            Se abre en la tienda
+            <select [(ngModel)]="tienda">
+              @for (t of tiendas(); track t.id) {
+                <option [ngValue]="t.id">
+                  {{ t.nombre }}{{ existenciaEn(t.id) !== null ? ' — hay ' + (existenciaEn(t.id) | cantidad: 'kg') : ' — no hay' }}
                 </option>
               }
-              @if (pb.existencias.length === 0) {
-                @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
-              }
             </select>
-            @if (pb.existencias.length === 0) {
-              <span class="ayuda">Este paquete no tiene existencias en ningún almacén.</span>
+            @if (!problemaUbicacion() && tienda && !existenciaEn(tienda)) {
+              <span class="ayuda aviso-tienda">
+                En esta tienda no hay de este paquete: si está en la bodega, primero mándalo con Surtir sucursal.
+              </span>
             }
           </label>
           <label class="field">
-            Baja a (mostrador)
-            <select [(ngModel)]="bajarA">
-              @for (a of almacenes(); track a.id) {
-                <option [ngValue]="a.id">{{ a.nombre }}{{ a.es_punto_venta ? ' · mostrador' : '' }}</option>
-              }
-            </select>
-          </label>
-          <label class="field">
-            <span>Destare <span class="muted">(opcional)</span></span>
+            <span>Destare por cono <span class="muted">(opcional)</span></span>
             <span class="cant">
-              <input type="number" step="0.001" min="0" [(ngModel)]="destare" placeholder="Ej. 0.5" />
+              <input type="number" step="0.001" min="0" max="1" [(ngModel)]="destarePorCono" placeholder="Ej. 0.035" />
               <span>kg</span>
             </span>
             <span class="ayuda">
-              Lo que gana de peso al enconarse, por el tubo de cada cono. Se suma a los kilos que
-              entran al mostrador; no cambia lo que se descuenta del paquete.
+              Lo que pesa el tubo de UN cono{{ gramos() ? ' (' + gramos() + ' g)' : '' }}. Se multiplica por los
+              conos que salen y se suma a los kilos del mostrador; lo que se descuenta del paquete no cambia.
             </span>
           </label>
           <label class="field">
@@ -140,16 +141,17 @@
               <span class="ayuda">Solo si el bulto rinde menos de lo normal. Vacío usa los nominales.</span>
             </label>
             <label class="field">
-              Sale de (bodega)
-              <select [(ngModel)]="manual.origen">
-                @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+              Se abre en la tienda
+              <select [(ngModel)]="manual.tienda">
+                @for (t of tiendas(); track t.id) { <option [ngValue]="t.id">{{ t.nombre }}</option> }
               </select>
             </label>
             <label class="field">
-              Entra a (mostrador)
-              <select [(ngModel)]="manual.destino">
-                @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
-              </select>
+              <span>Destare por cono <span class="muted">(opcional)</span></span>
+              <span class="cant">
+                <input type="number" step="0.001" min="0" max="1" [(ngModel)]="destarePorCono" placeholder="Ej. 0.035" />
+                <span>kg</span>
+              </span>
             </label>
             <label class="field">
               <span>Motivo <span class="muted">(opcional)</span></span>
@@ -175,8 +177,14 @@
                     <span class="muted"> · ajustado, nominal {{ p.piezasNominal | cantidad }}</span>
                   }
                 </span>
-                <b class="pos">+{{ p.piezas | cantidad }} conos</b>
+                <b class="pos">+{{ p.piezas | cantidad }} conos · {{ p.kgEnconados | cantidad: 'kg' }}</b>
               </div>
+              @if (p.destare > 0) {
+                <div class="renglon">
+                  <span class="muted">{{ p.piezas | cantidad }} conos × {{ destarePorCono | cantidad: 'kg' }} de destare</span>
+                  <span class="muted">+{{ p.destare | cantidad: 'kg' }}</span>
+                </div>
+              }
             </div>
           }
 
@@ -229,7 +237,7 @@
         <button type="button" class="btn btn-ghost" (click)="olvidarBulto()" [disabled]="bajando()">
           Otro bulto
         </button>
-        <button type="button" class="btn btn-primary" (click)="bajar()" [disabled]="bajando()">
+        <button type="button" class="btn btn-primary" (click)="bajar()" [disabled]="bajando() || !!problemaUbicacion()">
           {{ bajando() ? 'Bajando…' : 'Bajar a mostrador' }}
         </button>
       } @else {

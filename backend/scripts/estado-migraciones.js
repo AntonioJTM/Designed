@@ -27,6 +27,8 @@ const mysql = require('mysql2/promise');
 //                    (migración que solo cambia una vista, sin tocar columnas)
 // tabla#col=valor  → debe haber una FILA con ese valor (migración que solo
 //                    llena datos, sin tocar la estructura)
+// tabla^texto      → algún CHECK de la tabla debe CONTENER ese texto
+//                    (migración que solo cambia los valores válidos)
 const MIGRACIONES = [
   ['2026-07_variante_codigos', 'variante_codigos'],
   ['2026-07_nomina', 'nomina_periodos'],
@@ -74,6 +76,11 @@ const MIGRACIONES = [
   ['2026-10 hora de la tienda (scripts/ajustar-hora.js)', '_zona_horaria'],
   ['2026-10_carga_proveedor_costo', 'remesas.proveedor_id'],
   ['2026-10_carga_proveedor_costo (contabilidad)', 'roles#nombre=contabilidad'],
+  ['2026-10_varios_puestos', 'usuario_roles'],
+  ['2026-10_piezas_en_venta', 'pedido_detalle.piezas'],
+  ['2026-10_pedidos_encargo', 'pedidos.encargo'],
+  ['2026-10_pedidos_encargo (permiso)', 'permisos#clave=ver:encargos'],
+  ['2026-10_bulto_apartado', "variante_codigos^'apartado'"],
 ];
 
 (async () => {
@@ -93,6 +100,18 @@ const MIGRACIONES = [
       const [[f]] = await c.query(`SELECT COUNT(*) n FROM \`${tabla}\` WHERE \`${col}\` = ?`, [valor]);
       const ok = Number(f.n) > 0;
       console.log(`  ${ok ? 'ok      ' : 'FALTA   '} ${nombre}${ok ? '' : `  → no hay ${tabla} con ${col} = ${valor}`}`);
+      if (!ok) faltan.push(nombre);
+      continue;
+    }
+    if (huella.includes('^')) {
+      const [tabla, texto] = huella.split('^');
+      const [[k]] = await c.query(
+        `SELECT COUNT(*) n FROM information_schema.check_constraints
+          WHERE constraint_schema = ? AND table_name = ? AND check_clause LIKE ?`,
+        [process.env.DB_NAME, tabla, `%${texto}%`]
+      );
+      const ok = Number(k.n) > 0;
+      console.log(`  ${ok ? 'ok      ' : 'FALTA   '} ${nombre}${ok ? '' : `  → ningún CHECK de ${tabla} admite ${texto}`}`);
       if (!ok) faltan.push(nombre);
       continue;
     }

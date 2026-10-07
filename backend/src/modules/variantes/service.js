@@ -8,6 +8,7 @@ const { paginado } = require('../../utils/query');
 
 async function listar(filtros) {
   const { rows, total } = await model.listar(filtros);
+  if (filtros.almacen_id) await model.conExistenciaEn(rows, filtros.almacen_id);
   return paginado(rows, total, filtros.page, filtros.limit);
 }
 

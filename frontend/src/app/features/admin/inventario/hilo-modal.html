@@ -1,0 +1,324 @@
+<!-- Solo mira: no mueve nada. Se sale con la ✕, "Cerrar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="hilo-titulo">
+    <div class="modal-head">
+      <div>
+        <h2 id="hilo-titulo">{{ nombre() }}</h2>
+        @if (clasificacion(); as c) { <p class="subtitulo">{{ c }}</p> }
+      </div>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+
+      @if (!loteSel()) {
+        <!-- ===== El hilo: cuánto hay, dónde, y sus lotes ===== -->
+        <div class="hilo-datos">
+          <div class="hilo-dato">
+            <span class="dato-etiqueta">Hay en total</span>
+            <b>{{ kgTotal() | cantidad: 'kg' }}</b>
+            <span class="dato-pie">
+              @if (kgCono() > 0) { de ellos {{ kgCono() | cantidad: 'kg' }} ya enconados } @else { todo en paquete }
+            </span>
+          </div>
+          <div class="hilo-dato">
+            <span class="dato-etiqueta">Paquetes cerrados</span>
+            <b>{{ (detalle()?.resumen?.bultos_disponibles ?? 0).toLocaleString('es-MX') }}</b>
+            <span class="dato-pie">{{ (detalle()?.resumen?.kg_en_bultos ?? 0) | cantidad: 'kg' }} con su peso real</span>
+          </div>
+          <div class="hilo-dato">
+            <span class="dato-etiqueta">Lotes con paquetes</span>
+            <b>{{ detalle()?.resumen?.lotes ?? 0 }}</b>
+            <span class="dato-pie">de {{ detalle()?.resumen?.lotes_total ?? 0 }} que han llegado</span>
+          </div>
+        </div>
+
+        <h3>Dónde está</h3>
+        @if (donde().length === 0) {
+          <p class="muted">No hay existencias de este hilo en ningún almacén.</p>
+        } @else {
+          <div class="tabla-scroll">
+            <table class="grid compacta">
+              <thead>
+                <tr>
+                  <th>Presentación</th>
+                  <th>Almacén</th>
+                  <th class="num">Hay</th>
+                  <th class="num">Apartado</th>
+                  <th class="num">Paquetes ahí</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (e of donde(); track e.sku + '-' + e.almacen_id) {
+                  <tr>
+                    <td>{{ presentacion(e.tipo) }}</td>
+                    <td>{{ e.almacen }}</td>
+                    <td class="num"><b>{{ e.cantidad | cantidad: 'kg' }}</b></td>
+                    <td class="num">
+                      @if (e.reservada > 0) { {{ e.reservada | cantidad: 'kg' }} } @else { <span class="muted">—</span> }
+                    </td>
+                    <td class="num">
+                      @if (e.bultos === null) {
+                        <span class="muted">no van en paquete</span>
+                      } @else {
+                        {{ paquetes(e.bultos) }}
+                        <div class="sub">{{ (e.kg_en_bultos ?? 0) | cantidad: 'kg' }}</div>
+                        @if (noCuadra(e)) { <div><span class="pill ambar">no cuadra con lo que hay</span></div> }
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="nota">
+            "Hay" es la existencia del almacén: eso es lo que vale. Los paquetes son los que el sistema
+            ubica ahí por la última vez que se escanearon; si no cuadra, se vendió o se ajustó sin
+            escanear, o un paquete se movió sin pasar por el lector.
+            @if ((detalle()?.resumen?.sin_ubicar ?? 0) > 0) {
+              Hay {{ paquetes(detalle()!.resumen.sin_ubicar) }} sin almacén (capturados a mano).
+            }
+          </p>
+        }
+
+        <h3>Lotes</h3>
+        @if ((detalle()?.lotes ?? []).length === 0) {
+          <p class="muted">Este hilo no tiene paquetes registrados: no ha llegado en ninguna carga.</p>
+        } @else {
+          <p class="nota arriba">Toca un lote para ver sus paquetes uno por uno.</p>
+          <div class="tabla-scroll">
+            <table class="grid compacta lotes">
+              <thead>
+                <tr>
+                  <th>Lote</th>
+                  <th class="num">Quedan en paquete</th>
+                  <th>Dónde están</th>
+                  <th>Ya salieron</th>
+                  <th>Llegó</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (l of detalle()?.lotes ?? []; track l.lote) {
+                  <tr class="clic" (click)="abrirLote(l)" [class.agotado]="l.disponibles.bultos === 0">
+                    <td>
+                      <button type="button" class="lote-boton mono" (click)="$event.stopPropagation(); abrirLote(l)">
+                        {{ etiquetaLote(l.lote) }} ›
+                      </button>
+                      <div class="sub">llegaron {{ paquetes(l.bultos) }}</div>
+                    </td>
+                    <td class="num">
+                      @if (l.disponibles.bultos > 0) {
+                        <b>{{ paquetes(l.disponibles.bultos) }}</b>
+                        <div class="sub">{{ l.disponibles.kg | cantidad: 'kg' }}</div>
+                      } @else {
+                        <span class="muted">ya no quedan</span>
+                      }
+                      @if (l.apartados.bultos > 0) {
+                        <div class="sub">+ {{ paquetes(l.apartados.bultos) }} apartados</div>
+                      }
+                    </td>
+                    <td>
+                      @for (a of l.disponibles.por_almacen; track a.almacen_id) {
+                        <div>{{ a.almacen ?? 'Sin almacén' }} <span class="muted">· {{ a.bultos }}</span></div>
+                      } @empty {
+                        <span class="muted">—</span>
+                      }
+                    </td>
+                    <td>
+                      @if (l.desarmados.bultos > 0) {
+                        <div>{{ paquetes(l.desarmados.bultos) }} a conos <span class="muted">· {{ l.desarmados.conos }} conos</span></div>
+                      }
+                      @if (l.vendidos.bultos > 0) {
+                        <div>{{ paquetes(l.vendidos.bultos) }} vendidos</div>
+                      }
+                      @if (l.desarmados.bultos === 0 && l.vendidos.bultos === 0) { <span class="muted">ninguno</span> }
+                    </td>
+                    <td>
+                      @for (c of l.cargas; track c.remesa_id) {
+                        <div>
+                          {{ c.fecha_ingreso | fecha: true }}
+                          <span class="muted mono" [title]="c.folio">· {{ c.folio | folio }}</span>
+                        </div>
+                        @if (c.proveedor) { <div class="sub">{{ c.proveedor }}</div> }
+                      } @empty {
+                        <span class="muted">capturado a mano</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      } @else {
+        <!-- ===== Un lote: sus cifras y sus paquetes uno por uno ===== -->
+        @if (loteSel(); as l) {
+          <button type="button" class="btn btn-ghost btn-sm volver" (click)="volver()">‹ Todos los lotes</button>
+          <h3 class="lote-titulo">
+            Lote <span class="mono">{{ etiquetaLote(l.lote) }}</span>
+            <span class="muted">&nbsp;· llegaron {{ paquetes(l.bultos) }}, {{ l.kg | cantidad: 'kg' }}</span>
+          </h3>
+          @if (l.cargas.length) {
+            <p class="nota arriba">
+              @for (c of l.cargas; track c.remesa_id; let ultimo = $last) {
+                Llegó el {{ c.fecha_ingreso | fecha: true }} en la carga
+                <span class="mono" [title]="c.folio">{{ c.folio | folio }}</span>
+                @if (c.proveedor) { de {{ c.proveedor }} }
+                @if (l.cargas.length > 1) { ({{ paquetes(c.bultos) }}) }{{ ultimo ? '.' : ';' }}
+              }
+            </p>
+          }
+
+          <div class="hilo-datos">
+            <div class="hilo-dato">
+              <span class="dato-etiqueta">En paquete</span>
+              <b>{{ l.disponibles.bultos.toLocaleString('es-MX') }}</b>
+              <span class="dato-pie">
+                {{ l.disponibles.kg | cantidad: 'kg' }}
+                @if (l.disponibles.conos > 0) { · rinden {{ l.disponibles.conos.toLocaleString('es-MX') }} conos }
+              </span>
+            </div>
+            @if (l.apartados.bultos > 0) {
+              <div class="hilo-dato">
+                <span class="dato-etiqueta">Apartados</span>
+                <b>{{ l.apartados.bultos.toLocaleString('es-MX') }}</b>
+                <span class="dato-pie">{{ l.apartados.kg | cantidad: 'kg' }} · para pedidos de clientes</span>
+              </div>
+            }
+            <div class="hilo-dato">
+              <span class="dato-etiqueta">Bajados a conos</span>
+              <b>{{ l.desarmados.bultos.toLocaleString('es-MX') }}</b>
+              <span class="dato-pie">
+                @if (l.desarmados.bultos > 0) {
+                  {{ l.desarmados.kg | cantidad: 'kg' }} · salieron {{ l.desarmados.conos.toLocaleString('es-MX') }} conos
+                } @else { ninguno todavía }
+              </span>
+            </div>
+            <div class="hilo-dato">
+              <span class="dato-etiqueta">Vendidos en paquete</span>
+              <b>{{ l.vendidos.bultos.toLocaleString('es-MX') }}</b>
+              <span class="dato-pie">
+                @if (l.vendidos.bultos > 0) { {{ l.vendidos.kg | cantidad: 'kg' }} } @else { ninguno todavía }
+              </span>
+            </div>
+            @if (l.peso_min !== null && l.peso_max !== null) {
+              <div class="hilo-dato">
+                <span class="dato-etiqueta">Pesan</span>
+                <b class="chica">{{ l.peso_min | cantidad }} a {{ l.peso_max | cantidad: 'kg' }}</b>
+                <span class="dato-pie">cada paquete, con su peso real</span>
+              </div>
+            }
+          </div>
+
+          <div class="filtros-lote">
+            <div class="seg" role="radiogroup" aria-label="Qué paquetes ver">
+              <button type="button" role="radio" [class.on]="estado() === 'disponible'" [attr.aria-checked]="estado() === 'disponible'"
+                      (click)="estado.set('disponible')">En paquete · {{ conteo().disponible }}</button>
+              @if (conteo().apartado > 0) {
+                <button type="button" role="radio" [class.on]="estado() === 'apartado'" [attr.aria-checked]="estado() === 'apartado'"
+                        (click)="estado.set('apartado')">Apartados · {{ conteo().apartado }}</button>
+              }
+              <button type="button" role="radio" [class.on]="estado() === 'desarmado'" [attr.aria-checked]="estado() === 'desarmado'"
+                      (click)="estado.set('desarmado')">A conos · {{ conteo().desarmado }}</button>
+              <button type="button" role="radio" [class.on]="estado() === 'vendido'" [attr.aria-checked]="estado() === 'vendido'"
+                      (click)="estado.set('vendido')">Vendidos · {{ conteo().vendido }}</button>
+              <button type="button" role="radio" [class.on]="estado() === 'todos'" [attr.aria-checked]="estado() === 'todos'"
+                      (click)="estado.set('todos')">Todos · {{ conteo().todos }}</button>
+            </div>
+            <div class="filtros-fila">
+              <label class="field">
+                <span class="oculto">Almacén</span>
+                <select [ngModel]="almacenFiltro()" (ngModelChange)="almacenFiltro.set($event)">
+                  <option value="">Todos los almacenes</option>
+                  @for (a of almacenesLote(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+                </select>
+              </label>
+              <label class="buscador">
+                <span class="oculto">Buscar código</span>
+                <input type="search" [ngModel]="buscar()" (ngModelChange)="buscar.set($event)" placeholder="Código del paquete" />
+              </label>
+            </div>
+          </div>
+
+          @if (errorBultos()) { <p class="alert">{{ errorBultos() }}</p> }
+
+          <div class="bultos-caja">
+            @if (cargandoBultos()) {
+              <p class="muted">Cargando los paquetes del lote…</p>
+            } @else if (bultosVistos().length === 0) {
+              <p class="vacio">Ningún paquete de este lote coincide con el filtro.</p>
+            } @else {
+              <div class="tabla-scroll">
+                <table class="grid compacta">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th class="num">Peso real</th>
+                      <th class="num">Conos</th>
+                      <th>Qué es de él</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (b of bultosVistos(); track b.id) {
+                      <tr>
+                        <td class="mono">{{ b.codigo }}</td>
+                        <td class="num">{{ b.peso_kg === null ? '—' : (b.peso_kg | cantidad: 'kg') }}</td>
+                        <td class="num">{{ b.conos ?? '—' }}</td>
+                        <td>
+                          @switch (b.estado) {
+                            @case ('disponible') {
+                              <span class="pill verde">En paquete</span>
+                              <span class="donde">{{ b.almacen ?? 'sin almacén' }}</span>
+                            }
+                            @case ('apartado') {
+                              <span class="pill ambar">Apartado</span>
+                              <span class="donde">
+                                @if (b.pedido_folio) { para <span class="mono" [title]="b.pedido_folio">{{ b.pedido_folio | folio }}</span> }
+                                @if (b.almacen) { · {{ b.almacen }} }
+                              </span>
+                            }
+                            @case ('desarmado') {
+                              <span class="pill azul">Bajado a conos</span>
+                              <span class="donde">
+                                {{ b.consumido_en | cuando }}
+                                @if (b.conos_generados !== null) { · {{ b.conos_generados }} conos }
+                                @if (b.almacen) { · {{ b.almacen }} }
+                              </span>
+                            }
+                            @case ('vendido') {
+                              <span class="pill gris">Vendido</span>
+                              <span class="donde">
+                                {{ b.consumido_en | cuando }}
+                                @if (b.pedido_folio) { · <span class="mono" [title]="b.pedido_folio">{{ b.pedido_folio | folio }}</span> }
+                                @if (b.almacen) { · {{ b.almacen }} }
+                              </span>
+                            }
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <p class="nota">
+                {{ paquetes(bultosVistos().length) }} · {{ kgVistos() | cantidad: 'kg' }}
+              </p>
+            }
+          </div>
+        }
+      }
+    </div>
+
+    <div class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
+    </div>
+
+    @if (cargando()) {
+      <div class="modal-cargando" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        Cargando…
+      </div>
+    }
+  </div>
+</div>

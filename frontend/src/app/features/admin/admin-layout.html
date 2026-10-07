@@ -37,7 +37,7 @@
         <div class="quien">
           <div class="nombre-rol">
             <span class="nombre">{{ s.nombre }}</span>
-            <span class="rol">{{ s.rol }}</span>
+            <span class="rol">{{ (s.puestos ?? []).join(' · ') || s.rol }}</span>
           </div>
           <!--
             La campana: lo que está esperando a alguien. Va aquí, junto al nombre y

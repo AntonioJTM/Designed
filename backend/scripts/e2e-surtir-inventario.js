@@ -22,15 +22,17 @@ const jwt = require('jsonwebtoken');
 const m = require('mysql2/promise');
 
 const B = process.env.BASE ?? 'http://localhost:3210/api/v1';
-const firmar = (rolId, rol) => jwt.sign({ sub: 1, tipo: 'usuario', rol_id: rolId, rol }, process.env.JWT_SECRET, { expiresIn: '1h' });
-const ADMIN = firmar(1, 'administrador');
+// El servidor decide qué puede alguien por QUIÉN es (sus puestos en la base,
+// 2026-10-06), no por el puesto que diga el token: cada token es de una persona
+// real de ese puesto.
+const firmar = (id, rolId, rol) => jwt.sign({ sub: id, tipo: 'usuario', rol_id: rolId, rol }, process.env.JWT_SECRET, { expiresIn: '1h' });
 const SUF = '-S' + Date.now().toString(36);
 
 const llamar = (token) => async (me, r, b) => {
   const x = await fetch(B + r, { method: me, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: b === undefined ? undefined : JSON.stringify(b) });
   return { status: x.status, ...(await x.json().catch(() => ({}))) };
 };
-const api = llamar(ADMIN);
+let api;
 
 let f = 0;
 const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n + (d !== undefined ? ' → ' + d : '')); if (!ok) f++; };
@@ -45,11 +47,21 @@ const dias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); const p 
   for (const t of ['productos', 'almacenes', 'remesas', 'proveedores']) antes[t] = new Set((await db.query(`SELECT id FROM ${t}`))[0].map((r) => r.id));
   const costoDe = async (v) => Number((await db.query('SELECT costo FROM producto_variantes WHERE id=?', [v]))[0][0].costo);
 
-  // Un puesto sin costo pero que sí surte (el almacenista) y Contabilidad.
+  const [[admin]] = await db.query(
+    `SELECT u.id, u.rol_id FROM usuarios u JOIN roles r ON r.id = u.rol_id
+      WHERE r.nombre = 'administrador' AND u.activo = 1 ORDER BY u.id LIMIT 1`
+  );
+  api = llamar(firmar(admin.id, admin.rol_id, 'administrador'));
+  // Un puesto sin costo pero que sí surte (el almacenista) y Contabilidad: un
+  // empleado TMPSI de cada uno, que se borra al final.
   const [[alm]] = await db.query("SELECT id FROM roles WHERE nombre='almacenista'");
   const [[conta]] = await db.query("SELECT id FROM roles WHERE nombre='contabilidad'");
-  const comoAlmacen = llamar(firmar(alm.id, 'almacenista'));
-  const comoConta = llamar(firmar(conta.id, 'contabilidad'));
+  const empleado = async (rolId, quien) => (await db.query(
+    `INSERT INTO usuarios (rol_id, nombre, correo, contrasena_hash) VALUES (?, ?, ?, 'no-entra')`,
+    [rolId, `TMPSI ${quien}`, `tmpsi.${quien}${SUF}@prueba.local`.toLowerCase()]
+  ))[0].insertId;
+  const comoAlmacen = llamar(firmar(await empleado(alm.id, 'almacen'), alm.id, 'almacenista'));
+  const comoConta = llamar(firmar(await empleado(conta.id, 'conta'), conta.id, 'contabilidad'));
 
   try {
     console.log('=== 1. Proveedores: se eligen de una lista y no se repiten ===');
@@ -175,11 +187,13 @@ const dias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); const p 
     }
     await db.query("DELETE FROM almacenes WHERE nombre LIKE 'TMPSI %'");
     await db.query("DELETE FROM proveedores WHERE nombre LIKE 'TMPSI %'");
+    await db.query("DELETE FROM usuarios WHERE nombre LIKE 'TMPSI %' AND correo LIKE 'tmpsi.%@prueba.local'");
     await db.query('SET FOREIGN_KEY_CHECKS=1');
     const [[resto]] = await db.query(
       `SELECT (SELECT COUNT(*) FROM productos WHERE nombre LIKE 'TMPSI%')
             + (SELECT COUNT(*) FROM proveedores WHERE nombre LIKE 'TMPSI%')
-            + (SELECT COUNT(*) FROM almacenes WHERE nombre LIKE 'TMPSI%') AS n`
+            + (SELECT COUNT(*) FROM almacenes WHERE nombre LIKE 'TMPSI%')
+            + (SELECT COUNT(*) FROM usuarios WHERE nombre LIKE 'TMPSI%') AS n`
     );
     ck('no quedó basura (TMPSI)', Number(resto.n) === 0, resto.n);
     await db.end();

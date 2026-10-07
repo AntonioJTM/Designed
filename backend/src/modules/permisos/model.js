@@ -36,14 +36,54 @@ async function clavesDeRol(rolId) {
   return cache.get(Number(rolId)) ?? new Set();
 }
 
+// Qué puestos tiene cada persona: el PRINCIPAL (`usuarios.rol_id`) y los DEMÁS
+// (`usuario_roles`, 2026-10-06). También se consulta en cada petición protegida,
+// así que va en memoria; se tira al guardar a alguien en Personal, y por eso un
+// puesto que se da o se quita vale en el acto, sin volver a entrar.
+const puestosCache = new Map();
+
+/**
+ * `{ activo, puestos: [{ id, nombre }] }` de una persona, el principal primero.
+ * Sin la persona (o sin la fila), `activo: false` y sin puestos: no puede nada.
+ */
+async function puestosDeUsuario(usuarioId) {
+  const id = Number(usuarioId);
+  if (puestosCache.has(id)) return puestosCache.get(id);
+  const [rows] = await pool.query(
+    `SELECT r.id, r.nombre, u.activo, 0 AS orden
+       FROM usuarios u JOIN roles r ON r.id = u.rol_id
+      WHERE u.id = :id
+     UNION ALL
+     SELECT r.id, r.nombre, u.activo, 1 AS orden
+       FROM usuario_roles ur
+       JOIN usuarios u ON u.id = ur.usuario_id
+       JOIN roles r    ON r.id = ur.rol_id
+      WHERE ur.usuario_id = :id AND ur.rol_id <> u.rol_id
+      ORDER BY orden, id`,
+    { id }
+  );
+  const res = {
+    activo: rows.length > 0 && !!Number(rows[0].activo),
+    puestos: rows.map((r) => ({ id: Number(r.id), nombre: r.nombre })),
+  };
+  puestosCache.set(id, res);
+  return res;
+}
+
 function invalidar() {
   cache = null;
+  puestosCache.clear();
 }
 
 async function roles() {
   const [rows] = await pool.query(
     `SELECT r.id, r.nombre, r.descripcion,
-            (SELECT COUNT(*) FROM usuarios u WHERE u.rol_id = r.id AND u.activo = 1) AS personas
+            -- Cuenta a quien lo tiene de principal Y a quien lo tiene además de otro.
+            (SELECT COUNT(*) FROM usuarios u
+              WHERE u.activo = 1
+                AND (u.rol_id = r.id
+                     OR EXISTS (SELECT 1 FROM usuario_roles ur
+                                 WHERE ur.usuario_id = u.id AND ur.rol_id = r.id))) AS personas
        FROM roles r ORDER BY r.id`
   );
   return rows;
@@ -98,4 +138,4 @@ async function clavesRegistradas() {
   return new Set(rows.map((r) => r.clave));
 }
 
-module.exports = { clavesDeRol, invalidar, roles, asignados, guardar, crearRol, obtenerRol, porNombre, clavesRegistradas };
+module.exports = { clavesDeRol, puestosDeUsuario, invalidar, roles, asignados, guardar, crearRol, obtenerRol, porNombre, clavesRegistradas };

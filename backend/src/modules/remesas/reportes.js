@@ -29,7 +29,7 @@ const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const pdf = require('../../utils/pdf');
 
-const ESTADO = { disponible: 'En existencia', vendido: 'Vendido', desarmado: 'Bajado a conos' };
+const ESTADO = { disponible: 'En existencia', apartado: 'Apartado para un pedido', vendido: 'Vendido', desarmado: 'Bajado a conos' };
 
 /** "REM-1789814460000-D0B2" → "REM-D0B2", como en las listas de la pantalla. */
 function folioCorto(folio) {
@@ -280,6 +280,7 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta }) {
             r.num_bultos, r.kg_total, r.costo_kg, r.lotes, pv.sku,
             a.nombre AS almacen, u.nombre AS usuario,
             COALESCE(e.disp, 0) AS disp, COALESCE(e.disp_kg, 0) AS disp_kg,
+            COALESCE(e.apar, 0) AS apar, COALESCE(e.apar_kg, 0) AS apar_kg,
             COALESCE(e.vend, 0) AS vend, COALESCE(e.vend_kg, 0) AS vend_kg,
             COALESCE(e.des, 0) AS des, COALESCE(e.des_kg, 0) AS des_kg
        FROM remesas r
@@ -289,6 +290,7 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta }) {
        LEFT JOIN (
          SELECT remesa_id,
                 SUM(estado = 'disponible') AS disp, SUM(IF(estado = 'disponible', peso_kg, 0)) AS disp_kg,
+                SUM(estado = 'apartado')   AS apar, SUM(IF(estado = 'apartado', peso_kg, 0))   AS apar_kg,
                 SUM(estado = 'vendido')    AS vend, SUM(IF(estado = 'vendido', peso_kg, 0))    AS vend_kg,
                 SUM(estado = 'desarmado')  AS des,  SUM(IF(estado = 'desarmado', peso_kg, 0))  AS des_kg
            FROM variante_codigos WHERE remesa_id IS NOT NULL GROUP BY remesa_id
@@ -408,6 +410,7 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta }) {
       ],
       [
         [ESTADO.disponible, pdf.numero(suma('disp')), pdf.kg(r3(suma('disp_kg')))],
+        ...(suma('apar') > 0 ? [[ESTADO.apartado, pdf.numero(suma('apar')), pdf.kg(r3(suma('apar_kg')))]] : []),
         [ESTADO.vendido, pdf.numero(suma('vend')), pdf.kg(r3(suma('vend_kg')))],
         [ESTADO.desarmado, pdf.numero(suma('des')), pdf.kg(r3(suma('des_kg')))],
       ]

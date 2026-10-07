@@ -314,7 +314,7 @@
                         @if (m.numero_pedido) {
                           <br />
                           @if (vePedidos() && m.pedido_id) {
-                            <a class="mono" [routerLink]="['/admin/pedidos', m.pedido_id]" [title]="m.numero_pedido">{{ m.numero_pedido | folio }}</a>
+                            <a class="mono" [routerLink]="['/admin/ventas', m.pedido_id]" [title]="m.numero_pedido">{{ m.numero_pedido | folio }}</a>
                           } @else { <span class="mono muted" [title]="m.numero_pedido">{{ m.numero_pedido | folio }}</span> }
                         }
                         @if (m.notas) { <br /><span class="muted">{{ m.notas }}</span> }

@@ -52,7 +52,8 @@ export interface VarianteCodigo {
   creado_en?: string;
 }
 
-export type EstadoBulto = 'disponible' | 'vendido' | 'desarmado';
+/** 'apartado': ligado a un pedido o un apartado que no se ha entregado (sigue en la tienda). */
+export type EstadoBulto = 'disponible' | 'apartado' | 'vendido' | 'desarmado';
 
 /** Los bultos de un lote, para resumir la lista cuando son muchos. */
 export interface LoteDeBultos {
@@ -123,6 +124,11 @@ export interface Variante {
   por_lotes?: boolean | number;
   /** Precios propios por tipo de cliente (el público es `precio`). */
   precios?: PrecioTipo[];
+  /**
+   * Lo que hay en el almacén por el que se preguntó (la caja busca con el suyo):
+   * los kilos y, si es paquete, cuántos paquetes cerrados se ubican ahí.
+   */
+  aqui?: { cantidad: number; paquetes: number | null };
 }
 
 /** Tipo de cliente = lista de precios. El público cobra `variante.precio`. */

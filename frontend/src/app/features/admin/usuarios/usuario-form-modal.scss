@@ -1,0 +1,22 @@
+// "También trabaja como": los demás puestos de la persona, en casillas.
+.otros-puestos {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.otros-puestos legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.casillas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 16px;
+}
+
+.casillas .field.check {
+  font-weight: 400;
+}
