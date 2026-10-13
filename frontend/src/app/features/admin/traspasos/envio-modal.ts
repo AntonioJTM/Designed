@@ -9,6 +9,7 @@ import {
 } from '../../../core/services/inventario.service';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 /** Un paquete escaneado: su código, de qué hilo es y lo que pesa de verdad. */
 export interface PaqueteEscaneado {
@@ -16,6 +17,11 @@ export interface PaqueteEscaneado {
   variante_id: number;
   peso_kg: number;
   lote: string | null;
+  /**
+   * El almacén donde lo tenía el sistema, si era otro y se confirmó que sí está
+   * aquí: al guardar o enviar se pasa al que surte con sus kilos.
+   */
+  estaba_en?: string | null;
 }
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -42,7 +48,23 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
  * no sale; el modal lo dice antes de enviar y el servidor lo anota solo en las
  * notas del envío ("…era lo único que había"), junto con lo que se escriba aquí.
  *
- * El traspaso entra por input. No cierra al tocar el fondo: ✕, "Cancelar" o Escape.
+ * SE PUEDE DEJAR A MEDIAS (2026-10-07: "que se puedan escanear una parte, se
+ * guarden esos códigos pero que ya no se puedan vender hasta que cancele el
+ * pedido; que haya un como en espera hasta que terminen de escanear los
+ * demás"). "Guardar y seguir después" guarda lo escaneado: esos paquetes quedan
+ * APARTADOS para este envío (la caja no los vende) y el traspaso queda en
+ * espera. Al volver a abrir, aparecen ya escaneados. Al enviar salen junto con
+ * los nuevos; si se cancela el traspaso, quedan libres.
+ *
+ * UN PAQUETE QUE EL SISTEMA TIENE EN OTRO ALMACÉN (2026-10-07, el usuario
+ * eligió "avisar y, si confirman que sí está aquí, pasarlo con sus kilos"): al
+ * escanearlo pregunta "¿Este paquete sí está aquí?". Si sí, entra marcado
+ * ("estaba en «…»") y el servidor lo pasa al almacén que surte CON SUS KILOS al
+ * guardar o enviar (queda en el kardex); si no, no entra. Uno que viene en
+ * camino en otro envío no entra.
+ *
+ * El traspaso entra por input. No cierra al tocar el fondo: ✕, "Cancelar" o
+ * Escape; si hay paquetes escaneados sin guardar, pregunta antes.
  */
 @Component({
   selector: 'app-envio-modal',
@@ -53,12 +75,18 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
 })
 export class EnvioModal implements OnInit {
   private readonly inv = inject(InventarioService);
+  private readonly confirmacion = inject(ConfirmacionService);
 
   readonly traspaso = input.required<Traspaso>();
 
   readonly cerrado = output<void>();
   /** Ya salió: la pantalla avisa y recarga. */
   readonly enviado = output<ResultadoTraspaso>();
+  /** Se guardó lo escaneado a medio surtir: la pantalla avisa y recarga. */
+  readonly guardado = output<{ folio: string; guardados: number; kg: number }>();
+
+  /** Los códigos que ya estaban guardados al abrir (para saber qué falta guardar). */
+  private guardadosAlAbrir = new Set<string>();
 
   private readonly lector = viewChild<ElementRef<HTMLInputElement>>('lector');
 
@@ -76,7 +104,29 @@ export class EnvioModal implements OnInit {
 
   /** El input se lee aquí, no en el constructor: ahí todavía no está puesto. */
   ngOnInit(): void {
+    // Lo que se escaneó y guardó antes aparece ya en la lista.
+    const previos: PaqueteEscaneado[] = this.lineas().flatMap((l) =>
+      (l.guardados ?? []).map((g) => ({
+        codigo: g.codigo,
+        variante_id: Number(g.variante_id ?? l.variante_id),
+        peso_kg: Number(g.peso_kg),
+        lote: g.lote ?? null,
+      }))
+    );
+    this.escaneados.set(previos);
+    this.guardadosAlAbrir = new Set(previos.map((p) => p.codigo));
     setTimeout(() => this.enfocar());
+  }
+
+  /** Cuántos había guardados al abrir. */
+  yaGuardados(): number {
+    return this.guardadosAlAbrir.size;
+  }
+
+  /** Lo escaneado ya no es lo que estaba guardado (hay nuevos o se quitó alguno). */
+  cambiosSinGuardar(): boolean {
+    const ahora = this.escaneados().map((p) => p.codigo);
+    return ahora.length !== this.guardadosAlAbrir.size || ahora.some((c) => !this.guardadosAlAbrir.has(c));
   }
 
   lineas(): TraspasoLinea[] {
@@ -165,23 +215,42 @@ export class EnvioModal implements OnInit {
     }
     this.enCamino.add(cod);
     this.inv.resolverCodigo(cod).subscribe({
-      next: (r) => {
-        this.enCamino.delete(cod);
+      next: async (r) => {
         const motivo = this.motivoRechazo(cod, r);
         if (motivo) {
+          this.enCamino.delete(cod);
           this.error.set(motivo);
           this.ultimo.set(null);
           return;
         }
         const b = r.bulto!;
+        // El sistema lo tiene en OTRO almacén: se pregunta si de verdad está aquí.
+        const origen = this.traspaso().almacen_origen_id;
+        let estabaEn: string | null = null;
+        if (b.almacen_id != null && origen != null && Number(b.almacen_id) !== Number(origen)) {
+          estabaEn = b.almacen ?? 'otro almacén';
+          const si = await this.confirmarAqui(cod, Number(b.peso_kg), Number(b.variante_id), estabaEn);
+          if (!si) {
+            this.enCamino.delete(cod);
+            this.error.set(`No se agregó el paquete ${cod}: el sistema lo tiene en «${estabaEn}».`);
+            this.ultimo.set(null);
+            this.enfocar();
+            return;
+          }
+        }
+        this.enCamino.delete(cod);
         const paquete: PaqueteEscaneado = {
           codigo: cod,
           variante_id: Number(b.variante_id),
           peso_kg: Number(b.peso_kg),
           lote: b.lote ?? null,
+          estaba_en: estabaEn,
         };
         this.escaneados.update((arr) => [...arr, paquete]);
-        this.ultimo.set(`${cod} · ${paquete.peso_kg} kg · ${this.nombreDe(paquete.variante_id)}`);
+        this.ultimo.set(
+          `${cod} · ${paquete.peso_kg} kg · ${this.nombreDe(paquete.variante_id)}` +
+            (estabaEn ? ` · se pasa de «${estabaEn}» a «${this.traspaso().almacen_origen}»` : '')
+        );
         this.enfocar();
       },
       error: (e) => {
@@ -197,6 +266,28 @@ export class EnvioModal implements OnInit {
     });
   }
 
+  /**
+   * "¿Este paquete sí está aquí?": el sistema lo tiene en otro almacén. Si lo
+   * tienen en la mano, ahí está; se pasa al que surte con sus kilos.
+   */
+  private confirmarAqui(cod: string, peso: number, varianteId: number, estabaEn: string): Promise<boolean> {
+    const aqui = this.traspaso().almacen_origen;
+    const kg = `${peso.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`;
+    return this.confirmacion.pedir({
+      titulo: '¿Este paquete sí está aquí?',
+      mensaje:
+        `El sistema tiene el paquete ${cod} (${kg} de ${this.nombreDe(varianteId)}) en «${estabaEn}», no en «${aqui}». ` +
+        `Si lo tienes en la mano, se pasa a «${aqui}» con sus ${kg} y sale en este envío. Queda escrito en el kardex.`,
+      aceptar: 'Sí está aquí',
+      cancelar: 'No, dejarlo',
+    });
+  }
+
+  /** Los confirmados que estaban en otro almacén: el servidor los pasa aquí con sus kilos. */
+  private encontrados(): string[] {
+    return this.escaneados().filter((p) => p.estaba_en).map((p) => p.codigo);
+  }
+
   /** Por qué no puede salir ese código; null si sí. */
   private motivoRechazo(cod: string, r: CodigoResuelto): string | null {
     const b = r.bulto;
@@ -208,15 +299,23 @@ export class EnvioModal implements OnInit {
       return `El paquete ${cod} es de ${v.producto}${v.calibre ? ' ' + v.calibre : ''}, que no está en este traspaso.`;
     }
     if (b.estado && b.estado !== 'disponible') {
-      if (b.estado === 'apartado') {
-        return `El paquete ${cod} está apartado para un pedido${b.consumido_folio ? ` (${b.consumido_folio})` : ''}: escanea otro.`;
+      // Uno apartado para ESTE mismo envío (se guardó antes y se quitó de la lista) sí vale.
+      const delMismo = b.estado === 'apartado' && b.consumido_folio === this.traspaso().folio;
+      if (b.estado === 'apartado' && !delMismo) {
+        const de = b.consumido_folio?.startsWith('TRA') ? 'otro envío a sucursal' : 'un pedido';
+        return `El paquete ${cod} está apartado para ${de}${b.consumido_folio ? ` (${b.consumido_folio})` : ''}: escanea otro.`;
       }
+    }
+    if (b.estado && b.estado !== 'disponible' && b.estado !== 'apartado') {
       return b.estado === 'vendido'
         ? `El paquete ${cod} ya se vendió${b.consumido_folio ? ` (${b.consumido_folio})` : ''}.`
         : `El paquete ${cod} ya se bajó a conos.`;
     }
     if (!(Number(b.peso_kg) > 0)) {
       return `El paquete ${cod} no tiene peso registrado: no se puede saber cuánto sale.`;
+    }
+    if (b.en_camino_folio) {
+      return `El paquete ${cod} viene en camino (${b.en_camino_folio}): primero se recibe ese envío.`;
     }
     return null;
   }
@@ -236,7 +335,7 @@ export class EnvioModal implements OnInit {
     this.enviando.set(true);
     this.error.set(null);
     const codigos = this.escaneados().map((p) => p.codigo);
-    this.inv.enviarTraspaso(this.traspaso().id, codigos, this.notas.trim() || undefined).subscribe({
+    this.inv.enviarTraspaso(this.traspaso().id, codigos, this.notas.trim() || undefined, this.encontrados()).subscribe({
       next: (r) => {
         this.enviando.set(false);
         this.enviado.emit(r);
@@ -248,8 +347,46 @@ export class EnvioModal implements OnInit {
     });
   }
 
-  cerrar(): void {
+  /**
+   * Guarda lo escaneado y deja el envío en espera: esos paquetes quedan
+   * apartados (no se venden) hasta que se envíe o se cancele.
+   */
+  guardar(): void {
     if (this.enviando()) return;
+    this.enviando.set(true);
+    this.error.set(null);
+    this.inv.guardarEscaneos(this.traspaso().id, this.escaneados().map((p) => p.codigo), this.encontrados()).subscribe({
+      next: (r) => {
+        this.enviando.set(false);
+        this.guardadosAlAbrir = new Set(this.escaneados().map((p) => p.codigo));
+        this.guardado.emit({ folio: r.folio, guardados: r.guardados, kg: r.kg });
+      },
+      error: (e) => {
+        this.enviando.set(false);
+        this.error.set(this.msg(e));
+      },
+    });
+  }
+
+  async cerrar(): Promise<void> {
+    if (this.enviando()) return;
+    if (this.cambiosSinGuardar()) {
+      const nuevos = this.escaneados().filter((p) => !this.guardadosAlAbrir.has(p.codigo)).length;
+      const si = await this.confirmacion.pedir({
+        titulo: '¿Salir sin guardar lo escaneado?',
+        mensaje: nuevos
+          ? `Escaneaste ${nuevos} ${nuevos === 1 ? 'paquete' : 'paquetes'} que no se han guardado: si sales, se pierden y ` +
+            'habrá que volver a escanearlos. Para dejarlo a medias, usa «Guardar y seguir después».'
+          : 'Quitaste paquetes de la lista y no se ha guardado: si sales, siguen apartados para este envío.',
+        aceptar: 'Salir sin guardar',
+        cancelar: 'Seguir escaneando',
+        peligro: true,
+      });
+      if (!si) {
+        this.enfocar();
+        return;
+      }
+    }
     this.cerrado.emit();
   }
 

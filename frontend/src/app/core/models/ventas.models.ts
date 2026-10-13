@@ -150,7 +150,7 @@ export interface EncargoHilo {
   kg: number;
   /** Conos, si se contaron al pesarlos. */
   piezas: number | null;
-  /** Cuántos paquetes van: los escaneados al prepararlo, o un aproximado. */
+  /** Cuántos paquetes van: los escaneados, o un aproximado. */
   paquetes: number | null;
   /** Paquetes ya escaneados (ligados al pedido); 0 = el número es aproximado. */
   escaneados?: number;
@@ -314,17 +314,32 @@ export interface Pedido {
   cambio?: number;
   /** Al entregar un pedido que pesó menos de lo que dejó: lo que se le devolvió. */
   devuelto?: number;
-  /** Al prepararlo: el total de antes, lo que lleva pagado, lo que falta o lo que tiene a favor. */
+  /** Al modificarlo: el total de antes, lo que falta o lo que tiene a favor, y qué cambió. */
   total_antes?: number;
   a_favor?: number;
+  cambios?: string[];
 }
 
-/** Una línea al PREPARAR un pedido: los paquetes que van, o lo que pesó. */
-export interface LineaPreparada {
-  detalle_id: number;
+/**
+ * Una línea al MODIFICAR un pedido: con `detalle_id`, una que ya llevaba; sin él
+ * (con `variante_id`), un hilo nuevo. Las que no se manden se quitan.
+ */
+export interface LineaPedidoEdit {
+  detalle_id?: number;
+  variante_id?: number;
   codigos?: string[];
   cantidad?: number;
   piezas?: number | null;
+}
+
+/** Lo que se manda al modificar un pedido: lo que lleva y la entrega, como notas. */
+export interface ModificarPedidoInput {
+  lineas: LineaPedidoEdit[];
+  metodo_entrega?: 'recoger' | 'envio';
+  entrega_direccion?: string | null;
+  costo_envio?: number;
+  entrega_para?: string | null;
+  notas?: string | null;
 }
 
 /** Un movimiento del libro de crédito ligado a un pedido. */

@@ -5,14 +5,12 @@ import { NominaService } from '../../../core/services/nomina.service';
 import {
   ClaveConcepto,
   ConceptoNomina,
-  DesgloseVentas,
   DiaHorario,
   PeriodoNomina,
   ReciboNomina,
 } from '../../../core/models/nomina.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
-import { FechaPipe } from '../../../shared/fecha.pipe';
 import {
   DIAS,
   DIAS_CORTOS,
@@ -22,7 +20,9 @@ import {
   minutosExtra,
   turno,
 } from './jornada';
-import { diaCorto, sumarDias } from './semana';
+import { diaCorto, rangoArchivo, sumarDias } from './semana';
+import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
+import { ComisionesSemanaComponent } from './comisiones-semana';
 
 /** Un día de la semana para elegir dónde hubo horas extra. */
 interface DiaDeLaSemana {
@@ -34,7 +34,7 @@ interface DiaDeLaSemana {
 /**
  * El detalle de un recibo de nómina, en modal sobre la semana: de qué sale lo
  * que se le paga a la persona, los días que trabajó, sus horas extra, sus
- * descuentos y las ventas que formaron su comisión.
+ * descuentos y las ventas cuya comisión paga (y las que faltan por liquidar).
  *
  * Desde el 2026-10-06, con horario:
  *  · se paga POR DÍAS: "Días trabajados" viene con los de su horario (menos
@@ -43,7 +43,7 @@ interface DiaDeLaSemana {
  *    y el sistema las cuenta contra su horario de ESE día, al doble de su hora.
  *
  * Entra el recibo por input —la semana ya lo tiene— y abre armado; solo las
- * ventas se piden al servidor. Cada cambio devuelve el periodo entero: el modal
+ * comisiones se piden al servidor. Cada cambio devuelve el periodo entero: el modal
  * se queda con su recibo nuevo y avisa a la semana para que sus totales cuadren.
  * NO se cierra al agregar: capturar varias cosas seguidas es lo normal.
  *
@@ -51,7 +51,7 @@ interface DiaDeLaSemana {
  */
 @Component({
   selector: 'app-recibo-modal',
-  imports: [FormsModule, DineroPipe, FechaPipe],
+  imports: [FormsModule, DineroPipe, ComisionesSemanaComponent],
   templateUrl: './recibo-modal.html',
   host: { '(document:keydown.escape)': 'cerrar()' },
   styles: `
@@ -96,10 +96,10 @@ export class ReciboModal implements OnInit {
 
   /** El recibo que se muestra: empieza con el del input y se renueva con cada cambio. */
   readonly actual = signal<ReciboNomina | null>(null);
-  readonly ventas = signal<DesgloseVentas | null>(null);
   readonly ocupado = signal(false);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+  readonly bajando = signal(false);
 
   readonly DIAS_CORTOS = DIAS_CORTOS;
 
@@ -122,9 +122,24 @@ export class ReciboModal implements OnInit {
     this.actual.set(r);
     this.diasTrabajados = r.dias_trabajados !== null ? Number(r.dias_trabajados) : null;
     this.armarSemana(r);
-    this.api.ventas(this.periodoId(), r.usuario_id).subscribe({
-      next: (v) => this.ventas.set(v),
-      error: (e) => this.error.set(this.msg(e)),
+  }
+
+  /** El recibo de esta persona en PDF, con su línea para firmar. */
+  bajarPdf(): void {
+    const r = this.actual();
+    if (!r || this.bajando()) return;
+    this.bajando.set(true);
+    this.error.set(null);
+    const fin = sumarDias(this.semanaInicio(), 6);
+    this.api.pdf(this.periodoId(), r.usuario_id).subscribe({
+      next: (blob) => {
+        this.bajando.set(false);
+        guardarArchivo(blob, `Recibo ${r.usuario} ${rangoArchivo(this.semanaInicio(), fin)}.pdf`);
+      },
+      error: async (e) => {
+        this.bajando.set(false);
+        this.error.set(await mensajeDeError(e));
+      },
     });
   }
 

@@ -9,9 +9,9 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
 import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
 import { EntregarPedidoModal } from './entregar-modal';
-import { PrepararPedidoModal } from './preparar-modal';
+import { ModificarPedidoModal } from './modificar-modal';
 
-type Paso = '' | 'en_preparacion' | 'listo' | 'enviado';
+type Filtro = 'todos' | 'hoy' | 'atrasados' | 'chofer';
 
 /**
  * PEDIDOS de clientes (encargos) (2026-10-06): "tenemos chofer que los lleva, o
@@ -19,18 +19,18 @@ type Paso = '' | 'en_preparacion' | 'listo' | 'enviado';
  * venta" (usuario). Antes "Pedidos" era la lista de ventas: esa ahora se llama
  * Ventas.
  *
- * Se toman en el punto de venta (botón "Pedido") con la mercancía apartada. Aquí
- * se siguen: por preparar → listo → en camino (si lo lleva el chofer) → se
- * ENTREGA cobrando lo que falte o fiándolo (`entregar-modal.ts`), que es cuando
- * sale del inventario. Cancelar va en el detalle de la venta (pide su permiso).
- *
- * Queda LISTO al PREPARARLO (`preparar-modal.ts`): se escanean los paquetes que
- * van y se pesan los conos, y el total queda con el peso real. Sin prepararlo no
- * se entrega.
+ * Se toman en el punto de venta (botón "Pedido") con la mercancía apartada y
+ * quedan EN ESPERA (2026-10-07: "mejor que sean notas en espera, porque hay
+ * casos donde el cliente quiere modificar su pedido, agregar o quitar cosas"):
+ * "Modificar" (`modificar-modal.ts`) les quita o agrega hilos, escanea sus
+ * paquetes y cambia la entrega y las notas, las veces que haga falta; "Entregar
+ * y cobrar" (`entregar-modal.ts`) cobra lo que falte o lo fía y ahí sale del
+ * inventario. Ya no llevan pasos de preparar ni de chofer. Cancelar va en el
+ * detalle de la venta (pide su permiso).
  */
 @Component({
   selector: 'app-encargos',
-  imports: [FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, EntregarPedidoModal, PrepararPedidoModal],
+  imports: [FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, EntregarPedidoModal, ModificarPedidoModal],
   templateUrl: './encargos.html',
   styleUrl: './encargos.scss',
 })
@@ -43,23 +43,34 @@ export class EncargosPantalla {
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
 
-  readonly paso = signal<Paso>('');
+  readonly filtro = signal<Filtro>('todos');
   q = '';
   private temporizador: ReturnType<typeof setTimeout> | null = null;
 
   /** El pedido que se está entregando (abre la ventana de cobro). */
   readonly entregando = signal<Encargo | null>(null);
-  /** El pedido que se está preparando (abre la ventana de escanear y pesar). */
-  readonly preparando = signal<Encargo | null>(null);
-  /** El pedido que está cambiando de paso, para no mandar dos veces. */
-  readonly moviendo = signal<number | null>(null);
+  /** El pedido que se está modificando. */
+  readonly modificando = signal<Encargo | null>(null);
 
   readonly puedeVender = computed(() => this.auth.puede('ver:pos'));
-  readonly items = computed(() => this.datos()?.items ?? []);
-  readonly conteo = computed(() => this.datos()?.conteo ?? { en_preparacion: 0, listo: 0, enviado: 0 });
-  readonly totalPedidos = computed(() => {
-    const c = this.conteo();
-    return c.en_preparacion + c.listo + c.enviado;
+  readonly todos = computed(() => this.datos()?.items ?? []);
+  readonly cuantos = computed(() => {
+    const ts = this.todos();
+    return {
+      todos: ts.length,
+      hoy: ts.filter((e) => e.entrega_para === hoyLocal()).length,
+      atrasados: ts.filter((e) => this.atrasado(e)).length,
+      chofer: ts.filter((e) => e.metodo_entrega === 'envio').length,
+    };
+  });
+  readonly items = computed(() => {
+    const f = this.filtro();
+    return this.todos().filter((e) =>
+      f === 'hoy' ? e.entrega_para === hoyLocal()
+        : f === 'atrasados' ? this.atrasado(e)
+          : f === 'chofer' ? e.metodo_entrega === 'envio'
+            : true
+    );
   });
 
   constructor() {
@@ -68,7 +79,7 @@ export class EncargosPantalla {
 
   cargar(): void {
     this.cargando.set(true);
-    this.ventas.encargos({ estado: this.paso() || undefined, q: this.q.trim() || undefined }).subscribe({
+    this.ventas.encargos({ q: this.q.trim() || undefined }).subscribe({
       next: (d) => {
         this.datos.set(d);
         this.cargando.set(false);
@@ -80,11 +91,6 @@ export class EncargosPantalla {
     });
   }
 
-  elegirPaso(p: Paso): void {
-    this.paso.set(p);
-    this.cargar();
-  }
-
   alTeclear(): void {
     if (this.temporizador) clearTimeout(this.temporizador);
     this.temporizador = setTimeout(() => this.cargar(), 350);
@@ -94,14 +100,6 @@ export class EncargosPantalla {
 
   quien(e: Encargo): string {
     return e.nombre_comercial || e.cliente || 'Sin cliente';
-  }
-
-  nombrePaso(estado: string): string {
-    return estado === 'en_preparacion' ? 'Por preparar' : estado === 'listo' ? 'Listo' : 'En camino';
-  }
-
-  tonoPaso(estado: string): string {
-    return estado === 'en_preparacion' ? 'ambar' : estado === 'listo' ? 'verde' : 'azul';
   }
 
   /**
@@ -138,44 +136,21 @@ export class EncargosPantalla {
     return !!e.entrega_para && e.entrega_para < hoyLocal();
   }
 
-  /**
-   * El siguiente paso que se le puede dar desde aquí (preparar y entregar van
-   * aparte). Queda listo al PREPARARLO, no con un botón.
-   */
-  siguiente(e: Encargo): { estado: 'enviado'; texto: string } | null {
-    if (e.estado === 'listo' && e.metodo_entrega === 'envio') return { estado: 'enviado', texto: 'Salió con el chofer' };
-    return null;
-  }
-
-  alPreparar(p: Pedido): void {
-    this.preparando.set(null);
+  /** Se modificó: dice qué cambió y cómo quedó el total. */
+  alModificar(p: Pedido): void {
+    this.modificando.set(null);
     const total = Number(p.total);
     const antes = Number(p.total_antes ?? total);
     const aFavor = Number(p.a_favor ?? 0);
     const falta = Number(p.falta ?? 0);
     const dinero = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const cambios = (p.cambios ?? []).join('; ');
     this.mensaje.set(
-      `${p.numero_pedido} listo` +
-        (Math.abs(total - antes) > 0.004 ? `: con el peso real queda en ${dinero(total)} (era ${dinero(antes)})` : '') +
-        (aFavor > 0 ? `. Pagó ${dinero(aFavor)} de más: se le devuelven al entregar.` : falta > 0 ? `. Falta cobrar ${dinero(falta)}.` : '. Ya está pagado.')
+      `${p.numero_pedido} modificado${cambios ? ': ' + cambios : ''}.` +
+        (Math.abs(total - antes) > 0.004 ? ` El total queda en ${dinero(total)} (era ${dinero(antes)}).` : '') +
+        (aFavor > 0 ? ` Dejó ${dinero(aFavor)} de más: se le devuelven al entregar.` : falta > 0 ? ` Falta cobrar ${dinero(falta)}.` : ' Ya está pagado.')
     );
     this.cargar();
-  }
-
-  avanzar(e: Encargo, estado: 'enviado' | 'en_preparacion'): void {
-    this.moviendo.set(e.id);
-    this.error.set(null);
-    this.ventas.cambiarEstado(e.id, estado).subscribe({
-      next: () => {
-        this.moviendo.set(null);
-        this.mensaje.set(`${e.numero_pedido}: ${this.nombrePaso(estado).toLowerCase()}.`);
-        this.cargar();
-      },
-      error: (err) => {
-        this.moviendo.set(null);
-        this.error.set(this.msg(err));
-      },
-    });
   }
 
   alEntregar(p: Pedido): void {

@@ -28,7 +28,7 @@ export const ADMIN_ROUTES: Routes = [
       { path: 'ventas', ...p('ver:pedidos'), loadComponent: () => import('./pedidos/pedidos-list').then((m) => m.PedidosList) },
       { path: 'ventas/:id', ...p('ver:pedidos'), loadComponent: () => import('./pedidos/pedido-detalle').then((m) => m.PedidoDetalle) },
       { path: 'pedidos/:id', redirectTo: 'ventas/:id' },
-      // Los PEDIDOS de clientes (encargos): por preparar, listos, en camino.
+      // Los PEDIDOS de clientes (encargos): en espera, se modifican y se entregan cobrando.
       { path: 'pedidos', ...p('ver:encargos'), loadComponent: () => import('./encargos/encargos').then((m) => m.EncargosPantalla) },
       { path: 'apartados', ...p('ver:apartados'), loadComponent: () => import('./apartados/apartados').then((m) => m.ApartadosPantalla) },
 

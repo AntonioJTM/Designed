@@ -132,6 +132,8 @@ export class ProductoPresentaciones {
   nuevoPeso: number | null = null;
   /** Conos que rinde el bulto: varía entre bultos, así vienen de fábrica. */
   nuevoConos: number | null = null;
+  /** A qué almacén entra el bulto que se captura a mano ('' = sin elegir). */
+  nuevoAlmacen: number | '' = '';
   readonly avisoBulto = signal<string | null>(null);
 
   /** El SKU se tecleó a mano, así que ya no sigue al código de barras. */
@@ -838,9 +840,48 @@ export class ProductoPresentaciones {
     this.nuevoLote = '';
     this.nuevoPeso = null;
     this.nuevoConos = null;
+    // Si el hilo está en un solo lugar, entra ahí; en dos o más (o en ninguno), se elige.
+    const donde = this.dondeHayHilo();
+    this.nuevoAlmacen = donde.length === 1 ? donde[0].almacen_id : '';
     this.avisoBulto.set(null);
     this.error.set(null);
     this.modal.set('bulto');
+  }
+
+  /**
+   * Dónde hay existencias del hilo (la presentación principal). Un bulto
+   * capturado a mano da ENTRADA a sus kilos en el almacén que se elija
+   * (2026-10-07: "si tengo hilo en 2 lugares, que me pregunte a cuál de los 2 se
+   * va a cargar ese bulto"; "sí se suman los kilos de la entrada"). El servidor
+   * lo valida igual.
+   */
+  dondeHayHilo(): StockItem[] {
+    const v = this.principal();
+    return v ? this.existenciasDe(v) ?? [] : [];
+  }
+
+  /**
+   * Lo que ofrece "¿A qué almacén entra?": primero donde ya hay de este hilo
+   * (con sus kilos), luego los demás almacenes.
+   */
+  opcionesAlmacenBulto(): { id: number; texto: string }[] {
+    const donde = this.dondeHayHilo();
+    const kg = (n: number) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 3 });
+    const con = donde.map((d) => ({ id: d.almacen_id, texto: `${d.almacen} · hay ${kg(Number(d.cantidad))} kg` }));
+    const otros = this.almacenes()
+      .filter((a) => !donde.some((d) => d.almacen_id === a.id))
+      .map((a) => ({ id: a.id, texto: `${a.nombre} · no hay de este hilo` }));
+    return [...con, ...otros];
+  }
+
+  /** No se ha dicho a qué almacén entra el bulto. */
+  faltaAlmacenBulto(): boolean {
+    return !this.nuevoAlmacen;
+  }
+
+  /** Nombre del almacén elegido, para decir a dónde entran los kilos. */
+  almacenBultoNombre(): string {
+    return this.almacenes().find((a) => a.id === Number(this.nuevoAlmacen))?.nombre ?? '';
   }
 
   /**
@@ -851,6 +892,14 @@ export class ProductoPresentaciones {
     const v = this.principal();
     const codigo = this.nuevoCodigo.trim();
     if (!v || !codigo) return;
+    if (this.faltaAlmacenBulto()) {
+      this.error.set('Elige a qué almacén entra el bulto: ahí se suman sus kilos.');
+      return;
+    }
+    if (!(Number(this.nuevoPeso) > 0)) {
+      this.error.set('Escribe lo que pesa el bulto: esos kilos entran al inventario.');
+      return;
+    }
     this.error.set(null);
     this.catalogo
       .agregarCodigo(v.id, {
@@ -859,15 +908,20 @@ export class ProductoPresentaciones {
         peso_kg: this.nuevoPeso != null && this.nuevoPeso > 0 ? this.nuevoPeso : undefined,
         lote: this.nuevoLote.trim() || undefined,
         conos: this.nuevoConos != null && this.nuevoConos > 0 ? this.nuevoConos : undefined,
+        almacen_id: this.nuevoAlmacen ? Number(this.nuevoAlmacen) : undefined,
       })
       .subscribe({
         next: (c) => {
           this.codigos.update((m) => ({ ...m, [v.id]: [...(m[v.id] ?? []), c] }));
-          this.avisoBulto.set(`Bulto ${c.codigo} añadido.`);
+          this.avisoBulto.set(
+            `Bulto ${c.codigo} añadido: entraron ${Number(c.peso_kg).toLocaleString('en-US', { maximumFractionDigits: 3 })} kg a ${c.almacen}.`
+          );
+          // Cambiaron las existencias: se vuelven a leer (y la lista de bultos).
+          this.cargarDetalle();
           this.nuevoCodigo = '';
           this.nuevoPeso = null;
           this.nuevoConos = null;
-          // El lote se queda: los bultos que se capturan juntos suelen ser del mismo.
+          // El lote y el lugar se quedan: los bultos que se capturan juntos suelen ser del mismo.
         },
         error: (e) => {
           this.avisoBulto.set(null);
@@ -883,19 +937,29 @@ export class ProductoPresentaciones {
   }
 
   async eliminarCodigoVar(b: BultoFila): Promise<void> {
+    // "Un bulto que metió kilos se los lleva al quitarlo" (2026-10-07): el de una
+    // carga y el capturado a mano. Los capturados a mano antes nunca metieron
+    // kilos: solo se borra su registro.
+    const conEntrada = !!Number(b.con_entrada ?? 0);
+    const kg = Number(b.peso_kg ?? 0).toLocaleString('en-US', { maximumFractionDigits: 3 });
+    const deDonde = b.remesa_folio ? `Llegó en la carga ${b.remesa_folio}` : 'Se capturó a mano';
     const si = await this.confirmacion.pedir({
       titulo: `¿Quitar el bulto ${b.codigo}?`,
-      mensaje: 'Solo se borra su registro: quitarlo no mueve el inventario.',
+      mensaje: conEntrada
+        ? `${deDonde}: al quitarlo salen sus ${kg} kg de ${b.almacen ?? 'su almacén'} y queda en el kardex.`
+        : 'Se capturó a mano antes de que los bultos sumaran kilos: solo se borra su registro, el inventario no cambia.',
       aceptar: 'Quitar',
       peligro: true,
     });
     if (!si) return;
     this.catalogo.eliminarCodigo(b.id).subscribe({
-      next: () =>
+      next: () => {
         this.codigos.update((m) => ({
           ...m,
           [b.variante_id]: (m[b.variante_id] ?? []).filter((c) => c.id !== b.id),
-        })),
+        }));
+        if (conEntrada) this.cargarDetalle();
+      },
       error: (e) => this.error.set(this.msg(e)),
     });
   }

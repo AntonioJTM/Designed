@@ -1066,6 +1066,31 @@ CREATE TABLE `nomina_recibos` (
   CONSTRAINT `nomina_recibos_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+--
+-- Qué ventas paga cada recibo de nómina (la comisión se paga al LIQUIDARSE la
+-- venta, una sola vez). Migración 2026-10_comisiones_al_liquidar.sql.
+--
+CREATE TABLE `nomina_comisiones` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `recibo_id` bigint(20) unsigned NOT NULL,
+  `pedido_id` bigint(20) unsigned DEFAULT NULL,
+  `numero_pedido` varchar(40) NOT NULL,
+  `cliente` varchar(160) DEFAULT NULL,
+  `tipo` varchar(10) NOT NULL,
+  `vendida_en` datetime NOT NULL,
+  `liquidada_en` datetime DEFAULT NULL,
+  `total` decimal(12,2) NOT NULL,
+  `venta_neta` decimal(12,2) NOT NULL,
+  `porcentaje` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `comision` decimal(12,2) NOT NULL DEFAULT 0.00,
+  PRIMARY KEY (`id`),
+  KEY `idx_nomcom_recibo` (`recibo_id`),
+  KEY `idx_nomcom_pedido` (`pedido_id`),
+  CONSTRAINT `fk_nomcom_recibo` FOREIGN KEY (`recibo_id`) REFERENCES `nomina_recibos` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_nomcom_pedido` FOREIGN KEY (`pedido_id`) REFERENCES `pedidos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `chk_nomcom_tipo` CHECK (`tipo` in ('contado','credito','apartado','pedido'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------- Tabla: nomina_recibo_conceptos ----------
 DROP TABLE IF EXISTS `nomina_recibo_conceptos`;
 CREATE TABLE `nomina_recibo_conceptos` (

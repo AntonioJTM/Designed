@@ -82,10 +82,9 @@ const ck = (n, ok, d) => {
     ck('caja y turno de prueba', !!sesion?.id);
 
     const codigo = 'TMPVC-B1-' + SUF;
-    r = await api('POST', `/variantes/${paquete.id}/codigos`, { codigo, peso_kg: 19.2, conos: 12, lote: 'L1' });
-    ck('el paquete físico (19.2 kg, 12 conos)', r.status === 201, r.error);
-    r = await api('POST', '/inventario/movimientos', { variante_id: paquete.id, almacen_id: almacen, tipo: 'entrada', cantidad: 19.2, motivo: 'Prueba TMPVC' });
-    ck('entra a la tienda', r.status === 201 || r.status === 200, r.error);
+    // El bulto capturado a mano da entrada a sus kilos en el almacén que se diga (2026-10-07).
+    r = await api('POST', `/variantes/${paquete.id}/codigos`, { codigo, peso_kg: 19.2, conos: 12, lote: 'L1', almacen_id: almacen });
+    ck('el paquete físico (19.2 kg, 12 conos) entra a la tienda', r.status === 201 && Number(r.data?.almacen_id) === almacen, r.error);
     const [[bodega]] = await db.query('SELECT id FROM almacenes WHERE es_punto_venta = 0 AND activo = 1 ORDER BY id LIMIT 1');
     if (bodega) {
       r = await api('POST', '/inventario/desarmes', { codigo_bulto: codigo, almacen_origen_id: bodega.id, almacen_destino_id: bodega.id });

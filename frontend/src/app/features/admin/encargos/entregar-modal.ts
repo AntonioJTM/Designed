@@ -18,7 +18,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
  *   · Si se cobra menos de lo que falta, el resto se FÍA (pide «Fiar» y el
  *     servidor revisa su crédito).
  *   · Sin nada pendiente, solo se entrega.
- *   · Si al prepararlo pesó MENOS de lo que dejó pagado, se le devuelve la
+ *   · Si al modificarlo quedó en MENOS de lo que dejó pagado, se le devuelve la
  *     diferencia en efectivo: sale de un turno abierto.
  */
 @Component({

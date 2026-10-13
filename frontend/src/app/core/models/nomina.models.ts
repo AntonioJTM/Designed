@@ -161,25 +161,58 @@ export interface SemanaActual {
   periodo: PeriodoNomina | null;
 }
 
-/** Pedido que forma parte de la base comisionable de un empleado. */
-export interface VentaComisionable {
-  id: number;
+/**
+ * La comisión de una venta se paga UNA vez, completa, en la nómina de la semana
+ * en que la venta quedó PAGADA (2026-10-07): la de contado el día que se vende;
+ * la fiada, el apartado y el pedido cuando se terminan de pagar.
+ */
+export type TipoVentaComision = 'contado' | 'credito' | 'apartado' | 'pedido';
+
+/** Una venta cuya comisión paga esta nómina (congelada en el recibo). */
+export interface VentaComision {
+  pedido_id: number | null;
   numero_pedido: string;
-  canal: 'tienda_linea' | 'punto_venta';
-  estado: string;
-  creado_en: string;
-  subtotal: string;
-  descuento: string;
-  impuestos: string;
-  costo_envio: string;
-  total: string;
-  venta_neta: string;
+  cliente: string | null;
+  tipo: TipoVentaComision;
+  vendida_en: string;
+  /** Cuándo quedó pagada; null = se pagó con la regla anterior (al venderla). */
+  liquidada_en: string | null;
+  total: number;
+  /** Sin IVA ni envío: sobre esto es la comisión. */
+  venta_neta: number;
+  comision: number;
 }
 
-export interface DesgloseVentas {
-  pedidos: VentaComisionable[];
-  venta_neta: number;
-  num_pedidos: number;
+/** Una venta que todavía no paga comisión (al día de hoy). */
+export interface VentaPorLiquidar extends VentaComision {
+  usuario_id: number;
+  pagado: number;
+  falta: number;
+}
+
+export interface ComisionesVendedor {
+  recibo_id: number;
+  usuario_id: number;
+  usuario: string;
+  rol: string;
+  porcentaje: number;
+  ventas_netas: number;
+  comision: number;
+  ventas: VentaComision[];
+  /** Lo que se debe (fiado, apartado, pedido): su comisión se paga al liquidarse. */
+  por_liquidar: VentaPorLiquidar[];
+  por_liquidar_comision: number;
+  por_liquidar_debe: number;
+  /** Ya pagadas, pero entran en la próxima nómina que se calcule. */
+  proxima_nomina: { ventas: number; venta_neta: number; comision: number };
+}
+
+/** El reporte de comisiones de una semana. */
+export interface ComisionesSemana {
+  /** 'anterior': semana pagada con la regla vieja (por la fecha de venta). */
+  regla: 'anterior' | 'al_liquidar';
+  desde: string;
+  vendedores: ComisionesVendedor[];
 }
 
 /** Horas extra de un día: a qué hora entró o salió de verdad. */

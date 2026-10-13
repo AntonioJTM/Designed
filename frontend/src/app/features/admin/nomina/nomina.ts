@@ -13,8 +13,10 @@ import { hoyLocal } from '../../../shared/fecha.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { ApiError } from '../../../core/models/auth.models';
 import { ReciboModal } from './recibo-modal';
-import { diaCorto, diaLargo, domingoDe, rangoCorto, rangoLargo, sumarDias } from './semana';
+import { ComisionesSemanaComponent } from './comisiones-semana';
+import { diaCorto, diaLargo, domingoDe, rangoArchivo, rangoCorto, rangoLargo, sumarDias } from './semana';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
 
 /** Una opción del selector de semana. */
 interface OpcionSemana {
@@ -39,7 +41,7 @@ const SEMANAS_ATRAS = 12;
  */
 @Component({
   selector: 'app-nomina',
-  imports: [RouterLink, DineroPipe, ReciboModal],
+  imports: [RouterLink, DineroPipe, ReciboModal, ComisionesSemanaComponent],
   templateUrl: './nomina.html',
   styles: `
     /* El punto de color de la cifra es fijo: la clase global .punto también es
@@ -74,6 +76,10 @@ export class Nomina {
 
   /** Recibo abierto en el modal de detalle. */
   readonly reciboAbierto = signal<ReciboNomina | null>(null);
+  /** Se está armando el PDF de la semana. */
+  readonly bajando = signal(false);
+  /** Qué se ve en la tarjeta de la semana: los recibos o el reporte de comisiones. */
+  readonly vista = signal<'recibos' | 'comisiones'>('recibos');
 
   /** Hoy en hora LOCAL: con toISOString() la semana se adelantaría desde las 18:00. */
   private readonly hoy = hoyLocal();
@@ -254,6 +260,24 @@ export class Nomina {
   etiquetaEstado(h: PeriodoResumen): string {
     if (h.estado === 'pagado') return `Pagada el ${diaCorto(h.fecha_pago)}`;
     return h.estado === 'borrador' ? 'Borrador' : 'Cancelada';
+  }
+
+  /** El PDF de la semana: el resumen y un recibo por persona, para firmar. */
+  bajarPdf(): void {
+    const p = this.periodo();
+    if (!p || this.bajando()) return;
+    this.bajando.set(true);
+    this.error.set(null);
+    this.api.pdf(p.id).subscribe({
+      next: (blob) => {
+        this.bajando.set(false);
+        guardarArchivo(blob, `Nómina ${rangoArchivo(p.fecha_inicio, p.fecha_fin)}.pdf`);
+      },
+      error: async (e) => {
+        this.bajando.set(false);
+        this.error.set(await mensajeDeError(e));
+      },
+    });
   }
 
   // ---- Utilidades internas ----

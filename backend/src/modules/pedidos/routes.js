@@ -119,7 +119,7 @@ router.get('/mis', authRequired, controller.misPedidos);
 // Los apartados vigentes. Va ANTES de '/:id' o Express lo tomaría por un id y
 // respondería 404 — el mismo cuidado que con '/mis' y '/cotizacion'.
 router.get('/apartados', ...soloStaff, controller.apartados);
-// Los PEDIDOS (encargos) sin entregar: por preparar, listos y en camino.
+// Los PEDIDOS (encargos) sin entregar: en espera.
 router.get('/encargos', ...soloStaff, requirePermiso('ver:encargos'), controller.encargos);
 // Las cifras de arriba de Pedidos: hoy, la semana, lo fiado por cobrar y lo cancelado.
 router.get('/resumen', ...soloStaff, controller.resumen);
@@ -152,26 +152,33 @@ const entregaSchema = z
   .strict();
 router.post('/:id/entregar', ...soloStaff, validate(entregaSchema), controller.entregarApartado);
 
-// PREPARAR un pedido: los paquetes que van (escaneados) y lo que pesaron los
-// conos; queda listo con el total al peso real. Lo hace quien ve Pedidos.
-const prepararSchema = z
+// MODIFICAR un pedido en espera (2026-10-07: "hay casos donde el cliente quiere
+// modificar su pedido, agregar o quitar cosas"): la lista COMPLETA de lo que
+// lleva (las líneas que no vienen se quitan; las nuevas van sin detalle_id), y
+// la entrega, el envío, para cuándo y las notas. Lo hace quien ve Pedidos.
+const modificarSchema = z
   .object({
     lineas: z
       .array(
         z
           .object({
-            detalle_id: z.coerce.number().int().positive(),
+            detalle_id: z.coerce.number().int().positive().optional(),
+            variante_id: z.coerce.number().int().positive().optional(),
             codigos: z.array(z.string().trim().min(1).max(60)).max(500).optional(),
             cantidad: z.coerce.number().positive().max(100000).optional(),
             piezas: z.coerce.number().int().min(0).max(100000).nullable().optional(),
           })
           .strict()
       )
-      .min(1)
       .max(100),
+    metodo_entrega: z.enum(['recoger', 'envio']).optional(),
+    entrega_direccion: z.string().trim().max(255).nullable().optional(),
+    costo_envio: z.coerce.number().nonnegative().max(999999).optional(),
+    entrega_para: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    notas: z.string().trim().max(1000).nullable().optional(),
   })
   .strict();
-router.post('/:id/preparar', ...soloStaff, requirePermiso('ver:encargos'), validate(prepararSchema), controller.prepararEncargo);
+router.put('/:id/encargo', ...soloStaff, requirePermiso('ver:encargos'), validate(modificarSchema), controller.modificarEncargo);
 
 // ---- Comprobante de pago ----
 // La captura que el cliente le manda al administrador cuando deposita. La sube

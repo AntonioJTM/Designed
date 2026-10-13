@@ -83,9 +83,9 @@ async function entregarApartado(id, usuarioId, datos = {}) {
   return model.entregarApartado(id, usuarioId, datos);
 }
 
-/** Prepara un pedido: paquetes escaneados, conos pesados, total con el peso real. */
-async function prepararEncargo(id, datos, usuarioId) {
-  return model.prepararEncargo(id, datos, usuarioId);
+/** Modifica un pedido en espera: lo que lleva, la entrega y las notas. */
+async function modificarEncargo(id, datos) {
+  return model.modificarEncargo(id, datos);
 }
 
 /** Los pedidos (encargos) sin entregar. */
@@ -101,5 +101,5 @@ module.exports = {
   resumen,
   crear, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,
-  apartados, abonarApartado, entregarApartado, prepararEncargo, encargos,
+  apartados, abonarApartado, entregarApartado, modificarEncargo, encargos,
 };

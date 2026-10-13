@@ -1,0 +1,169 @@
+<!-- No se cierra al tocar el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modificar-titulo">
+    <div class="modal-head">
+      <h2 id="modificar-titulo">Modificar el pedido · {{ pedido().nombre_comercial || pedido().cliente }}</h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <p class="explica">
+        Quita o agrega hilos, cambia los kilos y escanea los paquetes que van. Lo que agregas se
+        <b>aparta</b> y lo que quitas queda <b>libre</b> para venderse. Lo que ya llevaba conserva su precio.
+      </p>
+
+      @if (error()) { <p class="alert">{{ error() }}</p> }
+
+      @if (cargando()) {
+        <p class="muted">Cargando el pedido…</p>
+      } @else {
+        <!-- Escanear un paquete: cae en su hilo; si el pedido no lo llevaba, lo agrega. -->
+        <label class="field">
+          Escanear un paquete
+          <span class="escaneo">
+            <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
+                   (keydown.enter)="$event.preventDefault(); leer()"
+                   placeholder="Escanea la etiqueta del paquete" />
+            <button type="button" class="btn btn-ghost" (click)="leer()">Agregar</button>
+          </span>
+        </label>
+        @if (ultimo()) { <p class="ultimo">✓ {{ ultimo() }}</p> }
+
+        <div class="lineas-mod">
+          @for (l of lineas(); track $index) {
+            <section class="linea-mod" [class.nueva]="l.detalle_id === null">
+              <div class="linea-cabeza">
+                <div>
+                  <b>{{ l.hilo }}</b>
+                  <span class="muted"> · {{ tipoTexto(l) }}</span>
+                  @if (l.detalle_id === null) { <span class="pill verde">Nuevo</span> }
+                  @if (l.antes > 0 && kgDe(l) !== l.antes) { <div class="sub">Tenía {{ l.antes | cantidad: 'kg' }}</div> }
+                </div>
+                <div class="linea-va">
+                  @if (kgDe(l); as kg) {
+                    <b>{{ kg | cantidad: 'kg' }}</b>
+                    <div class="sub">{{ importe(l) | dinero }}</div>
+                  } @else {
+                    <span class="pill ambar">Faltan los kilos</span>
+                  }
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" (click)="quitarLinea(l)"
+                        [attr.aria-label]="'Quitar ' + l.hilo + ' del pedido'">Quitar</button>
+              </div>
+
+              @if (l.paquetes.length > 0) {
+                <ul class="escaneados" [attr.aria-label]="'Paquetes de ' + l.hilo">
+                  @for (p of l.paquetes; track p.codigo) {
+                    <li>
+                      <span class="mono">{{ p.codigo }}</span>
+                      <span class="muted">{{ p.lote ? 'lote ' + p.lote : '' }}</span>
+                      <b>{{ p.peso_kg | cantidad: 'kg' }}</b>
+                      <button type="button" class="btn btn-ghost btn-sm" (click)="quitarPaquete(l, p.codigo)"
+                              [attr.aria-label]="'Quitar el paquete ' + p.codigo">Quitar</button>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <div class="pesar">
+                  <label class="field">
+                    Kilos
+                    <span class="con-unidad">
+                      <input type="number" min="0" step="0.001" [(ngModel)]="l.kg" [name]="'kg-' + $index" />
+                      <span>kg</span>
+                    </span>
+                    @if (l.tipo === 'paquete') { <span class="ayuda">O escanea sus paquetes arriba.</span> }
+                  </label>
+                  @if (l.tipo === 'cono') {
+                    <label class="field">
+                      Cuántos conos
+                      <input type="number" min="0" step="1" [(ngModel)]="l.conos" [name]="'conos-' + $index" />
+                    </label>
+                  }
+                </div>
+              }
+            </section>
+          } @empty {
+            <p class="muted">No lleva nada: agrega un hilo, o cancela el pedido.</p>
+          }
+        </div>
+
+        <!-- Agregar un hilo que no llevaba. -->
+        <div class="agregar">
+          <label class="field">
+            Agregar un hilo
+            <span class="escaneo">
+              <input type="search" [(ngModel)]="q" (keydown.enter)="$event.preventDefault(); buscar()"
+                     placeholder="Color o calibre: rojo 2/30" autocomplete="off" />
+              <button type="button" class="btn btn-ghost" (click)="buscar()">Buscar</button>
+            </span>
+          </label>
+          @if (resultados().length > 0) {
+            <ul class="resultados">
+              @for (v of resultados(); track v.id) {
+                <li>
+                  <span><b>{{ nombreDe(v) }}</b><span class="muted"> · {{ v.tipo_presentacion === 'cono' ? 'conos' : v.tipo_presentacion === 'paquete' ? 'paquete' : 'por kilo' }}</span></span>
+                  <span class="muted">{{ hayAqui(v) }}</span>
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="agregar(v)">Agregar</button>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+
+        <!-- La entrega, como notas: se puede cambiar cuando haga falta. -->
+        <div class="entrega">
+          <div class="seg" role="radiogroup" aria-label="Cómo se entrega">
+            <button type="button" role="radio" [class.on]="entrega === 'recoger'" [attr.aria-checked]="entrega === 'recoger'"
+                    (click)="entrega = 'recoger'">Pasa por él</button>
+            <button type="button" role="radio" [class.on]="entrega === 'envio'" [attr.aria-checked]="entrega === 'envio'"
+                    (click)="entrega = 'envio'">Lo lleva el chofer</button>
+          </div>
+          <div class="form-grid">
+            @if (entrega === 'envio') {
+              <label class="field full">
+                ¿A dónde?
+                <input type="text" [(ngModel)]="direccion" name="direccion" placeholder="Calle, número, colonia" />
+              </label>
+              <label class="field">
+                Envío
+                <input type="number" min="0" step="0.01" [(ngModel)]="costoEnvio" name="envio" placeholder="0.00" />
+              </label>
+            }
+            <label class="field">
+              Para cuándo
+              <input type="date" [(ngModel)]="paraCuando" name="para" />
+            </label>
+            <label class="field full">
+              Notas
+              <input type="text" [(ngModel)]="notas" name="notas" placeholder="Ej. Llamar antes de llegar" />
+            </label>
+          </div>
+        </div>
+
+        <div class="previa-entrega">
+          <div><span>Total como estaba</span><span>{{ pedido().total | dinero }}</span></div>
+          <div>
+            <span>Total ahora @if (hayNuevos()) { <span class="muted">(aprox.: lo nuevo con su lista de precios al guardar)</span> }</span>
+            <b>{{ total() | dinero }}</b>
+          </div>
+          @if (pagado() > 0) { <div><span>Ya dejó</span><span>{{ pagado() | dinero }}</span></div> }
+          <div class="renglon-falta">
+            @if (pagado() > total() + 0.004) {
+              <span>A su favor (se le devuelve al entregar)</span><b>{{ pagado() - total() | dinero }}</b>
+            } @else {
+              <span>Falta</span><b>{{ total() - pagado() | dinero }}</b>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="modal-foot">
+      @if (!cargando() && motivo(); as m) { <span class="nota">{{ m }}</span> }
+      <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" [disabled]="guardando() || cargando() || !!motivo()" (click)="guardar()">
+        {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
+      </button>
+    </div>
+  </div>
+</div>

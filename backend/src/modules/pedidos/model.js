@@ -100,6 +100,47 @@ async function _apartadoEnAlmacen(conn, varianteId, almacenId) {
   return Number(r.kg);
 }
 
+/**
+ * A cómo se cobra una presentación con una lista de precios: el precio del tipo
+ * de cliente > la oferta > el público. Rechaza la que no existe, la inactiva y
+ * la que no tiene precio (un hilo que entró con la lista del proveedor queda en
+ * $0: venderlo así sería regalarlo). Lo usan la venta (_cotizar) y modificar un
+ * pedido, para que las dos cobren igual.
+ */
+async function _precioDeVariante(conn, varianteId, tipoClienteId) {
+  // `precio_tipo` es el precio propio del tipo de cliente, si lo tiene
+  // capturado; si no, se cobra el público (pv.precio).
+  const [vrows] = await conn.query(
+    `SELECT pv.id, pv.precio, pv.precio_oferta, pv.presentacion, pv.activo,
+            pv.costo,
+            p.nombre AS producto, p.grosor_calibre AS calibre, imp.porcentaje AS imp_pct,
+            (SELECT vp.precio FROM variante_precios vp
+              WHERE vp.variante_id = pv.id AND vp.tipo_cliente_id = :tipo_cliente) AS precio_tipo
+       FROM producto_variantes pv
+       JOIN productos p        ON p.id = pv.producto_id
+       LEFT JOIN impuestos imp ON imp.id = p.impuesto_id
+      WHERE pv.id = :id`,
+    { id: varianteId, tipo_cliente: tipoClienteId ?? 0 }
+  );
+  const v = vrows[0];
+  if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `Variante ${varianteId} no existe`);
+  if (!v.activo) throw new AppError(422, 'VARIANTE_INACTIVA', `La variante ${varianteId} está inactiva`);
+
+  // Orden de prelación: precio del tipo de cliente > oferta > público.
+  const precioUnit =
+    v.precio_tipo != null
+      ? Number(v.precio_tipo)
+      : v.precio_oferta != null
+        ? Number(v.precio_oferta)
+        : Number(v.precio);
+  if (!(precioUnit > 0)) {
+    throw new AppError(422, 'SIN_PRECIO',
+      `«${v.producto}${v.calibre ? ' ' + v.calibre : ''}» todavía no tiene precio. ` +
+      'Ponle su precio por kilo en Productos para poder venderlo.');
+  }
+  return { v, precioUnit };
+}
+
 async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {}) {
   const esPOS = datos.canal === 'punto_venta';
   const paraBloquear = bloquear ? 'FOR UPDATE' : '';
@@ -194,39 +235,7 @@ async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {
   let impuestos = 0;
 
   for (const item of datos.items) {
-    // `precio_tipo` es el precio propio del tipo de cliente, si lo tiene
-    // capturado; si no, se cobra el público (pv.precio).
-    const [vrows] = await conn.query(
-      `SELECT pv.id, pv.precio, pv.precio_oferta, pv.presentacion, pv.activo,
-              pv.costo,
-              p.nombre AS producto, p.grosor_calibre AS calibre, imp.porcentaje AS imp_pct,
-              (SELECT vp.precio FROM variante_precios vp
-                WHERE vp.variante_id = pv.id AND vp.tipo_cliente_id = :tipo_cliente) AS precio_tipo
-         FROM producto_variantes pv
-         JOIN productos p        ON p.id = pv.producto_id
-         LEFT JOIN impuestos imp ON imp.id = p.impuesto_id
-        WHERE pv.id = :id`,
-      { id: item.variante_id, tipo_cliente: tipoClienteId ?? 0 }
-    );
-    const v = vrows[0];
-    if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `Variante ${item.variante_id} no existe`);
-    if (!v.activo) throw new AppError(422, 'VARIANTE_INACTIVA', `La variante ${item.variante_id} está inactiva`);
-
-    // Orden de prelación: precio del tipo de cliente > oferta > público.
-    const precioUnit =
-      v.precio_tipo != null
-        ? Number(v.precio_tipo)
-        : v.precio_oferta != null
-          ? Number(v.precio_oferta)
-          : Number(v.precio);
-    // Un hilo que entró con la lista del proveedor y todavía no tiene precio
-    // queda en $0: venderlo así sería regalarlo. Se rechaza hasta que la tienda
-    // le ponga su precio por kilo.
-    if (!(precioUnit > 0)) {
-      throw new AppError(422, 'SIN_PRECIO',
-        `«${v.producto}${v.calibre ? ' ' + v.calibre : ''}» todavía no tiene precio. ` +
-        'Ponle su precio por kilo en Productos para poder venderlo.');
-    }
+    const { v, precioUnit } = await _precioDeVariante(conn, item.variante_id, tipoClienteId);
 
     // Bloquea existencias y valida disponibilidad.
     const [irows] = await conn.query(
@@ -552,6 +561,9 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         if (bulto && bulto.estado !== 'disponible') {
           throw await _errorBultoTomado(conn, b.codigo, bulto);
         }
+        // Y tiene que estar EN ESTA TIENDA (2026-10-07): no se vende uno que el
+        // sistema tiene en otro almacén o que viene en camino.
+        if (bulto) await _exigirPaqueteAqui(conn, bulto.id, almacenId);
 
         // El código y el peso se CONGELAN aquí: si mañana se borra el bulto, el
         // pedido sigue diciendo qué se entregó. `variante_codigo_id` es la
@@ -570,12 +582,9 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         );
 
         if (bulto) {
-          // Se marca vendido y se corrige su ubicación al almacén donde se
-          // escaneó. El traspaso asigna los bultos por FIFO, pero quien surte se
-          // lleva los que tiene a mano, así que la ubicación registrada puede no
-          // ser la real: el escaneo en el mostrador es el dato bueno y manda.
-          // NO se valida que el bulto "estuviera" aquí: eso bloquearía ventas
-          // legítimas por un detalle de registro que la tienda no lleva.
+          // Se marca vendido. Ya se validó que está en esta tienda; el almacén
+          // se escribe para el que no tenía (capturado a mano antes del
+          // 2026-10-07).
           // En un PEDIDO o un APARTADO el paquete no sale todavía: queda
           // 'apartado' para este cliente (sigue en la tienda y el saldo no baja)
           // y pasa a 'vendido' al entregarlo.
@@ -1002,11 +1011,13 @@ function _validarCaminoApartado(pedido, estado) {
 
 /**
  * El camino de un PEDIDO (encargo) mientras no se entrega
- * (`inventario_descontado = 0`): por preparar ↔ listo → en camino (solo si lo
- * lleva el chofer). Se ENTREGA con `POST /pedidos/:id/entregar`, que cobra lo
- * que falte (o lo fía) y es donde se descuenta. Se CANCELA, que libera lo
- * apartado; cancelado, se reactiva solo como "por preparar". Ya entregado, es
- * una venta más y sigue el camino de siempre (cancelar o devolver repone).
+ * (`inventario_descontado = 0`): está EN ESPERA ('en_preparacion') y se
+ * modifica con `PUT /pedidos/:id/encargo` (2026-10-07; antes pasaba por
+ * preparar → listo → en camino, y 'listo'/'enviado' se siguen leyendo como en
+ * espera). Se ENTREGA con `POST /pedidos/:id/entregar`, que cobra lo que falte
+ * (o lo fía) y es donde se descuenta. Se CANCELA, que libera lo apartado;
+ * cancelado, se reactiva solo en espera. Ya entregado, es una venta más y sigue
+ * el camino de siempre (cancelar o devolver repone).
  */
 function _validarCaminoEncargo(pedido, estado) {
   const antes = pedido.estado;
@@ -1016,14 +1027,14 @@ function _validarCaminoEncargo(pedido, estado) {
   if (!sinEntregar) {
     if (estado === 'apartado' || PASOS_ENCARGO.includes(estado)) {
       throw new AppError(409, 'PEDIDO_YA_ENTREGADO',
-        `${num} ya se entregó: no regresa a prepararse. Si lo devolvieron, márcalo devuelto.`);
+        `${num} ya se entregó: no regresa a estar en espera. Si lo devolvieron, márcalo devuelto.`);
     }
     return;
   }
   if (INACTIVOS.includes(antes)) {
     if (estado !== 'en_preparacion') {
       throw new AppError(409, 'REACTIVAR_COMO_PEDIDO',
-        `${num} era un pedido: se reactiva como "por preparar", que vuelve a apartar la mercancía.`);
+        `${num} era un pedido: se reactiva "en espera", que vuelve a apartar la mercancía.`);
     }
     return;
   }
@@ -1032,20 +1043,11 @@ function _validarCaminoEncargo(pedido, estado) {
       `${num} no se ha entregado: no hay nada que devolver. Cancélalo.`);
   }
   if (estado === 'cancelado' || estado === 'en_preparacion') return;
-  // Queda listo al PREPARARLO (POST /:id/preparar): ahí se escanean los
-  // paquetes y se pesan los conos, y el total queda con el peso real. Marcarlo
-  // listo a mano se saltaba eso (2026-10-06).
-  if (antes === 'en_preparacion' && (estado === 'listo' || estado === 'enviado')) {
-    throw new AppError(409, 'PEDIDO_SE_PREPARA',
-      `${num} queda listo al PREPARARLO (en Pedidos, «Ya está listo»): ahí se escanean los paquetes y se pesan los conos.`);
-  }
-  if (estado === 'listo') return;
-  if (estado === 'enviado') {
-    if (pedido.metodo_entrega !== 'envio') {
-      throw new AppError(409, 'PEDIDO_SE_RECOGE',
-        `${num} lo recoge el cliente: no sale con el chofer.`);
-    }
-    return;
+  // Ya no hay pasos de preparar ni de chofer (2026-10-07): el pedido está en
+  // espera, se modifica y se entrega cobrando.
+  if (estado === 'listo' || estado === 'enviado') {
+    throw new AppError(409, 'PEDIDO_EN_ESPERA',
+      `${num} está en espera: se modifica en Pedidos y se entrega con «Entregar y cobrar».`);
   }
   throw new AppError(409, 'PEDIDO_SE_ENTREGA',
     `${num} es un pedido: se entrega desde Pedidos, que cobra lo que falte y lo descuenta del inventario.`);
@@ -1334,7 +1336,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
 
     // Reactivar un apartado cancelado: la mercancía se vuelve a apartar. No se
     // descuenta —sigue sin entregarse— así que solo se rehace la reserva.
-    // Igual un PEDIDO cancelado que se reactiva (vuelve a "por preparar").
+    // Igual un PEDIDO cancelado que se reactiva (vuelve a estar en espera).
     if (eraInactivo && !esInactivo && !Number(pedido.inventario_descontado) && almacenId) {
       const [lineas] = await conn.query(
         'SELECT variante_id, cantidad, descripcion FROM pedido_detalle WHERE pedido_id = :id',
@@ -1960,11 +1962,6 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
         throw new AppError(409, 'NO_ES_PEDIDO_VIGENTE',
           `${pedido.numero_pedido} no es un pedido por entregar (está ${pedido.estado}).`);
       }
-      // Se entrega lo PREPARADO: con los paquetes escaneados y el peso real.
-      if (pedido.estado === 'en_preparacion') {
-        throw new AppError(409, 'PEDIDO_SIN_PREPARAR',
-          `${pedido.numero_pedido} todavía no se prepara: márcalo «Ya está listo», escaneando los paquetes y pesando los conos.`);
-      }
     } else if (pedido.estado !== 'apartado') {
       throw new AppError(409, 'NO_ES_APARTADO',
         `${pedido.numero_pedido} no es un apartado vigente (está ${pedido.estado}).`);
@@ -2114,7 +2111,60 @@ async function _devolverDiferencia(conn, pedido, monto, datos) {
  * APARTADO, para qué pedido y de quién (así se sabe que es de otro cliente y
  * no un error del lector).
  */
+/**
+ * EN LA CAJA SOLO SE VENDEN LOS PAQUETES DE ESA TIENDA (usuario, 2026-10-07:
+ * "si está en Tienda Principal solo se venden los paquetes que están ahí; no
+ * tiene por qué tomar los de almacén. Que diga que sí existe pero está en
+ * almacén, que tome uno que sí esté registrado con la tienda").
+ *
+ * Antes la venta NO lo validaba y le corregía la ubicación al paquete. Eso
+ * descuadraba: el paquete PERLA JASPE 00633586 estaba en Almacén General, se
+ * vendió en la caja de Tienda Principal y la venta le quitó sus 19.95 kg a la
+ * tienda —los kilos de la bodega se quedaron con un paquete que ya no estaba—.
+ *
+ * Vale para vender, apartar, tomar un pedido y modificarlo (el almacén es el
+ * del pedido). Un paquete que viene EN CAMINO tampoco: sus kilos todavía no
+ * entran a la tienda. Sin almacén (capturado a mano antes del 2026-10-07) se
+ * permite: no hay nada que lo contradiga.
+ */
+async function _exigirPaqueteAqui(conn, bultoId, almacenId) {
+  const [[u]] = await conn.query(
+    `SELECT vc.codigo, vc.almacen_id, a.nombre AS almacen,
+            (SELECT nombre FROM almacenes WHERE id = :aqui) AS aqui,
+            (SELECT t.folio
+               FROM traspaso_bultos tb
+               JOIN traspaso_detalle td ON td.id = tb.detalle_id
+               JOIN traspasos t         ON t.id = td.traspaso_id
+              WHERE tb.variante_codigo_id = vc.id AND t.estado = 'en_transito'
+              ORDER BY t.id DESC LIMIT 1) AS en_camino
+       FROM variante_codigos vc
+       LEFT JOIN almacenes a ON a.id = vc.almacen_id
+      WHERE vc.id = :id`,
+    { id: bultoId, aqui: almacenId }
+  );
+  if (!u) return;
+  if (u.en_camino) {
+    throw new AppError(409, 'PAQUETE_EN_CAMINO',
+      `El paquete ${u.codigo} viene en camino (${u.en_camino}): primero recibe el envío en Surtir sucursal.`);
+  }
+  if (u.almacen_id != null && Number(u.almacen_id) !== Number(almacenId)) {
+    throw new AppError(409, 'PAQUETE_EN_OTRA_SUCURSAL',
+      `El paquete ${u.codigo} sí existe, pero está en «${u.almacen}», no en «${u.aqui}»: ` +
+      'toma uno que esté en esta tienda.');
+  }
+}
+
 async function _errorBultoTomado(conn, codigo, bulto) {
+  if (bulto.estado === 'apartado' && bulto.consumido_tipo === 'traspaso') {
+    // Se escaneó al surtir una sucursal y se guardó: va en ese envío.
+    const [[t]] = await conn.query(
+      `SELECT t.folio, a.nombre AS destino FROM traspasos t JOIN almacenes a ON a.id = t.almacen_destino_id
+        WHERE t.id = :id`,
+      { id: bulto.consumido_id ?? 0 }
+    );
+    return new AppError(409, 'BULTO_NO_DISPONIBLE',
+      `El paquete ${codigo} está apartado para el envío ${t?.folio ?? ''}${t?.destino ? ' a ' + t.destino : ''}: escanea otro.`);
+  }
   if (bulto.estado === 'apartado') {
     const [[p]] = await conn.query(
       `SELECT p.numero_pedido, p.encargo, c.nombre AS cliente
@@ -2137,7 +2187,7 @@ async function _errorBultoTomado(conn, codigo, bulto) {
  * pedido) y que tengan peso. Como al vender, NO se valida en qué almacén
  * estaban: se les corrige la ubicación.
  */
-async function _bultosParaLinea(conn, codigos, linea, pedidoId, hilo) {
+async function _bultosParaLinea(conn, codigos, linea, pedidoId, hilo, almacenId) {
   if (!codigos.length) return [];
   const [rows] = await conn.query(
     `SELECT vc.id, vc.variante_id, vc.codigo, vc.peso_kg, vc.lote, vc.estado,
@@ -2165,6 +2215,7 @@ async function _bultosParaLinea(conn, codigos, linea, pedidoId, hilo) {
     }
     const deEste = b.estado === 'apartado' && b.consumido_tipo === 'pedido' && Number(b.consumido_id) === Number(pedidoId);
     if (b.estado !== 'disponible' && !deEste) throw await _errorBultoTomado(conn, c, b);
+    if (!deEste) await _exigirPaqueteAqui(conn, b.id, almacenId);
     if (b.peso_kg == null || Number(b.peso_kg) <= 0) {
       throw new AppError(422, 'BULTO_SIN_PESO', `El paquete ${c} no tiene peso registrado: no se puede saber cuánto pesa.`);
     }
@@ -2173,44 +2224,45 @@ async function _bultosParaLinea(conn, codigos, linea, pedidoId, hilo) {
 }
 
 /**
- * PREPARAR un pedido (encargo). Al tomarlo se puso lo que pidió, aunque fuera
- * aproximado ("6 conos", más o menos 9 kg); aquí se escanean los paquetes que
- * de verdad van y se pesan los conos (o lo que va por kilo):
- *   · cada línea queda con el PESO REAL y su importe se recalcula con el
- *     precio CONGELADO de la línea (el de cuando se tomó);
- *   · lo apartado en el almacén se ajusta a esos kilos (si sube, tiene que
- *     haber: 409 STOCK_INSUFICIENTE);
- *   · los paquetes escaneados quedan ligados a la línea y 'apartado' (pasan a
- *     'vendido' al entregarlo); los que traía y ya no van se sueltan;
- *   · el total se recalcula y el pedido queda 'listo'.
+ * MODIFICAR un pedido (encargo) mientras no se entrega (2026-10-07: "mejor que
+ * sean notas en espera, porque hay casos donde el cliente quiere modificar su
+ * pedido, agregar o quitar cosas"). El pedido queda EN ESPERA: se modifica las
+ * veces que haga falta y se entrega cobrando ("Entregar y cobrar"); ya no lleva
+ * los pasos de preparar ni "salió con el chofer".
  *
- * `lineas`: [{ detalle_id, codigos?, cantidad?, piezas? }]. La línea que no
- * viene no cambia. Con `codigos` la línea queda EXACTAMENTE con esos paquetes
- * y, sin `cantidad`, sus kilos son lo que pesan. Una línea de PAQUETE se
- * escanea: sin ningún código, 422 SIN_ESCANEAR (como al surtir una sucursal).
- *
- * Se puede volver a preparar mientras esté por preparar o listo; en camino ya
- * no (salió con lo que llevaba).
+ * `lineas` es la lista COMPLETA de lo que lleva ahora:
+ *   · con `detalle_id`, una línea que ya tenía: se le cambian los kilos, los
+ *     conos o los paquetes escaneados (`codigos`: la línea queda EXACTAMENTE con
+ *     esos; sin `cantidad`, sus kilos son lo que pesan). Su precio sigue
+ *     CONGELADO (el de cuando se tomó);
+ *   · sin `detalle_id` (con `variante_id`), una línea NUEVA: se cobra con la
+ *     lista de precios del pedido, como en la caja (`_precioDeVariante`);
+ *   · la que ya no viene se QUITA: suelta sus kilos apartados y sus paquetes.
+ * Lo apartado sigue a los kilos: si sube, tiene que haber libre (409
+ * STOCK_INSUFICIENTE, sin contar lo apartado para otros clientes). Los paquetes
+ * escaneados quedan ligados y 'apartado' (pasan a vendidos al entregarlo).
+ * También se cambian la entrega, la dirección, el envío, para cuándo y las
+ * notas. El total se rehace (subtotal − descuento + impuestos + envío).
  */
-async function prepararEncargo(pedidoId, datos, usuarioId) {
+async function modificarEncargo(pedidoId, datos) {
   return withTransaction(async (conn) => {
     const [[pedido]] = await conn.query(
-      `SELECT id, numero_pedido, estado, encargo, inventario_descontado, almacen_id,
-              descuento, costo_envio, total
+      `SELECT id, numero_pedido, estado, encargo, inventario_descontado, almacen_id, tipo_cliente_id,
+              descuento, costo_envio, total, metodo_entrega, entrega_direccion, notas,
+              DATE_FORMAT(entrega_para, '%Y-%m-%d') AS entrega_para
          FROM pedidos WHERE id = :id FOR UPDATE`,
       { id: pedidoId }
     );
     if (!pedido) throw new AppError(404, 'NO_ENCONTRADO', 'Pedido no encontrado');
     const num = pedido.numero_pedido;
-    if (!Number(pedido.encargo) || Number(pedido.inventario_descontado)
-        || !['en_preparacion', 'listo'].includes(pedido.estado)) {
-      throw new AppError(409, 'NO_SE_PREPARA',
-        `${num} no es un pedido por preparar (está ${pedido.estado}).`);
+    if (!Number(pedido.encargo) || Number(pedido.inventario_descontado) || !PASOS_ENCARGO.includes(pedido.estado)) {
+      throw new AppError(409, 'NO_SE_MODIFICA',
+        `${num} no es un pedido en espera (está ${pedido.estado}): ya no se puede modificar.`);
     }
 
     const [lineas] = await conn.query(
       `SELECT d.id, d.variante_id, d.descripcion, d.cantidad, d.piezas, d.precio_unitario,
-              d.descuento, d.impuesto, d.subtotal, pv.tipo_presentacion,
+              d.descuento, d.impuesto, d.subtotal,
               pr.nombre AS producto, pr.grosor_calibre AS calibre, imp.porcentaje AS imp_pct
          FROM pedido_detalle d
          JOIN producto_variantes pv ON pv.id = d.variante_id
@@ -2219,16 +2271,24 @@ async function prepararEncargo(pedidoId, datos, usuarioId) {
         WHERE d.pedido_id = :id ORDER BY d.id`,
       { id: pedidoId }
     );
-    const entrada = new Map();
-    for (const l of datos.lineas ?? []) {
-      if (!lineas.some((x) => Number(x.id) === Number(l.detalle_id))) {
-        throw new AppError(422, 'LINEA_INVALIDA', `Esa línea no es de ${num}.`);
+    const entrada = datos.lineas ?? [];
+    if (!entrada.length) {
+      throw new AppError(422, 'PEDIDO_VACIO', `${num} se quedaría sin nada: si ya no lo quiere, cancélalo.`);
+    }
+    const porId = new Map(lineas.map((l) => [Number(l.id), l]));
+    const quedan = new Set();
+    for (const l of entrada) {
+      if (l.detalle_id != null) {
+        if (!porId.has(Number(l.detalle_id))) throw new AppError(422, 'LINEA_INVALIDA', `Esa línea no es de ${num}.`);
+        if (quedan.has(Number(l.detalle_id))) throw new AppError(422, 'LINEA_REPETIDA', 'La misma línea viene dos veces.');
+        quedan.add(Number(l.detalle_id));
+      } else if (!l.variante_id) {
+        throw new AppError(422, 'LINEA_INVALIDA', 'Cada hilo nuevo necesita su presentación.');
       }
-      entrada.set(Number(l.detalle_id), l);
     }
     // Un paquete es una pieza: no puede ir en dos líneas ni dos veces.
     const vistos = new Set();
-    for (const l of entrada.values()) {
+    for (const l of entrada) {
       for (const c of l.codigos ?? []) {
         const k = String(c).trim();
         if (!k) continue;
@@ -2236,113 +2296,172 @@ async function prepararEncargo(pedidoId, datos, usuarioId) {
         vistos.add(k);
       }
     }
-
+    const hiloDe = (l) => `${l.producto}${l.calibre ? ' ' + l.calibre : ''}`;
     const cambios = [];
-    for (const l of lineas) {
-      const inp = entrada.get(Number(l.id));
-      if (!inp) continue;
-      const hilo = `${l.producto}${l.calibre ? ' ' + l.calibre : ''}`;
-      const [ya] = await conn.query(
-        'SELECT id, variante_codigo_id, peso_kg FROM pedido_detalle_bultos WHERE detalle_id = :d',
-        { d: l.id }
-      );
-      let pesoBultos = round3(ya.reduce((s, b) => s + Number(b.peso_kg), 0));
 
-      if (inp.codigos !== undefined) {
-        const codigos = inp.codigos.map((c) => String(c).trim()).filter(Boolean);
-        if (l.tipo_presentacion === 'paquete' && !codigos.length) {
-          throw new AppError(422, 'SIN_ESCANEAR', `Escanea los paquetes de ${hilo} que van en el pedido.`);
-        }
-        const bultos = await _bultosParaLinea(conn, codigos, l, pedidoId, hilo);
-        const nuevos = new Set(bultos.map((b) => Number(b.id)));
-        // Los que traía y ya no van: se sueltan.
-        for (const b of ya) {
-          if (b.variante_codigo_id != null && nuevos.has(Number(b.variante_codigo_id))) continue;
-          await conn.query('DELETE FROM pedido_detalle_bultos WHERE id = :id', { id: b.id });
-          if (b.variante_codigo_id != null) {
-            await conn.query(
-              `UPDATE variante_codigos
-                  SET estado = 'disponible', consumido_en = NULL, consumido_tipo = NULL, consumido_id = NULL
-                WHERE id = :id AND estado = 'apartado' AND consumido_tipo = 'pedido' AND consumido_id = :p`,
-              { id: b.variante_codigo_id, p: pedidoId }
-            );
-          }
-        }
-        // Los nuevos: se ligan a la línea (con su peso y lote congelados) y se apartan.
-        const yaIds = new Set(ya.map((b) => Number(b.variante_codigo_id)));
-        for (const b of bultos) {
-          if (yaIds.has(Number(b.id))) continue;
-          await conn.query(
-            `INSERT INTO pedido_detalle_bultos (detalle_id, variante_codigo_id, codigo, peso_kg, lote)
-             VALUES (:d, :id, :codigo, :peso, :lote)`,
-            { d: l.id, id: b.id, codigo: b.codigo, peso: b.peso_kg, lote: b.lote ?? null }
-          );
+    /** Mueve lo apartado en el almacén del pedido (+ aparta, − suelta). */
+    const apartar = (varianteId, delta) => conn.query(
+      `INSERT INTO inventario (variante_id, almacen_id, cantidad, cantidad_reservada)
+         VALUES (:v, :a, 0, GREATEST(0, :d))
+       ON DUPLICATE KEY UPDATE cantidad_reservada = GREATEST(0, cantidad_reservada + :d)`,
+      { v: varianteId, a: pedido.almacen_id, d: delta }
+    );
+    /** Si se van a apartar `delta` kg más, que haya libres. */
+    const exigirLibre = async (varianteId, delta, hilo, tenia) => {
+      if (!(delta > 0)) return;
+      const [irows] = await conn.query(
+        'SELECT cantidad FROM inventario WHERE variante_id = :v AND almacen_id = :a FOR UPDATE',
+        { v: varianteId, a: pedido.almacen_id }
+      );
+      const existe = irows[0] ? Number(irows[0].cantidad) : 0;
+      const libre = round3(existe - (await _apartadoEnAlmacen(conn, varianteId, pedido.almacen_id)));
+      if (libre + 0.0001 < delta) {
+        throw new AppError(409, 'STOCK_INSUFICIENTE',
+          `De ${hilo} quedan ${Math.max(0, libre)} kg libres` +
+          (tenia > 0 ? ` (el pedido ya tenía ${round3(tenia)} kg apartados)` : '') +
+          `: no alcanza para ${round3(tenia + delta)} kg.`);
+      }
+    };
+    /** Suelta los paquetes de una línea que ya no van (salvo `quedanIds`). */
+    const soltarBultos = async (detalleId, quedanIds = new Set()) => {
+      const [ya] = await conn.query(
+        'SELECT id, variante_codigo_id FROM pedido_detalle_bultos WHERE detalle_id = :d', { d: detalleId }
+      );
+      for (const b of ya) {
+        if (b.variante_codigo_id != null && quedanIds.has(Number(b.variante_codigo_id))) continue;
+        await conn.query('DELETE FROM pedido_detalle_bultos WHERE id = :id', { id: b.id });
+        if (b.variante_codigo_id != null) {
           await conn.query(
             `UPDATE variante_codigos
-                SET estado = 'apartado', consumido_en = NULL, consumido_tipo = 'pedido',
-                    consumido_id = :p, almacen_id = :a
-              WHERE id = :id`,
-            { p: pedidoId, a: pedido.almacen_id, id: b.id }
+                SET estado = 'disponible', consumido_en = NULL, consumido_tipo = NULL, consumido_id = NULL
+              WHERE id = :id AND estado = 'apartado' AND consumido_tipo = 'pedido' AND consumido_id = :p`,
+            { id: b.variante_codigo_id, p: pedidoId }
           );
         }
+      }
+      return ya;
+    };
+    /** Liga y aparta los paquetes nuevos de una línea. */
+    const ligarBultos = async (detalleId, bultos, yaIds = new Set()) => {
+      for (const b of bultos) {
+        if (yaIds.has(Number(b.id))) continue;
+        await conn.query(
+          `INSERT INTO pedido_detalle_bultos (detalle_id, variante_codigo_id, codigo, peso_kg, lote)
+           VALUES (:d, :id, :codigo, :peso, :lote)`,
+          { d: detalleId, id: b.id, codigo: b.codigo, peso: b.peso_kg, lote: b.lote ?? null }
+        );
+        await conn.query(
+          `UPDATE variante_codigos
+              SET estado = 'apartado', consumido_en = NULL, consumido_tipo = 'pedido',
+                  consumido_id = :p, almacen_id = :a
+            WHERE id = :id`,
+          { p: pedidoId, a: pedido.almacen_id, id: b.id }
+        );
+      }
+    };
+    const importe = (precio, cantidad, descuento, pct) => {
+      const sub = round2(round2(Number(precio) * cantidad) - round2(descuento ?? 0));
+      return { sub, imp: round2((sub * pct) / 100) };
+    };
+
+    // 1. Lo que ya no va: suelta sus kilos y sus paquetes, y se borra la línea.
+    for (const l of lineas) {
+      if (quedan.has(Number(l.id))) continue;
+      await soltarBultos(l.id);
+      await apartar(l.variante_id, -Number(l.cantidad));
+      await conn.query('DELETE FROM pedido_detalle WHERE id = :id', { id: l.id });
+      cambios.push(`Se quitó ${hiloDe(l)} (${round3(l.cantidad)} kg)`);
+    }
+
+    // 2. Lo que sigue: kilos, conos y paquetes.
+    for (const inp of entrada.filter((x) => x.detalle_id != null)) {
+      const l = porId.get(Number(inp.detalle_id));
+      const hilo = hiloDe(l);
+      const [ya] = await conn.query(
+        'SELECT id, variante_codigo_id, peso_kg FROM pedido_detalle_bultos WHERE detalle_id = :d', { d: l.id }
+      );
+      let pesoBultos = round3(ya.reduce((s, b) => s + Number(b.peso_kg), 0));
+      if (inp.codigos !== undefined) {
+        const codigos = inp.codigos.map((c) => String(c).trim()).filter(Boolean);
+        const bultos = await _bultosParaLinea(conn, codigos, l, pedidoId, hilo, pedido.almacen_id);
+        await soltarBultos(l.id, new Set(bultos.map((b) => Number(b.id))));
+        await ligarBultos(l.id, bultos, new Set(ya.map((b) => Number(b.variante_codigo_id))));
         pesoBultos = round3(bultos.reduce((s, b) => s + Number(b.peso_kg), 0));
       }
-
       const cantidad = round3(
         inp.cantidad != null ? Number(inp.cantidad)
-          : inp.codigos !== undefined ? pesoBultos : Number(l.cantidad)
+          : inp.codigos !== undefined && pesoBultos > 0 ? pesoBultos : Number(l.cantidad)
       );
+      if (!(cantidad > 0)) throw new AppError(422, 'CANTIDAD_INVALIDA', `Di cuántos kilos van de ${hilo}.`);
+      if (pesoBultos > cantidad + 0.0005) {
+        throw new AppError(422, 'BULTOS_EXCEDEN_CANTIDAD',
+          `Los paquetes de ${hilo} pesan ${pesoBultos} kg y la línea dice ${cantidad} kg.`);
+      }
+      const delta = round3(cantidad - Number(l.cantidad));
+      await exigirLibre(l.variante_id, delta, hilo, Number(l.cantidad));
+      if (delta !== 0) await apartar(l.variante_id, delta);
+      const pct = Number(l.impuesto) > 0
+        ? (l.imp_pct != null ? Number(l.imp_pct) : (Number(l.impuesto) * 100) / Number(l.subtotal))
+        : 0;
+      const { sub, imp } = importe(l.precio_unitario, cantidad, l.descuento, pct);
+      const piezas = inp.piezas !== undefined ? (inp.piezas || null) : l.piezas;
+      await conn.query(
+        'UPDATE pedido_detalle SET cantidad = :c, piezas = :pz, subtotal = :s, impuesto = :i WHERE id = :id',
+        { c: cantidad, pz: piezas, s: sub, i: imp, id: l.id }
+      );
+      if (delta !== 0) cambios.push(`${hilo}: ${round3(l.cantidad)} → ${cantidad} kg`);
+    }
+
+    // 3. Lo nuevo: con el precio de la lista del pedido, apartado y con sus paquetes.
+    for (const inp of entrada.filter((x) => x.detalle_id == null)) {
+      const { v, precioUnit } = await _precioDeVariante(conn, inp.variante_id, pedido.tipo_cliente_id);
+      const hilo = `${v.producto}${v.calibre ? ' ' + v.calibre : ''}`;
+      const codigos = (inp.codigos ?? []).map((c) => String(c).trim()).filter(Boolean);
+      const bultos = await _bultosParaLinea(conn, codigos, { variante_id: inp.variante_id }, pedidoId, hilo, pedido.almacen_id);
+      const pesoBultos = round3(bultos.reduce((s, b) => s + Number(b.peso_kg), 0));
+      const cantidad = round3(inp.cantidad != null ? Number(inp.cantidad) : pesoBultos);
       if (!(cantidad > 0)) {
-        throw new AppError(422, 'CANTIDAD_INVALIDA', `Di cuántos kilos van de ${hilo}.`);
+        throw new AppError(422, 'FALTA_CANTIDAD', `Di cuántos kilos van de ${hilo}, o escanea sus paquetes.`);
       }
       if (pesoBultos > cantidad + 0.0005) {
         throw new AppError(422, 'BULTOS_EXCEDEN_CANTIDAD',
           `Los paquetes de ${hilo} pesan ${pesoBultos} kg y la línea dice ${cantidad} kg.`);
       }
-
-      // Lo apartado sigue a los kilos. Si sube, lo que se agrega tiene que
-      // estar libre (sin contar lo apartado para otros clientes).
-      const delta = round3(cantidad - Number(l.cantidad));
-      if (delta > 0) {
-        const [irows] = await conn.query(
-          'SELECT cantidad FROM inventario WHERE variante_id = :v AND almacen_id = :a FOR UPDATE',
-          { v: l.variante_id, a: pedido.almacen_id }
-        );
-        const existe = irows[0] ? Number(irows[0].cantidad) : 0;
-        const apartado = await _apartadoEnAlmacen(conn, l.variante_id, pedido.almacen_id);
-        const libre = round3(existe - apartado);
-        if (libre + 0.0001 < delta) {
-          throw new AppError(409, 'STOCK_INSUFICIENTE',
-            `De ${hilo} el pedido tenía ${round3(l.cantidad)} kg apartados y quedan ${Math.max(0, libre)} kg ` +
-            `libres: no alcanza para ${cantidad} kg.`);
+      await exigirLibre(inp.variante_id, cantidad, hilo, 0);
+      const pct = v.imp_pct != null ? Number(v.imp_pct) : 0;
+      const { sub, imp } = importe(precioUnit, cantidad, 0, pct);
+      const [ins] = await conn.query(
+        `INSERT INTO pedido_detalle
+           (pedido_id, variante_id, descripcion, cantidad, piezas, precio_unitario, costo_unitario,
+            descuento, impuesto, subtotal)
+         VALUES (:p, :v, :desc, :c, :pz, :precio, :costo, 0, :i, :s)`,
+        {
+          p: pedidoId, v: inp.variante_id,
+          desc: `${v.producto}${v.presentacion ? ' · ' + v.presentacion : ''}`,
+          c: cantidad, pz: inp.piezas || null, precio: precioUnit,
+          costo: v.costo != null ? Number(v.costo) : null, i: imp, s: sub,
         }
-      }
-      if (delta !== 0) {
-        await conn.query(
-          `INSERT INTO inventario (variante_id, almacen_id, cantidad, cantidad_reservada)
-             VALUES (:v, :a, 0, GREATEST(0, :d))
-           ON DUPLICATE KEY UPDATE cantidad_reservada = GREATEST(0, cantidad_reservada + :d)`,
-          { v: l.variante_id, a: pedido.almacen_id, d: delta }
-        );
-      }
-
-      // El importe, con el precio CONGELADO de la línea. El impuesto, si la
-      // línea lo llevaba, con la tasa del producto.
-      const piezas = inp.piezas !== undefined ? (inp.piezas || null) : l.piezas;
-      const descLinea = round2(l.descuento ?? 0);
-      const subLinea = round2(round2(Number(l.precio_unitario) * cantidad) - descLinea);
-      const pct = Number(l.impuesto) > 0
-        ? (l.imp_pct != null ? Number(l.imp_pct) : (Number(l.impuesto) * 100) / Number(l.subtotal))
-        : 0;
-      const impLinea = round2((subLinea * pct) / 100);
-      await conn.query(
-        'UPDATE pedido_detalle SET cantidad = :c, piezas = :pz, subtotal = :s, impuesto = :i WHERE id = :id',
-        { c: cantidad, pz: piezas, s: subLinea, i: impLinea, id: l.id }
       );
-      if (delta !== 0) cambios.push(`${hilo}: ${round3(l.cantidad)} → ${cantidad} kg`);
+      await ligarBultos(ins.insertId, bultos);
+      await apartar(inp.variante_id, cantidad);
+      cambios.push(`Se agregó ${hilo} (${cantidad} kg)`);
     }
 
-    // El total, otra vez (como _cotizar: subtotal − descuento + impuestos + envío).
+    // 4. La entrega, el envío, para cuándo y las notas (lo que no viene, se queda).
+    const metodo = datos.metodo_entrega ?? pedido.metodo_entrega;
+    if (!METODOS_ENTREGA.includes(metodo)) {
+      throw new AppError(422, 'ENTREGA_INVALIDA', 'La entrega debe ser "recoger" o "envio"');
+    }
+    let direccion = datos.entrega_direccion !== undefined
+      ? String(datos.entrega_direccion ?? '').trim() || null
+      : pedido.entrega_direccion;
+    if (metodo === 'envio' && !direccion) throw new AppError(422, 'FALTA_DIRECCION', 'Si lo lleva el chofer, di a dónde.');
+    if (metodo === 'recoger') direccion = null;
+    const costoEnvio = metodo === 'envio' ? round2(datos.costo_envio ?? pedido.costo_envio ?? 0) : 0;
+    const entregaPara = datos.entrega_para !== undefined ? datos.entrega_para || null : pedido.entrega_para;
+    const notas = datos.notas !== undefined ? String(datos.notas ?? '').trim() || null : pedido.notas;
+
+    // 5. El total, otra vez (como _cotizar: subtotal − descuento + impuestos + envío).
     const [[s]] = await conn.query(
       `SELECT COALESCE(SUM(subtotal), 0) AS sub, COALESCE(SUM(impuesto), 0) AS imp
          FROM pedido_detalle WHERE pedido_id = :id`,
@@ -2351,12 +2470,16 @@ async function prepararEncargo(pedidoId, datos, usuarioId) {
     const subtotal = round2(s.sub);
     const impuestos = round2(s.imp);
     const descuento = Math.min(round2(pedido.descuento), subtotal);
-    const total = round2(subtotal - descuento + impuestos + Number(pedido.costo_envio));
+    const total = round2(subtotal - descuento + impuestos + costoEnvio);
     await conn.query(
       `UPDATE pedidos SET subtotal = :subtotal, descuento = :descuento, impuestos = :impuestos,
-              total = :total, estado = 'listo'
+              costo_envio = :envio, total = :total, metodo_entrega = :metodo, entrega_direccion = :direccion,
+              entrega_para = :para, notas = :notas, estado = 'en_preparacion'
         WHERE id = :id`,
-      { subtotal, descuento, impuestos, total, id: pedidoId }
+      {
+        subtotal, descuento, impuestos, envio: costoEnvio, total, metodo, direccion,
+        para: entregaPara, notas, id: pedidoId,
+      }
     );
 
     const pagado = await _abonado(conn, pedidoId);
@@ -2460,8 +2583,8 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
 }
 
 /**
- * Los PEDIDOS (encargos) sin entregar: lo que hay que preparar, lo que ya está
- * listo y lo que va en camino, con quién es, qué lleva y cuánto falta cobrar.
+ * Los PEDIDOS (encargos) sin entregar —en espera—, con quién es, qué lleva y
+ * cuánto falta cobrar.
  */
 async function listarEncargos({ estado, q } = {}) {
   const where = ["p.encargo = 1", 'p.inventario_descontado = 0', "p.estado IN ('en_preparacion', 'listo', 'enviado')"];
@@ -2655,7 +2778,7 @@ module.exports = {
   resumen,
   crearPedido, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,
-  abonarApartado, entregarApartado, prepararEncargo,
+  abonarApartado, entregarApartado, modificarEncargo,
   listarEncargos, listarApartados,
   ESTADOS, METODOS_ENTREGA,
 };

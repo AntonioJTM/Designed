@@ -57,6 +57,7 @@ describe('Pos', () => {
   } | null = null;
   let cajaPedida: number | null = null;
   let permisos: Set<string>;
+  let invFalso: Record<string, unknown> = {};
 
   const ventasFalso = {
     cajas: () =>
@@ -86,7 +87,7 @@ describe('Pos', () => {
       providers: [
         provideRouter([]),
         { provide: VentasService, useValue: ventasFalso },
-        { provide: InventarioService, useValue: {} },
+        { provide: InventarioService, useValue: invFalso },
         {
           provide: AuthService,
           useValue: {
@@ -125,6 +126,7 @@ describe('Pos', () => {
     pedidoEnviado = null;
     cajaPedida = null;
     permisos = new Set(['ver:caja', 'hacer:fiar']);
+    invFalso = {};
     try { localStorage.removeItem('caja_sel'); } catch { /* sin almacenamiento */ }
   });
   afterEach(() => {
@@ -290,6 +292,35 @@ describe('Pos', () => {
     c.quitarBulto(c.carrito()[0], 'B1');
     c.quitarBulto(c.carrito()[0], 'B2');
     expect(c.carrito().length).toBe(0);
+  });
+
+  it('solo vende paquetes de SU tienda: el de la bodega o el que viene en camino se rechazan', async () => {
+    // 2026-10-07: "si está en Tienda Principal solo se venden los paquetes que están ahí".
+    const rojo = { id: 5, sku: 'ROJO', producto: 'ROJO', calibre: '2/30', precio: '200', unidad: 'kg', tipo_presentacion: 'paquete' };
+    const resueltos: Record<string, unknown> = {
+      B1: { variante: rojo, bulto: { id: 1, variante_id: 5, codigo: 'B1', peso_kg: '19.95', estado: 'disponible', almacen_id: 2, almacen: 'Almacén General' } },
+      C1: { variante: rojo, bulto: { id: 2, variante_id: 5, codigo: 'C1', peso_kg: '19.2', estado: 'disponible', almacen_id: 1, almacen: 'Matriz', en_camino_folio: 'TRA-9' } },
+      T1: { variante: rojo, bulto: { id: 3, variante_id: 5, codigo: 'T1', peso_kg: '19.5', estado: 'disponible', almacen_id: 1, almacen: 'Matriz' } },
+      M1: { variante: rojo, bulto: { id: 4, variante_id: 5, codigo: 'M1', peso_kg: '18.6', estado: 'disponible', almacen_id: null } },
+    };
+    invFalso['resolverCodigo'] = (q: string) => of(resueltos[q]);
+    const { c } = await montar();
+    // La Caja 1 es de «Matriz».
+    c.qVar = 'B1';
+    c.escanearOBuscar();
+    expect(c.error()).toBe('El paquete B1 sí existe, pero está en «Almacén General», no en «Matriz»: toma uno que esté en esta tienda.');
+    expect(c.carrito().length).toBe(0);
+    c.qVar = 'C1';
+    c.escanearOBuscar();
+    expect(c.error()).toContain('viene en camino (TRA-9)');
+    expect(c.carrito().length).toBe(0);
+    // El de aquí sí; y el capturado a mano sin almacén también.
+    c.qVar = 'T1';
+    c.escanearOBuscar();
+    c.qVar = 'M1';
+    c.escanearOBuscar();
+    expect(c.carrito()[0].bultos!.map((b) => b.codigo)).toEqual(['T1', 'M1']);
+    expect(c.carrito()[0].cantidad).toBe(38.1);
   });
 
   // ---- Pesar: conos y venta por kilo (2026-10-06: "vengo por 6 conos") ----

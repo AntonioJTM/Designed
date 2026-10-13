@@ -192,18 +192,48 @@ tienda-hilos/
   Cancelar o devolver el pedido regresa sus bultos a `disponible`; reactivarlo retoma solo los que
   nadie más haya tomado. Un bulto `desarmado` no vuelve: ya son conos.
   El bulto SABE en qué almacén está (`variante_codigos.almacen_id`): lo pone la remesa que lo trajo
-  y lo cambia el traspaso. Los capturados a mano quedan en NULL.
+  y lo cambia el traspaso. **El BULTO CAPTURADO A MANO es una ENTRADA** (2026-10-07: "si tengo
+  hilo en 2 lugares, que me pregunte a cuál de los 2 se va a cargar ese bulto" y "sí se suman los
+  kilos de la entrada de ese paquete"). `POST /variantes/:id/codigos` exige `peso_kg` (422
+  `FALTA_PESO`) y un almacén (`almacen_id`; `variantes/service.js → _almacenDelBulto`): si no se
+  dice y el hilo está en UN solo lugar, entra ahí; en dos o más, o en ninguno, 422 `FALTA_ALMACEN`;
+  puede ser cualquier almacén activo. En una transacción (`variantes/model.js →
+  agregarBultoConEntrada`): el bulto con ese almacén, sus kilos sumados al saldo y su movimiento
+  `entrada` con `referencia_tipo = 'bulto'` (el kardex dice "Bulto capturado a mano" y su código;
+  cuenta en el filtro "Entradas"); si la presentación no tenía peso, toma el del bulto.
+  **"Un bulto que metió kilos se los lleva al quitarlo"** (usuario, 2026-10-07): `DELETE
+  /variantes/codigos/:id` de un bulto de una CARGA del proveedor (`remesa_id`) o capturado a mano
+  con entrada SACA sus kilos del almacén donde está hoy (salida `referencia_tipo = 'bulto'`; el
+  motivo dice la carga), solo si sigue disponible (409 `BULTO_NO_DISPONIBLE`), si no viene en camino
+  (409 `PAQUETE_EN_CAMINO`) y si el saldo alcanza (409 `STOCK_INSUFICIENTE`). Así, quitar un
+  paquete con el código mal y volverlo a capturar bien deja el inventario igual. Los capturados a
+  mano ANTES del 2026-10-07 nunca metieron kilos: solo borran su registro. La lista trae
+  `con_entrada` (metió kilos) y la confirmación lo dice. La ventana "Agregar bulto a mano" pregunta "¿A qué almacén entra?" (primero donde
+  hay de ese hilo, con sus kilos) y dice "Entran X kg a …"; conserva la elección entre un bulto y
+  otro. `e2e-bulto-a-mano.js`.
   **EXCEPCIÓN: para BAJAR CONOS el paquete tiene que estar en esa tienda** (usuario, 2026-10-06:
   "si no, que mande una alerta de que el paquete en esa sucursal no existe"). Si el sistema lo
   tiene en otro almacén, 409 `PAQUETE_EN_OTRA_SUCURSAL` (dice dónde está); si viene en camino en un
   traspaso enviado sin recibir, 409 `PAQUETE_EN_CAMINO`. Sin almacén (capturado a mano) se
   permite. La vista previa del desarme trae `bulto.almacen_id/almacen/en_tienda/en_camino_folio`
   y el modal avisa en un recuadro rojo y apaga "Bajar a mostrador". La VENTA sigue sin validarlo.
-  **La ubicación del bulto es APROXIMADA; los saldos por almacén son la verdad.** Se escanea al
-  vender, al desarmar y al SURTIR (desde el 2026-10-06), pero nada se escanea al recibir ni al
-  acomodar en la bodega, y los capturados a mano no tienen almacén. Por eso vender o desarmar **no valida** que el
-  bulto estuviera en ese almacén —validarlo bloquearía ventas legítimas— y en cambio le CORRIGE la
-  ubicación al almacén donde se escaneó. No añadas esa validación.
+  **EN LA CAJA SOLO SE VENDEN LOS PAQUETES DE ESA TIENDA** (usuario, 2026-10-07: "si está en
+  Tienda Principal solo se venden los paquetes que están ahí; no tiene por qué tomar los de
+  almacén. Que diga que sí existe pero está en almacén, que tome uno que sí esté registrado con
+  la tienda"). Vender, apartar, tomar un pedido o MODIFICARLO con un paquete que el sistema tiene
+  en otro almacén da 409 `PAQUETE_EN_OTRA_SUCURSAL` ("El paquete X sí existe, pero está en «…»,
+  no en «…»: toma uno que esté en esta tienda") y uno que viene en camino en un envío sin recibir,
+  409 `PAQUETE_EN_CAMINO`; no se mueve nada (`pedidos/model.js → _exigirPaqueteAqui`, con el
+  almacén de la caja o del pedido). Sin almacén (capturado a mano antes del 2026-10-07) se
+  permite y queda apuntado en esa tienda. El lector (`GET /variantes/resolver/:codigo`) trae
+  `bulto.almacen_id/almacen/en_camino_folio` y la caja y "Modificar pedido" avisan al escanear
+  (`shared/paquete-aqui.ts`). `e2e-paquete-de-otra-tienda.js`.
+  ANTES la venta NO lo validaba y le corregía la ubicación al paquete, y eso descuadraba: el
+  PERLA JASPE 00633586 estaba en Almacén General, se vendió en la caja de Tienda Principal, la
+  venta le quitó sus 19.95 kg a la TIENDA y la bodega se quedó con los kilos de un paquete que ya
+  no tenía ("no cuadra con lo que hay" en el detalle del hilo, +19.95 en un lado y −19.95 en el
+  otro). Un paquete que pasa a otra tienda va por Surtir sucursal. Al SURTIR la regla es otra
+  (ver "Paquete encontrado en otro almacén" en el traspaso).
 - **El pago en efectivo se asienta por lo COBRADO, no por el billete.** Una venta de $432 pagada
   con $500 deja un `pagos` de $432: `crearPedido` resta el cambio del efectivo antes de
   insertarlo y devuelve `cambio` en la respuesta (no se guarda: no es dinero de la tienda). Si
@@ -337,14 +367,39 @@ tienda-hilos/
     y el apartado se libera completo. El servidor rechaza, sin mover nada: código repetido (`BULTO_REPETIDO`),
     desconocido (`CODIGO_DESCONOCIDO`), el de la presentación (`CODIGO_NO_ES_PAQUETE`), de un
     hilo que no está en el traspaso (`BULTO_NO_ES_DEL_TRASPASO`), vendido o desarmado (409
-    `BULTO_NO_DISPONIBLE`) o sin peso (`BULTO_SIN_PESO`). NO valida que el paquete estuviera en
-    el origen (la misma regla que al vender): le corrige la ubicación. El modal revisa cada
+    `BULTO_NO_DISPONIBLE`), sin peso (`BULTO_SIN_PESO`) o en camino en otro envío (409
+    `PAQUETE_EN_CAMINO`).
+    **PAQUETE ENCONTRADO EN OTRO ALMACÉN** (2026-10-07, el usuario eligió "avisar y, si confirman
+    que sí está aquí, pasarlo con sus kilos"): si el sistema tiene el paquete escaneado en OTRO
+    almacén, sin confirmar es 409 `PAQUETE_EN_OTRO_ALMACEN` (con `detalles.paquetes`) y no se mueve
+    nada; confirmado (`encontrados: [codigos]` al enviar o al guardar a medias), el paquete Y SUS
+    KILOS pasan de aquel almacén al que surte —salida allá y entrada aquí, tipo `transferencia`,
+    `referencia_tipo = 'bulto'`, el kardex dice "Paquete encontrado en otro almacén" y el motivo el
+    folio— y luego sale normal (`inventario/model.js → _traerAlOrigen`). Si aquel almacén ya no
+    tiene esos kilos, 409 `STOCK_INSUFICIENTE`: no se inventan. Antes el envío lo aceptaba y solo le
+    cambiaba la ubicación: los kilos salían del origen y se quedaban en el otro almacén, y los dos
+    quedaban "no cuadra". La ventana de envío pregunta "¿Este paquete sí está aquí?" al escanearlo
+    y lo marca "estaba en «…»". Sin almacén (capturado a mano antes del 2026-10-07) no pregunta.
+    `e2e-paquete-de-otra-tienda.js` (sección 5). El modal revisa cada
     código al leerlo para avisar en el momento, y vacía el campo DIRECTO en el DOM: con
     `eventCoalescing` el último dígito y el Enter del lector caen en el mismo ciclo y
     `codigo = ''` no se veía (el siguiente escaneo se pegaba al anterior).
     Lo apartado al pedir (el aproximado) solo sirve para reservar: al enviar se libera completo y
     sale lo escaneado. Una solicitud vieja en kilos también sale escaneando. Los bultos que
     viajaron quedan en `traspaso_bultos` (detalle + bulto).
+    **SE PUEDE SURTIR A MEDIAS** (2026-10-07: "que se puedan escanear una parte, se guarden esos
+    códigos pero que ya no se puedan vender hasta que cancele el pedido; que haya un como en espera
+    hasta que terminen de escanear los demás"). `PUT /inventario/traspasos/:id/escaneos` (la lista
+    COMPLETA de `codigos`, `hacer:enviar_traspaso`, solo en "solicitado"; `guardarEscaneos`) liga
+    los paquetes a su línea en `traspaso_bultos` y los deja `apartado` con `consumido_tipo =
+    'traspaso'` y `consumido_id` = el traspaso: la caja, el desarme, otro envío y un pedido los
+    rechazan (el 409 dice para qué envío). Los que ya no vienen en la lista se sueltan. No mueve
+    kilos. El traspaso sigue "solicitado" y la pantalla lo dice "En espera: van N paquetes
+    escaneados" con el botón "Seguir escaneando"; las líneas traen `guardados` y el modal de envío
+    los carga ya escaneados ("Guardar y seguir después"; salir con escaneos sin guardar pregunta).
+    Al ENVIAR, lo guardado que viene en `codigos` vale (es de ESE envío), se rehacen los renglones
+    con lo que sale, lo guardado que no salió se suelta y lo que sale vuelve a `disponible` en el
+    destino. CANCELAR una solicitud suelta lo guardado. `e2e-surtir-a-medias.js`.
   · `POST /inventario/traspasos/:id/recibir` **recibe**: lo firma cualquiera del staff y queda su
     nombre y la hora. Acepta `recibido: [{detalle_id, paquetes|cantidad}]` para declarar lo que de
     verdad llegó; entra al destino solo eso y el faltante se asienta como **merma** con el folio
@@ -641,7 +696,7 @@ tienda-hilos/
   permiso nuevo `ver:encargos`, `encargos/encargos.ts`) son los encargos.
   · Es un `pedidos` con `encargo = 1` (la venta es unificada, como el apartado), migración
     `2026-10_pedidos_encargo.sql`: `entrega_direccion` (texto libre, a dónde lo lleva el chofer),
-    `entrega_para` (DATE) y el estado nuevo `listo`.
+    `entrega_para` (DATE) y el estado `listo` (ya no se usa: ver "en espera").
   · Se TOMA en el punto de venta (modo "Pedido" junto a Cobrar/Fiar/Apartar): exige cliente (422
     `PEDIDO_SIN_CLIENTE`), "Pasa por él" (`recoger`) o "Lo lleva el chofer" (`envio`, exige
     `entrega_direccion` al tomarlo —la cotización no—, `costo_envio` opcional que fija el
@@ -649,34 +704,39 @@ tienda-hilos/
     tomarlo (422 `PEDIDO_A_CREDITO`). La mercancía se APARTA (`inventario_descontado = 0`,
     `cantidad_reservada`) igual que el apartado, y la venta del mostrador la respeta
     (`_apartadoEnAlmacen` suma TODO lo vendido sin entregar).
-  · Pasos: `en_preparacion` (Por preparar) → `listo` → `enviado` (En camino, SOLO si va con el
-    chofer: 409 `PEDIDO_SE_RECOGE`) por `PATCH /estado` (`_validarCaminoEncargo`). Se ENTREGA con
-    `POST /pedidos/:id/entregar` (`entregar-modal.ts`), que cobra lo que falte (`pagos`, solo el
-    efectivo da cambio, entra al turno `sesion_caja_id` como 'ingreso') y/o lo fía (`a_credito`,
-    pide `hacer:fiar`; queda 'pendiente' como cualquier fiada); ahí descuenta del inventario. Sin
-    cubrir lo que falta, 409 `PAGO_INSUFICIENTE`. Pasarlo a entregado a mano: 409
-    `PEDIDO_SE_ENTREGA`. Se puede abonar antes (`POST /:id/abonos`, p.ej. transferencia).
-  · Cancelado libera lo apartado y devuelve el efectivo; se reactiva SOLO como "por preparar" (409
-    `REACTIVAR_COMO_PEDIDO`). Entregado ya no vuelve a los pasos (409 `PEDIDO_YA_ENTREGADO`).
-  · `GET /pedidos/encargos?estado&q` (lista con qué lleva, cuánto falta, `a_favor` y conteo por
-    paso; cada hilo trae `escaneados`). `etiquetaEstado(estado, canal, encargo)` dice "Por
-    preparar / Listo / En camino". `e2e-pedidos-encargo.js` recorre todo (61).
-  · **Queda LISTO al PREPARARLO, y sin prepararlo no se entrega** (2026-10-06: "cuando se pone el
-    pedido se tienen que escanear los paquetes o pesar los conos que pidió, para corroborar").
-    Al TOMARLO se pone lo que pidió aunque sea aproximado ("6 conos ≈ 9 kg"). `POST
-    /pedidos/:id/preparar` (`ver:encargos`, `encargos/preparar-modal.ts`, botón "Preparar" /
-    "Corregir") recibe `lineas: [{detalle_id, codigos?, cantidad?, piezas?}]`: los PAQUETES se
-    escanean (sin ninguno, 422 `SIN_ESCANEAR`) y la línea queda con la suma de sus pesos reales;
-    los conos y lo que va por kilo se pesan (`cantidad`). La línea se recalcula con su precio
-    CONGELADO, lo apartado (`cantidad_reservada`) sigue a los kilos (si sube, tiene que haber:
-    409 `STOCK_INSUFICIENTE`), los paquetes quedan ligados (`pedido_detalle_bultos`) y en
-    `apartado` —los que ya no van se sueltan— y el total se rehace (`subtotal − descuento +
-    impuestos + envío`). Valida como el envío: código desconocido, de presentación, de otro hilo
-    (`BULTO_DE_OTRO_HILO`), repetido, tomado o sin peso; NO valida en qué almacén estaba. Se
-    puede volver a preparar en "por preparar" o "listo" (409 `NO_SE_PREPARA` en camino o
-    entregado). Marcarlo listo o en camino a mano desde "por preparar": 409 `PEDIDO_SE_PREPARA`;
-    entregarlo sin preparar: 409 `PEDIDO_SIN_PREPARAR`.
-  · **Si pesó MENOS de lo que dejó pagado**, la lista dice "A favor $X" y al ENTREGARLO se le
+  · **EN ESPERA y se MODIFICA (2026-10-07: "mejor que sean notas en espera, porque el cliente
+    quiere modificar su pedido, agregar o quitar cosas").** Ya NO hay pasos de preparar ni de
+    chofer: todo pedido sin entregar está `en_preparacion` y se rotula **"En espera"**
+    (`listo`/`enviado` viejos se leen igual). `PATCH /estado` a `listo`/`enviado`: 409
+    `PEDIDO_EN_ESPERA`; a entregado: 409 `PEDIDO_SE_ENTREGA`. (Del 2026-10-06 al 07 había que
+    PREPARARLO —escanear o pesar— para que quedara "listo" y poder entregarlo; se quitó y
+    `POST /pedidos/:id/preparar` ya no existe: escanear los paquetes ahora es parte de Modificar.)
+    `PUT /pedidos/:id/encargo` (`ver:encargos`, `encargos/modificar-modal.ts`, botón "Modificar")
+    recibe la lista COMPLETA `lineas`: con `detalle_id` una que ya tenía (kilos, `piezas`,
+    `codigos` = EXACTAMENTE los paquetes que van; sin `cantidad`, sus kilos son lo que pesan) y
+    conserva su precio CONGELADO; con `variante_id` una NUEVA, cobrada con la lista del pedido
+    (`_precioDeVariante`, el mismo cálculo que `_cotizar`); la que no viene se QUITA y suelta sus
+    kilos y paquetes. Lo apartado (`cantidad_reservada`) sigue a los kilos y si sube tiene que
+    haber libre (409 `STOCK_INSUFICIENTE`, todo o nada). Cambia también `metodo_entrega`,
+    `entrega_direccion` (con chofer, obligatoria: 422 `FALTA_DIRECCION`), `costo_envio`,
+    `entrega_para` y `notas`, y rehace el total (`subtotal − descuento + impuestos + envío`).
+    Contesta `total_antes`, `pagado`, `falta`, `a_favor` y `cambios`. Sin líneas: 422
+    `PEDIDO_VACIO` (se cancela). Entregado o cancelado: 409 `NO_SE_MODIFICA`. Los paquetes validan
+    como al enviar (desconocido, de presentación, `BULTO_DE_OTRO_HILO`, repetido, tomado, sin
+    peso) y, desde el 2026-10-07, que estén en la tienda del pedido (409
+    `PAQUETE_EN_OTRA_SUCURSAL` / `PAQUETE_EN_CAMINO`).
+  · Se ENTREGA cuando sea con `POST /pedidos/:id/entregar` (`entregar-modal.ts`), que cobra lo
+    que falte (`pagos`, solo el efectivo da cambio, entra al turno `sesion_caja_id` como
+    'ingreso') y/o lo fía (`a_credito`, pide `hacer:fiar`; queda 'pendiente' como cualquier
+    fiada); ahí descuenta del inventario. Sin cubrir lo que falta, 409 `PAGO_INSUFICIENTE`. Se
+    puede abonar antes (`POST /:id/abonos`, p.ej. transferencia).
+  · Cancelado libera lo apartado y devuelve el efectivo; se reactiva SOLO en espera (409
+    `REACTIVAR_COMO_PEDIDO`). Entregado ya no vuelve a estar en espera (409 `PEDIDO_YA_ENTREGADO`).
+  · `GET /pedidos/encargos?q` (lista con qué lleva, cuánto falta, `a_favor` y conteo; cada hilo
+    trae `escaneados`). La pantalla filtra Todos / Para hoy / Atrasados / Los lleva el chofer.
+    `etiquetaEstado(estado, canal, encargo)` dice "En espera". `e2e-pedidos-encargo.js` recorre
+    todo (74).
+  · **Si queda en MENOS de lo que dejó pagado**, la lista dice "A favor $X" y al ENTREGARLO se le
     devuelve en efectivo: `movimientos_caja` 'devolucion' del turno que se elija (sin turno, 409
     `FALTA_SESION_CAJA`; mandar pagos o crédito, 422 `NADA_POR_COBRAR`) y sus `pagos` se reducen
     a lo cobrado (primero el efectivo; uno devuelto completo se borra), para que cancelar
@@ -767,7 +827,7 @@ tienda-hilos/
 - **Nómina semanal.** La semana va de **domingo a sábado** y se paga ese mismo sábado. La comisión
   se calcula sobre la **venta neta** (`pedidos.subtotal - pedidos.descuento`, sin IVA ni envío) de
   los pedidos donde el empleado es el vendedor (`pedidos.usuario_id`), excluyendo cancelados y
-  devueltos. Al calcular un recibo, `ventas_netas` y `porcentaje_comision` se **congelan** en
+  devueltos, y se paga la semana en que cada venta queda LIQUIDADA (ver abajo). Al calcular un recibo, `ventas_netas` y `porcentaje_comision` se **congelan** en
   `nomina_recibos` para que el histórico no cambie si después se edita la configuración del
   empleado. Un periodo `pagado` es inmutable: no se recalcula ni se reabre.
   **Por días, horario, horas extra y vacaciones (2026-10-06, decisiones del usuario):**
@@ -789,6 +849,47 @@ tienda-hilos/
     semana PAGADA. Registrarlas o quitarlas recalcula sola la semana en borrador.
   · Las cuentas viven en `modules/nomina/jornada.js` (con `jornada.test.js`) y su gemela de
     vista previa en `features/admin/nomina/jornada.ts`: si cambia una regla, cambian las dos.
+  · **El ENVÍO no cuenta para la comisión** (confirmado por el usuario el 2026-10-07: "un pedido de
+    $1,000 con $120 de envío: comisión sobre los $1,000"). Ya era así (`subtotal − descuento`); la
+    pantalla ahora lo dice ("sin IVA ni envío") y la lista de ventas del recibo marca "Pedido · lo
+    llevó el chofer" y "+ $120 de envío, no cuenta" (`ventasDelPeriodo` trae `encargo` y
+    `metodo_entrega`). `e2e-nomina-pdf.js` lo comprueba.
+  · **LA COMISIÓN SE PAGA CUANDO LA VENTA SE LIQUIDA** (2026-10-07: "si fue una venta a crédito no
+    se pagan comisiones hasta que se liquide… si cerré mi nómina no se mete; cuando se liquide,
+    ahí se agrega"; el usuario eligió COMPLETA al liquidarse —no por abono— y lo mismo para
+    apartados y pedidos). Cada venta paga su comisión UNA vez, completa, en la nómina de la semana
+    en que quedó PAGADA: contado, el día; fiada, cuando los abonos la cubren (el mismo reparto FIFO
+    de `clientes/model.js → repartirAbonos`, que se separó de `aplicarAbonos` para correrlo sobre
+    los movimientos HASTA una fecha); apartado o pedido, cuando sus `pagos` llegan al total.
+    `nomina/comisiones.js`: `ventasSinPagarComision` calcula para cada venta cuándo quedó liquidada;
+    `_calcular` toma las liquidadas hasta el sábado que NO estén en otra nómina viva (no cancelada) y
+    las anota en `nomina_comisiones` (migración `2026-10_comisiones_al_liquidar.sql`: folio,
+    cliente, tipo, vendida/liquidada, total, venta neta, %, comisión, CONGELADOS). Así lo liquidado
+    en una semana ya cerrada entra en la siguiente que se calcule, nada se paga dos veces y una
+    nómina cancelada suelta sus ventas. El recibo: `ventas_netas` y `num_pedidos` son las ventas
+    PAGADAS esa semana y `comision` la suma de la de cada venta. Rige desde `comisiones.DESDE`
+    ('2026-10-04'): las ventas anteriores se pagaron por la fecha de venta y no vuelven a entrar; la
+    migración anotó las que ya habían entrado en nóminas PAGADAS desde esa fecha (las que existían
+    al calcular el recibo) y una semana anterior se reporta con la regla vieja (`regla: 'anterior'`).
+    **El reporte de comisiones** ("qué se está pagando de cada venta, por semana"):
+    `GET /nomina/periodos/:id/comisiones[?usuario_id=]` → por vendedor, las ventas que paga (de la
+    tabla) y, al día de hoy, `por_liquidar` (lo que se debe, con su comisión al liquidarse) y
+    `proxima_nomina` (ya pagado, entra en la próxima). Pantalla: pestaña "Comisiones" de Nómina y el
+    detalle del recibo (`nomina/comisiones-semana.ts`, un solo componente). Reemplazó a
+    `GET /periodos/:id/ventas`. `e2e-nomina-pdf.js` recorre el caso del usuario (fiada en una semana
+    cerrada que se liquida dos semanas después).
+  · **El PDF de la nómina** (2026-10-07: "un reporte de nómina, un PDF con diseño"):
+    `GET /nomina/periodos/:id/pdf[?usuario_id=]` (`nomina/reporte.js`, `ver:nomina`), botón "Bajar
+    PDF" en Nómina y "Bajar su recibo (PDF)" en el detalle del recibo. Una hoja de RESUMEN (cifras,
+    tabla de todos con su total, la regla de la comisión y firmas de Elaboró / Autorizó), el REPORTE
+    DE COMISIONES venta por venta (pagadas y por liquidar; en el de una persona va detrás de su
+    recibo) y un RECIBO por persona en UNA hoja (su comisión resumida por tipo de venta): percepciones y deducciones, lo que se paga con número y CON LETRA
+    (`utils/letras.js → pesos`, "Mil doscientos pesos 50/100 M.N."), su semana día por día (horario,
+    vacaciones, horas extra), su comisión por tipo de venta con lo que le falta por liquidar y la
+    línea "Recibí…" para firmar. Se arma al momento con lo guardado. Sin calcular, 409
+    `SIN_RECIBOS`. Las
+    fuentes del PDF no traen "−" ni "≈": se escribe "-". `utils/pdf.js → enviar` manda cualquier PDF
+    (lo usan también las cargas).
 - **Material, línea y calibre.** El hilo se clasifica por tres cosas independientes:
   · **Material** → tabla `categorias`, rotulada "Material" en el panel (acrilán, viscosa). El
     nombre de la tabla se conservó para no arrastrar un rename por todo el catálogo público.

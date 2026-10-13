@@ -1,4 +1,4 @@
-import { domingoDe, rangoCorto, rangoLargo, sumarDias } from './semana';
+import { domingoDe, rangoArchivo, rangoCorto, rangoLargo, sumarDias } from './semana';
 
 /**
  * La semana de nómina va de DOMINGO a SÁBADO. Estas cuentas arman el selector y
@@ -26,5 +26,10 @@ describe('semana de nómina', () => {
     expect(rangoLargo('2026-09-27', '2026-10-03', hoy)).toBe('27 de septiembre al 3 de octubre');
     // Otro año: se dice cuál.
     expect(rangoLargo('2025-12-28', '2026-01-03', '2026-10-02')).toBe('28 de diciembre de 2025 al 3 de enero');
+  });
+
+  it('el nombre del PDF dice la semana como el servidor', () => {
+    expect(rangoArchivo('2026-10-04', '2026-10-10')).toBe('4 al 10 oct 2026');
+    expect(rangoArchivo('2026-09-27', '2026-10-03')).toBe('27 sep al 3 oct 2026');
   });
 });

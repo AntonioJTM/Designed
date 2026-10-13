@@ -40,14 +40,19 @@ export interface VarianteCodigo {
   consumido_id?: number | null;
   /** Folio del pedido que lo consumió, cuando fue una venta. */
   consumido_folio?: string | null;
+  /** Folio del envío en el que viene en camino, si todavía no se recibe (lo manda el lector). */
+  en_camino_folio?: string | null;
   remesa_id?: number | null;
   remesa_folio?: string | null;
   /**
-   * Almacén donde está el bulto. APROXIMADO: lo pone la remesa y lo corrigen el
-   * traspaso y el escaneo al vender. NULL en los capturados a mano.
+   * Almacén donde está el bulto: lo pone la carga (o el que se eligió al
+   * capturarlo a mano) y lo cambia el traspaso. La caja solo vende los paquetes
+   * de su tienda (2026-10-07). null = capturado a mano antes de ese día.
    */
   almacen_id?: number | null;
   almacen?: string | null;
+  /** Metió kilos al inventario (llegó en una carga, o se capturó a mano): quitarlo los saca. */
+  con_entrada?: number | boolean;
   etiqueta?: string | null;
   creado_en?: string;
 }

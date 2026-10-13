@@ -3,6 +3,7 @@
 const service = require('./service');
 const lista = require('./lista');
 const reportes = require('./reportes');
+const pdf = require('../../utils/pdf');
 const permisos = require('../permisos/service');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
@@ -153,14 +154,7 @@ async function listar(req, res, next) {
 
 /** Manda un PDF. El nombre del archivo lo pone la pantalla al guardarlo. */
 function enviarPdf(res, buffer, nombre) {
-  const ascii = nombre.normalize('NFD').replace(/[^\x20-\x7E]/g, '').replace(/["\\/]/g, '-');
-  res.set({
-    'Content-Type': 'application/pdf',
-    'Content-Length': buffer.length,
-    'Content-Disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(nombre)}`,
-    'Cache-Control': 'no-store',
-  });
-  res.send(buffer);
+  pdf.enviar(res, buffer, nombre);
 }
 
 /** Fechas tecleadas en un <input type="date">: lo que no tenga forma de fecha se ignora. */

@@ -3,6 +3,7 @@
 const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const jornada = require('./jornada');
+const comisiones = require('./comisiones');
 
 // Nómina semanal del personal (domingo → sábado, pagada ese mismo sábado).
 //
@@ -10,6 +11,10 @@ const jornada = require('./jornada');
 // los que el empleado figura como vendedor (pedidos.usuario_id), es decir
 // `subtotal - descuento`: sin IVA y sin costo de envío. Los pedidos cancelados
 // o devueltos no cuentan, igual que en el módulo de reportes.
+// Desde la semana del 4 de octubre de 2026 la comisión de cada venta se paga en
+// la semana en que queda LIQUIDADA (contado: el día; fiada, apartado o pedido:
+// cuando termina de pagarse), una sola vez (ver comisiones.js). Antes, en la
+// semana de la venta.
 const VENTA_VALIDA = "estado NOT IN ('cancelado','devuelto')";
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -458,8 +463,24 @@ async function _calcular(conn, periodoId) {
   );
   const previoPorUsuario = new Map(previos.map((r) => [Number(r.usuario_id), r]));
 
-  // Venta neta de la semana por vendedor.
-  const [ventas] = await conn.query(
+  // Lo que paga comisión esta semana. Con la regla nueva, las ventas que
+  // quedaron liquidadas hasta el sábado y no están en otra nómina; con la
+  // anterior (semanas viejas), las vendidas en la semana.
+  const alLiquidar = periodo.fecha_inicio >= comisiones.DESDE;
+  const liquidadas = alLiquidar
+    ? await comisiones.liquidadasEnSemana(conn, { periodoId, hastaExcl, usuarioIds: ids.map(Number) })
+    : new Map();
+  if (alLiquidar) {
+    // Se vuelven a anotar abajo; las de quien ya no tiene recibo se van con él.
+    await conn.query(
+      `DELETE nc FROM nomina_comisiones nc JOIN nomina_recibos r ON r.id = nc.recibo_id
+        WHERE r.periodo_id = :id`,
+      { id: periodoId }
+    );
+  }
+
+  // Venta neta de la semana por vendedor (regla anterior).
+  const [ventas] = alLiquidar ? [[]] : await conn.query(
     `SELECT usuario_id, COUNT(*) AS num_pedidos,
             COALESCE(SUM(subtotal - descuento), 0) AS ventas_netas
        FROM pedidos
@@ -474,11 +495,18 @@ async function _calcular(conn, periodoId) {
   // Upsert de un recibo por empleado.
   for (const emp of empleados) {
     const id = Number(emp.usuario_id);
-    const venta = ventaPorUsuario.get(id);
-    const ventasNetas = venta ? round2(venta.ventas_netas) : 0;
-    const numPedidos = venta ? Number(venta.num_pedidos) : 0;
     const pct = emp.paga_comision ? Number(emp.porcentaje_comision) : 0;
-    const comision = round2((ventasNetas * pct) / 100);
+    const venta = ventaPorUsuario.get(id);
+    const pagadas = liquidadas.get(id) ?? [];
+    const ventasNetas = alLiquidar
+      ? round2(pagadas.reduce((s, v) => s + v.venta_neta, 0))
+      : venta ? round2(venta.ventas_netas) : 0;
+    const numPedidos = alLiquidar ? pagadas.length : venta ? Number(venta.num_pedidos) : 0;
+    // Con la regla nueva, la suma de la comisión de cada venta: así el recibo
+    // cuadra centavo a centavo con el reporte de comisiones.
+    const comision = alLiquidar
+      ? round2(pagadas.reduce((s, v) => s + comisiones.comisionDe(v.venta_neta, pct), 0))
+      : round2((ventasNetas * pct) / 100);
     const sueldo = Number(emp.sueldo_base_semanal);
 
     const horario = horarios.get(id) ?? [];
@@ -541,6 +569,13 @@ async function _calcular(conn, periodoId) {
         comision,
       }
     );
+    if (alLiquidar) {
+      const [[rec]] = await conn.query(
+        'SELECT id FROM nomina_recibos WHERE periodo_id = :p AND usuario_id = :u',
+        { p: periodoId, u: emp.usuario_id }
+      );
+      await comisiones.anotar(conn, rec.id, pagadas, pct);
+    }
   }
 
   // Fuera de la nómina = fuera del periodo (arrastra sus conceptos por CASCADE).
@@ -668,28 +703,6 @@ async function eliminarConcepto(conceptoId) {
   });
 }
 
-/** Pedidos que forman la base comisionable de un empleado en el periodo. */
-async function ventasDelPeriodo(periodoId, usuarioId) {
-  const periodo = await obtenerPeriodo(periodoId);
-  if (!periodo) throw new AppError(404, 'NO_ENCONTRADO', 'Periodo de nómina no encontrado');
-
-  const desde = `${periodo.fecha_inicio} 00:00:00`;
-  const hastaExcl = _diaSiguiente(periodo.fecha_fin);
-
-  const [rows] = await pool.query(
-    `SELECT id, numero_pedido, canal, estado, creado_en,
-            subtotal, descuento, impuestos, costo_envio, total,
-            (subtotal - descuento) AS venta_neta
-       FROM pedidos
-      WHERE usuario_id = :usuario_id
-        AND creado_en >= :desde AND creado_en < :hasta
-        AND ${VENTA_VALIDA}
-      ORDER BY creado_en`,
-    { usuario_id: usuarioId, desde, hasta: hastaExcl }
-  );
-  return rows;
-}
-
 /**
  * Devuelve 'YYYY-MM-DD 00:00:00' del día siguiente (límite superior exclusivo).
  * Acepta un string 'YYYY-MM-DD' o el objeto Date que devuelve mysql2 para DATE.
@@ -725,5 +738,4 @@ module.exports = {
   calcularPeriodo,
   agregarConcepto,
   eliminarConcepto,
-  ventasDelPeriodo,
 };
