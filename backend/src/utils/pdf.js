@@ -215,6 +215,18 @@ function pie(doc, texto) {
   }
 }
 
+/** Manda un PDF como descarga. El nombre lo usa la pantalla al guardarlo. */
+function enviar(res, buffer, nombre) {
+  const ascii = nombre.normalize('NFD').replace(/[^\x20-\x7E]/g, '').replace(/["\\/]/g, '-');
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Length': buffer.length,
+    'Content-Disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(nombre)}`,
+    'Cache-Control': 'no-store',
+  });
+  res.send(buffer);
+}
+
 /** Cierra el documento y devuelve sus bytes. */
 function aBuffer(doc) {
   return new Promise((resolve, reject) => {
@@ -268,6 +280,6 @@ function dinero(n) {
 }
 
 module.exports = {
-  crear, encabezado, seccion, nota, datos, cifras, tabla, pie, aBuffer, linea,
+  crear, encabezado, seccion, nota, datos, cifras, tabla, pie, aBuffer, enviar, linea,
   fecha, fechaCorta, kg, numero, dinero, COLOR,
 };

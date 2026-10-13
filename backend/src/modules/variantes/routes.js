@@ -49,6 +49,9 @@ const codigoSchema = z
     lote: z.string().trim().max(40).nullable().optional(),
     conos: z.coerce.number().int().positive().max(10000).nullable().optional(),
     etiqueta: z.string().trim().max(60).optional(),
+    // A qué almacén entra el bulto (sus kilos se suman ahí). Si el hilo está en
+    // un solo lugar y no se dice, entra ahí.
+    almacen_id: z.coerce.number().int().positive().nullable().optional(),
   })
   .strict();
 

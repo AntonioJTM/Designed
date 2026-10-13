@@ -16,7 +16,7 @@ import {
   ResultadoAbono,
   SesionCaja,
   Encargos,
-  LineaPreparada,
+  ModificarPedidoInput,
 } from '../models/ventas.models';
 
 function data<T>(r: ApiResponse<T>): T {
@@ -263,16 +263,16 @@ export class VentasService {
   }
 
   /**
-   * PREPARA un pedido: los paquetes escaneados que van y lo que pesó lo demás.
-   * Queda 'listo' con el total al peso real.
+   * MODIFICA un pedido en espera: lo que lleva (la lista completa: lo que no
+   * venga se quita) y la entrega. Devuelve el pedido con su total nuevo.
    */
-  prepararPedido(pedidoId: number, lineas: LineaPreparada[]): Observable<Pedido> {
+  modificarPedido(pedidoId: number, body: ModificarPedidoInput): Observable<Pedido> {
     return this.http
-      .post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/preparar`, { lineas })
+      .put<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/encargo`, body)
       .pipe(map(data));
   }
 
-  /** Los PEDIDOS (encargos) sin entregar: por preparar, listos y en camino. */
+  /** Los PEDIDOS (encargos) sin entregar: en espera. */
   encargos(f: { estado?: string; q?: string } = {}): Observable<Encargos> {
     let p = new HttpParams();
     if (f.estado) p = p.set('estado', f.estado);

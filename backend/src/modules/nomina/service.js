@@ -2,6 +2,7 @@
 
 const model = require('./model');
 const jornada = require('./jornada');
+const comisiones = require('./comisiones');
 const { AppError } = require('../../middlewares/error');
 const { paginado } = require('../../utils/query');
 const { hoyLocal } = require('../../utils/fechas');
@@ -267,10 +268,14 @@ async function cambiarEstado(id, estado) {
   return _conRecibos(await model.cambiarEstadoPeriodo(id, estado));
 }
 
-async function ventasDelPeriodo(id, usuarioId) {
-  const pedidos = await model.ventasDelPeriodo(id, usuarioId);
-  const venta_neta = round2(pedidos.reduce((s, p) => s + Number(p.venta_neta), 0));
-  return { pedidos, venta_neta, num_pedidos: pedidos.length };
+/**
+ * El reporte de comisiones de la semana: qué venta paga cada quien en esta
+ * nómina y qué tiene todavía por liquidar (comisiones.js → reporte).
+ */
+async function comisionesDelPeriodo(id, usuarioId = null) {
+  const periodo = await model.obtenerPeriodo(id);
+  if (!periodo) throw new AppError(404, 'NO_ENCONTRADO', 'Periodo de nómina no encontrado');
+  return { periodo, ...(await comisiones.reporte(periodo, { usuarioId })) };
 }
 
 // ---- Conceptos manuales ----
@@ -406,7 +411,7 @@ module.exports = {
   obtenerPeriodo,
   calcular,
   cambiarEstado,
-  ventasDelPeriodo,
+  comisionesDelPeriodo,
   agregarConcepto,
   eliminarConcepto,
 };

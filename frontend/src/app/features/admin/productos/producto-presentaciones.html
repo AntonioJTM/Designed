@@ -706,9 +706,25 @@
         @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
         @if (avisoBulto()) { <p class="ok-msg" style="margin: 0">{{ avisoBulto() }}</p> }
         <p class="muted" style="margin: 0; font-size: 14px; line-height: 1.5">
-          Va a <span class="mono">{{ principal()?.sku }}</span>. Añadir un bulto aquí NO mueve el
-          inventario: para que entre la mercancía, carga el Excel del proveedor.
+          Va a <span class="mono">{{ principal()?.sku }}</span>. El bulto <b>entra al inventario</b>: sus kilos se
+          suman al almacén que elijas y queda en el kardex como «Bulto capturado a mano». Para una lista completa
+          del proveedor, mejor carga su Excel.
         </p>
+        <!-- A dónde entra el paquete (y sus kilos): si el hilo está en dos lugares, se elige; no se adivina. -->
+        <label class="field">
+          ¿A qué almacén entra?
+          <select [(ngModel)]="nuevoAlmacen" name="nal">
+            <option [ngValue]="''">Elige el almacén…</option>
+            @for (o of opcionesAlmacenBulto(); track o.id) {
+              <option [ngValue]="o.id">{{ o.texto }}</option>
+            }
+          </select>
+          @if (dondeHayHilo().length > 1) {
+            <span class="ayuda">Este hilo está en {{ dondeHayHilo().length }} lugares: elige a cuál entra este bulto.</span>
+          } @else if (dondeHayHilo().length === 1 && nuevoAlmacen === dondeHayHilo()[0].almacen_id) {
+            <span class="ayuda">Es el único lugar donde hay de este hilo.</span>
+          }
+        </label>
         <div class="form-grid">
           <label class="field full">
             Código del bulto
@@ -722,6 +738,11 @@
               <input type="number" step="0.001" min="0" [(ngModel)]="nuevoPeso" name="np" />
               <span class="unidad">kg</span>
             </span>
+            @if (nuevoAlmacen && nuevoPeso) {
+              <span class="ayuda">Entran {{ nuevoPeso | cantidad: 'kg' }} a {{ almacenBultoNombre() }}.</span>
+            } @else {
+              <span class="ayuda">Son los kilos que entran al inventario.</span>
+            }
           </label>
           <label class="field">
             Conos que rinde
@@ -736,7 +757,7 @@
       </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" (click)="cerrarModal()">Cerrar</button>
-        <button type="button" class="btn btn-primary" [disabled]="!nuevoCodigo.trim()"
+        <button type="button" class="btn btn-primary" [disabled]="!nuevoCodigo.trim() || faltaAlmacenBulto() || !(nuevoPeso! > 0)"
                 (click)="agregarCodigoVar(); campoCodigo.focus()">
           Añadir bulto
         </button>

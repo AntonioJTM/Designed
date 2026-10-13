@@ -84,8 +84,9 @@ const conceptoSchema = z
   })
   .strict();
 
-const ventasQuerySchema = z
-  .object({ usuario_id: z.coerce.number().int().positive() })
+// El reporte de comisiones y el PDF: de todos, o solo de una persona.
+const deQuienSchema = z
+  .object({ usuario_id: z.coerce.number().int().positive().optional() })
   .strict();
 
 // Configuración de nómina del personal.
@@ -101,7 +102,9 @@ router.delete('/vacaciones/:id', ...soloAdmin, controller.eliminarVacaciones);
 router.get('/periodos/actual', ...soloAdmin, controller.periodoActual);
 router.get('/periodos', ...soloAdmin, controller.listarPeriodos);
 router.post('/periodos', ...soloAdmin, validate(crearPeriodoSchema), controller.crearPeriodo);
-router.get('/periodos/:id/ventas', ...soloAdmin, validate(ventasQuerySchema, 'query'), controller.ventasDelPeriodo);
+// Qué venta paga comisión en esta nómina y qué falta por liquidar.
+router.get('/periodos/:id/comisiones', ...soloAdmin, validate(deQuienSchema, 'query'), controller.comisiones);
+router.get('/periodos/:id/pdf', ...soloAdmin, validate(deQuienSchema, 'query'), controller.pdf);
 router.post('/periodos/:id/calcular', ...soloAdmin, controller.calcular);
 router.patch('/periodos/:id/estado', ...soloAdmin, validate(estadoSchema), controller.cambiarEstado);
 

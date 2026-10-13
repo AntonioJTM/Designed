@@ -202,51 +202,20 @@
               </section>
             </div>
 
-            <!-- Ventas que formaron la comisión -->
-            <div class="col">
-              <section>
-                <h3>Ventas de la semana</h3>
-                @if (!ventas()) {
-                  <p class="muted" style="margin: 0; font-size: 14px">Cargando…</p>
-                } @else if (ventas()!.pedidos.length === 0) {
-                  <p class="muted" style="margin: 0; font-size: 14px">Sin ventas registradas a su nombre en esta semana.</p>
-                } @else {
-                  <div class="tabla-scroll">
-                    <table class="grid">
-                      <thead>
-                        <tr><th>Pedido</th><th>Fecha</th><th class="num">Venta neta</th></tr>
-                      </thead>
-                      <tbody>
-                        @for (v of ventas()!.pedidos; track v.id) {
-                          <tr>
-                            <td>
-                              {{ v.numero_pedido }}
-                              <!-- El canal es un dato del pedido (los viejos pueden ser en línea), no un filtro. -->
-                              <div class="muted" style="font-size: 12px">{{ v.canal === 'punto_venta' ? 'Mostrador' : 'En línea' }}</div>
-                            </td>
-                            <td class="muted">{{ v.creado_en | fecha }}</td>
-                            <td class="num">{{ v.venta_neta | dinero }}</td>
-                          </tr>
-                        }
-                        <tr>
-                          <td colspan="2"><b>Base comisionable</b></td>
-                          <td class="num"><b>{{ ventas()!.venta_neta | dinero }}</b></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <p class="nota-chica">
-                    Venta neta = subtotal − descuento. Sin IVA ni envío, y sin lo cancelado ni lo devuelto.
-                  </p>
-                }
-              </section>
-            </div>
           </div>
+
+          <!-- Las ventas cuya comisión paga esta semana, y las que faltan por liquidar: a todo lo ancho. -->
+          <section>
+            <app-comisiones-semana [periodoId]="periodoId()" [usuarioId]="r.usuario_id" [clave]="actual()" />
+          </section>
         </div>
       }
     </div>
 
     <div class="modal-foot">
+      <button type="button" class="btn btn-ghost" [disabled]="bajando()" (click)="bajarPdf()">
+        {{ bajando() ? 'Armando el PDF…' : 'Bajar su recibo (PDF)' }}
+      </button>
       <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
     </div>
   </div>

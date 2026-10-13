@@ -61,6 +61,14 @@ export function rangoLargo(inicio: string, fin: string, hoy: string): string {
   return `${a.getUTCDate()} de ${MESES[a.getUTCMonth()]}${anioA} al ${diaLargo(fin, hoy)}`;
 }
 
+/** "4 al 10 oct 2026" o "27 sep al 3 oct 2026": para el nombre de un archivo (como lo nombra el servidor). */
+export function rangoArchivo(inicio: string, fin: string): string {
+  const a = aFecha(inicio);
+  const b = aFecha(fin);
+  const desde = a.getUTCMonth() === b.getUTCMonth() ? `${a.getUTCDate()}` : diaCorto(inicio);
+  return `${desde} al ${diaCorto(fin)} ${b.getUTCFullYear()}`;
+}
+
 /** "Semana del 27 sep al 3 oct", o "Semana del 13 al 19 sep" dentro del mismo mes. */
 export function rangoCorto(inicio: string, fin: string, hoy: string): string {
   const a = aFecha(inicio);

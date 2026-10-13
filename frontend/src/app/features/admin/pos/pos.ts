@@ -16,6 +16,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { HiloAPesar, PesarModal } from './pesar-modal';
+import { paqueteFueraDeAqui } from '../../../shared/paquete-aqui';
 
 /** Un hilo de la búsqueda con sus presentaciones (paquete y cono) juntas. */
 interface HiloEncontrado {
@@ -439,14 +440,25 @@ export class Pos {
     // vender. El backend también lo rechaza; esto es para avisar antes de que
     // el cajero cierre el ticket.
     if (r.bulto && r.bulto.estado && r.bulto.estado !== 'disponible') {
-      // Apartado = es de un pedido o un apartado de otro cliente: sigue aquí,
-      // pero ya tiene dueño.
+      // Apartado = es de un pedido o un apartado de otro cliente, o va en un
+      // envío a sucursal que se está surtiendo: sigue aquí, pero ya tiene dueño.
       const folio = r.bulto.consumido_folio;
+      const deQue = folio?.startsWith('TRA') ? 'va en un envío a sucursal' : 'es de un pedido';
       this.error.set(
         r.bulto.estado === 'apartado'
-          ? `El paquete ${r.bulto.codigo} está apartado${folio ? ' para ' + folio : ''}: es de un pedido. Escanea otro.`
+          ? `El paquete ${r.bulto.codigo} está apartado${folio ? ' para ' + folio : ''}: ${deQue}. Escanea otro.`
           : `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${folio ? ' en ' + folio : ''}. Escanea otro.`
       );
+      this.qVar = '';
+      return;
+    }
+
+    // Solo se venden los paquetes de ESTA tienda (2026-10-07): si el sistema lo
+    // tiene en otro almacén o viene en camino, se pide otro.
+    const caja = this.cajaActual();
+    const fuera = r.bulto ? paqueteFueraDeAqui(r.bulto, caja?.almacen_id, caja?.almacen) : null;
+    if (fuera) {
+      this.error.set(fuera);
       this.qVar = '';
       return;
     }
@@ -1137,8 +1149,8 @@ export class Pos {
    * Toma el PEDIDO: la mercancía se aparta (no sale todavía) y entra solo lo que
    * deje pagado. Se sigue en la pantalla Pedidos, donde se entrega cobrando lo
    * que falte. Los paquetes escaneados van ligados al pedido y quedan
-   * APARTADOS para él (pasan a vendidos al entregarlo); al prepararlo se
-   * escanean los que de verdad van.
+   * APARTADOS para él (pasan a vendidos al entregarlo); en Pedidos se
+   * modifica: se escanean los que de verdad van, se agrega o se quita.
    */
   private tomarPedido(s: SesionCaja, deja: number): void {
     const envio = this.entregaPedido() === 'envio';

@@ -9,8 +9,15 @@
     <div class="modal-body">
       <p class="explica">
         De <b>{{ traspaso().almacen_origen }}</b> a <b>{{ traspaso().almacen_destino }}</b>. Escanea cada
-        paquete conforme lo subes: sale su peso real y esos paquetes quedan en la sucursal.
+        paquete conforme lo subes: sale su peso real y esos paquetes quedan en la sucursal. Si no terminas,
+        <b>guarda y sigue después</b>: lo escaneado queda apartado para este envío y ya no se puede vender.
       </p>
+      @if (yaGuardados() > 0) {
+        <p class="guardados-aviso">
+          Ya había {{ yaGuardados() }} {{ yaGuardados() === 1 ? 'paquete escaneado y guardado' : 'paquetes escaneados y guardados' }}:
+          están en la lista. Sigue con los que faltan.
+        </p>
+      }
 
       @if (error()) { <p class="alert">{{ error() }}</p> }
 
@@ -66,7 +73,7 @@
           @for (p of lista(); track p.codigo) {
             <li>
               <span class="mono">{{ p.codigo }}</span>
-              <span class="muted">{{ nombreDe(p.variante_id) }}{{ p.lote ? ' · lote ' + p.lote : '' }}</span>
+              <span class="muted">{{ nombreDe(p.variante_id) }}{{ p.lote ? ' · lote ' + p.lote : '' }}@if (p.estaba_en) {<span class="estaba"> · estaba en «{{ p.estaba_en }}»</span>}</span>
               <b>{{ p.peso_kg | cantidad: 'kg' }}</b>
               <button type="button" class="btn btn-ghost btn-sm" (click)="quitar(p.codigo)"
                       [attr.aria-label]="'Quitar el paquete ' + p.codigo">Quitar</button>
@@ -98,9 +105,14 @@
         · {{ totalKg() | cantidad: 'kg' }} reales
       </span>
       <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
+      <!-- A medias: se guarda y los paquetes quedan apartados; el envío queda en espera. -->
+      <button type="button" class="btn btn-ghost" [disabled]="enviando() || !cambiosSinGuardar()"
+              (click)="guardar()">
+        Guardar y seguir después
+      </button>
       <button type="button" class="btn btn-primary" [disabled]="enviando() || totalPaquetes() === 0"
               (click)="confirmar()">
-        {{ enviando() ? 'Enviando…' : 'Enviar' }}
+        {{ enviando() ? 'Un momento…' : 'Enviar' }}
       </button>
     </div>
   </div>

@@ -198,7 +198,7 @@ const FILTROS_CONCEPTO = {
   desarmes: "m.referencia_tipo = 'conversion'",
   // La mercancía que entra por la remesa del proveedor ES la entrada de
   // mercancía; sin ella el filtro solo mostraba las capturadas a mano.
-  entradas: "m.tipo = 'entrada' AND (m.referencia_tipo IS NULL OR m.referencia_tipo = 'remesa')",
+  entradas: "m.tipo = 'entrada' AND (m.referencia_tipo IS NULL OR m.referencia_tipo IN ('remesa', 'bulto'))",
   ajustes: "m.tipo = 'ajuste'",
   mermas: "m.tipo = 'merma'",
   manuales: 'm.referencia_tipo IS NULL',
@@ -215,7 +215,8 @@ const CAMPOS_DOCUMENTO = `
             tao.nombre AS traspaso_origen, tad.nombre AS traspaso_destino,
             cvo.sku AS conversion_paquete, cvd.sku AS conversion_cono,
             cv.codigo_bulto AS conversion_bulto,
-            rem.folio AS remesa_folio`;
+            rem.folio AS remesa_folio,
+            bm.codigo AS bulto_codigo`;
 
 const JOINS_DOCUMENTO = `
        LEFT JOIN pedidos ped      ON m.referencia_tipo = 'pedido'
@@ -229,7 +230,9 @@ const JOINS_DOCUMENTO = `
        LEFT JOIN producto_variantes cvo ON cvo.id = cv.variante_origen_id
        LEFT JOIN producto_variantes cvd ON cvd.id = cv.variante_destino_id
        LEFT JOIN remesas rem      ON m.referencia_tipo = 'remesa'
-                                 AND rem.id = m.referencia_id`;
+                                 AND rem.id = m.referencia_id
+       LEFT JOIN variante_codigos bm ON m.referencia_tipo = 'bulto'
+                                    AND bm.id = m.referencia_id`;
 
 const FROM_KARDEX = `
        FROM movimientos_inventario m
@@ -264,7 +267,7 @@ async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, q, d
   const busca = porPalabras(q, [
     'pv.sku', 'prod.nombre',
     { col: 'prod.grosor_calibre', calibre: true },
-    'ped.numero_pedido', 'tr.folio', 'rem.folio', 'cv.codigo_bulto',
+    'ped.numero_pedido', 'tr.folio', 'rem.folio', 'cv.codigo_bulto', 'bm.codigo', 'm.motivo',
   ]);
   if (busca) {
     where.push(busca.sql);
@@ -630,11 +633,11 @@ async function desarmar(datos, usuarioId) {
           `El bulto ${bulto.codigo} ya está ${bulto.estado}; no se puede desarmar.`);
       }
       // EL PAQUETE TIENE QUE ESTAR EN ESA TIENDA (usuario, 2026-10-06: "si no,
-      // que mande una alerta de que el paquete en esa sucursal no existe").
-      // Al vender NO se valida —la ubicación se corrige al escanear—, pero un
-      // paquete se abre donde está: si el sistema lo tiene en otro almacén o
-      // viene en camino, no se abre aquí. Sin almacén (capturado a mano) se
-      // permite: no hay nada que contradiga.
+      // que mande una alerta de que el paquete en esa sucursal no existe"). Es
+      // la misma regla que al vender (2026-10-07, pedidos/model.js →
+      // _exigirPaqueteAqui): si el sistema lo tiene en otro almacén o viene en
+      // camino, no se abre aquí. Sin almacén (capturado a mano) se permite: no
+      // hay nada que contradiga.
       const u = await ubicacionBulto(conn, bulto.id);
       if (u?.en_camino_folio) {
         throw new AppError(409, 'PAQUETE_EN_CAMINO',
@@ -939,12 +942,13 @@ async function solicitarTraspaso(datos, usuarioId) {
  * cuando se surte sí se escanean los paquetes que salen"), así que se sabe cuáles
  * son y cuánto pesan de verdad.
  *
- * NO se valida que el paquete estuviera en el origen: la ubicación del bulto es
- * aproximada y validarla frenaría un envío legítimo (la misma regla que al
- * vender). Se le corrige al moverlo. Sí se exige que esté disponible, que tenga
- * peso y que sea de un hilo del traspaso.
+ * Se exige que esté disponible, que tenga peso, que sea de un hilo del traspaso
+ * y que no venga EN CAMINO en otro envío (409 PAQUETE_EN_CAMINO: todavía va en
+ * la camioneta). Uno ya APARTADO para este mismo traspaso (se guardó a medio
+ * surtir) sí vale. Si el sistema lo tiene en OTRO almacén, eso lo resuelve
+ * `_traerAlOrigen` (trae `almacen_id` y `almacen`).
  */
-async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe) {
+async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe, traspasoId = null) {
   const limpios = codigos.map((c) => String(c).trim()).filter(Boolean);
   const vistos = new Set();
   for (const c of limpios) {
@@ -956,8 +960,20 @@ async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe) 
   if (!limpios.length) return [];
 
   const [rows] = await conn.query(
-    `SELECT id, variante_id, codigo, peso_kg, lote, estado
-       FROM variante_codigos WHERE codigo IN (:c) FOR UPDATE`,
+    `SELECT vc.id, vc.variante_id, vc.codigo, vc.peso_kg, vc.lote, vc.estado, vc.consumido_tipo, vc.consumido_id,
+            ped.numero_pedido AS pedido_folio, tra.folio AS traspaso_folio,
+            vc.almacen_id, alm.nombre AS almacen,
+            (SELECT t2.folio
+               FROM traspaso_bultos tb2
+               JOIN traspaso_detalle td2 ON td2.id = tb2.detalle_id
+               JOIN traspasos t2         ON t2.id = td2.traspaso_id
+              WHERE tb2.variante_codigo_id = vc.id AND t2.estado = 'en_transito'
+              ORDER BY t2.id DESC LIMIT 1) AS en_camino_folio
+       FROM variante_codigos vc
+       LEFT JOIN pedidos ped   ON vc.consumido_tipo = 'pedido' AND ped.id = vc.consumido_id
+       LEFT JOIN traspasos tra ON vc.consumido_tipo = 'traspaso' AND tra.id = vc.consumido_id
+       LEFT JOIN almacenes alm ON alm.id = vc.almacen_id
+      WHERE vc.codigo IN (:c) FOR UPDATE`,
     { c: limpios }
   );
   const porCodigo = new Map(rows.map((r) => [r.codigo, r]));
@@ -977,8 +993,13 @@ async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe) 
       throw new AppError(422, 'BULTO_NO_ES_DEL_TRASPASO',
         `El paquete ${c} es de otro hilo: no está en este traspaso.`);
     }
-    if (b.estado !== 'disponible') {
-      const que = { vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: 'está apartado para un pedido de un cliente' };
+    const delMismo = b.estado === 'apartado' && b.consumido_tipo === 'traspaso' &&
+      traspasoId != null && Number(b.consumido_id) === Number(traspasoId);
+    if (b.estado !== 'disponible' && !delMismo) {
+      const apartadoPara = b.consumido_tipo === 'traspaso'
+        ? `está apartado para el envío ${b.traspaso_folio ?? ''} a otra sucursal`
+        : `está apartado para ${b.pedido_folio ? 'el pedido ' + b.pedido_folio : 'un pedido de un cliente'}`;
+      const que = { vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: apartadoPara };
       throw new AppError(409, 'BULTO_NO_DISPONIBLE',
         `El paquete ${c} de ${nombreDe(b.variante_id)} ${que[b.estado] ?? 'no está disponible'}.`);
     }
@@ -986,8 +1007,71 @@ async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe) 
       throw new AppError(422, 'BULTO_SIN_PESO',
         `El paquete ${c} no tiene peso registrado: no se puede saber cuánto sale.`);
     }
+    if (b.en_camino_folio) {
+      throw new AppError(409, 'PAQUETE_EN_CAMINO',
+        `El paquete ${c} viene en camino (${b.en_camino_folio}): primero se recibe ese envío.`);
+    }
   }
   return limpios.map((c) => porCodigo.get(c));
+}
+
+/**
+ * Un paquete escaneado al SURTIR que el sistema tiene en OTRO almacén
+ * (2026-10-07, el usuario eligió "avisar y, si confirman que sí está aquí,
+ * pasarlo con sus kilos"). Si quien surte lo tiene en la mano, ahí está: antes
+ * el envío lo aceptaba y le cambiaba la ubicación, pero los kilos salían del
+ * origen y se quedaban en el otro almacén, y los dos quedaban "no cuadra".
+ *
+ *   · Sin confirmar (no viene en `encontrados`): 409 PAQUETE_EN_OTRO_ALMACEN,
+ *     que dice dónde lo tiene el sistema; no se mueve nada.
+ *   · Confirmado: el paquete y SUS KILOS pasan de aquel almacén al que surte
+ *     (salida allá, entrada aquí, `referencia_tipo = 'bulto'`, tipo
+ *     'transferencia', el kardex dice "Paquete encontrado en otro almacén" y el
+ *     folio del envío). Si aquel almacén ya no tiene esos kilos, 409
+ *     STOCK_INSUFICIENTE: no se inventan kilos.
+ * Sin almacén (capturado a mano antes del 2026-10-07) no se pregunta: se
+ * apunta al moverlo, como siempre.
+ */
+async function _traerAlOrigen(conn, bultos, t, encontrados, usuarioId, nombreDe) {
+  const fuera = bultos.filter((b) => b.almacen_id != null && Number(b.almacen_id) !== Number(t.almacen_origen_id));
+  if (!fuera.length) return [];
+  const confirmados = new Set((encontrados ?? []).map((c) => String(c).trim()));
+  const sinConfirmar = fuera.filter((b) => !confirmados.has(b.codigo));
+  const [[origen]] = await conn.query('SELECT nombre FROM almacenes WHERE id = :id', { id: t.almacen_origen_id });
+  if (sinConfirmar.length) {
+    const b = sinConfirmar[0];
+    throw new AppError(409, 'PAQUETE_EN_OTRO_ALMACEN',
+      `El paquete ${b.codigo} el sistema lo tiene en «${b.almacen}», no en «${origen.nombre}». ` +
+      'Si de verdad está aquí, quítalo de la lista y vuelve a escanearlo para confirmarlo.',
+      { paquetes: sinConfirmar.map((x) => ({ codigo: x.codigo, almacen_id: x.almacen_id, almacen: x.almacen })) });
+  }
+  for (const b of fuera) {
+    const peso = round3(b.peso_kg);
+    const hilo = nombreDe(b.variante_id);
+    const alla = await _leerCantidad(conn, b.variante_id, b.almacen_id);
+    const saldoAlla = alla ? Number(alla.cantidad) : 0;
+    if (saldoAlla + 0.0005 < peso) {
+      throw new AppError(409, 'STOCK_INSUFICIENTE',
+        `«${b.almacen}» solo tiene ${round3(saldoAlla)} kg de ${hilo}: no alcanza para pasar los ${peso} kg ` +
+        `del paquete ${b.codigo} a «${origen.nombre}». Cuadra ese almacén con un Ajuste o avisa al administrador.`);
+    }
+    const aqui = await _leerCantidad(conn, b.variante_id, t.almacen_origen_id);
+    await _aplicarSaldo(conn, b.variante_id, b.almacen_id, round3(saldoAlla - peso));
+    await _aplicarSaldo(conn, b.variante_id, t.almacen_origen_id, round3((aqui ? Number(aqui.cantidad) : 0) + peso));
+    const motivo = `Paquete ${b.codigo} encontrado en «${origen.nombre}» al surtir ${t.folio} ` +
+      `(el sistema lo tenía en «${b.almacen}»)`;
+    for (const [almacen, cantidad] of [[b.almacen_id, -peso], [t.almacen_origen_id, peso]]) {
+      await _insertarMovimiento(conn, {
+        variante_id: b.variante_id, almacen_id: almacen, tipo: 'transferencia', cantidad,
+        costo_unitario: null, referencia_tipo: 'bulto', referencia_id: b.id,
+        usuario_id: usuarioId ?? null, motivo,
+      });
+    }
+    await conn.query('UPDATE variante_codigos SET almacen_id = :a WHERE id = :id', { a: t.almacen_origen_id, id: b.id });
+    b.almacen_id = t.almacen_origen_id;
+    b.almacen = origen.nombre;
+  }
+  return fuera.map((b) => b.codigo);
 }
 
 /**
@@ -1033,7 +1117,7 @@ async function enviarTraspaso(id, usuarioId, datos = {}) {
       return v ? `${v.producto}${v.calibre ? ' ' + v.calibre : ''}` : 'otro hilo';
     };
     const escaneados = await _bultosEscaneados(
-      conn, datos.codigos ?? [], new Set(variantes.keys()), nombreDe
+      conn, datos.codigos ?? [], new Set(variantes.keys()), nombreDe, t.id
     );
     const escaneadosDe = (vid) => escaneados.filter((b) => Number(b.variante_id) === Number(vid));
 
@@ -1042,6 +1126,17 @@ async function enviarTraspaso(id, usuarioId, datos = {}) {
       throw new AppError(422, 'SIN_ESCANEAR',
         'Escanea los paquetes que salen: sin escanear no se puede enviar.');
     }
+    // Los que el sistema tenía en otro almacén: confirmados, pasan aquí con sus kilos.
+    await _traerAlOrigen(conn, escaneados, t, datos.encontrados, usuarioId, nombreDe);
+
+    // Lo que se había guardado a medio surtir: los renglones se rehacen abajo con
+    // lo que de verdad sale, y lo guardado que ya no va queda libre otra vez.
+    await conn.query(
+      `DELETE tb FROM traspaso_bultos tb JOIN traspaso_detalle d ON d.id = tb.detalle_id
+        WHERE d.traspaso_id = :id`,
+      { id: t.id }
+    );
+    await _soltarApartados(conn, t.id, escaneados.map((b) => b.id));
     const incompletos = [];
 
     for (const d of det) {
@@ -1087,9 +1182,14 @@ async function enviarTraspaso(id, usuarioId, datos = {}) {
       // Se libera el apartado de ESTA solicitud, que ya se convirtió en salida.
       await _moverReserva(conn, v.id, t.almacen_origen_id, -solicitado);
 
-      // Los paquetes escaneados ya apuntan a la sucursal.
+      // Los paquetes escaneados ya apuntan a la sucursal (y los que estaban
+      // apartados para este envío vuelven a estar disponibles: ya salieron).
       await conn.query(
-        'UPDATE variante_codigos SET almacen_id = :destino WHERE id IN (:ids)',
+        // (Solo llegan aquí paquetes disponibles o apartados para ESTE envío.)
+        `UPDATE variante_codigos
+            SET almacen_id = :destino, estado = 'disponible',
+                consumido_tipo = NULL, consumido_id = NULL, consumido_en = NULL
+          WHERE id IN (:ids)`,
         { destino: t.almacen_destino_id, ids: bultos.map((b) => b.id) }
       );
       // Y queda escrito cuáles viajaron: si el envío se cancela, regresan ESOS y
@@ -1146,6 +1246,116 @@ async function enviarTraspaso(id, usuarioId, datos = {}) {
 
     return { id: t.id, folio: t.folio, estado: 'en_transito', envio_notas: notas || null, lineas };
   });
+}
+
+/** Deja libres los paquetes apartados para este traspaso (salvo `quedan`). */
+async function _soltarApartados(conn, traspasoId, quedan = []) {
+  await conn.query(
+    `UPDATE variante_codigos
+        SET estado = 'disponible', consumido_tipo = NULL, consumido_id = NULL, consumido_en = NULL
+      WHERE consumido_tipo = 'traspaso' AND consumido_id = :id AND estado = 'apartado'
+        ${quedan.length ? 'AND id NOT IN (:quedan)' : ''}`,
+    { id: traspasoId, quedan: quedan.length ? quedan : [0] }
+  );
+}
+
+/**
+ * GUARDAR LO ESCANEADO A MEDIO SURTIR (2026-10-07: "que se puedan escanear una
+ * parte, se guarden esos códigos de barras pero que ya no se puedan vender hasta
+ * que cancele el pedido; que haya un como en espera hasta que terminen de
+ * escanear los demás").
+ *
+ * `codigos` es la lista COMPLETA de lo escaneado hasta ahora (la reemplaza):
+ *   · los nuevos quedan ligados a su línea (`traspaso_bultos`) y APARTADOS para
+ *     este traspaso (`estado = 'apartado'`, `consumido_tipo = 'traspaso'`): la
+ *     caja no los vende, no se bajan a conos ni se mandan en otro envío;
+ *   · los que estaban y ya no vienen se sueltan.
+ * No mueve kilos: lo apartado al pedir sigue igual. El traspaso sigue
+ * "solicitado" (en espera) hasta que se ENVÍA, que toma estos y los que se
+ * escaneen después, o se CANCELA, que los suelta.
+ */
+async function guardarEscaneos(id, usuarioId, codigos = [], encontrados = []) {
+  return withTransaction(async (conn) => {
+    const [[t]] = await conn.query('SELECT * FROM traspasos WHERE id = :id FOR UPDATE', { id });
+    if (!t) throw new AppError(404, 'NO_ENCONTRADO', 'Traspaso no encontrado');
+    if (t.estado !== 'solicitado') {
+      throw new AppError(409, 'ESTADO_INVALIDO',
+        `El traspaso ${t.folio} está "${t.estado}": solo se guarda lo escaneado de una solicitud por enviar.`);
+    }
+    const [det] = await conn.query('SELECT id, variante_id FROM traspaso_detalle WHERE traspaso_id = :id ORDER BY id', { id });
+    const variantes = new Map();
+    for (const d of det) variantes.set(Number(d.variante_id), await _varianteParaTraspaso(conn, d.variante_id));
+    const nombreDe = (vid) => {
+      const v = variantes.get(Number(vid));
+      return v ? `${v.producto}${v.calibre ? ' ' + v.calibre : ''}` : 'otro hilo';
+    };
+    const bultos = await _bultosEscaneados(conn, codigos, new Set(variantes.keys()), nombreDe, t.id);
+    // Igual que al enviar: el que estaba en otro almacén y se confirmó, pasa aquí con sus kilos.
+    await _traerAlOrigen(conn, bultos, t, encontrados, usuarioId, nombreDe);
+
+    // Lo que ya estaba guardado.
+    const [antes] = await conn.query(
+      `SELECT tb.id, tb.variante_codigo_id FROM traspaso_bultos tb
+         JOIN traspaso_detalle d ON d.id = tb.detalle_id
+        WHERE d.traspaso_id = :id`,
+      { id }
+    );
+    const nuevos = new Set(bultos.map((b) => Number(b.id)));
+    const yaEstaban = new Set(antes.map((a) => Number(a.variante_codigo_id)));
+    const quitar = antes.filter((a) => !nuevos.has(Number(a.variante_codigo_id)));
+    if (quitar.length) {
+      await conn.query('DELETE FROM traspaso_bultos WHERE id IN (:ids)', { ids: quitar.map((a) => a.id) });
+    }
+    await _soltarApartados(conn, t.id, [...nuevos]);
+
+    const lineaDe = new Map(det.map((d) => [Number(d.variante_id), d.id]));
+    const agregar = bultos.filter((b) => !yaEstaban.has(Number(b.id)));
+    if (agregar.length) {
+      await conn.query(
+        'INSERT INTO traspaso_bultos (detalle_id, variante_codigo_id) VALUES ?',
+        [agregar.map((b) => [lineaDe.get(Number(b.variante_id)), b.id])]
+      );
+      await conn.query(
+        `UPDATE variante_codigos
+            SET estado = 'apartado', consumido_tipo = 'traspaso', consumido_id = :t, consumido_en = NULL
+          WHERE id IN (:ids)`,
+        { t: t.id, ids: agregar.map((b) => b.id) }
+      );
+    }
+
+    return {
+      id: t.id,
+      folio: t.folio,
+      guardados: bultos.length,
+      kg: round3(bultos.reduce((s, b) => s + Number(b.peso_kg), 0)),
+      agregados: agregar.length,
+      soltados: quitar.length,
+    };
+  });
+}
+
+/**
+ * Lo escaneado y guardado de los traspasos que todavía no se envían, por línea:
+ * `l.guardados = [{ codigo, peso_kg, lote, variante_id }]`.
+ */
+async function _conGuardados(ejecutor, traspasos) {
+  const porEnviar = traspasos.filter((t) => t.estado === 'solicitado');
+  const lineas = porEnviar.flatMap((t) => t.lineas ?? []);
+  for (const l of lineas) l.guardados = [];
+  if (!lineas.length) return;
+  const [rows] = await ejecutor.query(
+    `SELECT tb.detalle_id, vc.codigo, vc.peso_kg, vc.lote, vc.variante_id
+       FROM traspaso_bultos tb JOIN variante_codigos vc ON vc.id = tb.variante_codigo_id
+      WHERE tb.detalle_id IN (:ids)
+      ORDER BY tb.id`,
+    { ids: lineas.map((l) => l.detalle_id) }
+  );
+  const porLinea = new Map(lineas.map((l) => [Number(l.detalle_id), l]));
+  for (const r of rows) {
+    porLinea.get(Number(r.detalle_id))?.guardados.push({
+      codigo: r.codigo, peso_kg: r.peso_kg, lote: r.lote, variante_id: Number(r.variante_id),
+    });
+  }
 }
 
 /**
@@ -1307,6 +1517,16 @@ async function cancelarTraspaso(id, usuarioId, motivo) {
       { id }
     );
 
+    if (t.estado === 'solicitado') {
+      // Lo que se había escaneado y guardado a medio surtir queda libre otra vez.
+      await conn.query(
+        `DELETE tb FROM traspaso_bultos tb JOIN traspaso_detalle d ON d.id = tb.detalle_id
+          WHERE d.traspaso_id = :id`,
+        { id: t.id }
+      );
+      await _soltarApartados(conn, t.id);
+    }
+
     for (const d of det) {
       const cantidad = Number(d.cantidad);
       if (t.estado === 'solicitado') {
@@ -1406,6 +1626,7 @@ async function listarTraspasos({ almacen_destino_id, limit, offset }) {
     const porTraspaso = new Map(rows.map((r) => [r.id, []]));
     for (const d of det) porTraspaso.get(d.traspaso_id)?.push(d);
     for (const r of rows) r.lineas = porTraspaso.get(r.id) ?? [];
+    await _conGuardados(pool, rows);
   }
   return { rows, total };
 }
@@ -1449,6 +1670,7 @@ async function obtenerTraspaso(id) {
     { id }
   );
   traspaso.lineas = lineas;
+  await _conGuardados(pool, [traspaso]);
   return traspaso;
 }
 
@@ -1518,6 +1740,7 @@ module.exports = {
   listarConversiones,
   solicitarTraspaso,
   enviarTraspaso,
+  guardarEscaneos,
   recibirTraspaso,
   cancelarTraspaso,
   listarTraspasos,

@@ -124,6 +124,8 @@ const ck = (n, ok, d) => {
     // Cancelar una venta
     ck('cajero → cancelar venta: no', negado(await cajero('PATCH', `/pedidos/${NO_EXISTE}/estado`, { estado: 'cancelado' })));
     ck('gerente → pasa la guarda (404)', paso(await gerente('PATCH', `/pedidos/${NO_EXISTE}/estado`, { estado: 'cancelado' })));
+    // Modificar un pedido en espera (Pedidos lo trae de fábrica el cajero)
+    ck('cajero → modificar un pedido: pasa la guarda (404)', paso(await cajero('PUT', `/pedidos/${NO_EXISTE}/encargo`, { lineas: [{ detalle_id: 1 }] })));
     // Fiar (el almacenista no tiene; el turno no existe, así que nadie vende de verdad)
     const venta = { canal: 'punto_venta', sesion_caja_id: NO_EXISTE, cliente_id: NO_EXISTE, a_credito: 1, items: [{ variante_id: NO_EXISTE, cantidad: 1 }] };
     ck('almacenista → fiar: no', negado(await almacen('POST', '/pedidos', venta)));

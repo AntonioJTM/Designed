@@ -29,7 +29,7 @@ const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const pdf = require('../../utils/pdf');
 
-const ESTADO = { disponible: 'En existencia', apartado: 'Apartado para un pedido', vendido: 'Vendido', desarmado: 'Bajado a conos' };
+const ESTADO = { disponible: 'En existencia', apartado: 'Apartado (pedido o envío)', vendido: 'Vendido', desarmado: 'Bajado a conos' };
 
 /** "REM-1789814460000-D0B2" → "REM-D0B2", como en las listas de la pantalla. */
 function folioCorto(folio) {
@@ -164,7 +164,8 @@ function _dibujarCarga(doc, c, veCostos) {
   if (c.bultos.length < Number(c.num_bultos)) {
     pdf.nota(doc,
       `La carga registró ${c.num_bultos} bultos; ${c.num_bultos - c.bultos.length} se quitaron después ` +
-      'a mano y ya no aparecen en la lista. Los totales de arriba son los de la carga.');
+      '(y sus kilos salieron del inventario, con su movimiento en el kardex) y ya no aparecen en la lista. ' +
+      'Los totales de arriba son los de la carga.');
   }
   pdf.nota(doc,
     'La columna "Hoy" dice cómo está cada bulto al generar este reporte: si sigue en existencia (y en qué ' +

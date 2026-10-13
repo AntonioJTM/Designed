@@ -162,9 +162,9 @@ async function entregarApartado(req, res, next) {
   } catch (err) { next(err); }
 }
 
-async function prepararEncargo(req, res, next) {
+async function modificarEncargo(req, res, next) {
   try {
-    const data = await service.prepararEncargo(Number(req.params.id), req.body ?? {}, req.auth?.sub);
+    const data = await service.modificarEncargo(Number(req.params.id), req.body ?? {});
     res.json({ data, error: null });
   } catch (err) { next(err); }
 }
@@ -185,5 +185,5 @@ module.exports = {
   resumen,
   crear, obtener, listar, misPedidos, cambiarEstado, cotizar,
   subirComprobante, verComprobante, eliminarComprobante,
-  apartados, abonarApartado, entregarApartado, prepararEncargo, encargos,
+  apartados, abonarApartado, entregarApartado, modificarEncargo, encargos,
 };

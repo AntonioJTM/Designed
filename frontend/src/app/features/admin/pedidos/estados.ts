@@ -14,11 +14,10 @@ export function etiquetaEstado(
   canal?: CanalVenta | null,
   encargo?: boolean | number | null
 ): string {
-  // Un PEDIDO (encargo) habla de sus pasos: por preparar, listo, en camino.
-  if (encargo) {
-    if (estado === 'en_preparacion') return 'Por preparar';
-    if (estado === 'listo') return 'Listo';
-    if (estado === 'enviado') return 'En camino';
+  // Un PEDIDO (encargo) sin entregar está EN ESPERA (2026-10-07: se modifica y
+  // se entrega cobrando; ya no lleva pasos de preparar ni de chofer).
+  if (encargo && (estado === 'en_preparacion' || estado === 'listo' || estado === 'enviado')) {
+    return 'En espera';
   }
   switch (estado) {
     case 'apartado': return 'Apartado';

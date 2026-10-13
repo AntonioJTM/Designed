@@ -6,7 +6,7 @@ import { ApiResponse } from '../models/auth.models';
 import { Paginado } from '../models/catalogo.models';
 import {
   ConfigEmpleadoInput,
-  DesgloseVentas,
+  ComisionesSemana,
   EmpleadoNomina,
   EstadoPeriodoNomina,
   NuevasHorasExtra,
@@ -110,12 +110,27 @@ export class NominaService {
       .pipe(map(data));
   }
 
-  /** Pedidos que forman la base comisionable de un empleado en el periodo. */
-  ventas(periodoId: number, usuarioId: number): Observable<DesgloseVentas> {
-    const params = new HttpParams().set('usuario_id', usuarioId);
+  /**
+   * El reporte de comisiones de la semana: qué venta paga cada quien y qué le
+   * falta por liquidar. Con `usuarioId`, solo esa persona.
+   */
+  comisiones(periodoId: number, usuarioId?: number): Observable<ComisionesSemana> {
+    let params = new HttpParams();
+    if (usuarioId) params = params.set('usuario_id', usuarioId);
     return this.http
-      .get<ApiResponse<DesgloseVentas>>(`${this.base}/periodos/${periodoId}/ventas`, { params })
+      .get<ApiResponse<ComisionesSemana>>(`${this.base}/periodos/${periodoId}/comisiones`, { params })
       .pipe(map(data));
+  }
+
+  /**
+   * La nómina de la semana en PDF: el resumen y un recibo por persona. Con
+   * `usuarioId`, solo el recibo de esa persona. Llega como Blob (el enlace
+   * normal no manda el token).
+   */
+  pdf(periodoId: number, usuarioId?: number): Observable<Blob> {
+    let params = new HttpParams();
+    if (usuarioId) params = params.set('usuario_id', usuarioId);
+    return this.http.get(`${this.base}/periodos/${periodoId}/pdf`, { params, responseType: 'blob' });
   }
 
   // ---- Conceptos manuales del recibo ----

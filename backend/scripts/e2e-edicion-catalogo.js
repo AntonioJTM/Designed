@@ -157,15 +157,16 @@ const ck = (n, ok, d) => {
     const [[{ quedan }]] = await db.query('SELECT COUNT(*) quedan FROM producto_variantes WHERE id = ?', [varVacio]);
     ck('y su presentación vacía con él', Number(quedan) === 0, quedan);
 
-    // Con un solo bulto capturado a mano (sin existencias ni kardex): antes la
-    // cascada lo borraba sin avisar.
+    // Con un solo bulto capturado a mano: antes la cascada lo borraba sin
+    // avisar. (Desde el 2026-10-07 el bulto a mano da entrada a sus kilos.)
     r = await api('POST', '/productos', {
       categoria_id: cat, unidad_medida_id: kgu, nombre: 'TMPED BULTO ' + SUF, grosor_calibre: '2/30',
       multipresentacion: true, precio_kg: 100,
     });
     const conBulto = r.data?.id;
     const varBulto = (r.data?.variantes ?? [])[0]?.id;
-    await api('POST', `/variantes/${varBulto}/codigos`, { codigo: 'TMPED-B-' + SUF, peso_kg: 19 });
+    const [[almBulto]] = await db.query('SELECT id FROM almacenes WHERE activo = 1 ORDER BY id LIMIT 1');
+    await api('POST', `/variantes/${varBulto}/codigos`, { codigo: 'TMPED-B-' + SUF, peso_kg: 19, almacen_id: almBulto.id });
     r = await api('GET', `/productos/${conBulto}/eliminacion`);
     ck('con un bulto ya NO se puede', r.data?.se_puede === false && /1 bulto/.test(r.data?.mensaje ?? ''), r.data?.mensaje);
     r = await api('DELETE', '/productos/' + conBulto);

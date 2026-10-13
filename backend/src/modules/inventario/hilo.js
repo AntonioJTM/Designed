@@ -227,13 +227,14 @@ async function bultosDeLote(productoId, lote) {
             pv.sku, pv.tipo_presentacion,
             r.folio AS carga_folio, DATE_FORMAT(COALESCE(r.fecha_ingreso, r.creado_en), '%Y-%m-%d') AS fecha_ingreso,
             vc.consumido_en, vc.consumido_tipo, vc.consumido_id,
-            ped.numero_pedido AS pedido_folio,
+            COALESCE(ped.numero_pedido, tra.folio) AS pedido_folio,
             cv.piezas_generadas AS conos_generados
        FROM variante_codigos vc
        JOIN producto_variantes pv  ON pv.id = vc.variante_id
        LEFT JOIN almacenes a       ON a.id = vc.almacen_id
        LEFT JOIN remesas r         ON r.id = vc.remesa_id
        LEFT JOIN pedidos ped       ON vc.consumido_tipo = 'pedido' AND ped.id = vc.consumido_id
+       LEFT JOIN traspasos tra     ON vc.consumido_tipo = 'traspaso' AND tra.id = vc.consumido_id
        LEFT JOIN variante_conversiones cv ON vc.consumido_tipo = 'conversion' AND cv.id = vc.consumido_id
       WHERE pv.producto_id = :id
         AND ${lote === null ? "(vc.lote IS NULL OR TRIM(vc.lote) = '')" : 'vc.lote = :lote'}

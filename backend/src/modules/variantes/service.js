@@ -3,6 +3,8 @@
 const model = require('./model');
 const productosModel = require('../productos/model');
 const tiposModel = require('../tipos-cliente/model');
+const almacenesModel = require('../almacenes/model');
+const inventarioModel = require('../inventario/model');
 const { AppError } = require('../../middlewares/error');
 const { paginado } = require('../../utils/query');
 
@@ -263,8 +265,15 @@ async function listarCodigos(varianteId) {
   return model.codigosDe(varianteId);
 }
 
-async function agregarCodigo(varianteId, datos) {
-  await obtener(varianteId);
+async function agregarCodigo(varianteId, datos, usuarioId = null) {
+  const variante = await obtener(varianteId);
+  if (variante.tipo_presentacion === 'cono') {
+    throw new AppError(422, 'NO_ES_PAQUETE', 'Los conos no llevan bultos: el bulto es del paquete.');
+  }
+  // Sus kilos entran al inventario: sin peso no se sabe cuánto entra.
+  if (!(Number(datos.peso_kg) > 0)) {
+    throw new AppError(422, 'FALTA_PESO', 'Escribe lo que pesa el bulto: esos kilos entran al inventario.');
+  }
   const cod = datos.codigo.trim();
   const dueno = await model.variantePorCodigo(cod);
   if (dueno && dueno !== varianteId) {
@@ -273,7 +282,31 @@ async function agregarCodigo(varianteId, datos) {
   if (dueno === varianteId) {
     throw new AppError(409, 'CODIGO_DUPLICADO', 'Esa variante ya tiene ese código');
   }
-  return model.agregarCodigo(varianteId, { ...datos, codigo: cod });
+  const almacenId = await _almacenDelBulto(varianteId, datos.almacen_id ?? null);
+  return model.agregarBultoConEntrada(varianteId, { ...datos, codigo: cod, almacen_id: almacenId }, usuarioId);
+}
+
+/**
+ * A QUÉ ALMACÉN entra un bulto capturado a mano (2026-10-07: "cuando tengo hilo
+ * en 2 lugares, que me pregunte a cuál de los 2 se va a cargar ese bulto"; y
+ * "sí se suman los kilos de la entrada de ese paquete"). Ahí queda el paquete
+ * y ahí se suman sus kilos.
+ *   · Si se dice, tiene que ser un almacén activo (422 ALMACEN_INVALIDO). Puede
+ *     ser cualquiera: es mercancía que entra.
+ *   · Si no se dice y el hilo está en un solo lugar, entra ahí.
+ *   · Si está en dos o más, o en ninguno, hay que decirlo (422 FALTA_ALMACEN).
+ */
+async function _almacenDelBulto(varianteId, elegido) {
+  if (elegido) {
+    const alm = await almacenesModel.obtener(elegido);
+    if (!alm || !Number(alm.activo)) throw new AppError(422, 'ALMACEN_INVALIDO', 'Ese almacén no existe o está inactivo.');
+    return Number(elegido);
+  }
+  const donde = await model.almacenesConExistencia(varianteId);
+  if (donde.length === 1) return donde[0].almacen_id;
+  throw new AppError(422, 'FALTA_ALMACEN', donde.length > 1
+    ? `Este hilo está en ${donde.map((d) => `«${d.almacen}»`).join(' y ')}: di a cuál de ellos entra el bulto.`
+    : 'Di a qué almacén entra el bulto: ahí se suman sus kilos.');
 }
 
 /**
@@ -298,10 +331,38 @@ async function resolverCodigo(codigo) {
   return { variante, bulto };
 }
 
-async function eliminarCodigo(codigoId) {
+/**
+ * Quita un bulto. "Un bulto que metió kilos se los lleva al quitarlo"
+ * (usuario, 2026-10-07): el que llegó en una carga del proveedor y el capturado
+ * a mano desde ese día SACAN sus kilos del almacén donde están, y solo si siguen
+ * disponibles (uno vendido, apartado o bajado a conos ya no está para sacarlo) y
+ * no vienen en camino en un traspaso. Así, quitar un paquete con el código mal y
+ * volverlo a capturar bien deja el inventario igual. Los capturados a mano ANTES
+ * nunca metieron kilos: solo borran su registro. Devuelve los kilos que salieron.
+ */
+async function eliminarCodigo(codigoId, usuarioId = null) {
   const c = await model.obtenerCodigo(codigoId);
   if (!c) throw new AppError(404, 'NO_ENCONTRADO', 'Código no encontrado');
-  await model.eliminarCodigo(codigoId);
+  const metioKilos = c.remesa_id != null || (await model.bultoConEntrada(codigoId));
+  if (!metioKilos) {
+    await model.eliminarCodigo(codigoId);
+    return { salieron_kg: 0 };
+  }
+  if (c.estado && c.estado !== 'disponible') {
+    const que = { vendido: 'ya se vendió', apartado: 'está apartado para un pedido', desarmado: 'ya se bajó a conos' };
+    throw new AppError(409, 'BULTO_NO_DISPONIBLE', `El bulto ${c.codigo} ${que[c.estado] ?? 'no está disponible'}: ya no se puede quitar.`);
+  }
+  const u = await inventarioModel.ubicacionBulto(null, codigoId);
+  if (u?.en_camino_folio) {
+    throw new AppError(409, 'PAQUETE_EN_CAMINO',
+      `El bulto ${c.codigo} viene en camino (${u.en_camino_folio}): recibe el envío antes de quitarlo.`);
+  }
+  const r = await model.quitarBultoConSalida(c, usuarioId);
+  if (r?.error === 'STOCK_INSUFICIENTE') {
+    throw new AppError(409, 'STOCK_INSUFICIENTE',
+      `En «${r.almacen}» hay ${r.hay} kg de este hilo y el bulto pesa ${r.kg} kg: ajusta el inventario antes de quitarlo.`);
+  }
+  return { salieron_kg: r?.kg ?? 0, almacen: r?.almacen ?? null };
 }
 
 module.exports = {

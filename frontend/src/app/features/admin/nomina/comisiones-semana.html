@@ -1,0 +1,134 @@
+@if (error()) {
+  <p class="alert" style="margin: 0">{{ error() }}</p>
+} @else if (!datos()) {
+  <p class="sin">Cargando…</p>
+} @else {
+  @if (!usuarioId()) {
+    <p class="regla">
+      @if (datos()!.regla === 'anterior') {
+        Esta semana se pagó con la regla anterior: la comisión de cada venta, en la semana en que se vendió.
+      } @else {
+        Cada venta paga su comisión <b>una vez, completa</b>, en la nómina de la semana en que quedó pagada: la de
+        contado el día que se vende; la fiada, el apartado y el pedido cuando se terminan de pagar. Lo que se liquida
+        en una semana ya cerrada entra en la siguiente. Sobre la venta neta: sin IVA ni envío.
+      }
+    </p>
+  }
+
+  @for (v of conComision(); track v.usuario_id) {
+    <div class="vendedor">
+      <div class="vendedor-head">
+        @if (!usuarioId()) {
+          <h3>{{ v.usuario }} <span class="sub3" style="text-transform: capitalize">· {{ v.rol }}</span></h3>
+        } @else {
+          <h3>Comisión de la semana</h3>
+        }
+        <span class="cifras">
+          @if (v.porcentaje > 0) { {{ v.porcentaje }}% · } @else { sin comisión · }
+          {{ v.ventas.length }} {{ v.ventas.length === 1 ? 'venta pagada' : 'ventas pagadas' }} ·
+          {{ v.ventas_netas | dinero }} · comisión <b>{{ v.comision | dinero }}</b>
+        </span>
+      </div>
+
+      @if (v.ventas.length === 0) {
+        <p class="sin">Ninguna venta suya quedó pagada esta semana.</p>
+      } @else {
+        <div class="tabla-scroll">
+          <table class="grid" style="min-width: 620px">
+            <thead>
+              <tr>
+                <th>Venta</th>
+                <th>Tipo</th>
+                <th>Quedó pagada</th>
+                <th class="num">Total</th>
+                <th class="num">Venta neta</th>
+                <th class="num">Comisión</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (x of v.ventas; track $index) {
+                <tr>
+                  <td>
+                    @if (x.pedido_id) {
+                      <a class="mono" [routerLink]="['/admin/ventas', x.pedido_id]" [title]="x.numero_pedido">{{ x.numero_pedido | folio }}</a>
+                    } @else {
+                      <span class="mono" [title]="x.numero_pedido">{{ x.numero_pedido | folio }}</span>
+                    }
+                    <div class="sub3">{{ x.cliente || 'sin cliente' }}</div>
+                  </td>
+                  <td>
+                    <span [class]="'pill ' + tono(x.tipo)">{{ tipo(x.tipo) }}</span>
+                    <div class="sub3">vendida {{ dia(x.vendida_en) }}</div>
+                  </td>
+                  <td>
+                    @if (x.liquidada_en) { {{ dia(x.liquidada_en) }} } @else { <span class="sub3">al venderla (regla anterior)</span> }
+                  </td>
+                  <td class="num">{{ x.total | dinero }}</td>
+                  <td class="num">
+                    {{ x.venta_neta | dinero }}
+                    @if (noCuenta(x) > 0) { <div class="sub3">sin {{ noCuenta(x) | dinero }} de envío o IVA</div> }
+                  </td>
+                  <td class="num"><b>{{ x.comision | dinero }}</b></td>
+                </tr>
+              }
+              <tr>
+                <td colspan="3"><b>Se paga esta semana</b></td>
+                <td class="num">{{ suma(v.ventas, 'total') | dinero }}</td>
+                <td class="num"><b>{{ suma(v.ventas, 'venta_neta') | dinero }}</b></td>
+                <td class="num"><b>{{ suma(v.ventas, 'comision') | dinero }}</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      }
+
+      @if (v.por_liquidar.length > 0) {
+        <h4>Por liquidar al día de hoy · {{ v.por_liquidar_comision | dinero }} de comisión cuando se terminen de pagar</h4>
+        <div class="tabla-scroll">
+          <table class="grid" style="min-width: 620px">
+            <thead>
+              <tr>
+                <th>Venta</th>
+                <th>Tipo</th>
+                <th class="num">Total</th>
+                <th class="num">Pagado</th>
+                <th class="num">Debe</th>
+                <th class="num">Comisión</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (x of v.por_liquidar; track $index) {
+                <tr>
+                  <td>
+                    <a class="mono" [routerLink]="['/admin/ventas', x.pedido_id]" [title]="x.numero_pedido">{{ x.numero_pedido | folio }}</a>
+                    <div class="sub3">{{ x.cliente || 'sin cliente' }}</div>
+                  </td>
+                  <td>
+                    <span [class]="'pill ' + tono(x.tipo)">{{ tipo(x.tipo) }}</span>
+                    <div class="sub3">vendida {{ dia(x.vendida_en) }}</div>
+                  </td>
+                  <td class="num">{{ x.total | dinero }}</td>
+                  <td class="num">{{ x.pagado | dinero }}</td>
+                  <td class="num debe">{{ x.falta | dinero }}</td>
+                  <td class="num sub3">{{ x.comision | dinero }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      @if (v.proxima_nomina.ventas > 0) {
+        <p class="nota-chica">
+          {{ v.proxima_nomina.ventas }} {{ v.proxima_nomina.ventas === 1 ? 'venta ya pagada entra' : 'ventas ya pagadas entran' }}
+          en la próxima nómina que se calcule ({{ v.proxima_nomina.comision | dinero }} de comisión).
+        </p>
+      }
+    </div>
+  } @empty {
+    <p class="sin">{{ usuarioId() ? 'No recibe comisión ni tiene ventas pendientes.' : 'Nadie cobra comisión esta semana.' }}</p>
+  }
+
+  @if (!usuarioId() && sinComision().length > 0) {
+    <p class="nota-chica">Sin comisión ni ventas esta semana: {{ sinComision().join(', ') }}.</p>
+  }
+}

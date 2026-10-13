@@ -1,6 +1,8 @@
 'use strict';
 
 const service = require('./service');
+const reporte = require('./reporte');
+const pdf = require('../../utils/pdf');
 const { parsePagination, parseBool } = require('../../utils/query');
 
 // ---- Configuración del personal ----
@@ -100,15 +102,27 @@ async function cambiarEstado(req, res, next) {
   }
 }
 
-async function ventasDelPeriodo(req, res, next) {
+async function comisiones(req, res, next) {
   try {
-    const data = await service.ventasDelPeriodo(
+    const data = await service.comisionesDelPeriodo(
       Number(req.params.id),
-      Number(req.query.usuario_id)
+      req.query.usuario_id ? Number(req.query.usuario_id) : null
     );
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);
+  }
+}
+
+/** La nómina de la semana en PDF (o solo el recibo de una persona). */
+async function pdfNomina(req, res, next) {
+  try {
+    const { buffer, nombre } = await reporte.pdfNomina(Number(req.params.id), {
+      usuarioId: req.query.usuario_id ? Number(req.query.usuario_id) : null,
+    });
+    pdf.enviar(res, buffer, nombre);
+  } catch (err) {
+    next(err);
   }
 }
 
@@ -163,7 +177,8 @@ module.exports = {
   listarPeriodos,
   calcular,
   cambiarEstado,
-  ventasDelPeriodo,
+  comisiones,
+  pdf: pdfNomina,
   agregarConcepto,
   eliminarConcepto,
 };

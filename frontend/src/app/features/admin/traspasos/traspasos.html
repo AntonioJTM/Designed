@@ -69,7 +69,7 @@
               <div class="traspaso-acciones">
                 @if (t.estado === 'solicitado' && puedeEnviar()) {
                   <button type="button" class="btn btn-primary btn-sm" (click)="enviarTraspaso(t)">
-                    Enviar
+                    {{ guardadosDe(t) > 0 ? 'Seguir escaneando' : 'Enviar' }}
                   </button>
                 } @else if (t.estado === 'en_transito' && puedeRecibir()) {
                   <button type="button" class="btn btn-primary btn-sm" (click)="abrirRecepcion(t)">
@@ -88,6 +88,9 @@
                   } @else {
                     <b>{{ l.cantidad | cantidad: 'kg' }}</b> · {{ etiquetaHilo(l) }}
                     @if (paquetesTexto(l); as p) { <span class="muted">({{ p }})</span> }
+                    @if ((l.guardados ?? []).length > 0) {
+                      <span class="pill azul">{{ l.guardados!.length }} escaneados</span>
+                    }
                   }
                 </li>
               }
@@ -452,7 +455,8 @@
 
 <!-- Enviar: se escanean los paquetes que suben a la camioneta. -->
 @if (porEnviar(); as t) {
-  <app-envio-modal [traspaso]="t" (cerrado)="porEnviar.set(null)" (enviado)="alEnviar($event)" />
+  <app-envio-modal [traspaso]="t" (cerrado)="porEnviar.set(null)" (enviado)="alEnviar($event)"
+                   (guardado)="alGuardar($event)" />
 }
 
 <!-- Cancelar un traspaso. Cerrar sin confirmar NO cancela nada. -->
@@ -472,6 +476,9 @@
             Ya salió: la mercancía <b>regresa a {{ t.almacen_origen }}</b> y sus bultos vuelven allá.
           } @else {
             Todavía no sale: se <b>libera lo apartado</b> en {{ t.almacen_origen }}.
+            @if (guardadosDe(t) > 0) {
+              Los {{ guardadosDe(t) }} paquetes que ya se habían escaneado quedan libres otra vez (se pueden vender).
+            }
           }
         </p>
         @if (error()) { <p class="alert">{{ error() }}</p> }

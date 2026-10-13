@@ -85,6 +85,9 @@ const traspasoSchema = z
 const envioSchema = z
   .object({
     codigos: z.array(z.string().trim().min(1).max(60)).max(2000).optional(),
+    // Los que el sistema tenía en otro almacén y quien surte confirmó que sí
+    // están aquí: se pasan al origen con sus kilos (2026-10-07).
+    encontrados: z.array(z.string().trim().min(1).max(60)).max(2000).optional(),
     notas: z.string().trim().max(1000).optional(),
   })
   .strict();
@@ -145,6 +148,15 @@ router.post('/desarmes', ...soloStaff, requirePermiso('hacer:bajar_conos'), vali
 // recibir; queda guardado su nombre y la hora.
 router.post('/traspasos', ...soloStaff, requirePermiso('ver:surtir'), validate(traspasoSchema), controller.solicitarTraspaso);
 router.post('/traspasos/:id/enviar', ...soloStaff, requirePermiso('hacer:enviar_traspaso'), validate(envioSchema), controller.enviarTraspaso);
+// Guardar lo escaneado a medio surtir (la lista completa): esos paquetes quedan
+// apartados para este envío hasta que se envíe o se cancele.
+const escaneosSchema = z
+  .object({
+    codigos: z.array(z.string().trim().min(1).max(60)).max(2000),
+    encontrados: z.array(z.string().trim().min(1).max(60)).max(2000).optional(),
+  })
+  .strict();
+router.put('/traspasos/:id/escaneos', ...soloStaff, requirePermiso('hacer:enviar_traspaso'), validate(escaneosSchema), controller.guardarEscaneos);
 router.post('/traspasos/:id/recibir', ...soloStaff, requirePermiso('hacer:recibir_traspaso'), validate(recepcionSchema), controller.recibirTraspaso);
 router.post('/traspasos/:id/cancelar', ...soloStaff, requirePermiso('ver:surtir'), validate(cancelacionSchema), controller.cancelarTraspaso);
 router.put('/configuracion', ...soloStaff, requirePermiso('ver:inventario'), validate(configurarSchema), controller.configurar);

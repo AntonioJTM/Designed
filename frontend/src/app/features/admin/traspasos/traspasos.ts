@@ -416,6 +416,22 @@ export class Traspasos {
     this.porEnviar.set(t);
   }
 
+  /** Cuántos paquetes lleva escaneados y guardados (a medio surtir). */
+  guardadosDe(t: Traspaso): number {
+    return (t.lineas ?? []).reduce((s, l) => s + (l.guardados?.length ?? 0), 0);
+  }
+
+  /** Se dejó a medias: lo escaneado quedó apartado y el envío, en espera. */
+  alGuardar(r: { folio: string; guardados: number; kg: number }): void {
+    this.porEnviar.set(null);
+    this.mensaje.set(
+      `${r.folio}: quedaron guardados ${r.guardados} ${r.guardados === 1 ? 'paquete' : 'paquetes'} ` +
+        `(${r.kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg). Están apartados para este envío: ` +
+        'no se pueden vender. Sigue escaneando cuando quieras; si se cancela el traspaso, quedan libres.'
+    );
+    this.cargarHistorial();
+  }
+
   /** Ya salió: dice qué salió de verdad (lo escaneado) y recarga. */
   alEnviar(r: ResultadoTraspaso): void {
     this.porEnviar.set(null);
@@ -580,6 +596,10 @@ export class Traspasos {
 
   /** Lo que le falta a este traspaso, dicho en una frase. */
   siguientePaso(t: Traspaso): string {
+    const g = this.guardadosDe(t);
+    if (t.estado === 'solicitado' && g > 0) {
+      return `En espera: van ${g} ${g === 1 ? 'paquete escaneado' : 'paquetes escaneados'} (apartados). Falta terminar y enviarlo.`;
+    }
     if (t.estado === 'solicitado') return 'Falta enviarlo desde el origen.';
     if (t.estado === 'en_transito') return 'Falta que la sucursal acepte que lo recibió.';
     return '';

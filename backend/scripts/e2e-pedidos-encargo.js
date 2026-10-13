@@ -7,14 +7,16 @@
  *
  *   · se toma en el mostrador con el cliente; la mercancía se APARTA (no se
  *     descuenta) y nadie más la vende;
- *   · queda LISTO al PREPARARLO: se escanean los paquetes que van (quedan
- *     apartados para él) y se pesa lo que va por kilo; el total queda con el
- *     peso real (si pesó menos de lo que pagó, se le devuelve al entregar);
- *   · pasa por preparar → listo → en camino (solo si lo lleva el chofer);
+ *   · queda EN ESPERA (2026-10-07: "mejor que sean notas en espera, porque el
+ *     cliente quiere modificar su pedido, agregar o quitar cosas"): se MODIFICA
+ *     las veces que haga falta —quitar o agregar hilos, cambiar kilos, escanear
+ *     sus paquetes (quedan apartados para él), la entrega y las notas— y lo
+ *     apartado sigue a lo que lleva; ya no hay pasos de preparar ni de chofer;
  *   · al ENTREGARLO se cobra lo que falta (el efectivo entra al turno, con
- *     cambio) o se fía, y ahí sale del inventario;
- *   · cancelado libera lo apartado y devuelve lo que dejó; se reactiva solo como
- *     "por preparar";
+ *     cambio) o se fía, y ahí sale del inventario; si pesó menos de lo que
+ *     pagó, se le devuelve;
+ *   · cancelado libera lo apartado y devuelve lo que dejó; se reactiva solo
+ *     "en espera";
  *   · los paquetes escaneados al tomar un pedido o un APARTADO quedan apartados
  *     y pasan a vendidos al entregarlo.
  *
@@ -86,7 +88,9 @@ const ck = (n, ok, d) => {
     const almacen = (await api('GET', '/caja/cajas')).data.find((c) => c.activo).almacen_id;
     const cj = (await api('POST', '/caja/cajas', { almacen_id: almacen, nombre: 'TMPPE Caja ' + SUF })).data;
     const sesion = (await api('POST', '/caja/sesiones', { caja_id: cj.id, monto_inicial: 0 })).data;
-    await api('POST', '/inventario/movimientos', { variante_id: paquete.id, almacen_id: almacen, tipo: 'entrada', cantidad: 100, motivo: 'TMPPE' });
+    // 100 kg en total: 11.85 sueltos y los 88.15 de los cinco paquetes (el bulto a
+    // mano da entrada a sus kilos, 2026-10-07).
+    await api('POST', '/inventario/movimientos', { variante_id: paquete.id, almacen_id: almacen, tipo: 'entrada', cantidad: 11.85, motivo: 'TMPPE' });
     const cli = (await api('POST', '/clientes', { nombre: 'TMPPE Mercería ' + SUF, telefono: '4450000000', limite_credito: 5000 })).data;
     ck('hilo a $100/kg con 100 kg, caja, turno y cliente con crédito', !!paquete && !!sesion?.id && !!cli?.id);
 
@@ -125,7 +129,7 @@ const ck = (n, ok, d) => {
       items: [{ variante_id: paquete.id, cantidad: 38 }],
     });
     const p1 = r.data;
-    ck('se toma: queda "por preparar"', r.status === 201 && p1?.estado === 'en_preparacion' && Number(p1?.encargo) === 1, r.error ?? p1?.estado);
+    ck('se toma: queda "en espera"', r.status === 201 && p1?.estado === 'en_preparacion' && Number(p1?.encargo) === 1, r.error ?? p1?.estado);
     ck('total $3,800 (aproximado) y para el 15 de enero', Number(p1?.total) === 3800 && p1?.entrega_para === '2030-01-15', [p1?.total, p1?.entrega_para]);
     ck('la mercancía se aparta, no se descuenta', JSON.stringify(await inv(paquete.id, almacen)) === JSON.stringify({ cantidad: 100, reservada: 38 }),
       await inv(paquete.id, almacen));
@@ -136,20 +140,25 @@ const ck = (n, ok, d) => {
     ck('aparece en Pedidos: falta todo, ≈ 2 paquetes sin escanear', enLista && enLista.falta === 3800 && enLista.hilos?.[0]?.paquetes === 2 &&
       enLista.hilos?.[0]?.escaneados === 0 && enLista.telefono === '4450000000', enLista && { falta: enLista.falta, hilos: enLista.hilos });
 
-    console.log('\n=== 3. Se PREPARA: se escanean los paquetes que van ===');
+    console.log('\n=== 3. Está EN ESPERA: no hay pasos, se modifica ===');
     const linea1 = (await api('GET', `/pedidos/${p1.id}`)).data.detalle[0].id;
     r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'listo' });
-    ck('marcarlo listo a mano no se puede: se prepara (409)', r.status === 409 && r.error?.code === 'PEDIDO_SE_PREPARA', r.error?.code);
-    r = await api('POST', `/pedidos/${p1.id}/entregar`, { pagos: [{ metodo_pago_id: efectivo.id, monto: 3800 }], sesion_caja_id: sesion.id });
-    ck('sin prepararlo no se entrega (409)', r.status === 409 && r.error?.code === 'PEDIDO_SIN_PREPARAR', r.error?.code);
-    r = await api('POST', `/pedidos/${p1.id}/preparar`, { lineas: [{ detalle_id: linea1, codigos: [] }] });
-    ck('el paquete sin escanear no queda listo: 422 SIN_ESCANEAR', r.status === 422 && r.error?.code === 'SIN_ESCANEAR', r.error?.code);
-    r = await api('POST', `/pedidos/${p1.id}/preparar`, { lineas: [{ detalle_id: linea1, codigos: ['NO-EXISTE-' + SUF] }] });
+    ck('marcarlo listo ya no existe: está en espera (409)', r.status === 409 && r.error?.code === 'PEDIDO_EN_ESPERA', r.error?.code);
+    r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'enviado' });
+    ck('ni "salió con el chofer" (409)', r.status === 409 && r.error?.code === 'PEDIDO_EN_ESPERA', r.error?.code);
+    r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'entregado' });
+    ck('entregarlo a mano no se puede: se entrega cobrando (409)', r.status === 409 && r.error?.code === 'PEDIDO_SE_ENTREGA', r.error?.code);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [] });
+    ck('dejarlo sin nada no: se cancela (422 PEDIDO_VACIO)', r.status === 422 && r.error?.code === 'PEDIDO_VACIO', r.error?.code);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: 999999999, cantidad: 5 }] });
+    ck('una línea que no es suya: 422', r.status === 422 && r.error?.code === 'LINEA_INVALIDA', r.error?.code);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1, codigos: ['NO-EXISTE-' + SUF] }] });
     ck('un código que no existe: 422', r.status === 422 && r.error?.code === 'CODIGO_DESCONOCIDO', r.error?.code);
-    r = await api('POST', `/pedidos/${p1.id}/preparar`, { lineas: [{ detalle_id: linea1, codigos: [cod[0], cod[0]] }] });
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1, codigos: [cod[0], cod[0]] }] });
     ck('el mismo paquete dos veces: 422', r.status === 422 && r.error?.code === 'BULTO_REPETIDO', r.error?.code);
-    r = await api('POST', `/pedidos/${p1.id}/preparar`, { lineas: [{ detalle_id: linea1, codigos: [cod[0], cod[1]] }] });
-    ck('con 2 paquetes (19.2 + 18.6): listo con 37.8 kg y $3,780', r.status === 200 && r.data?.estado === 'listo' &&
+
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1, codigos: [cod[0], cod[1]] }] });
+    ck('se escanean 2 paquetes (19.2 + 18.6): 37.8 kg y $3,780, sigue en espera', r.status === 200 && r.data?.estado === 'en_preparacion' &&
       Number(r.data?.detalle?.[0]?.cantidad) === 37.8 && Number(r.data?.total) === 3780 && r.data?.total_antes === 3800,
       r.error ?? [r.data?.estado, r.data?.detalle?.[0]?.cantidad, r.data?.total]);
     ck('lo apartado sigue a los kilos (37.8)', (await inv(paquete.id, almacen)).reservada === 37.8, await inv(paquete.id, almacen));
@@ -160,21 +169,47 @@ const ck = (n, ok, d) => {
     });
     ck('el mostrador no vende un paquete apartado: 409 que dice para quién', r.status === 409 && r.error?.code === 'BULTO_NO_DISPONIBLE' &&
       /apartado para el pedido/.test(r.error?.message ?? ''), r.error);
-    r = await api('GET', '/pedidos/encargos?estado=listo');
+    r = await api('GET', '/pedidos/encargos');
     enLista = r.data?.items?.find((x) => x.id === p1.id);
-    ck('en Pedidos: listo, 2 paquetes escaneados', enLista?.hilos?.[0]?.escaneados === 2 && enLista?.hilos?.[0]?.paquetes === 2, enLista?.hilos);
+    ck('en Pedidos: 2 paquetes escaneados', enLista?.hilos?.[0]?.escaneados === 2 && enLista?.hilos?.[0]?.paquetes === 2, enLista?.hilos);
 
-    r = await api('POST', `/pedidos/${p1.id}/preparar`, { lineas: [{ detalle_id: linea1, codigos: [cod[1], cod[2]] }] });
-    ck('se corrige: van el 2 y el 3 (38.7 kg, $3,870)', r.status === 200 && Number(r.data?.total) === 3870 &&
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1, codigos: [cod[1], cod[2]] }] });
+    ck('se cambia un paquete: van el 2 y el 3 (38.7 kg, $3,870)', r.status === 200 && Number(r.data?.total) === 3870 &&
       r.data?.detalle?.[0]?.bultos?.map((b) => b.codigo).sort().join() === [cod[1], cod[2]].sort().join(), r.error ?? r.data?.detalle?.[0]?.bultos);
     ck('el 1 se suelta y el 3 se aparta', (await estadoBulto(cod[0])) === 'disponible' && (await estadoBulto(cod[2])) === 'apartado');
     ck('apartado: 38.7', (await inv(paquete.id, almacen)).reservada === 38.7, await inv(paquete.id, almacen));
-    r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'enviado' });
-    ck('lo recoge el cliente: no sale con el chofer (409)', r.status === 409 && r.error?.code === 'PEDIDO_SE_RECOGE', r.error?.code);
-    r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'entregado' });
-    ck('entregarlo a mano no se puede: se entrega cobrando (409)', r.status === 409 && r.error?.code === 'PEDIDO_SE_ENTREGA', r.error?.code);
 
-    console.log('\n=== 4. Paga una parte por transferencia y el resto al recogerlo ===');
+    console.log('\n=== 4. El cliente AGREGA y luego QUITA un hilo ===');
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1 }, { variante_id: kilo.id, codigos: [cod[0]] }] });
+    ck('un paquete de otro hilo en la línea nueva: 422', r.status === 422 && r.error?.code === 'BULTO_DE_OTRO_HILO', r.error?.code);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1 }, { variante_id: kilo.id, cantidad: 999 }] });
+    ck('si no hay tanto del nuevo: 409 STOCK_INSUFICIENTE', r.status === 409 && r.error?.code === 'STOCK_INSUFICIENTE', r.error?.code);
+    ck('…y nada se movió', (await inv(kilo.id, almacen)).reservada === 0 && (await inv(paquete.id, almacen)).reservada === 38.7);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1 }, { variante_id: kilo.id, cantidad: 5 }] });
+    ck('agrega 5 kg de negro a $80: $3,870 + $400 = $4,270', r.status === 200 && Number(r.data?.total) === 4270 && r.data?.detalle?.length === 2 &&
+      r.data?.cambios?.some((c) => /Se agregó/.test(c)), r.error ?? [r.data?.total, r.data?.cambios]);
+    ck('el rojo conserva sus 2 paquetes', r.data?.detalle?.find((d) => d.id === linea1)?.bultos?.length === 2);
+    ck('el negro queda apartado (5 kg)', (await inv(kilo.id, almacen)).reservada === 5, await inv(kilo.id, almacen));
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1 }] });
+    ck('lo quita: vuelve a $3,870', r.status === 200 && Number(r.data?.total) === 3870 && r.data?.detalle?.length === 1 &&
+      r.data?.cambios?.some((c) => /Se quitó/.test(c)), r.error ?? [r.data?.total, r.data?.cambios]);
+    ck('el negro queda libre otra vez', (await inv(kilo.id, almacen)).reservada === 0, await inv(kilo.id, almacen));
+
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1 }], metodo_entrega: 'envio' });
+    ck('con el chofer y sin a dónde: 422 FALTA_DIRECCION', r.status === 422 && r.error?.code === 'FALTA_DIRECCION', r.error?.code);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, {
+      lineas: [{ detalle_id: linea1 }], metodo_entrega: 'envio', entrega_direccion: 'Calle TMPPE 5', costo_envio: 50,
+    });
+    ck('ahora lo lleva el chofer: + $50 de envío = $3,920', r.status === 200 && Number(r.data?.total) === 3920 &&
+      r.data?.entrega_direccion === 'Calle TMPPE 5', r.error ?? [r.data?.total, r.data?.entrega_direccion]);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, {
+      lineas: [{ detalle_id: linea1 }], metodo_entrega: 'recoger', entrega_para: '2030-01-20', notas: 'TMPPE mejor pasa él',
+    });
+    ck('mejor pasa él, otro día: sin envío ($3,870), sin dirección, para el 20', r.status === 200 && Number(r.data?.total) === 3870 &&
+      r.data?.entrega_direccion == null && r.data?.entrega_para === '2030-01-20' && r.data?.notas === 'TMPPE mejor pasa él',
+      r.error ?? [r.data?.total, r.data?.entrega_direccion, r.data?.entrega_para, r.data?.notas]);
+
+    console.log('\n=== 5. Paga una parte por transferencia y el resto al recogerlo ===');
     r = await api('POST', `/pedidos/${p1.id}/abonos`, { monto: 500, metodo_pago_id: transferencia.id, referencia: 'SPEI-TMPPE' });
     ck('abona $500 por transferencia', r.status === 201 && r.data?.pendiente === 3370, r.error ?? r.data);
     r = await api('POST', `/pedidos/${p1.id}/entregar`, { pagos: [{ metodo_pago_id: efectivo.id, monto: 1000 }], sesion_caja_id: sesion.id });
@@ -186,12 +221,12 @@ const ck = (n, ok, d) => {
       await inv(paquete.id, almacen));
     ck('sus paquetes quedan VENDIDOS', (await estadoBulto(cod[1])) === 'vendido' && (await estadoBulto(cod[2])) === 'vendido');
     ck('al cajón entran $3,370 como ingreso', JSON.stringify(await caja(sesion.id)) === JSON.stringify(['ingreso:3370']), await caja(sesion.id));
-    r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'listo' });
-    ck('entregado ya no regresa a prepararse (409)', r.status === 409 && r.error?.code === 'PEDIDO_YA_ENTREGADO', r.error?.code);
-    r = await api('POST', `/pedidos/${p1.id}/preparar`, { lineas: [{ detalle_id: linea1, codigos: [cod[0]] }] });
-    ck('ni se vuelve a preparar (409)', r.status === 409 && r.error?.code === 'NO_SE_PREPARA', r.error?.code);
+    r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'en_preparacion' });
+    ck('entregado ya no regresa a estar en espera (409)', r.status === 409 && r.error?.code === 'PEDIDO_YA_ENTREGADO', r.error?.code);
+    r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1 }] });
+    ck('ni se modifica (409)', r.status === 409 && r.error?.code === 'NO_SE_MODIFICA', r.error?.code);
 
-    console.log('\n=== 5. Por kilo: "6 conos de negro", lo lleva el chofer y se fía ===');
+    console.log('\n=== 6. Por kilo: "6 conos de negro", lo lleva el chofer y se fía ===');
     r = await api('POST', '/pedidos', {
       ...base, cliente_id: cli.id, metodo_entrega: 'envio', entrega_direccion: 'Calle TMPPE 12, Moroleón', costo_envio: 50,
       items: [{ variante_id: kilo.id, cantidad: 10, piezas: 6 }],
@@ -200,16 +235,12 @@ const ck = (n, ok, d) => {
     ck('pedido con chofer: ≈ $800 + $50 de envío', r.status === 201 && Number(p2?.total) === 850 && p2?.entrega_direccion === 'Calle TMPPE 12, Moroleón',
       r.error ?? [p2?.total, p2?.entrega_direccion]);
     const linea2 = p2.detalle[0].id;
-    r = await api('PATCH', `/pedidos/${p2.id}/estado`, { estado: 'enviado' });
-    ck('sin prepararlo no sale con el chofer (409)', r.status === 409 && r.error?.code === 'PEDIDO_SE_PREPARA', r.error?.code);
-    r = await api('POST', `/pedidos/${p2.id}/preparar`, { lineas: [{ detalle_id: linea2, cantidad: 999 }] });
+    r = await api('PUT', `/pedidos/${p2.id}/encargo`, { lineas: [{ detalle_id: linea2, cantidad: 999 }] });
     ck('si no hay tanto, no queda: 409 STOCK_INSUFICIENTE', r.status === 409 && r.error?.code === 'STOCK_INSUFICIENTE', r.error?.code);
-    r = await api('POST', `/pedidos/${p2.id}/preparar`, { lineas: [{ detalle_id: linea2, cantidad: 9.5, piezas: 6 }] });
-    ck('se pesan: 9.5 kg → $760 + $50 = $810', r.status === 200 && Number(r.data?.total) === 810 && r.data?.falta === 810 &&
+    r = await api('PUT', `/pedidos/${p2.id}/encargo`, { lineas: [{ detalle_id: linea2, cantidad: 9.5, piezas: 6 }] });
+    ck('se pesan: 9.5 kg → $760 + $50 = $810 (el envío se queda)', r.status === 200 && Number(r.data?.total) === 810 && r.data?.falta === 810 &&
       Number(r.data?.detalle?.[0]?.piezas) === 6, r.error ?? [r.data?.total, r.data?.falta]);
     ck('lo apartado del negro: 9.5', (await inv(kilo.id, almacen)).reservada === 9.5, await inv(kilo.id, almacen));
-    r = await api('PATCH', `/pedidos/${p2.id}/estado`, { estado: 'enviado' });
-    ck('ya preparado, sale con el chofer', r.status === 200 && r.data?.estado === 'enviado', r.error);
     r = await api('POST', `/pedidos/${p2.id}/entregar`, { a_credito: 810 });
     ck('se entrega fiado: queda pendiente de pago', r.status === 200 && r.data?.estado === 'pendiente', r.error ?? r.data?.estado);
     const [[cargo]] = await db.query("SELECT monto FROM credito_movimientos WHERE pedido_id = ? AND tipo = 'cargo'", [p2.id]);
@@ -217,16 +248,16 @@ const ck = (n, ok, d) => {
     ck('sale del inventario lo que pesó (40.5 kg)', JSON.stringify(await inv(kilo.id, almacen)) === JSON.stringify({ cantidad: 40.5, reservada: 0 }),
       await inv(kilo.id, almacen));
 
-    console.log('\n=== 6. Pagó todo por adelantado y pesó MENOS ===');
+    console.log('\n=== 7. Pagó todo por adelantado y pesó MENOS ===');
     r = await api('POST', '/pedidos', {
       ...base, cliente_id: cli.id, items: [{ variante_id: kilo.id, cantidad: 10 }],
       pagos: [{ metodo_pago_id: efectivo.id, monto: 800 }],
     });
     const p4 = r.data;
     ck('deja los $800 completos', r.status === 201 && (await caja(sesion.id)).includes('venta:800'), r.error ?? await caja(sesion.id));
-    r = await api('POST', `/pedidos/${p4.id}/preparar`, { lineas: [{ detalle_id: p4.detalle[0].id, cantidad: 9.2 }] });
+    r = await api('PUT', `/pedidos/${p4.id}/encargo`, { lineas: [{ detalle_id: p4.detalle[0].id, cantidad: 9.2 }] });
     ck('pesa 9.2 kg: $736, le quedan $64 a favor', r.status === 200 && Number(r.data?.total) === 736 && r.data?.a_favor === 64, r.error ?? [r.data?.total, r.data?.a_favor]);
-    r = await api('GET', '/pedidos/encargos?estado=listo');
+    r = await api('GET', '/pedidos/encargos');
     ck('Pedidos dice "a favor $64"', r.data?.items?.some((x) => x.id === p4.id && x.a_favor === 64 && x.falta === 0));
     r = await api('POST', `/pedidos/${p4.id}/entregar`, {});
     ck('sin turno para devolverle: 409 FALTA_SESION_CAJA', r.status === 409 && r.error?.code === 'FALTA_SESION_CAJA', r.error?.code);
@@ -238,7 +269,7 @@ const ck = (n, ok, d) => {
     const [[pg]] = await db.query("SELECT COALESCE(SUM(monto), 0) AS s FROM pagos WHERE pedido_id = ? AND estado = 'completado'", [p4.id]);
     ck('lo asentado es lo cobrado ($736), no lo que dejó', r2(pg.s) === 736, pg.s);
 
-    console.log('\n=== 7. Los paquetes escaneados al tomarlo, y cancelar ===');
+    console.log('\n=== 8. Los paquetes escaneados al tomarlo, cancelar y entregar SIN modificar ===');
     r = await api('POST', '/pedidos', {
       ...base, cliente_id: cli.id, pagos: [{ metodo_pago_id: efectivo.id, monto: 200 }],
       items: [{ variante_id: paquete.id, cantidad: 19.5, bultos: [{ codigo: cod[3], peso_kg: 19.5 }] }],
@@ -249,16 +280,24 @@ const ck = (n, ok, d) => {
     r = await api('PATCH', `/pedidos/${p3.id}/estado`, { estado: 'cancelado' });
     ck('se cancela: suelta lo apartado, el paquete y devuelve los $200', r.status === 200 && (await inv(paquete.id, almacen)).reservada === 0 &&
       (await estadoBulto(cod[3])) === 'disponible' && (await caja(sesion.id)).includes('devolucion:200'), r.error ?? await caja(sesion.id));
+    r = await api('PUT', `/pedidos/${p3.id}/encargo`, { lineas: [{ detalle_id: p3.detalle[0].id }] });
+    ck('cancelado no se modifica (409)', r.status === 409 && r.error?.code === 'NO_SE_MODIFICA', r.error?.code);
     r = await api('PATCH', `/pedidos/${p3.id}/estado`, { estado: 'apartado' });
     ck('cancelado, no se reactiva como apartado (409)', r.status === 409 && r.error?.code === 'REACTIVAR_COMO_PEDIDO', r.error?.code);
     r = await api('PATCH', `/pedidos/${p3.id}/estado`, { estado: 'en_preparacion' });
-    ck('se reactiva como "por preparar": vuelve a apartar, también el paquete', r.status === 200 && r.data?.estado === 'en_preparacion' &&
+    ck('se reactiva en espera: vuelve a apartar, también el paquete', r.status === 200 && r.data?.estado === 'en_preparacion' &&
       (await inv(paquete.id, almacen)).reservada === 19.5 && (await estadoBulto(cod[3])) === 'apartado', r.error ?? await inv(paquete.id, almacen));
-    r = await api('GET', '/pedidos/encargos?estado=en_preparacion');
-    ck('Pedidos lo enseña por preparar, con lo que ya dejó', r.data?.items?.some((x) => x.id === p3.id && x.pagado === 200 && x.falta === 1750) &&
+    r = await api('GET', '/pedidos/encargos');
+    ck('Pedidos lo enseña en espera, con lo que ya dejó', r.data?.items?.some((x) => x.id === p3.id && x.pagado === 200 && x.falta === 1750) &&
       r.data?.conteo?.en_preparacion >= 1, r.data?.conteo);
+    r = await api('POST', `/pedidos/${p3.id}/entregar`, { pagos: [{ metodo_pago_id: efectivo.id, monto: 1750 }], sesion_caja_id: sesion.id });
+    ck('se entrega tal cual, sin modificarlo: cobra los $1,750', r.status === 200 && r.data?.estado === 'entregado' &&
+      (await caja(sesion.id)).includes('ingreso:1750'), r.error ?? r.data?.estado);
+    ck('su paquete queda vendido', (await estadoBulto(cod[3])) === 'vendido');
+    ck('sale del inventario (61.3 − 19.5 = 41.8)', JSON.stringify(await inv(paquete.id, almacen)) === JSON.stringify({ cantidad: 41.8, reservada: 0 }),
+      await inv(paquete.id, almacen));
 
-    console.log('\n=== 8. Un APARTADO con su paquete escaneado ===');
+    console.log('\n=== 9. Un APARTADO con su paquete escaneado ===');
     r = await api('POST', '/pedidos', {
       canal: 'punto_venta', sesion_caja_id: sesion.id, apartado: true, cliente_id: cli.id,
       items: [{ variante_id: paquete.id, cantidad: 10.75, bultos: [{ codigo: cod[4], peso_kg: 10.75 }] }],
@@ -269,7 +308,7 @@ const ck = (n, ok, d) => {
     await api('POST', `/pedidos/${p5.id}/abonos`, { monto: 1075, metodo_pago_id: transferencia.id });
     r = await api('POST', `/pedidos/${p5.id}/entregar`, {});
     ck('al entregarlo, el paquete queda vendido', r.status === 200 && (await estadoBulto(cod[4])) === 'vendido', r.error ?? await estadoBulto(cod[4]));
-    ck('y sale del inventario (61.3 − 10.75 = 50.55)', JSON.stringify(await inv(paquete.id, almacen)) === JSON.stringify({ cantidad: 50.55, reservada: 19.5 }),
+    ck('y sale del inventario (41.8 − 10.75 = 31.05)', JSON.stringify(await inv(paquete.id, almacen)) === JSON.stringify({ cantidad: 31.05, reservada: 0 }),
       await inv(paquete.id, almacen));
   } catch (e) {
     console.error(e);

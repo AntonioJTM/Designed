@@ -1,6 +1,6 @@
 'use strict';
 
-const { pool } = require('../../config/db');
+const { pool, withTransaction } = require('../../config/db');
 const { porPalabras } = require('../../utils/query');
 
 // Acceso a datos de `producto_variantes`. Es el SKU real que se vende e
@@ -137,17 +137,25 @@ async function codigosDe(varianteId) {
   // salió (los que se capturaron a mano no tienen remesa).
   // El almacén es APROXIMADO —lo pone la remesa y lo corrigen el traspaso y el
   // escaneo al vender—, pero es lo que permite decir "dónde está" cada bulto en
-  // la pantalla de presentaciones. Los capturados a mano quedan en NULL.
+  // la pantalla de presentaciones. Los capturados a mano llevan el almacén que
+  // se eligió (desde el 2026-10-07; antes quedaban en NULL) y `con_entrada`
+  // dice si el bulto METIÓ kilos al inventario —llegó en una carga, o se
+  // capturó a mano desde el 2026-10-07—: quitarlo los saca.
   const [rows] = await pool.query(
     `SELECT vc.id, vc.variante_id, vc.codigo, vc.peso_kg, vc.lote, vc.conos,
             vc.estado, vc.consumido_en, vc.consumido_tipo, vc.consumido_id,
-            ped.numero_pedido AS consumido_folio,
+            COALESCE(ped.numero_pedido, tra.folio) AS consumido_folio,
             vc.remesa_id, r.folio AS remesa_folio, vc.etiqueta, vc.creado_en,
-            vc.almacen_id, alm.nombre AS almacen
+            vc.almacen_id, alm.nombre AS almacen,
+            (vc.remesa_id IS NOT NULL OR EXISTS (
+               SELECT 1 FROM movimientos_inventario mi
+                WHERE mi.referencia_tipo = 'bulto' AND mi.referencia_id = vc.id
+                  AND mi.tipo = 'entrada')) AS con_entrada
        FROM variante_codigos vc
        LEFT JOIN remesas r ON r.id = vc.remesa_id
        LEFT JOIN almacenes alm ON alm.id = vc.almacen_id
        LEFT JOIN pedidos ped ON vc.consumido_tipo = 'pedido' AND ped.id = vc.consumido_id
+       LEFT JOIN traspasos tra ON vc.consumido_tipo = 'traspaso' AND tra.id = vc.consumido_id
       WHERE vc.variante_id = :id
       ORDER BY vc.estado, vc.lote, vc.id`,
     { id: varianteId }
@@ -189,11 +197,22 @@ async function bultoPorCodigo(codigo) {
   const [rows] = await pool.query(
     `SELECT vc.id, vc.variante_id, vc.codigo, vc.peso_kg, vc.lote, vc.conos,
             vc.estado, vc.consumido_en, vc.consumido_tipo, vc.consumido_id,
-            ped.numero_pedido AS consumido_folio,
-            r.folio AS remesa_folio
+            COALESCE(ped.numero_pedido, tra.folio) AS consumido_folio,
+            r.folio AS remesa_folio,
+            -- Dónde lo tiene el sistema (la caja solo vende los de su tienda) y
+            -- si viene en camino en un envío todavía sin recibir.
+            vc.almacen_id, alm.nombre AS almacen,
+            (SELECT t.folio
+               FROM traspaso_bultos tb
+               JOIN traspaso_detalle td ON td.id = tb.detalle_id
+               JOIN traspasos t         ON t.id = td.traspaso_id
+              WHERE tb.variante_codigo_id = vc.id AND t.estado = 'en_transito'
+              ORDER BY t.id DESC LIMIT 1) AS en_camino_folio
        FROM variante_codigos vc
        LEFT JOIN remesas r ON r.id = vc.remesa_id
+       LEFT JOIN almacenes alm ON alm.id = vc.almacen_id
        LEFT JOIN pedidos ped ON vc.consumido_tipo = 'pedido' AND ped.id = vc.consumido_id
+       LEFT JOIN traspasos tra ON vc.consumido_tipo = 'traspaso' AND tra.id = vc.consumido_id
       WHERE vc.codigo = :c
       LIMIT 1`,
     { c: codigo }
@@ -206,22 +225,124 @@ async function bultoPorCodigo(codigo) {
  * peso y su lote: son datos del bulto, no adornos. NO toca el inventario —
  * registrar el código y recibir la mercancía son cosas distintas.
  */
-async function agregarCodigo(varianteId, datos) {
-  const { codigo, etiqueta, peso_kg, lote, conos } = datos;
-  const [r] = await pool.query(
-    `INSERT INTO variante_codigos (variante_id, codigo, peso_kg, lote, conos, etiqueta)
-     VALUES (:v, :c, :peso, :lote, :conos, :e)`,
-    {
-      v: varianteId,
-      c: codigo,
-      peso: peso_kg ?? null,
-      lote: lote ?? null,
-      conos: conos ?? null,
-      e: etiqueta ?? null,
+/**
+ * Da de alta un bulto capturado a mano y da ENTRADA a sus kilos en su almacén
+ * (2026-10-07: "sí se suman los kilos de la entrada de ese paquete"): el bulto,
+ * el saldo y su movimiento en el kardex (referencia 'bulto'), en una sola
+ * transacción. Si la presentación todavía no tenía peso, toma el de este bulto
+ * (el desarme lo necesita).
+ */
+async function agregarBultoConEntrada(varianteId, datos, usuarioId) {
+  const { codigo, etiqueta, peso_kg, lote, conos, almacen_id } = datos;
+  return withTransaction(async (conn) => {
+    const [r] = await conn.query(
+      `INSERT INTO variante_codigos (variante_id, codigo, peso_kg, lote, conos, etiqueta, almacen_id)
+       VALUES (:v, :c, :peso, :lote, :conos, :e, :a)`,
+      {
+        v: varianteId, c: codigo, peso: peso_kg, lote: lote ?? null, conos: conos ?? null,
+        e: etiqueta ?? null, a: almacen_id,
+      }
+    );
+    await conn.query(
+      `INSERT INTO inventario (variante_id, almacen_id, cantidad) VALUES (:v, :a, :kg)
+       ON DUPLICATE KEY UPDATE cantidad = cantidad + :kg`,
+      { v: varianteId, a: almacen_id, kg: peso_kg }
+    );
+    await conn.query(
+      `INSERT INTO movimientos_inventario
+         (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)
+       VALUES (:v, :a, 'entrada', :kg, 'bulto', :id, :u, :motivo)`,
+      {
+        v: varianteId, a: almacen_id, kg: peso_kg, id: r.insertId, u: usuarioId ?? null,
+        motivo: `Bulto capturado a mano ${codigo} (${Number(peso_kg)} kg)`,
+      }
+    );
+    await conn.query(
+      'UPDATE producto_variantes SET peso_kg = :kg WHERE id = :v AND peso_kg IS NULL',
+      { v: varianteId, kg: peso_kg }
+    );
+    const [rows] = await conn.query(
+      `SELECT vc.*, alm.nombre AS almacen, 1 AS con_entrada
+         FROM variante_codigos vc LEFT JOIN almacenes alm ON alm.id = vc.almacen_id
+        WHERE vc.id = :id`,
+      { id: r.insertId }
+    );
+    return rows[0];
+  });
+}
+
+/**
+ * Quita un bulto que METIÓ kilos (llegó en una carga del proveedor o se capturó
+ * a mano) y SACA esos kilos del almacén donde está hoy (un traspaso pudo
+ * moverlo; si no se sabe, el de su carga). Exige que el saldo alcance; deja la
+ * salida en el kardex con referencia al bulto.
+ */
+async function quitarBultoConSalida(bulto, usuarioId) {
+  return withTransaction(async (conn) => {
+    const [[vc]] = await conn.query(
+      `SELECT vc.id, vc.codigo, vc.estado, vc.peso_kg, vc.variante_id, r.folio AS carga,
+              COALESCE(vc.almacen_id, r.almacen_id) AS almacen_id, alm.nombre AS almacen
+         FROM variante_codigos vc
+         LEFT JOIN remesas r     ON r.id = vc.remesa_id
+         LEFT JOIN almacenes alm ON alm.id = COALESCE(vc.almacen_id, r.almacen_id)
+        WHERE vc.id = :id FOR UPDATE`,
+      { id: bulto.id }
+    );
+    if (!vc) return null;
+    const kg = Number(vc.peso_kg ?? 0);
+    if (!(kg > 0) || !vc.almacen_id) {
+      // Sin peso o sin almacén no hay kilos que sacar: solo se borra.
+      await conn.query('DELETE FROM variante_codigos WHERE id = :id', { id: vc.id });
+      return { kg: 0, almacen: null };
     }
+    const [[inv]] = await conn.query(
+      'SELECT cantidad FROM inventario WHERE variante_id = :v AND almacen_id = :a FOR UPDATE',
+      { v: vc.variante_id, a: vc.almacen_id }
+    );
+    const hay = inv ? Number(inv.cantidad) : 0;
+    if (hay + 0.0005 < kg) {
+      return { error: 'STOCK_INSUFICIENTE', hay, kg, almacen: vc.almacen };
+    }
+    await conn.query(
+      'UPDATE inventario SET cantidad = cantidad - :kg WHERE variante_id = :v AND almacen_id = :a',
+      { v: vc.variante_id, a: vc.almacen_id, kg }
+    );
+    await conn.query(
+      `INSERT INTO movimientos_inventario
+         (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)
+       VALUES (:v, :a, 'salida', :kg, 'bulto', :id, :u, :motivo)`,
+      {
+        v: vc.variante_id, a: vc.almacen_id, kg: -kg, id: vc.id, u: usuarioId ?? null,
+        motivo: vc.carga
+          ? `Se quitó el bulto ${vc.codigo} (${kg} kg) de la carga ${vc.carga}`
+          : `Se quitó el bulto capturado a mano ${vc.codigo} (${kg} kg)`,
+      }
+    );
+    await conn.query('DELETE FROM variante_codigos WHERE id = :id', { id: vc.id });
+    return { kg, almacen: vc.almacen };
+  });
+}
+
+/** ¿Al capturar este bulto entraron sus kilos? (lo capturado a mano desde el 2026-10-07). */
+async function bultoConEntrada(id) {
+  const [[r]] = await pool.query(
+    `SELECT COUNT(*) AS n FROM movimientos_inventario
+      WHERE referencia_tipo = 'bulto' AND referencia_id = :id AND tipo = 'entrada'`,
+    { id }
   );
-  const [rows] = await pool.query('SELECT * FROM variante_codigos WHERE id = :id', { id: r.insertId });
-  return rows[0];
+  return Number(r.n) > 0;
+}
+
+/** Dónde hay existencias de la presentación: los almacenes con saldo, el mayor primero. */
+async function almacenesConExistencia(varianteId) {
+  const [rows] = await pool.query(
+    `SELECT i.almacen_id, a.nombre AS almacen, i.cantidad
+       FROM inventario i JOIN almacenes a ON a.id = i.almacen_id
+      WHERE i.variante_id = :v AND i.cantidad > 0
+      ORDER BY i.cantidad DESC, a.nombre`,
+    { v: varianteId }
+  );
+  return rows.map((r) => ({ almacen_id: Number(r.almacen_id), almacen: r.almacen, cantidad: Number(r.cantidad) }));
 }
 
 async function obtenerCodigo(id) {
@@ -352,7 +473,10 @@ module.exports = {
   porSku,
   variantePorCodigo,
   bultoPorCodigo,
-  agregarCodigo,
+  agregarBultoConEntrada,
+  quitarBultoConSalida,
+  bultoConEntrada,
+  almacenesConExistencia,
   obtenerCodigo,
   eliminarCodigo,
 };

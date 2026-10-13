@@ -120,7 +120,7 @@ export class CatalogoService {
   /** Da de alta un bulto: su código y, si se conocen, su peso real y su lote. */
   agregarCodigo(
     varianteId: number,
-    body: { codigo: string; peso_kg?: number; lote?: string; conos?: number; etiqueta?: string }
+    body: { codigo: string; peso_kg?: number; lote?: string; conos?: number; etiqueta?: string; almacen_id?: number }
   ): Observable<VarianteCodigo> {
     return this.http
       .post<ApiResponse<VarianteCodigo>>(`${this.base}/variantes/${varianteId}/codigos`, body)

@@ -97,16 +97,11 @@ export class PedidoDetalle implements OnDestroy {
    */
   readonly estados = computed<EstadoPedido[]>(() => {
     const p = this.pedido();
-    // Un PEDIDO sin entregar avanza por sus pasos o se cancela; cancelado, se
-    // reactiva como "por preparar". Queda LISTO al prepararlo (en Pedidos:
-    // paquetes escaneados y conos pesados), no desde aquí; se ENTREGA desde
-    // Pedidos (cobra y descuenta).
+    // Un PEDIDO sin entregar está en espera: solo se cancela; cancelado, se
+    // reactiva en espera. Se modifica y se ENTREGA desde Pedidos (cobra y descuenta).
     if (p && this.esEncargo(p) && this.esApartadoSinEntregar(p)) {
       if (this.inactivo(p)) return [p.estado, 'en_preparacion'];
-      if (p.estado === 'en_preparacion') return ['en_preparacion', 'cancelado'];
-      const pasos: EstadoPedido[] = ['en_preparacion', 'listo'];
-      if (p.metodo_entrega === 'envio') pasos.push('enviado');
-      return [...pasos, 'cancelado'];
+      return [p.estado, 'cancelado'];
     }
     if (p && this.esApartadoSinEntregar(p)) {
       return p.estado === 'apartado' ? ['apartado', 'cancelado'] : [p.estado, 'apartado'];
@@ -126,7 +121,7 @@ export class PedidoDetalle implements OnDestroy {
     // "En preparación" y "Enviado" son del envío de la tienda en línea: en una
     // venta de mostrador no significan nada (y la tienda está apagada).
     const enLinea = p?.canal === 'tienda_linea';
-    // …salvo en un PEDIDO sin entregar, donde son sus pasos (por preparar, en camino).
+    // …salvo en un PEDIDO sin entregar, que está en espera.
     const pasosDePedido = !!p && this.esEncargo(p) && this.esApartadoSinEntregar(p);
     // Una venta FIADA se da por pagada sola al abonar: no se ofrece marcarla
     // pagada (o entregada) mientras se deba, ni regresarla a pendiente si ya se

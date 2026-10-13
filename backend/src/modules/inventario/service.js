@@ -88,6 +88,23 @@ function _describir(m) {
     };
   }
 
+  // Un bulto capturado a mano en Presentaciones: entran sus kilos. Al quitar un
+  // bulto que metió kilos (a mano o de una carga), salen. El código va también
+  // en el motivo (el bulto puede ya no existir).
+  if (m.referencia_tipo === 'bulto') {
+    return {
+      // 'transferencia': al surtir se escaneó un paquete que el sistema tenía
+      // en otro almacén y se confirmó que sí estaba ahí (2026-10-07).
+      concepto: m.tipo === 'transferencia'
+        ? 'Paquete encontrado en otro almacén'
+        : salida ? 'Se quitó un bulto' : 'Bulto capturado a mano',
+      folio: null,
+      codigo_bulto: m.bulto_codigo ?? null,
+      detalle_tipo: null,
+      detalle_id: null,
+    };
+  }
+
   // Movimientos capturados a mano desde Inventario.
   const nombres = {
     entrada: 'Entrada de mercancía',
@@ -298,6 +315,11 @@ async function enviarTraspaso(id, usuarioId, datos) {
   return model.enviarTraspaso(id, usuarioId, datos ?? {});
 }
 
+/** Guarda lo escaneado a medio surtir: esos paquetes quedan apartados para el envío. */
+async function guardarEscaneos(id, usuarioId, datos) {
+  return model.guardarEscaneos(id, usuarioId, datos?.codigos ?? [], datos?.encontrados ?? []);
+}
+
 async function recibirTraspaso(id, usuarioId, datos) {
   return model.recibirTraspaso(id, usuarioId, datos ?? {});
 }
@@ -338,6 +360,7 @@ module.exports = {
   listarConversiones,
   solicitarTraspaso,
   enviarTraspaso,
+  guardarEscaneos,
   recibirTraspaso,
   cancelarTraspaso,
   equivalenciaPaquetes,

@@ -169,6 +169,15 @@ async function enviarTraspaso(req, res, next) {
   }
 }
 
+async function guardarEscaneos(req, res, next) {
+  try {
+    const data = await service.guardarEscaneos(Number(req.params.id), req.auth.sub, req.body);
+    res.json({ data, error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function recibirTraspaso(req, res, next) {
   try {
     const data = await service.recibirTraspaso(Number(req.params.id), req.auth.sub, req.body);
@@ -232,6 +241,7 @@ module.exports = {
   listarConversiones,
   solicitarTraspaso,
   enviarTraspaso,
+  guardarEscaneos,
   recibirTraspaso,
   cancelarTraspaso,
   equivalenciaPaquetes,

@@ -374,6 +374,11 @@ export interface CodigoResuelto {
     consumido_folio?: string | null;
     consumido_tipo?: 'pedido' | 'conversion' | null;
     remesa_folio?: string | null;
+    /** Dónde lo tiene el sistema; null = capturado a mano antes del 2026-10-07. */
+    almacen_id?: number | null;
+    almacen?: string | null;
+    /** Folio del envío en el que viene en camino, si todavía no se recibe. */
+    en_camino_folio?: string | null;
   } | null;
 }
 
@@ -499,6 +504,11 @@ export interface TraspasoLinea {
   paquetes_pedidos?: number | null;
   /** Solo al enviar: de ese hilo no había y no salió. */
   no_salio?: boolean;
+  /**
+   * Por enviar: los paquetes que ya se escanearon y GUARDARON a medio surtir.
+   * Están apartados para este envío (no se venden) hasta que salga o se cancele.
+   */
+  guardados?: { codigo: string; peso_kg: string; lote?: string | null; variante_id: number }[];
   /** Lo que se PIDIÓ; `paquetes` y `cantidad` dicen lo que salió, ya enviado. */
   paquetes_solicitados?: number | string | null;
   cantidad_solicitada?: number | string | null;
@@ -935,12 +945,32 @@ export class InventarioService {
    * Paso 2: sale. Con los paquetes ESCANEADOS al surtir: sale su peso real y
    * esos quedan en la sucursal. Sin escanear no se envía.
    */
-  enviarTraspaso(id: number, codigos: string[], notas?: string): Observable<ResultadoTraspaso> {
+  enviarTraspaso(id: number, codigos: string[], notas?: string, encontrados: string[] = []): Observable<ResultadoTraspaso> {
     return this.http
       .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/enviar`, {
         codigos,
+        // Los que el sistema tenía en otro almacén y se confirmó que sí están aquí.
+        ...(encontrados.length ? { encontrados } : {}),
         ...(notas ? { notas } : {}),
       })
+      .pipe(map(data));
+  }
+
+  /**
+   * Guarda lo escaneado a medio surtir (la lista COMPLETA de códigos): esos
+   * paquetes quedan apartados para el envío —no se venden— hasta que se envíe o
+   * se cancele. Los que ya no vengan en la lista se sueltan.
+   */
+  guardarEscaneos(
+    id: number,
+    codigos: string[],
+    encontrados: string[] = []
+  ): Observable<{ id: number; folio: string; guardados: number; kg: number }> {
+    return this.http
+      .put<ApiResponse<{ id: number; folio: string; guardados: number; kg: number }>>(
+        `${this.base}/inventario/traspasos/${id}/escaneos`,
+        { codigos, ...(encontrados.length ? { encontrados } : {}) }
+      )
       .pipe(map(data));
   }
 

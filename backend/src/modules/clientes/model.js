@@ -584,7 +584,16 @@ async function aplicarAbonos(ejecutor, clienteId) {
       ORDER BY creado_en, id`,
     { id: clienteId }
   );
+  return repartirAbonos(movs);
+}
 
+/**
+ * El reparto de `aplicarAbonos`, sin base: recibe los movimientos de la cuenta
+ * en orden (`tipo`, `monto`, `pedido_id`). La nómina lo corre sobre los
+ * movimientos hasta cierta fecha para saber CUÁNDO quedó pagada una venta fiada
+ * (la comisión se paga la semana en que se liquida).
+ */
+function repartirAbonos(movs) {
   // Lo que debe cada venta, en el orden de su primer movimiento.
   const porPedido = new Map();
   const deudas = [];
@@ -886,5 +895,6 @@ module.exports = {
   ajustarCreditoPorPedido,
   liquidarVentasACredito,
   aplicarAbonos,
+  repartirAbonos,
   SIGNO_CREDITO,
 };

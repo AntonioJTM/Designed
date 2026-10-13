@@ -22,7 +22,7 @@ const CATALOGO = [
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:pos', nombre: 'Punto de venta', ayuda: 'Cobrar, fiar y apartar' },
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:caja', nombre: 'Caja', ayuda: 'Turno, efectivo y corte' },
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:pedidos', nombre: 'Ventas', ayuda: 'Todo lo vendido y su estado' },
-  { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:encargos', nombre: 'Pedidos', ayuda: 'Los encargos de clientes: preparar, entregar y cobrar' },
+  { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:encargos', nombre: 'Pedidos', ayuda: 'Los encargos de clientes en espera: modificarlos, entregarlos y cobrarlos' },
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:apartados', nombre: 'Apartados', ayuda: 'Lo guardado para un cliente' },
   { grupo: 'Clientes', tipo: 'pantalla', clave: 'ver:clientes', nombre: 'Clientes', ayuda: 'Las cinco pestañas y el expediente' },
   { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:inventario', nombre: 'Inventario', ayuda: 'Existencias por almacén' },

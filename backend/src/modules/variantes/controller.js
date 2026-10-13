@@ -90,7 +90,7 @@ async function resolverCodigo(req, res, next) {
 
 async function agregarCodigo(req, res, next) {
   try {
-    const data = await service.agregarCodigo(Number(req.params.id), req.body);
+    const data = await service.agregarCodigo(Number(req.params.id), req.body, req.auth?.sub);
     return res.status(201).json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -99,8 +99,8 @@ async function agregarCodigo(req, res, next) {
 
 async function eliminarCodigo(req, res, next) {
   try {
-    await service.eliminarCodigo(Number(req.params.codigoId));
-    return res.json({ data: { eliminado: true }, error: null });
+    const data = await service.eliminarCodigo(Number(req.params.codigoId), req.auth?.sub);
+    return res.json({ data: { eliminado: true, ...data }, error: null });
   } catch (err) {
     return next(err);
   }

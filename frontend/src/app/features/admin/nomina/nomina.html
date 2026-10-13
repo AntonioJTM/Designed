@@ -24,6 +24,12 @@
       </div>
 
       @if (!cargando()) {
+        @if (periodo() && periodo()!.recibos.length > 0) {
+          <!-- El resumen y un recibo por persona, con su línea para firmar. -->
+          <button type="button" class="btn btn-ghost" [disabled]="bajando()" (click)="bajarPdf()">
+            {{ bajando() ? 'Armando el PDF…' : 'Bajar PDF' }}
+          </button>
+        }
         @if (!periodo()) {
           <button type="button" class="btn btn-primary" [disabled]="ocupado()" (click)="crear()">
             Crear nómina de esta semana
@@ -88,7 +94,10 @@
     <div class="card-head">
       <div>
         <h2>Recibos de la semana</h2>
-        <p>La comisión es sobre la venta neta de cada quien: sin IVA, sin lo cancelado ni lo devuelto.</p>
+        <p>
+          La comisión de cada venta se paga la semana en que queda pagada (la fiada, el apartado y el pedido, cuando
+          se liquidan), sobre la venta neta: sin IVA ni envío.
+        </p>
       </div>
       <div class="estado-periodo">
         @if (periodo(); as p) {
@@ -121,6 +130,16 @@
         la semana.
       </p>
     } @else {
+      <div class="tabs" role="tablist" aria-label="Qué ver de la semana" style="margin-bottom: 14px">
+        <button type="button" role="tab" [class.on]="vista() === 'recibos'" [attr.aria-selected]="vista() === 'recibos'"
+                (click)="vista.set('recibos')">Recibos · {{ periodo()!.recibos.length }}</button>
+        <button type="button" role="tab" [class.on]="vista() === 'comisiones'" [attr.aria-selected]="vista() === 'comisiones'"
+                (click)="vista.set('comisiones')">Comisiones · {{ totales().comisiones | dinero }}</button>
+      </div>
+      @if (vista() === 'comisiones') {
+        <!-- Qué venta paga cada quien en esta nómina y qué le falta por liquidar. -->
+        <app-comisiones-semana [periodoId]="periodo()!.id" [clave]="periodo()" />
+      } @else {
       <div class="tabla-scroll">
         <table class="grid" style="min-width: 900px">
           <thead>
@@ -156,7 +175,7 @@
                 <td class="num">
                   @if (num(r.ventas_netas) > 0) {
                     {{ r.ventas_netas | dinero }}
-                    <div class="sub2">{{ r.num_pedidos }} {{ num(r.num_pedidos) === 1 ? 'pedido' : 'pedidos' }}</div>
+                    <div class="sub2">{{ r.num_pedidos }} {{ num(r.num_pedidos) === 1 ? 'venta pagada' : 'ventas pagadas' }}</div>
                   } @else {
                     <span class="muted">—</span>
                   }
@@ -189,6 +208,7 @@
           </tbody>
         </table>
       </div>
+      }
     }
   </section>
 

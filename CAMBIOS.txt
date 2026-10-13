@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-06
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-07
 ===============================================================================
 
 ⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
@@ -25,10 +25,31 @@
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
-  PREPARAR EL PEDIDO (2026-10-06, entrada 20, DESPLEGADO; migración
-  2026-10_bulto_apartado en las dos bases): paquetes escaneados, conos pesados,
-  total al peso real; el paquete queda "apartado" hasta entregarse. Queda
-  pendiente el PEDIDO AL PROVEEDOR (compras).
+  SE BORRARON LAS VENTAS Y PEDIDOS DE PRUEBA DE hitex (2026-10-07, entrada 30):
+  las dos que había, ya canceladas; el inventario quedó idéntico.
+  Antes: SURTIR: PAQUETE ENCONTRADO EN OTRO ALMACÉN (2026-10-07, entrada 29,
+  DESPLEGADO; sin cambios en la estructura de la base): si se escanea uno que el
+  sistema tiene en otro almacén, pregunta "¿sí está aquí?" y, si sí, lo pasa con
+  sus kilos antes de enviarlo.
+  Antes: LA CAJA SOLO VENDE LOS PAQUETES DE SU TIENDA (2026-10-07, entrada 28,
+  DESPLEGADO; sin cambios en la estructura de la base): uno que está en otro
+  almacén o viene en camino se rechaza y dice dónde está. Se regresó la venta de
+  prueba de PERLA JASPE que descuadraba el detalle del hilo.
+  Antes: LOS PEDIDOS QUEDAN EN ESPERA Y SE MODIFICAN (2026-10-07, entrada 27,
+  DESPLEGADO; sin cambios en la base): se agregan o quitan hilos, se cambian
+  kilos, paquetes, entrega y notas; ya no hay "Preparar", "Listo" ni "En
+  camino". Se entregan cobrando, como antes.
+  Antes: SURTIR SUCURSAL A MEDIAS (2026-10-07, entrada 26, DESPLEGADO; sin cambios en
+  la base): lo escaneado se guarda y queda apartado hasta enviar o cancelar.
+  Antes:
+  EL BULTO A MANO DA ENTRADA A SUS KILOS EN EL ALMACÉN QUE SE ELIJA, Y "UN
+  BULTO QUE METIÓ KILOS SE LOS LLEVA AL QUITARLO" (2026-10-07, entradas 23 a 25,
+  DESPLEGADO; sin cambios en la base). Al usuario se le explica con casos y
+  ejemplos con números (lo pidió). Queda pendiente el
+  PEDIDO AL PROVEEDOR.
+  Antes: LA COMISIÓN SE PAGA AL LIQUIDARSE LA VENTA (entrada 22).
+  Antes: NÓMINA EN PDF Y EL ENVÍO FUERA DE LA COMISIÓN (entrada 21).
+  Antes: PREPARAR EL PEDIDO (entrada 20, migración 2026-10_bulto_apartado).
   Antes: VENTAS Y PEDIDOS DE CLIENTES (entrada 19). Antes: BAJAR CONOS: EL PAQUETE TIENE QUE ESTAR EN ESA TIENDA (2026-10-06, entrada
   18, DESPLEGADO en 20261006-164929).
   Antes: BAJAR CONOS SOLO EN TIENDAS Y DESTARE POR CONO (2026-10-06, entrada 17,
@@ -432,6 +453,514 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (30) · hitex: se borraron las ventas y pedidos de prueba
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "¿Puedes eliminar las ventas y los pedidos, dejar el inventario intacto para
+  que no haya problema? Son pruebas, para que todo vaya cuadrando bien."
+
+LO QUE HABÍA
+  Dos, las dos CANCELADAS: POS-1791324722738-1A4F (la venta de PERLA JASPE que
+  se regresó en la entrada 28) y POS-1791346803814-652E (pedido de 10 kg de
+  conos, cancelado desde la pantalla). Ninguna apartaba nada ni movía saldo.
+
+LO QUE SE BORRÓ (una transacción; respaldo previo en
+/root/respaldos/hitex_antes_borrar_ventas_20261007-223430.sql.gz)
+  · los dos pedidos y, en cascada, su detalle, sus paquetes ligados y sus pagos;
+  · sus 2 movimientos de kardex (−19.95 y +19.95: netos en 0);
+  · sus 4 movimientos de caja del turno 1 de "Caja Development" (netos en $0;
+    el turno sigue abierto, ahora sin movimientos);
+  · la comisión anotada (POS-1A4F, $0) y, en el recibo de una empleada de la semana
+    04–10 oct (ya pagada), "1 venta, $3,990" pasó a 0: lo pagado no cambia
+    porque la comisión era $0.
+  · Los contadores de pedidos, detalle, paquetes de venta, pagos, caja y
+    comisiones volvieron a 1.
+
+LA VERIFICACIÓN
+  · Foto del inventario antes y después: mismos renglones, mismos kilos
+    (27,729.7), mismo apartado (293.221, de la solicitud de traspaso
+    TRA-…8C3C, que NO se tocó) y los mismos paquetes por estado y almacén; el
+    kardex tiene 2 movimientos menos y suma lo mismo.
+  · El detalle de los 8 hilos cuadra en todos sus almacenes. Ventas: 0.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (29) · Surtir: un paquete que estaba en otro almacén se pasa con sus kilos (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Tras la entrada 28 se le explicó que al SURTIR todavía se podía escanear un
+  paquete que el sistema tenía en otro almacén: el envío lo aceptaba, sacaba sus
+  kilos del almacén que surte y solo le cambiaba la ubicación, así que dos
+  almacenes quedaban "no cuadra" (uno con kilos de más y otro de menos). De tres
+  opciones (bloquear como la caja; avisar y, si confirman, pasarlo con sus kilos;
+  dejarlo) eligió la 2: "sí, diría que la 2 está bien por cualquier cosa".
+
+CÓMO QUEDÓ
+  · En la ventana "Enviar", al escanear un paquete que el sistema tiene en otro
+    almacén pregunta "¿Este paquete sí está aquí?" (dice dónde lo tiene el
+    sistema y cuántos kilos). "Sí está aquí": entra a la lista marcado "estaba
+    en «…»". "No, dejarlo": no entra.
+  · Al guardar a medias o al enviar, el servidor pasa ese paquete y SUS KILOS de
+    aquel almacén al que surte (queda en el kardex como "Paquete encontrado en
+    otro almacén", con el folio del envío y quién lo hizo) y luego sale normal.
+    Ejemplo: 00631111 (20 kg) registrado en Tienda Principal, escaneado en la
+    bodega para Moroleón → Tienda Principal −20, bodega +20, y sale de la
+    bodega. Los tres almacenes cuadran.
+  · Sin confirmar, el servidor no lo deja (409) y no mueve nada.
+  · Si aquel almacén ya no tiene esos kilos, no se pasan (409): no se inventan.
+  · Uno que viene en camino en otro envío no entra.
+
+LO TÉCNICO
+  · Backend: inventario/model.js → _bultosEscaneados trae almacén y "en camino"
+    (409 PAQUETE_EN_CAMINO); _traerAlOrigen (409 PAQUETE_EN_OTRO_ALMACEN sin
+    confirmar; confirmado: salida/entrada tipo transferencia, referencia
+    'bulto'); lo llaman enviarTraspaso y guardarEscaneos. routes: `encontrados`
+    en el envío y en guardar escaneos. service.js: el concepto del kardex.
+  · Frontend: traspasos/envio-modal (pregunta al escanear, marca "estaba en",
+    manda `encontrados`), inventario.service (enviarTraspaso, guardarEscaneos,
+    CodigoResuelto con almacén y en camino).
+  · Sin cambios en la estructura de la base.
+
+LA VERIFICACIÓN
+  · e2e-paquete-de-otra-tienda.js, sección 5 (ahora 32 en total): sin
+    confirmar 409 y nada se mueve (a medias y al enviar), confirmado pasa con
+    sus kilos y sale, el kardex lo dice, al recibir todo cuadra, y sin kilos en
+    aquel almacén 409. Pasan traspaso-estados (39), surtir-inventario (25),
+    surtir-a-medias (17), detalle-hilo (33), bulto-a-mano (22) y permisos (39);
+    20 unitarias del backend y 326 del frontend (2 nuevas del modal de envío).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (28) · La caja solo vende los paquetes de su tienda (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Preguntó por qué el detalle de PERLA JASPE 2/30 decía "no cuadra con lo que
+  hay". Se encontró: el 06-oct a las 16:12 se vendió en la caja de Tienda
+  Principal (POS-1791324722738-1A4F, $3,990 en efectivo) el paquete 00633586
+  de 19.95 kg, que NO venía entre los 15 del envío TRA-…B464: el sistema lo
+  tenía en Almacén General. La venta le quitó los 19.95 kg a la TIENDA y movió
+  el paquete; la bodega quedó con 19.95 kg de más (3,209.55 kg contra 160
+  paquetes de 3,189.6) y la tienda con 19.95 de menos (259.35 contra 14 de
+  279.3). En total cuadraba (3,468.9).
+  Respuesta: "si está en Tienda Principal solo se venden los paquetes que están
+  ahí; no tiene por qué tomar los de almacén. Que diga que sí existe pero está
+  en almacén, que tome uno que sí esté registrado con la tienda", y "corrige el
+  sistema regresando eso, siguen siendo pruebas".
+
+CÓMO QUEDÓ
+  · Al escanear un paquete en la caja, si el sistema lo tiene en otro almacén
+    dice: "El paquete 00633586 sí existe, pero está en «Almacen General», no en
+    «Tienda Principal»: toma uno que esté en esta tienda", y no lo mete al
+    ticket. Si viene en camino en un envío sin recibir: "viene en camino
+    (TRA-…): primero recibe el envío en Surtir sucursal".
+  · Lo mismo al apartar, al tomar un pedido y en "Modificar pedido".
+  · El servidor lo valida igual: no se vende, no se aparta y no se mueve nada.
+  · Un paquete capturado a mano antes del 07-oct (sin almacén) sí se vende y
+    queda apuntado en esa tienda.
+  · Bajar conos ya tenía esta regla (06-oct). Surtir sucursal NO la tiene
+    todavía: el envío le corrige la ubicación al paquete escaneado.
+
+LO TÉCNICO
+  · Backend: pedidos/model.js → _exigirPaqueteAqui (en la venta/apartado/pedido
+    de crearPedido y en _bultosParaLinea de modificarEncargo, con el almacén de
+    la caja o del pedido): 409 PAQUETE_EN_OTRA_SUCURSAL / PAQUETE_EN_CAMINO. La
+    venta ya no "corrige" la ubicación (solo apunta el almacén al que no tenía).
+    variantes/model.js → bultoPorCodigo trae almacen_id, almacen y
+    en_camino_folio (lo usa el lector de la caja).
+  · Frontend: shared/paquete-aqui.ts (el mensaje, uno solo), pos.ts
+    (agregarPorCodigo), encargos/modificar-modal.ts (motivoRechazo),
+    catalogo.models (en_camino_folio).
+  · Sin cambios en la estructura de la base.
+
+LA CORRECCIÓN DE LOS DATOS (hitex, con respaldo previo)
+  · Se CANCELÓ la venta POS-1791324722738-1A4F por el camino normal: regresaron
+    los 19.95 kg a Tienda Principal (kardex "Cancelación de …"), el paquete
+    00633586 quedó disponible, el pago quedó reembolsado y salieron $3,990 del
+    turno abierto de "Caja Development" como devolución. La nómina pagada de
+    esa semana no cambia (la comisión de esa venta era $0).
+  · El paquete 00633586 se regresó a Almacén General (donde estaba antes de la
+    venta). Con eso el detalle del hilo cuadra en los dos almacenes.
+
+LA VERIFICACIÓN
+  · e2e-paquete-de-otra-tienda.js (nuevo, 21): vender/apartar/tomar pedido con
+    uno de la bodega (409, nada se mueve), modificar un pedido con él (409),
+    uno en camino (409) y ya recibido (se vende), el de la tienda y el sin
+    almacén (se venden). Pasan pedidos-encargo (74), apartados (47), venta-conos
+    (23), comprobante-pago (41), permisos (39), surtir-a-medias (17),
+    bulto-a-mano (22), traspaso-estados (39), surtir-inventario (25),
+    detalle-hilo (33), clientes-credito (59), costo-margen (17),
+    cancelacion-caja (31), devolucion-presentacion (18), nomina-pdf (29),
+    edicion-catalogo (30), carga-lista (60), precios-lista (9) y reporte-color
+    (30). Frontend: 324 (5 nuevas).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (27) · Los pedidos quedan EN ESPERA y se modifican (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "En el apartado de pedidos mejor que sean notas en espera, porque hay casos
+  donde el cliente quiere modificar su pedido, agregar o quitar cosas, entonces
+  es un problema." Al preguntarle: que siga siendo un PEDIDO que se edita (no
+  una nota aparte), que la mercancía SIGA APARTADA (lo que se quita queda libre,
+  lo que se agrega se aparta) y que NO haya pasos de chofer ("solo nota y
+  cobro"): la dirección y para cuándo quedan como datos que se cambian.
+
+CÓMO QUEDÓ
+  · Pedidos ya no tiene "Por preparar / Listo / En camino". Todo pedido sin
+    entregar dice "En espera". Arriba: cuántos hay, para hoy, atrasados y
+    cuánto falta por cobrar; pestañas Todos / Para hoy / Atrasados / Los lleva
+    el chofer.
+  · Cada renglón tiene "Modificar" y "Entregar y cobrar" (o "Entregar" si ya
+    está pagado). Se entrega cuando sea, sin pasos previos.
+  · "Modificar" abre una ventana con lo que lleva: quitar un hilo, cambiar sus
+    kilos o conos, escanear o quitar paquetes, agregar un hilo (buscándolo o
+    escaneando su paquete), y cambiar si pasa por él o lo lleva el chofer (con
+    dirección y envío), para cuándo y las notas. Abajo dice el total como
+    estaba, el total ahora y lo que falta (o lo que tiene a favor).
+  · Lo que ya llevaba conserva su precio; lo nuevo se cobra con la lista de
+    precios del pedido, como en la caja.
+  · Lo apartado sigue a lo que lleva: quitar suelta los kilos (y sus paquetes)
+    para que se vendan; agregar o subir kilos exige que haya libres (sin contar
+    lo apartado para otros clientes) o no se guarda nada.
+  · Si al modificarlo queda en menos de lo que dejó pagado, la lista dice "a
+    favor" y al entregarlo se le devuelve (igual que antes con el peso real).
+  · En Ventas el filtro dice "Pedido · en espera" y el detalle solo ofrece
+    cancelar; cancelado, se reactiva en espera.
+
+LO TÉCNICO
+  · Backend: pedidos/model.js → modificarEncargo (reemplaza a prepararEncargo):
+    PUT /api/v1/pedidos/:id/encargo (permiso ver:encargos) con la lista
+    COMPLETA de líneas (detalle_id = la que ya tenía; variante_id = una nueva;
+    la que no viene se quita), codigos opcionales, y metodo_entrega,
+    entrega_direccion, costo_envio, entrega_para y notas. Devuelve total_antes,
+    pagado, falta, a_favor y cambios. Errores: NO_SE_MODIFICA, PEDIDO_VACIO,
+    LINEA_INVALIDA, LINEA_REPETIDA, BULTO_REPETIDO, FALTA_CANTIDAD,
+    CANTIDAD_INVALIDA, BULTOS_EXCEDEN_CANTIDAD, FALTA_DIRECCION,
+    STOCK_INSUFICIENTE y los del paquete (desconocido, de otro hilo, tomado).
+    _precioDeVariante salió de _cotizar (el precio de una línea nueva es el
+    mismo que en la caja). _validarCaminoEncargo: 'listo'/'enviado' a mano → 409
+    PEDIDO_EN_ESPERA; entregar ya no exige estar preparado (se quitó
+    PEDIDO_SIN_PREPARAR). Se quitó POST /pedidos/:id/preparar.
+  · Los pedidos viejos en 'listo' o 'enviado' se leen como "en espera" (en
+    producción no había ninguno: el único está en 'en_preparacion').
+  · Frontend: encargos/modificar-modal.* (nuevo), encargos.ts/html rehechos,
+    preparar-modal.* borrados, ventas.service.modificarPedido, ventas.models
+    (LineaPedidoEdit, ModificarPedidoInput), pedidos/estados.ts ("En espera"),
+    pedido-detalle (solo cancelar), Ventas (filtro), catálogo de permisos (la
+    ayuda de Pedidos).
+  · Sin cambios en la base.
+
+LA VERIFICACIÓN
+  · e2e-pedidos-encargo.js reescrito (74): en espera sin pasos, modificar con
+    paquetes, agregar y quitar un hilo con lo apartado, sin existencias no se
+    guarda nada, cambiar la entrega, entregar sin modificar, a favor, fiado,
+    cancelar y reactivar. e2e-permisos (39, una nueva para la ruta). Pasan
+    apartados (47), venta-conos (23), comprobante-pago (41), nomina-pdf (29),
+    surtir-a-medias (17) y bulto-a-mano (22); 319 unitarias del frontend.
+  · Se miró la pantalla y la ventana con pedidos de prueba (se borraron): al
+    cambiar 6.5 → 9.25 kg de un hilo de $80, el total pasó de $4,390 a $4,610.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (26) · Surtir sucursal a medias: lo escaneado se guarda y se aparta (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Que se puedan escanear una parte, se guarden esos códigos de barras pero que
+  ya no se puedan vender hasta que cancele el pedido; que haya un como en
+  espera hasta que terminen de escanear los demás, pero que se guarden; al
+  final no se pueden vender."
+
+CÓMO QUEDÓ
+  · En la ventana "Enviar" hay un botón nuevo: "Guardar y seguir después".
+    Guarda lo escaneado; esos paquetes quedan APARTADOS para ese envío: la caja
+    no los vende ("está apartado para TRA-…: va en un envío a sucursal"), no se
+    bajan a conos y otro envío no los toma.
+  · El pendiente queda "En espera: van 2 paquetes escaneados (apartados). Falta
+    terminar y enviarlo", su línea dice "2 escaneados" y el botón dice "Seguir
+    escaneando". Al abrirlo, lo guardado ya está en la lista.
+  · Si se quita uno de la lista y se guarda, ese paquete queda libre otra vez.
+  · Salir con paquetes escaneados sin guardar pregunta antes ("se pierden").
+  · Al Enviar salen lo guardado y lo nuevo. Si se cancela la solicitud, lo
+    guardado queda libre (la ventana de cancelar lo dice).
+  · No mueve kilos: lo que se apartó al pedir sigue igual hasta que sale.
+
+LO TÉCNICO
+  · Backend: inventario/model (guardarEscaneos, _soltarApartados,
+    _conGuardados; _bultosEscaneados acepta los apartados del mismo traspaso
+    y dice para cuál está uno ajeno; enviar y cancelar los sueltan o los
+    mandan), routes (PUT /traspasos/:id/escaneos), controller, service;
+    pedidos (_errorBultoTomado dice el envío), variantes y hilo (el folio de
+    quien lo tiene: pedido o envío), remesas/reportes ("Apartado (pedido o
+    envío)").
+  · Frontend: traspasos/envio-modal (guardar, cargar lo guardado, preguntar
+    al salir), traspasos (en espera, "Seguir escaneando", cancelar), pos y
+    preparar-modal (mensaje), inventario.service.
+  · Sin cambios en la base (el estado 'apartado' del bulto ya existía).
+
+LA VERIFICACIÓN
+  · e2e-surtir-a-medias.js (nuevo, 17). Pasan traspaso-estados,
+    surtir-inventario, pedidos-encargo, bulto-a-mano, detalle-hilo, permisos,
+    venta-conos y apartados; 20 unitarias del backend y 319 del frontend
+    (4 nuevas del modal de envío). Se miró la pantalla y el modal con un envío
+    de prueba a medias (se borró).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (25) · Quitar un paquete de una carga también saca sus kilos (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Se le explicó (corrigiendo lo dicho antes: los paquetes del Excel SÍ
+  metieron kilos, con la carga) que quitar un paquete de una carga dejaba sus
+  kilos en el inventario, y que si después se volvía a capturar a mano con el
+  código bien, el inventario quedaba con esos kilos dos veces. Se le propuso
+  "un bulto que metió kilos se los lleva al quitarlo": "sí, hazlo así". Y "de
+  ahora en adelante explícame así (con casos y ejemplos), porque a veces no
+  entiendo muy bien".
+
+CÓMO QUEDÓ
+  · Quitar un paquete que llegó en una carga del Excel saca sus kilos del
+    almacén donde está, igual que el capturado a mano desde hoy. Solo si sigue
+    disponible (no vendido, apartado ni bajado a conos) y si no viene en camino
+    en un envío a sucursal.
+  · Los capturados a mano antes de hoy siguen borrando solo su registro (nunca
+    metieron kilos).
+  · La ventana de confirmación dice cuál es el caso: "Llegó en la carga …: al
+    quitarlo salen sus 19.2 kg de …".
+  · El kardex: "Se quitó un bulto", con la carga en el motivo. El PDF de la
+    carga ya decía que un bulto se quitó después; ahora dice que sus kilos
+    salieron.
+
+LO TÉCNICO
+  · variantes/service.eliminarCodigo (metió kilos = carga o entrada a mano;
+    PAQUETE_EN_CAMINO), variantes/model (quitarBultoConSalida toma el almacén
+    del bulto o el de su carga; con_entrada incluye los de carga),
+    inventario/service (concepto), remesas/reportes (nota), frontend
+    (mensaje). Sin cambios en la base.
+
+LA VERIFICACIÓN
+  · e2e-bulto-a-mano.js (22): además, quitar un paquete de una carga saca sus
+    19.2 kg, el kardex dice la carga, y volverlo a capturar bien deja el
+    inventario igual. Pasan venta-conos, edicion-catalogo, detalle-hilo y
+    carga-lista; 20 unitarias del backend y 315 del frontend.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (24) · El bulto a mano da entrada a sus kilos (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Al preguntarle si el bulto a mano debía sumar sus kilos (entrada 23 solo
+  decía dónde estaba): "sí, se suman los kilos de la entrada de ese paquete".
+
+CÓMO QUEDÓ
+  · "Agregar bulto a mano" pide el almacén ("¿A qué almacén entra?": primero
+    donde ya hay de ese hilo, con sus kilos, y luego los demás) y el peso real,
+    los dos obligatorios. Si el hilo está en un solo lugar, ya viene elegido.
+    Dice "Entran 18.6 kg a Bodega principal" antes de añadir y "Bulto …
+    añadido: entraron … kg a …" después; las existencias de la pantalla se
+    actualizan.
+  · El kardex lo anota como "Bulto capturado a mano" con su código (cuenta en
+    el filtro Entradas).
+  · Quitar un bulto capturado a mano saca sus kilos del almacén donde está (la
+    ventana de confirmación lo dice), si sigue disponible; uno vendido, apartado
+    o bajado a conos ya no se quita. Los bultos de una carga del proveedor, o
+    los capturados antes de hoy, siguen borrando solo su registro.
+  · Si la presentación todavía no tenía peso, toma el del bulto (lo necesita el
+    desarme).
+
+LO TÉCNICO
+  · Backend: variantes/service (FALTA_PESO; _almacenDelBulto ahora acepta
+    cualquier almacén y pide uno si el hilo está en dos o en ninguno;
+    eliminarCodigo saca los kilos), variantes/model (agregarBultoConEntrada,
+    quitarBultoConSalida, bultoConEntrada, con_entrada en la lista),
+    controller (el usuario va al kardex), inventario (kardex: referencia
+    'bulto', "Bulto capturado a mano", búsqueda por su código).
+  · Frontend: producto-presentaciones (selector, peso obligatorio, mensajes,
+    recarga de existencias), catalogo.models (con_entrada).
+  · E2E ajustadas porque capturaban bultos a mano sin esperar kilos:
+    e2e-pedidos-encargo (los 100 kg ahora son 11.85 sueltos + 88.15 de los
+    paquetes), e2e-venta-conos (el bulto da la entrada), e2e-edicion-catalogo
+    (dice el almacén).
+  · Sin cambios en la base.
+
+LA VERIFICACIÓN
+  · e2e-bulto-a-mano.js reescrita (18). Pasan también venta-conos,
+    edicion-catalogo, pedidos-encargo, comprobante-pago, detalle-hilo y
+    nomina-pdf; 20 unitarias del backend y 315 del frontend. Se miró la ventana
+    con un hilo de prueba (se borró).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (23) · Bulto a mano: se elige en qué almacén está (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Cuando se agrega un bulto a mano y tengo hilo en 2 lugares, que me pregunte
+  a cuál de los 2 lados se va a cargar ese bulto, para que no haya problema
+  dónde lo mete."
+
+LO QUE PASABA
+  · El bulto capturado a mano quedaba SIN almacén: el sistema no sabía dónde
+    estaba ese paquete (la caja, el desarme y el envío a sucursal se fijan en
+    eso).
+
+CÓMO QUEDÓ
+  · Productos → Presentaciones → "Agregar bulto a mano" pregunta "¿Dónde está
+    el bulto?", con los lugares donde hay de ese hilo y sus kilos:
+      - en dos o más lugares: hay que elegir (el botón no deja añadir sin
+        eso, y el servidor tampoco);
+      - en un solo lugar: ya viene elegido;
+      - sin existencias: se elige cualquiera o se deja sin almacén.
+  · El lugar se queda para el siguiente bulto (se capturan varios seguidos) y
+    el aviso dice "Bulto … añadido en Bodega principal".
+  · Sigue sin mover el inventario: solo dice dónde está el paquete.
+
+LO TÉCNICO
+  · Backend: variantes/routes (almacen_id en el bulto), service
+    (_almacenDelBulto: FALTA_ALMACEN, ALMACEN_SIN_ESTE_HILO, ALMACEN_INVALIDO),
+    model (lo guarda y lo devuelve con el nombre; almacenesConExistencia).
+  · Frontend: producto-presentaciones.ts|html (el selector), catalogo.service.
+  · Sin cambios en la base.
+
+LA VERIFICACIÓN
+  · e2e-bulto-a-mano.js (nuevo, 10). 20 unitarias del backend y 315 del
+    frontend. Se miró la ventana con un hilo de prueba en dos almacenes (se
+    borró).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (22) · La comisión se paga cuando la venta se liquida, y su reporte (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Si fue una venta a crédito no se pagan comisiones hasta que se liquide…
+  las comisiones se pagan por semana: si esta semana vendió $10 a crédito, no
+  se pagó y cerré mi nómina, no se mete; después de 2 semanas se paga, ahora
+  sí se agrega la comisión porque ya fue liquidado el crédito, y cuenta para
+  esa semana." Y "de las comisiones queremos un reporte para ver qué se está
+  pagando de cada venta, por semana". Al preguntarle: COMPLETA al liquidarse
+  (no por abono); los apartados y los pedidos igual; el reporte en pantalla y
+  en PDF.
+
+LA REGLA
+  · Cada venta paga su comisión UNA vez, completa, en la nómina de la semana en
+    que quedó pagada: la de contado, el día que se vende; la fiada, cuando los
+    abonos de la cuenta la cubren (lo más antiguo primero, como siempre); el
+    apartado y el pedido, cuando lo que dejaron llega al total.
+  · Si se liquida en una semana que ya se cerró, entra en la siguiente que se
+    calcule. Si una nómina se cancela, sus ventas vuelven a quedar libres.
+  · Sobre la venta neta, sin IVA ni envío (igual que antes).
+  · Rige desde la semana del domingo 4 de octubre de 2026. Lo vendido antes ya
+    se pagó con la regla anterior.
+
+CÓMO QUEDÓ
+  · Nómina → pestaña "Comisiones": por vendedor, qué ventas paga esta nómina
+    (folio con enlace, cliente, tipo —contado, fiada, apartado, pedido—, cuándo
+    se vendió y cuándo quedó pagada, total, venta neta y comisión) y "Por
+    liquidar al día de hoy" (lo que deben y la comisión que se pagará). La
+    columna de la tabla de recibos dice "N ventas pagadas".
+  · El detalle del recibo enseña lo mismo de esa persona, a todo lo ancho.
+  · El PDF: después del resumen, el "Reporte de comisiones" venta por venta; el
+    recibo resume su comisión por tipo de venta y dice en una línea lo que le
+    falta por liquidar, y sigue cabiendo en UNA hoja con su firma. El de una
+    persona lleva detrás el detalle de sus comisiones.
+
+CAMBIO EN LA BASE (migración 2026-10_comisiones_al_liquidar.sql)
+  · Tabla nomina_comisiones: qué ventas paga cada recibo, congeladas (folio,
+    cliente, tipo, vendida y liquidada, total, venta neta, % y comisión). Es lo
+    que evita pagar una venta dos veces y es el reporte de una semana pagada.
+  · Anota lo que ya se pagó en nóminas PAGADAS desde el 4 de octubre (las ventas
+    que existían cuando se calculó el recibo), para que no se vuelva a pagar.
+    En producción: POS-1A4F (de la semana del 4, sin comisión). El pedido
+    POS-652E (del 6 en la noche, después de calcular) no estaba en esa nómina:
+    entrará cuando se liquide.
+  · En "desarrollo" y en "hitex" (respaldo previo en /root/respaldos/).
+
+LO TÉCNICO
+  · Backend: nomina/comisiones.js (nuevo: cuándo se liquidó cada venta, las de
+    la semana, anotarlas, el reporte); model._calcular (regla nueva desde
+    DESDE, la vieja antes); clientes/model.js → repartirAbonos (el reparto sin
+    base, que aplicarAbonos sigue usando); GET /periodos/:id/comisiones (quitó
+    /ventas); reporte.js (hoja de comisiones, recibo compacto).
+  · Frontend: nomina/comisiones-semana.ts|html (+ spec), nomina (pestañas),
+    recibo-modal (el reporte de la persona), modelos y servicio.
+
+LA VERIFICACIÓN
+  · e2e-nomina-pdf.js reescrita (29): contado y pedido se pagan en su semana
+    (el envío no cuenta); la fiada, el apartado y la cancelada no; la fiada de
+    la semana A se paga completa en la B; una liquidada en una semana ya
+    cerrada entra en la C; recalcular no duplica; en total cada venta pagó una
+    vez ($3,100, $93); una nómina cancelada suelta sus ventas; el PDF.
+  · Pasan e2e-nomina-jornada, clientes-credito, apartados, pedidos-encargo,
+    cancelacion-caja y permisos; 20 unitarias del backend y 315 del frontend.
+  · Se miraron la pestaña, el detalle del recibo y las hojas del PDF con datos
+    de prueba (se borraron).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-07 (21) · Nómina: el envío no cuenta para la comisión, y el PDF (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Los envíos no entran en las comisiones del vendedor: un cliente hace
+  pedido, se lo van a llevar, se cobra un envío; se pagó 1000 y de envío 120,
+  esos 1120 no se le agregan a comisiones." Al preguntarle: la comisión es
+  sobre los $1,000 (el envío no cuenta, el hilo sí). Y "se requiere un reporte
+  de nómina, pero quiero un PDF con diseño": resumen + un recibo por persona.
+
+LO QUE SE ENCONTRÓ
+  · La comisión YA era sobre subtotal − descuento: el envío nunca contó. Pero
+    la pantalla decía "sin IVA, sin lo cancelado ni lo devuelto" (sin mencionar
+    el envío) y la lista de ventas del recibo no enseñaba el envío, así que no
+    había cómo verlo. No se cambió el cálculo.
+
+CÓMO QUEDÓ
+  · Nómina: "sin IVA ni envío" en la explicación. En el detalle del recibo,
+    cada venta dice si fue de mostrador o un pedido (pasó por él / lo llevó el
+    chofer), con el folio corto, y debajo de la venta neta "+ $120 de envío,
+    no cuenta".
+  · Botón "Bajar PDF" junto al selector de la semana: el resumen y un recibo
+    por persona. En el detalle de un recibo, "Bajar su recibo (PDF)".
+  · El PDF: franja azul arriba, estado de la nómina (borrador / pagada /
+    cancelada). RESUMEN: sueldos, comisiones, extras menos descuentos y el total
+    en cajas; la tabla de todos (días, sueldo, comisión con su % y su base,
+    extras y descuentos, a pagar) con su total; la regla de la comisión; firmas
+    de Elaboró y Autorizó. RECIBO (una hoja por persona): percepciones y
+    deducciones lado a lado, "A pagar" con número y con letra, su semana día
+    por día (horario, descanso, vacaciones en verde, horas extra), sus ventas
+    por día (cobrado, envío que no cuenta, venta neta) y "Recibí $… (… pesos
+    xx/100 M.N.) por mi sueldo y comisiones de la semana…" con fecha y firma.
+
+LO TÉCNICO
+  · Backend: nomina/reporte.js (nuevo), utils/letras.js (+ letras.test.js),
+    utils/pdf.js → enviar (también lo usa remesas/controller), nomina/routes
+    (GET /periodos/:id/pdf), controller, model (VENTA_VALIDA exportada;
+    ventasDelPeriodo con encargo y metodo_entrega).
+  · Frontend: nomina.ts|html (Bajar PDF, texto), recibo-modal.ts|html (PDF de
+    su recibo, de dónde fue cada venta, el envío), semana.ts (rangoArchivo),
+    nomina.service (pdf), nomina.models.
+  · Sin cambios en la base.
+
+LA VERIFICACIÓN
+  · e2e-nomina-pdf.js (nuevo, 17): un pedido con chofer de $1,000 + $120 y una
+    venta de $500 dan $1,500 de venta neta (la cancelada no cuenta) y $45 de
+    comisión al 3%; el PDF sale con el resumen y un recibo por persona; el de
+    una persona cabe en UNA hoja con horas extra, vacaciones y descuento; 404
+    y 409 donde toca; las tablas quedan como estaban.
+  · Pasan e2e-nomina-jornada y 20 unitarias del backend (con las de la
+    cantidad con letra) y 313 del frontend.
+  · Se miraron las hojas renderizadas (una semana de prueba y una real
+    pagada); se corrigieron un rótulo encimado, la columna "Descuentos" partida
+    y "-$0.00".
 
 
 -------------------------------------------------------------------------------

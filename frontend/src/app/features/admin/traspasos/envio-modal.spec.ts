@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { EnvioModal } from './envio-modal';
 import { CodigoResuelto, InventarioService, ResultadoTraspaso, Traspaso } from '../../../core/services/inventario.service';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 
 /**
  * Lo que importa al surtir escaneando (usuario, 2026-10-06):
@@ -9,7 +10,10 @@ import { CodigoResuelto, InventarioService, ResultadoTraspaso, Traspaso } from '
  *   · se avisa en el momento lo que no puede salir: el código de la
  *     presentación, un paquete de otro hilo, uno ya vendido, uno repetido o un
  *     código que no existe;
- *   · al enviar se mandan los códigos escaneados.
+ *   · al enviar se mandan los códigos escaneados;
+ *   · se puede dejar a medias (2026-10-07): "Guardar y seguir después" guarda lo
+ *     escaneado (queda apartado), al volver aparece ya en la lista, y salir con
+ *     escaneos sin guardar pregunta antes.
  */
 describe('EnvioModal', () => {
   const traspaso = {
@@ -29,28 +33,49 @@ describe('EnvioModal', () => {
     A2: bulto('A2', '19.450'),
     A3: bulto('A3', '18.900'),
     VENDIDO: bulto('VENDIDO', '19.000', { estado: 'vendido', consumido_folio: 'POS-79FA' }),
+    MIO: bulto('MIO', '19.100', { estado: 'apartado', consumido_folio: 'TRA-7' }),
+    AJENO: bulto('AJENO', '19.200', { estado: 'apartado', consumido_folio: 'TRA-9' }),
     PRESENTACION: { variante: negro, bulto: null } as unknown as CodigoResuelto,
     BLANCO: { variante: { id: 20, producto: 'BLANCO', calibre: '1/30' },
       bulto: { id: 9, variante_id: 20, codigo: 'BLANCO', peso_kg: '19.000', estado: 'disponible' } } as unknown as CodigoResuelto,
   };
 
   let enviado: { id: number; codigos: string[]; notas?: string } | null = null;
+  /** Los que se mandaron como "sí está aquí" (estaban en otro almacén). */
+  let encontradosEnviados: string[] = [];
+  let guardados: { id: number; codigos: string[] } | null = null;
+  let respuestaConfirmacion = true;
+  let preguntas = 0;
+  const confirmacionFalsa = {
+    pedir: () => {
+      preguntas++;
+      return Promise.resolve(respuestaConfirmacion);
+    },
+  };
   const invFalso = {
+    guardarEscaneos: (id: number, codigos: string[]) => {
+      guardados = { id, codigos };
+      return of({ id, folio: 'TRA-7', guardados: codigos.length, kg: 38.1 });
+    },
     resolverCodigo: (c: string) =>
       respuestas[c] ? of(respuestas[c]) : throwError(() => ({ status: 404 })),
-    enviarTraspaso: (id: number, codigos: string[], notas?: string) => {
+    enviarTraspaso: (id: number, codigos: string[], notas?: string, encontrados: string[] = []) => {
       enviado = notas ? { id, codigos, notas } : { id, codigos };
+      encontradosEnviados = encontrados;
       return of({ id, folio: 'TRA-7', estado: 'en_transito', lineas: [] } as ResultadoTraspaso);
     },
   };
 
-  async function montar() {
+  async function montar(t: Traspaso = traspaso) {
     await TestBed.configureTestingModule({
       imports: [EnvioModal],
-      providers: [{ provide: InventarioService, useValue: invFalso }],
+      providers: [
+        { provide: InventarioService, useValue: invFalso },
+        { provide: ConfirmacionService, useValue: confirmacionFalsa },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(EnvioModal);
-    fixture.componentRef.setInput('traspaso', traspaso);
+    fixture.componentRef.setInput('traspaso', t);
     fixture.detectChanges();
     return fixture;
   }
@@ -60,7 +85,13 @@ describe('EnvioModal', () => {
     c.leer();
   }
 
-  beforeEach(() => (enviado = null));
+  beforeEach(() => {
+    enviado = null;
+    guardados = null;
+    respuestaConfirmacion = true;
+    preguntas = 0;
+    encontradosEnviados = [];
+  });
   afterEach(() => TestBed.resetTestingModule());
 
   it('cada paquete escaneado suma su peso REAL a su hilo', async () => {
@@ -128,6 +159,39 @@ describe('EnvioModal', () => {
     expect(c.totalKg()).toBe(19.45);
   });
 
+  // 2026-10-07: el usuario eligió "avisar y, si confirman que sí está aquí, pasarlo con sus kilos".
+  const desdeBodega = { ...traspaso, almacen_origen_id: 2 } as Traspaso;
+  respuestas['OTRO'] = bulto('OTRO', '20.000', { almacen_id: 1, almacen: 'Tienda Principal' });
+  respuestas['AQUI'] = bulto('AQUI', '19.000', { almacen_id: 2, almacen: 'Bodega' });
+  respuestas['CAMINO'] = bulto('CAMINO', '19.000', { almacen_id: 2, almacen: 'Bodega', en_camino_folio: 'TRA-3' });
+  const esperar = () => new Promise((r) => setTimeout(r));
+
+  it('uno que el sistema tiene en OTRO almacén pregunta si sí está aquí; si sí, entra y va como encontrado', async () => {
+    const c = (await montar(desdeBodega)).componentInstance;
+    escanear(c, 'AQUI');
+    expect(preguntas).toBe(0);
+    escanear(c, 'OTRO');
+    await esperar();
+    expect(preguntas).toBe(1);
+    expect(c.escaneados().find((p) => p.codigo === 'OTRO')?.estaba_en).toBe('Tienda Principal');
+    expect(c.ultimo()).toContain('se pasa de «Tienda Principal» a «Bodega»');
+    c.confirmar();
+    expect(enviado!.codigos).toEqual(['AQUI', 'OTRO']);
+    expect(encontradosEnviados).toEqual(['OTRO']);
+  });
+
+  it('si dicen que no está aquí, no entra; y uno que viene en camino tampoco', async () => {
+    respuestaConfirmacion = false;
+    const c = (await montar(desdeBodega)).componentInstance;
+    escanear(c, 'OTRO');
+    await esperar();
+    expect(c.escaneados().length).toBe(0);
+    expect(c.error()).toBe('No se agregó el paquete OTRO: el sistema lo tiene en «Tienda Principal».');
+    escanear(c, 'CAMINO');
+    expect(c.error()).toContain('viene en camino (TRA-3)');
+    expect(c.escaneados().length).toBe(0);
+  });
+
   it('al enviar manda los códigos escaneados y avisa a la pantalla', async () => {
     const c = (await montar()).componentInstance;
     let salio = false;
@@ -164,7 +228,10 @@ describe('EnvioModal', () => {
     } as unknown as Traspaso;
     await TestBed.configureTestingModule({
       imports: [EnvioModal],
-      providers: [{ provide: InventarioService, useValue: invFalso }],
+      providers: [
+        { provide: InventarioService, useValue: invFalso },
+        { provide: ConfirmacionService, useValue: confirmacionFalsa },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(EnvioModal);
     fixture.componentRef.setInput('traspaso', dos);
@@ -177,5 +244,58 @@ describe('EnvioModal', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('era lo único que había');
     c.confirmar();
     expect(enviado).toEqual({ id: 7, codigos: ['A1'], notas: 'Va en la camioneta 2' });
+  });
+
+  it('a medias: guarda la lista completa y avisa a la pantalla', async () => {
+    const c = (await montar()).componentInstance;
+    let aviso: { guardados: number } | null = null;
+    c.guardado.subscribe((r) => (aviso = r));
+    escanear(c, 'A1');
+    expect(c.cambiosSinGuardar()).toBe(true);
+    c.guardar();
+    expect(guardados).toEqual({ id: 7, codigos: ['A1'] });
+    expect(aviso!.guardados).toBe(1);
+    expect(c.cambiosSinGuardar()).toBe(false);
+  });
+
+  it('lo guardado antes aparece ya escaneado y se sigue con lo demás', async () => {
+    const conGuardados = {
+      ...traspaso,
+      lineas: [{ ...traspaso.lineas[0], guardados: [{ codigo: 'MIO', peso_kg: '19.100', lote: 'L1', variante_id: 10 }] }],
+    } as unknown as Traspaso;
+    const c = (await montar(conGuardados)).componentInstance;
+    expect(c.escaneados().map((p) => p.codigo)).toEqual(['MIO']);
+    expect(c.yaGuardados()).toBe(1);
+    expect(c.cambiosSinGuardar()).toBe(false);
+    escanear(c, 'A2');
+    c.confirmar();
+    expect(enviado).toEqual({ id: 7, codigos: ['MIO', 'A2'] });
+  });
+
+  it('uno apartado para ESTE envío sí entra; uno de otro envío, no', async () => {
+    const c = (await montar()).componentInstance;
+    escanear(c, 'MIO');
+    expect(c.escaneados().map((p) => p.codigo)).toEqual(['MIO']);
+    escanear(c, 'AJENO');
+    expect(c.error()).toContain('apartado para otro envío a sucursal (TRA-9)');
+    expect(c.escaneados().length).toBe(1);
+  });
+
+  it('salir con escaneos sin guardar pregunta antes', async () => {
+    const c = (await montar()).componentInstance;
+    let cerro = false;
+    c.cerrado.subscribe(() => (cerro = true));
+    await c.cerrar();
+    expect(preguntas).toBe(0);
+    expect(cerro).toBe(true);
+    cerro = false;
+    escanear(c, 'A1');
+    respuestaConfirmacion = false;
+    await c.cerrar();
+    expect(preguntas).toBe(1);
+    expect(cerro).toBe(false);
+    respuestaConfirmacion = true;
+    await c.cerrar();
+    expect(cerro).toBe(true);
   });
 });

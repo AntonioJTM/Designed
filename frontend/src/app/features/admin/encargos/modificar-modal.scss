@@ -1,4 +1,4 @@
-/* Preparar un pedido: el lector, cada línea con lo que va y el total al peso real. */
+/* Modificar un pedido: el lector, cada hilo con lo que lleva, agregar, la entrega y el total. */
 .explica { margin: 0 0 16px; font-size: 14px; color: var(--tinta-2); line-height: 1.5; }
 .explica b { color: var(--tinta); }
 .modal-body > .alert { margin: 0 0 16px; }
@@ -8,10 +8,12 @@
 .sub { font-size: 12px; color: var(--tinta-3); margin: 4px 0 0; }
 .mono { font-family: var(--mono); font-size: 13px; }
 
-.lineas-prep { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
-.linea-prep { border: 1px solid var(--borde); border-radius: 10px; padding: 12px 14px; }
-.linea-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.linea-cabeza > :first-child { min-width: 0; }
+.lineas-mod { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.linea-mod { border: 1px solid var(--borde); border-radius: 10px; padding: 12px 14px; }
+.linea-mod.nueva { border-color: var(--ok-t); }
+.linea-cabeza { display: flex; align-items: flex-start; gap: 12px; }
+.linea-cabeza > :first-child { flex: 1 1 auto; min-width: 0; }
+.linea-cabeza .pill { margin-left: 6px; }
 .linea-va { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .escaneados {
@@ -24,13 +26,21 @@
 }
 .escaneados li:first-child { border-top: 0; }
 .escaneados li b { font-variant-numeric: tabular-nums; }
-.escaneados .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pesar { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
-.pesar .field { flex: 1 1 140px; margin: 0; }
+.pesar .field { flex: 0 1 220px; margin: 0; }
 .con-unidad { display: flex; align-items: center; gap: 6px; }
 .con-unidad input { flex: 1; min-width: 0; }
 .con-unidad span { color: var(--tinta-3); font-size: 13px; }
+
+.agregar, .entrega { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--borde); }
+.entrega .seg { margin-bottom: 12px; }
+.resultados { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--borde); border-radius: 8px; }
+.resultados li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px;
+  padding: 6px 10px; font-size: 13.5px; border-top: 1px solid var(--borde);
+}
+.resultados li:first-child { border-top: 0; }
 
 .previa-entrega {
   display: flex; flex-direction: column; gap: 6px; margin-top: 16px; padding: 12px 14px; border-radius: 10px;

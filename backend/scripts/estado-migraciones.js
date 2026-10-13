@@ -81,6 +81,7 @@ const MIGRACIONES = [
   ['2026-10_pedidos_encargo', 'pedidos.encargo'],
   ['2026-10_pedidos_encargo (permiso)', 'permisos#clave=ver:encargos'],
   ['2026-10_bulto_apartado', "variante_codigos^'apartado'"],
+  ['2026-10_comisiones_al_liquidar', 'nomina_comisiones'],
 ];
 
 (async () => {
