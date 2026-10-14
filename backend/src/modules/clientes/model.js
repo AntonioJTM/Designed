@@ -184,7 +184,11 @@ async function buscarParaVenta(q, limite = 10) {
             c.tipo_cliente_id, tc.nombre AS tipo_cliente,
             c.limite_credito,
             COALESCE(s.saldo, 0) AS saldo,
-            COALESCE(s.disponible, c.limite_credito) AS credito_disponible
+            COALESCE(s.disponible, c.limite_credito) AS credito_disponible,
+            -- Lo que le quedó a favor por devoluciones (2026-10-13): la caja
+            -- ofrece usarlo al cobrar.
+            (SELECT COALESCE(SUM(CASE WHEN f.tipo IN ('uso', 'aplicado') THEN -f.monto ELSE f.monto END), 0)
+               FROM saldo_favor_movimientos f WHERE f.cliente_id = c.id) AS saldo_favor
        FROM clientes c
        LEFT JOIN tipos_cliente tc ON tc.id = c.tipo_cliente_id
        LEFT JOIN v_clientes_saldo s ON s.cliente_id = c.id
@@ -500,10 +504,11 @@ async function registrarAbono(clienteId, datos, usuarioId) {
     let esEfectivo = false;
     if (datos.metodo_pago_id) {
       const [mrows] = await conn.query(
-        'SELECT nombre, activo FROM metodos_pago WHERE id = :id LIMIT 1',
+        'SELECT nombre, activo, interno FROM metodos_pago WHERE id = :id LIMIT 1',
         { id: datos.metodo_pago_id }
       );
-      if (!mrows[0] || !mrows[0].activo) {
+      // "Saldo a favor" es interno: se aplica con su propio botón (saldo-favor.js).
+      if (!mrows[0] || !mrows[0].activo || Number(mrows[0].interno)) {
         throw new AppError(422, 'METODO_PAGO_INVALIDO',
           'Ese método de pago no existe o está inactivo');
       }

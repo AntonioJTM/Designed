@@ -19,7 +19,6 @@ const pedidosRoutes = require('./modules/pedidos/routes');
 const nominaRoutes = require('./modules/nomina/routes');
 const reportesRoutes = require('./modules/reportes/routes');
 const analisisRoutes = require('./modules/analisis/routes');
-const asistenteRoutes = require('./modules/asistente/routes');
 const notificacionesRoutes = require('./modules/notificaciones/routes');
 const configuracionRoutes = require('./modules/configuracion/routes');
 const permisosRoutes = require('./modules/permisos/routes');
@@ -67,9 +66,5 @@ router.use('/nomina', nominaRoutes);
 router.use('/reportes', reportesRoutes);
 // El tablero del negocio: cobranza, clientes que no vuelven, hilo parado y margen.
 router.use('/analisis', analisisRoutes);
-
-// El asistente: se le pregunta en palabras normales y contesta con los datos de
-// la tienda. La IA elige entre consultas ya programadas; nunca escribe SQL.
-router.use('/asistente', asistenteRoutes);
 
 module.exports = router;

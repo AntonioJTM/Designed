@@ -22,7 +22,7 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
   <nav class="tabs" aria-label="Reportes">
     @for (t of pestanas; track t.clave) {

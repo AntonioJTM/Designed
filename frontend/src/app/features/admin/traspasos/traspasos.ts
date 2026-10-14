@@ -163,14 +163,14 @@ export class Traspasos {
     const recibidos = this.recibidosDelMes();
     const falto = Math.round(recibidos.reduce((s, t) => s + this.faltanteDe(t), 0) * 1000) / 1000;
     return [
-      { etiqueta: 'Por enviar', valor: String(porEnviar), pie: 'solicitudes esperando a la bodega', punto: '#2457C5' },
-      { etiqueta: 'En camino', valor: String(enCamino), pie: 'falta que confirmen que llegó', punto: '#E9A23B' },
-      { etiqueta: 'Recibidos', valor: String(recibidos.length), pie: 'este mes', punto: '#1baf7a' },
+      { etiqueta: 'Por enviar', valor: String(porEnviar), pie: 'solicitudes esperando a la bodega', punto: 'var(--acento)' },
+      { etiqueta: 'En camino', valor: String(enCamino), pie: 'falta que confirmen que llegó', punto: 'var(--punto-aviso)' },
+      { etiqueta: 'Recibidos', valor: String(recibidos.length), pie: 'este mes', punto: 'var(--viz-series-3)' },
       {
         etiqueta: 'Faltó al recibir',
         valor: `${falto.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`,
         pie: 'este mes · se asentó como merma',
-        punto: '#C2410C',
+        punto: 'var(--punto-alerta)',
       },
     ];
   });

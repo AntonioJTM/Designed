@@ -8,7 +8,7 @@
     <div class="modal-head">
       <h2 id="modal-recibo-titulo">
         Recibo de {{ actual()?.usuario }}
-        <span class="muted" style="font-weight: 400; font-size: 15px; text-transform: capitalize"> · {{ actual()?.rol }}</span>
+        <span class="muted" style="font-weight: 400; font-size: 0.9375rem; text-transform: capitalize"> · {{ actual()?.rol }}</span>
       </h2>
       <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
     </div>
@@ -16,8 +16,8 @@
     <div class="modal-body">
       @if (actual(); as r) {
         <div class="columna" style="gap: 20px">
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
-          @if (mensaje()) { <p class="ok-msg" style="margin: 0">{{ mensaje() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+          @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
           <!-- De dónde sale lo que se le paga, renglón por renglón. -->
           <div class="resumen-recibo">
@@ -72,7 +72,7 @@
           </div>
 
           @if (!conHorario(r)) {
-            <p class="aviso" style="margin: 0">
+            <p class="aviso">
               Sin horario: se le paga la semana completa y sus horas extra no se pueden calcular. Captura su
               horario en <b>Sueldos y comisiones</b> y luego toca <b>Recalcular</b>.
             </p>
@@ -105,7 +105,7 @@
                       Las vacaciones se registran en Sueldos y comisiones.
                     </p>
                   } @else {
-                    <p class="muted" style="margin: 0; font-size: 14px">
+                    <p class="muted" style="margin: 0; font-size: 0.875rem">
                       Trabajó {{ num(r.dias_trabajados) }} de {{ num(r.dias_laborales) }} días{{ num(r.dias_vacaciones) > 0 ? ' · ' + num(r.dias_vacaciones) + ' de vacaciones' : '' }}.
                     </p>
                   }
@@ -116,7 +116,7 @@
               <section>
                 <h3>Horas extra</h3>
                 @if (horasExtra(r).length === 0) {
-                  <p class="muted" style="margin: 0; font-size: 14px">Sin horas extra esta semana.</p>
+                  <p class="muted" style="margin: 0; font-size: 0.875rem">Sin horas extra esta semana.</p>
                 } @else {
                   @for (c of horasExtra(r); track c.id) {
                     <div class="concepto">
@@ -167,7 +167,7 @@
               <section>
                 <h3>Descuentos</h3>
                 @if (otros(r).length === 0) {
-                  <p class="muted" style="margin: 0; font-size: 14px">Sin descuentos.</p>
+                  <p class="muted" style="margin: 0; font-size: 0.875rem">Sin descuentos.</p>
                 } @else {
                   @for (c of otros(r); track c.id) {
                     <div class="concepto">

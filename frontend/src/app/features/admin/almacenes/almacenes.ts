@@ -43,15 +43,15 @@ interface TarjetaAlmacen {
     .tarjeta.inactiva { background: var(--superficie-2); }
     .tarjeta-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
     .tarjeta-cabeza > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-    .tarjeta-cabeza h2 { margin: 0; font-size: 17px; font-weight: 600; }
-    .direccion { font-size: 13px; color: var(--tinta-3); }
+    .tarjeta-cabeza h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+    .direccion { font-size: 0.8125rem; color: var(--tinta-3); }
     .etiquetas { display: flex; flex-wrap: wrap; gap: 6px; }
     .cifra { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
-    .cifra b { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .cifra span { font-size: 13px; color: var(--tinta-3); }
+    .cifra b { font-size: 1.625rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cifra span { font-size: 0.8125rem; color: var(--tinta-3); }
     .cajas { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--borde-suave); padding-top: 12px; }
-    .cajas > span:first-child { font-size: 13px; color: var(--tinta-3); }
-    .cajas > span { font-size: 14px; }
+    .cajas > span:first-child { font-size: 0.8125rem; color: var(--tinta-3); }
+    .cajas > span { font-size: 0.875rem; }
   `,
 })
 export class Almacenes {

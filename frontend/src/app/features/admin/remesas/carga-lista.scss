@@ -5,7 +5,7 @@
 .campos { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
 .campos > .field { flex: 1 1 200px; }
 .campos > .field.ancho { flex: 2 1 320px; }
-.nota { margin: 12px 0 0; font-size: 13px; color: var(--tinta-3); line-height: 1.45; }
+.nota { margin: 12px 0 0; font-size: 0.8125rem; color: var(--tinta-3); line-height: 1.45; }
 
 .soltar {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;
@@ -19,24 +19,24 @@
   display: inline-flex; align-items: center; justify-content: center;
 }
 .soltar-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.soltar-texto b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-.soltar-texto span { font-size: 13px; color: var(--tinta-3); }
+.soltar-texto b { font-size: 0.9375rem; font-weight: 600; overflow-wrap: anywhere; }
+.soltar-texto span { font-size: 0.8125rem; color: var(--tinta-3); }
 
 .resumen { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
 .caja-dato {
   flex: 1 1 140px; padding: 12px 14px; border-radius: 8px; background: var(--fondo);
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
-.caja-dato > span, .caja-dato > small { font-size: 12px; color: var(--tinta-3); }
-.caja-dato > b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.caja-dato > span, .caja-dato > small { font-size: 0.75rem; color: var(--tinta-3); }
+.caja-dato > b { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-.doc-linea { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 14px; }
+.doc-linea { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 0.875rem; }
 .alert, .aviso { margin: 0 0 14px; }
-.alert ul, .aviso ul { margin: 6px 0 4px 1.2rem; padding: 0; font-size: 13px; }
+.alert ul, .aviso ul { margin: 6px 0 4px 1.2rem; padding: 0; font-size: 0.8125rem; }
 
 /* Los hilos que se crean: material y línea, en un recuadro aparte. */
 .nuevos { padding: 14px 16px; margin-bottom: 14px; border-radius: 8px; background: var(--info-f); }
-.nuevos > p { margin: 0 0 12px; font-size: 14px; color: var(--tinta-2); line-height: 1.45; }
+.nuevos > p { margin: 0 0 12px; font-size: 0.875rem; color: var(--tinta-2); line-height: 1.45; }
 .nuevos .campos { margin-bottom: 0; }
 .nuevos .alert { margin: 12px 0 0; }
 
@@ -45,7 +45,7 @@
 
 table.grid.hilos { min-width: 740px; }
 table.grid.cargas { min-width: 640px; }
-table.grid .sub { font-size: 12px; color: var(--tinta-3); margin-top: 2px; }
+table.grid .sub { font-size: 0.75rem; color: var(--tinta-3); margin-top: 2px; }
 table.grid td .pill { margin-left: 6px; }
 
 /* El panel de avance mientras carga: qué hace, la barra y cada hilo. */
@@ -55,12 +55,12 @@ table.grid td .pill { margin-left: 6px; }
   border: 1px solid var(--borde); background: var(--superficie-2);
   display: flex; flex-direction: column; gap: 10px;
 }
-.estado-cabeza { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.estado-cabeza { display: flex; align-items: center; gap: 10px; font-size: 0.9375rem; }
 .estado-cabeza .reloj { margin-left: auto; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
 .avance-barra { height: 8px; border-radius: 4px; background: var(--fondo); overflow: hidden; }
 .avance-barra > span { display: block; height: 100%; border-radius: 4px; background: var(--acento); transition: width 0.3s; }
-.avance-cifra { margin: 0; font-size: 13px; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
-.avance-hilos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.avance-cifra { margin: 0; font-size: 0.8125rem; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+.avance-hilos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; }
 .avance-hilos li { display: flex; align-items: center; gap: 8px; }
 .avance-hilos .marca {
   flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%;
@@ -76,7 +76,7 @@ table.grid.hilos td:first-child { min-width: 220px; max-width: 340px; }
 
 .confirmar {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 12px; margin-top: 14px; font-size: 13px;
+  gap: 12px; margin-top: 14px; font-size: 0.8125rem;
 }
 
 .costo-hilo { display: inline-flex; align-items: center; gap: 4px; }

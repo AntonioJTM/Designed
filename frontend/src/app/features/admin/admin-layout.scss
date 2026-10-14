@@ -36,7 +36,7 @@
   gap: 10px;
   padding: 4px 10px;
   color: #fff;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   text-decoration: none;
@@ -47,9 +47,9 @@
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  border: 1px solid #333A48;
+  border: 1px solid var(--barra-borde);
   background: transparent;
-  color: #E2E6EE;
+  color: var(--barra-claro);
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -71,7 +71,7 @@
 }
 .grupo { display: flex; flex-direction: column; gap: 1px; }
 .grupo-titulo {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -87,10 +87,13 @@
   border-radius: 8px;
   color: var(--barra-tinta);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
-.side nav a:hover { background: #1C212C; color: #fff; }
+.side nav a:hover { background: var(--barra-hover); color: #fff; }
 .side nav a.on { background: var(--acento); color: #fff; font-weight: 500; }
+/* Sobre la barra oscura el contorno del foco va en azul claro (el del logo):
+   el azul de siempre casi no se ve sobre el negro. */
+.side :focus-visible { outline-color: #8FB2F2; }
 
 .user {
   /* Siempre abajo y a la vista: el nombre, el puesto, la campana y "Salir". */
@@ -104,8 +107,8 @@
 }
 .user .quien { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .nombre-rol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.user .nombre { font-size: 14px; color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user .rol { font-size: 12px; color: var(--barra-titulo); text-transform: capitalize; }
+.user .nombre { font-size: 0.875rem; color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user .rol { font-size: 0.75rem; color: var(--barra-titulo); text-transform: capitalize; }
 
 /* Campana de pendientes, junto al nombre y el tipo de usuario. */
 .campana {
@@ -114,15 +117,15 @@
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  border: 1px solid #333A48;
+  border: 1px solid var(--barra-borde);
   background: transparent;
-  color: #E2E6EE;
+  color: var(--barra-claro);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
 }
-.campana:hover { background: #1C212C; }
+.campana:hover { background: var(--barra-hover); }
 .campana .badge {
   position: absolute;
   top: -6px;
@@ -132,9 +135,9 @@
   padding: 0 5px;
   box-sizing: border-box;
   border-radius: 10px;
-  background: #C2410C;
+  background: var(--punto-alerta);
   color: #fff;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   line-height: 20px;
   text-align: center;
@@ -143,14 +146,14 @@
 .salir {
   min-height: 40px;
   background: transparent;
-  border: 1px solid #333A48;
-  color: #E2E6EE;
+  border: 1px solid var(--barra-borde);
+  color: var(--barra-claro);
   border-radius: 8px;
   font: inherit;
-  font-size: 14px;
+  font-size: 0.875rem;
   cursor: pointer;
 }
-.salir:hover { background: #1C212C; }
+.salir:hover { background: var(--barra-hover); }
 
 .main {
   background: var(--fondo);
@@ -174,6 +177,7 @@
     gap: 12px;
   }
   .btn-menu { display: inline-flex; }
+  .brand { min-height: 44px; }
   /* Cerrado, solo se ve la barra de arriba. */
   .side:not(.abierta) nav, .side:not(.abierta) .user { display: none; }
   .main { padding: 20px 16px 40px; }

@@ -7,7 +7,7 @@
   </a>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   @if (cargando() && !pedido()) {
     <p class="muted">Cargando…</p>
@@ -18,27 +18,32 @@
         <div class="franja-titulo">
           <div class="folio-fila">
             <h1 class="folio">{{ p.numero_pedido }}</h1>
-            <span [class]="'pill grande ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal) }}</span>
+            <span [class]="'pill grande ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal, p.encargo, p.nota_pendiente) }}</span>
           </div>
           <p class="sub">{{ fechaLarga(p.creado_en) }} · {{ dondeYQuien(p) }}</p>
           @if (esEncargo(p)) {
-            <p class="sub"><b>Pedido</b> · {{ entregaDelPedido(p) }}</p>
+            <p class="sub"><b>Nota en espera</b> · {{ entregaDelPedido(p) }}</p>
+          }
+          @if (esNotaPendiente(p)) {
+            <p class="sub"><b>Nota pendiente de pago</b> · se llevó la mercancía; el pago se registra en sus abonos</p>
           }
         </div>
         <div class="acciones">
-          <button type="button" class="btn btn-ghost" (click)="imprimirTicket()">Imprimir ticket</button>
-          @if (p.estado === 'apartado' && veApartados()) {
-            <a class="btn btn-ghost" routerLink="/admin/apartados">Abonar o entregar</a>
+          @if (llevaTicket()) {
+            <button type="button" class="btn btn-ghost" (click)="imprimirTicket()">Imprimir ticket</button>
           }
           @if (esEncargo(p) && esApartadoSinEntregar(p) && !inactivo(p) && veEncargos()) {
-            <a class="btn btn-ghost" routerLink="/admin/pedidos">Entregar o cobrar</a>
+            <a class="btn btn-ghost" routerLink="/admin/notas-en-espera">Entregar o cobrar</a>
+          }
+          @if (esNotaPendiente(p) && p.estado === 'pendiente' && fiado(p) <= 0 && veNotas()) {
+            <a class="btn btn-ghost" routerLink="/admin/notas-pendientes">Registrar su pago</a>
           }
           @if (puedeDevolverEste(p)) {
             <button type="button" class="btn btn-ghost" (click)="abrirDevolver()">Devolver mercancía</button>
           }
           @if (puedeCancelarEste(p)) {
             <button type="button" class="btn btn-danger" (click)="abrirCancelar()">
-              {{ esEncargo(p) && esApartadoSinEntregar(p) ? 'Cancelar pedido' : esApartadoSinEntregar(p) ? 'Cancelar apartado' : 'Cancelar venta' }}
+              {{ esEncargo(p) && esApartadoSinEntregar(p) ? 'Cancelar la nota' : esApartadoSinEntregar(p) ? 'Cancelar apartado' : 'Cancelar venta' }}
             </button>
           }
         </div>
@@ -192,7 +197,7 @@
           <div class="comprobante">
             <h3>Comprobante del depósito</h3>
 
-            @if (errorComprobante()) { <p class="alert" style="margin: 0">{{ errorComprobante() }}</p> }
+            @if (errorComprobante()) { <p class="alert" role="alert" style="margin: 0">{{ errorComprobante() }}</p> }
 
             @if (pagoConComprobante(); as pg) {
               <p class="muted" style="margin: 0">
@@ -221,7 +226,7 @@
               <div class="acciones">
                 <label class="btn btn-ghost btn-sm">
                   Reemplazar
-                  <input type="file" accept="image/*,.pdf" hidden (change)="elegirArchivo($event)" />
+                  <input type="file" accept="image/*,.pdf" class="oculto" (change)="elegirArchivo($event)" />
                 </label>
                 <button class="btn btn-danger btn-sm" (click)="quitarComprobante()">Quitar</button>
               </div>
@@ -232,7 +237,7 @@
               <div>
                 <label class="btn btn-primary btn-sm">
                   {{ subiendoComprobante() ? 'Subiendo…' : 'Subir captura' }}
-                  <input type="file" accept="image/*,.pdf" hidden [disabled]="subiendoComprobante()"
+                  <input type="file" accept="image/*,.pdf" class="oculto" [disabled]="subiendoComprobante()"
                          (change)="elegirArchivo($event)" />
                 </label>
               </div>
@@ -256,7 +261,7 @@
           <label class="field">
             Cambiar el estado
             <select [(ngModel)]="nuevoEstado" name="estado">
-              @for (e of opcionesEstado(); track e) { <option [value]="e">{{ etiquetaEstado(e, p.canal) }}</option> }
+              @for (e of opcionesEstado(); track e) { <option [value]="e">{{ etiquetaEstado(e, p.canal, p.encargo, p.nota_pendiente) }}</option> }
             </select>
           </label>
           <button type="button" class="btn btn-ghost" (click)="cambiarEstado()"
@@ -266,9 +271,8 @@
         </div>
         @if (p.estado === 'apartado') {
           <p class="muted ayuda">
-            Un apartado se entrega desde
-            @if (veApartados()) { <a routerLink="/admin/apartados">Apartados</a> } @else { Apartados }:
-            ahí se cobra lo que falta y se descuenta del inventario.
+            Es un apartado de antes: los apartados se quitaron del sistema el 13 de octubre de 2026. Si ya no
+            va a venir por él, cancélalo; si sí, cancélalo y véndeselo en el punto de venta.
           </p>
         }
       </section>
@@ -292,15 +296,15 @@
         </h2>
         <button type="button" class="modal-cerrar" (click)="cerrarDevolucion()" [disabled]="aplicando()" aria-label="Cerrar">✕</button>
       </div>
-      <div class="modal-body columna" style="gap: 16px">
-        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+      <div class="modal-body columna">
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
         @if (esApartadoSinEntregar(p)) {
-          <p style="margin: 0">
+          <p>
             Se libera lo apartado en <b>{{ p.almacen || 'su almacén' }}</b>. La mercancía nunca salió de
             ahí, así que no hay nada que reponer.
           </p>
         } @else {
-          <p style="margin: 0">
+          <p>
             La mercancía regresa al inventario de <b>{{ p.almacen || 'su almacén' }}</b>, que es de donde
             salió. Si el cliente la devuelve en otra presentación —se llevó el paquete y regresa
             coneado— cámbiala aquí.
@@ -349,7 +353,7 @@
         }
 
         @if (efectivoADevolver() > 0) {
-          <p class="aviso" style="margin: 0">
+          <p class="aviso">
             Salen <b>{{ efectivoADevolver() | dinero }}</b> en efectivo de la caja, para que el corte cuadre.
             Si el turno de la venta ya cerró, se registra en el turno abierto.
           </p>

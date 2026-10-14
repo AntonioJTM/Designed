@@ -44,21 +44,19 @@ const SEMANAS_ATRAS = 12;
   imports: [RouterLink, DineroPipe, ReciboModal, ComisionesSemanaComponent],
   templateUrl: './nomina.html',
   styles: `
-    /* El punto de color de la cifra es fijo: la clase global .punto también es
-       la de los "pensando…" del asistente y heredaba su parpadeo. */
-    .kpi-label .punto { animation: none; opacity: 1; }
-    .semana-sel { display: flex; align-items: center; gap: 6px; }
+    .semana-sel { display: flex; align-items: center; gap: 6px; max-width: 100%; }
     .semana-sel select {
       min-height: 44px; min-width: 260px; padding: 0 12px; border: 1px solid var(--borde-campo);
-      border-radius: 8px; background: #fff; font: inherit; font-size: 14px; color: var(--tinta);
+      border-radius: 8px; background: #fff; font: inherit; font-size: 0.875rem; color: var(--tinta);
     }
-    .semana-sel select:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533; }
+    .semana-sel select:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }
     .semana-sel .btn-icono { width: 44px; height: 44px; }
     .estado-periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-    .sub2 { font-size: 12px; color: var(--tinta-3); }
+    .estado-periodo .pill { white-space: normal; }
+    .sub2 { font-size: 0.75rem; color: var(--tinta-3); }
     .extra { color: var(--ok-t); }
     .desc { color: var(--alerta-t); }
-    @media (max-width: 640px) { .semana-sel select { min-width: 0; flex: 1; } .semana-sel { width: 100%; } }
+    @media (max-width: 640px) { .semana-sel select { min-width: 0; flex: 1 1 0; } .semana-sel { width: 100%; } }
   `,
 })
 export class Nomina {

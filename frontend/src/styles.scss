@@ -37,6 +37,15 @@
   --alerta-f: #FCE9E1;  --alerta-t: #9A3412;
   --peligro-f: #FBE4E2; --peligro-t: #A12318;
   --neutro-f: #EEF0F3;  --neutro-t: #3F4552;
+  /* Puntos de color de las cifras clave y el globo de la campana. */
+  --punto-aviso: #E9A23B;
+  --punto-alerta: #C2410C;
+  /* Halo del foco de un campo (el acento al 20%). */
+  --foco: #2457C533;
+  /* Controles sobre la barra oscura del menú. */
+  --barra-hover: #1C212C;
+  --barra-borde: #333A48;
+  --barra-claro: #E2E6EE;
   --fuente: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -45,6 +54,9 @@
 /* Barras de desplazamiento delgadas y discretas: solo salen cuando de verdad
    hace falta bajar, y no deben verse como parte de la pantalla. */
 html { scrollbar-width: thin; scrollbar-color: #C5CAD3 transparent; }
+/* Los tamaños de letra van en rem (auditoría 2026-10-13): con la letra normal
+   del navegador (16 px) se ven igual que antes, y si alguien la agranda en su
+   navegador, todo el sistema crece parejo. Las medidas de caja siguen en px. */
 html, body { margin: 0; }
 body {
   font-family: var(--fuente);
@@ -54,6 +66,32 @@ body {
 }
 a { color: var(--acento); }
 a:hover { color: var(--acento-oscuro); }
+
+/* ---- Foco del teclado (auditoría 2026-10-13) ---------------------------------
+   Los campos ya tienen su halo azul. Botones, enlaces, pestañas, fichas y
+   opciones llevan un contorno azul de 2 px, separado 2 px del control, SOLO con
+   el teclado (`:focus-visible`): con el ratón o el dedo no aparece. */
+:where(a, button, summary, [tabindex]:not([tabindex="-1"]), label.btn, .seg > label):focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+/* El cursor y la selección de texto, con los colores del sistema. */
+/*
+  "Saltar al contenido" (2026-10-13): el primer Tab del panel. No se ve hasta que
+  se llega a él con el teclado; entonces aparece arriba a la izquierda, encima
+  del menú, como un botón principal.
+*/
+.saltar-contenido {
+  position: fixed; top: 8px; left: 8px; z-index: 70;
+  transform: translateY(calc(-100% - 16px));
+}
+.saltar-contenido:focus { transform: none; }
+/* El título de la pantalla y la pantalla misma reciben el cursor al llegar (o
+   con "Saltar al contenido"), pero no son controles: sin contorno. */
+.main:focus, .main h1[tabindex="-1"]:focus { outline: none; }
+
+input, textarea { caret-color: var(--acento); }
+::selection { background: var(--acento-suave); color: var(--tinta); }
 button, input, select, textarea { font-family: inherit; }
 
 /* Contenedor de cada pantalla del panel: ancho cómodo de lectura y un solo
@@ -73,14 +111,19 @@ button, input, select, textarea { font-family: inherit; }
   margin-bottom: 1.25rem;
 }
 .pagina > .page-head { margin-bottom: 0; }
-.page-head h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
-.page-head .sub { margin: 6px 0 0; font-size: 14px; color: var(--tinta-3); line-height: 1.45; }
+/* Lo de un encabezado se deja encoger hasta el ancho de la pantalla (2026-10-13):
+   sin esto, el bloque de botones medía lo que su texto más largo —el selector
+   de la semana de Nómina— y sacaba de la pantalla la flecha de "semana
+   siguiente" en un celular angosto o con la letra grande. */
+.page-head > *, .card-head > * { min-width: 0; max-width: 100%; }
+.page-head h1 { margin: 0; font-size: 1.875rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
+.page-head .sub { margin: 6px 0 0; font-size: 0.875rem; color: var(--tinta-3); line-height: 1.45; }
 .page-head .acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
 /* Volver a la pantalla anterior (← Pedidos) */
 .volver {
   display: inline-flex; align-items: center; gap: 6px; min-height: 32px; align-self: flex-start;
-  font-size: 14px; color: var(--tinta-2); text-decoration: none;
+  font-size: 0.875rem; color: var(--tinta-2); text-decoration: none;
 }
 .volver:hover { color: var(--tinta); }
 
@@ -94,15 +137,15 @@ button, input, select, textarea { font-family: inherit; }
 }
 .pagina > .card, .fila > .card, .columna > .card { margin-bottom: 0; }
 .card > h2:first-child, .card > h3:first-child { margin-top: 0; }
-.card h2 { font-size: 17px; font-weight: 600; }
-.card h3 { font-size: 16px; font-weight: 600; }
+.card h2 { font-size: 1.0625rem; font-weight: 600; }
+.card h3 { font-size: 1rem; font-weight: 600; }
 /* Encabezado de tarjeta: título y explicación a la izquierda, algo a la derecha. */
 .card-head {
   display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
   gap: 12px; margin-bottom: 16px;
 }
-.card-head h2, .card-head h3 { margin: 0; font-size: 17px; font-weight: 600; }
-.card-head p { margin: 4px 0 0; font-size: 14px; color: var(--tinta-3); line-height: 1.45; }
+.card-head h2, .card-head h3 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+.card-head p { margin: 4px 0 0; font-size: 0.875rem; color: var(--tinta-3); line-height: 1.45; }
 .card.suave { background: var(--superficie-2); }
 .card.verde { background: #F2FAF5; border-color: #BFE3CC; }
 .card.verde h2, .card.verde h3 { color: var(--ok-t); }
@@ -114,6 +157,10 @@ button, input, select, textarea { font-family: inherit; }
 .fila > .angosta { flex: 2 1 340px; min-width: 0; }
 .fila > .mitad { flex: 1 1 420px; min-width: 0; }
 .columna { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+/* Como en la página y la pila: el espacio lo pone la columna, no cada párrafo.
+   El cuerpo de una ventana en columna va más junto (16 px). */
+.columna > * { margin-top: 0; margin-bottom: 0; }
+.modal-body.columna { gap: 16px; }
 /* Un componente que pinta varios bloques seguidos (las pestañas de Clientes):
    el mismo espacio de 24 px que .pagina, sin márgenes propios en los hijos. */
 .pila { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
@@ -127,10 +174,14 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px;
   padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 0;
 }
-.kpi-label, .kpi > .muted:first-child { font-size: 13px; color: var(--tinta-3); display: inline-flex; align-items: center; gap: 8px; }
+.kpi-label, .kpi > .muted:first-child { font-size: 0.8125rem; color: var(--tinta-3); display: inline-flex; align-items: center; gap: 8px; }
 .kpi-label .punto { width: 8px; height: 8px; border-radius: 50%; background: var(--acento); flex: 0 0 8px; }
-.kpi-valor, .kpi b { font-size: 28px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
-.kpi-pie { font-size: 13px; color: var(--tinta-3); line-height: 1.4; }
+/* La cifra grande se encoge solo si no cabe en su tarjeta (con la letra del
+   navegador al doble, "$14,000.00" se salía: un número no se parte en dos
+   renglones). Con la letra normal y la tarjeta de siempre mide 1.75rem. */
+.kpi { container-type: inline-size; }
+.kpi-valor, .kpi b { font-size: min(1.75rem, 15cqi); font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.kpi-pie { font-size: 0.8125rem; color: var(--tinta-3); line-height: 1.4; }
 .kpi.total { background: var(--acento); border-color: var(--acento); color: #fff; }
 .kpi.total .muted, .kpi.total .kpi-label, .kpi.total .kpi-pie { color: #DCE6FA; }
 
@@ -139,7 +190,7 @@ button, input, select, textarea { font-family: inherit; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 44px; padding: 0 16px;
   border-radius: 8px; border: 1px solid transparent;
-  font-size: 14px; font-weight: 500; line-height: 1.2;
+  font-size: 0.875rem; font-weight: 500; line-height: 1.2;
   cursor: pointer; text-decoration: none; white-space: nowrap;
 }
 .btn svg { flex: 0 0 auto; }
@@ -152,16 +203,40 @@ button, input, select, textarea { font-family: inherit; }
 .btn-danger:hover { background: var(--peligro-f); color: var(--peligro-t); }
 .btn-ok { background: var(--ok-t); color: #fff; }
 .btn-ok:hover { background: #12512F; color: #fff; }
-.btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
-.btn-lg { min-height: 52px; padding: 0 22px; font-size: 16px; }
+.btn-sm { min-height: 36px; padding: 0 12px; font-size: 0.8125rem; }
+.btn-lg { min-height: 52px; padding: 0 22px; font-size: 1rem; }
 .btn-bloque { width: 100%; }
 /* Botón que parece enlace (acciones secundarias dentro de un texto). */
 .btn-enlace { background: none; border: 0; padding: 0; color: var(--acento); font: inherit; font-weight: 500; cursor: pointer; }
 .btn-enlace:hover { color: var(--acento-oscuro); text-decoration: underline; }
 a.btn-enlace { text-decoration: none; display: inline-flex; align-items: center; min-height: 36px; white-space: nowrap; }
 a.btn-enlace:hover { text-decoration: underline; }
+/* Un botón que en realidad es la etiqueta de un campo de archivo escondido
+   ("Subir captura"): el foco lo tiene el campo, así que se enseña en la etiqueta. */
+label.btn { position: relative; }
+label.btn:focus-within { box-shadow: 0 0 0 3px var(--foco); }
 /* Botón cuadrado de un solo icono (quitar del carrito). */
 .btn-icono { width: 36px; height: 36px; padding: 0; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ---- Blancos de dedo: en el celular y en cualquier pantalla táctil --------
+   (auditoría 2026-10-13). Con ratón, el botón chico de 36 px y el enlace del
+   tamaño de su letra bastan; con el dedo, no: 44 px de alto como mínimo.
+   Los enlaces que van dentro de un texto o una lista NO cambian de tamaño ni
+   mueven nada: se agranda, invisible, la zona que se puede tocar alrededor. */
+@media (max-width: 900px), (pointer: coarse) {
+  body .btn-sm { min-height: 44px; }
+  body .btn-icono { width: 44px; height: 44px; }
+  body .volver { min-height: 44px; }
+  /* Varias pantallas le ponen su propio alto (36 px) al selector; con el dedo
+     manda este. Es la única excepción con !important, y solo en táctil. */
+  .main select { min-height: 44px !important; }
+  .btn-enlace, .main a:not(.btn), .hilo-boton { position: relative; }
+  .btn-enlace::after, .main a:not(.btn)::after, .hilo-boton::after {
+    content: ''; position: absolute; inset: -14px -6px;
+  }
+  /* Las pestañas ya miden 44 px y van pegadas: sin zona extra, para no pisarse. */
+  .tabs a::after { content: none; }
+}
 
 /* Van dentro de una tarjeta, sin marco propio. Una tabla ancha se desplaza en
    su caja (.tabla-scroll) en vez de ensanchar la página. */
@@ -174,15 +249,15 @@ table.grid th, table.grid td {
   text-align: left;
   padding: 12px;
   border-bottom: 1px solid var(--borde-suave);
-  font-size: 14px;
+  font-size: 0.875rem;
   vertical-align: middle;
 }
-table.grid th { padding-top: 10px; padding-bottom: 10px; color: var(--tinta-3); font-size: 13px; font-weight: 600; border-bottom-color: var(--borde); background: transparent; }
+table.grid th { padding-top: 10px; padding-bottom: 10px; color: var(--tinta-3); font-size: 0.8125rem; font-weight: 600; border-bottom-color: var(--borde); background: transparent; }
 table.grid tr:last-child td { border-bottom: 0; }
 /* Encabezado de un grupo de renglones (el nombre del hilo, una sola vez). */
 table.grid tr.grupo-fila > td { background: var(--superficie-2); padding-top: 14px; padding-bottom: 8px; }
 table.grid tr.titulo-grupo > td {
-  padding: 14px 12px 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+  padding: 14px 12px 6px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--tinta-3);
 }
 /* La celda de acciones sigue siendo CELDA: con display:flex dejaba de estirarse a
@@ -207,13 +282,13 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .filtros-barra > * { flex: 1 1 140px; min-width: 0; }
 .filtros-barra > .crece { flex: 2 1 220px; }
 
-.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--tinta-2); font-weight: 500; min-width: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 0.8125rem; color: var(--tinta-2); font-weight: 500; min-width: 0; }
 .field input, .field select, .field textarea {
   min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--borde-campo);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-family: inherit;
   font-weight: 400;
   color: var(--tinta);
@@ -223,11 +298,11 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .field textarea { padding: 10px 12px; min-height: 88px; }
 .field input:focus, .field select:focus, .field textarea:focus,
 .buscador:focus-within {
-  outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533;
+  outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco);
 }
 .field.check { flex-direction: row; align-items: center; gap: 8px; }
 .field.check input { width: 18px; min-height: 18px; height: 18px; accent-color: var(--acento); }
-.field .ayuda { font-size: 12px; font-weight: 400; color: var(--tinta-3); }
+.field .ayuda { font-size: 0.75rem; font-weight: 400; color: var(--tinta-3); }
 .input-scan { display: flex; gap: 8px; }
 .input-scan input { flex: 1; }
 /* Buscador con lupa. */
@@ -235,7 +310,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px;
   background: #fff; border: 1px solid var(--borde-campo); border-radius: 8px; color: var(--tinta-3);
 }
-.buscador input { border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; color: var(--tinta); flex: 1; min-width: 0; min-height: 40px; }
+.buscador input { border: 0; outline: 0; background: transparent; font: inherit; font-size: 0.875rem; color: var(--tinta); flex: 1; min-width: 0; min-height: 40px; }
 /* Solo para lectores de pantalla. */
 .oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -243,7 +318,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .pill {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 10px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; white-space: nowrap;
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
   background: var(--neutro-f); color: var(--neutro-t);
 }
 .pill.ok, .pill.verde { background: var(--ok-f); color: var(--ok-t); }
@@ -253,36 +328,39 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .pill.off, .pill.rojo { background: var(--peligro-f); color: var(--peligro-t); }
 .pill.gris { background: var(--neutro-f); color: var(--neutro-t); }
 /* Ficha neutra (un calibre, un hilo que también lleva). */
-.ficha { display: inline-block; font-size: 12px; padding: 4px 9px; border-radius: 6px; background: #F1F3F6; color: var(--tinta-2); white-space: nowrap; }
+.ficha { display: inline-block; font-size: 0.75rem; padding: 4px 9px; border-radius: 6px; background: #F1F3F6; color: var(--tinta-2); white-space: nowrap; }
 
 /* ---- Avisos -------------------------------------------------------------- */
-.alert { background: var(--peligro-f); color: var(--peligro-t); padding: 12px 14px; border-radius: 8px; font-size: 14px; }
-.ok-msg { background: var(--ok-f); color: var(--ok-t); padding: 12px 14px; border-radius: 8px; font-size: 14px; }
-.aviso { background: var(--aviso-f); color: var(--aviso-t); padding: 12px 14px; border-radius: 8px; font-size: 14px; border: 0; }
-.nota-info { background: var(--info-f); color: var(--info-t); padding: 12px 16px; border-radius: 10px; font-size: 14px; display: flex; align-items: center; gap: 12px; }
+.alert { background: var(--peligro-f); color: var(--peligro-t); padding: 12px 14px; border-radius: 8px; font-size: 0.875rem; }
+.ok-msg { background: var(--ok-f); color: var(--ok-t); padding: 12px 14px; border-radius: 8px; font-size: 0.875rem; }
+.aviso { background: var(--aviso-f); color: var(--aviso-t); padding: 12px 14px; border-radius: 8px; font-size: 0.875rem; border: 0; }
+.nota-info { background: var(--info-f); color: var(--info-t); padding: 12px 16px; border-radius: 10px; font-size: 0.875rem; display: flex; align-items: center; gap: 12px; }
 .muted { color: var(--tinta-3); }
 .empty, .vacio { text-align: center; color: var(--tinta-3); padding: 2rem; }
 .num { font-variant-numeric: tabular-nums; }
-.mono { font-family: var(--mono); font-size: 13px; }
+.mono { font-family: var(--mono); font-size: 0.8125rem; }
 .neg { color: var(--peligro-t); }
 .pos { color: var(--ok-t); }
 
 /* ---- Pestañas ------------------------------------------------------------ */
-.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid #DDE1E7; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--borde); }
 .tabs a, .tabs button {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px;
   margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none;
-  color: #4A5160; font: inherit; font-size: 15px; font-weight: 500; text-decoration: none; cursor: pointer;
+  color: #4A5160; font: inherit; font-size: 0.9375rem; font-weight: 500; text-decoration: none; cursor: pointer;
 }
 .tabs a:hover, .tabs button:hover { color: var(--tinta); }
 .tabs a.on, .tabs button.on { border-bottom-color: var(--acento); color: var(--acento-oscuro); font-weight: 600; }
 
 /* Opciones excluyentes en botones grandes (Cobrar / Fiar / Apartar). */
-.seg { display: flex; gap: 8px; }
+/* Opciones del mismo ancho, en una fila; si no caben (con la letra grande,
+   "Pedido" se salía de la caja) pasan a otro renglón. Cada una mide al menos lo
+   que su texto, y se reparten lo que sobra. */
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
 .seg > label, .seg > button {
-  flex: 1 1 0; display: flex; align-items: center; justify-content: center; min-height: 44px;
+  flex: 1 1 0; min-width: fit-content; padding: 0 8px; display: flex; align-items: center; justify-content: center; min-height: 44px;
   border-radius: 8px; border: 1px solid var(--borde-campo); background: #fff; color: var(--tinta-2);
-  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; position: relative;
+  font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; position: relative;
 }
 .seg > label input { position: absolute; opacity: 0; pointer-events: none; }
 .seg > .on { border-color: var(--acento); background: var(--acento-suave); color: var(--acento-oscuro); }
@@ -292,43 +370,45 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .barra-fila { display: grid; grid-template-columns: var(--etiqueta, 200px) minmax(0, 1fr); align-items: center; gap: 14px; }
 .barra-fila.con-cola { grid-template-columns: var(--etiqueta, 200px) minmax(0, 1fr) var(--cola, 120px); }
 .barra-etiqueta { display: flex; flex-direction: column; min-width: 0; }
-.barra-etiqueta > :first-child { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.barra-etiqueta > .muted { font-size: 12px; white-space: nowrap; }
-.barra-valor { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.barra-valor > .relleno { height: 18px; background: #2a78d6; border-radius: 0 4px 4px 0; flex: 0 0 auto; }
-.barra-valor > b { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.barra-etiqueta > :first-child { font-size: 0.875rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-etiqueta > .muted { font-size: 0.75rem; white-space: nowrap; }
+/* La cifra baja de renglón si no cabe junto a su barra (letra grande): la barra
+   conserva su largo, que es lo que se compara. */
+.barra-valor { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; min-width: 0; }
+.barra-valor > .relleno { height: 18px; background: var(--viz-series-1); border-radius: 0 4px 4px 0; flex: 0 0 auto; }
+.barra-valor > b { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* En el celular el nombre va ARRIBA de su barra: a la izquierda le dejaba a la
    barra menos de 100 px y la cifra se salía de la pantalla. */
 @media (max-width: 640px) {
   .barra-fila, .barra-fila.con-cola { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 .carril { height: 12px; background: var(--borde-suave); border-radius: 4px; overflow: hidden; display: flex; }
-.carril > span { display: block; height: 100%; background: #2a78d6; }
+.carril > span { display: block; height: 100%; background: var(--viz-series-1); }
 /* Una sola barra partida en tramos (hueco de 2 px, redondeo solo en las puntas). */
 .tramos { display: flex; gap: 2px; height: 40px; }
-.tramos > span { display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 0; }
+.tramos > span { display: flex; align-items: center; justify-content: center; font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 0; }
 .tramos > span:first-child { border-radius: 6px 0 0 6px; }
 .tramos > span:last-child { border-radius: 0 6px 6px 0; }
 .tramos > span:only-child { border-radius: 6px; }
-.leyenda { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; color: var(--tinta-2); }
+.leyenda { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 0.875rem; color: var(--tinta-2); }
 .leyenda > span { display: inline-flex; align-items: center; gap: 8px; }
 .leyenda i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: 0 0 12px; }
 /* Columnas verticales (ventas por semana, por hora). */
-.columnas { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; align-items: end; border-bottom: 1px solid #DDE1E7; }
+.columnas { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; align-items: end; border-bottom: 1px solid var(--borde); }
 .columnas > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; }
 .columnas > div > i { width: 100%; max-width: 44px; background: #9EC3F2; border-radius: 4px 4px 0 0; display: block; }
-.columnas > div > i.fuerte { background: #1c5cab; }
-.columnas > div > span { font-size: 11px; font-weight: 600; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.columnas > div > i.fuerte { background: var(--viz-rampa-3); }
+.columnas > div > span { font-size: 0.6875rem; font-weight: 600; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
 .columnas-pie { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin-top: 6px; }
-.columnas-pie > span { font-size: 12px; color: var(--tinta-3); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.columnas-pie > span { font-size: 0.75rem; color: var(--tinta-3); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- Lista de pendientes (Hoy y la campana) ------------------------------ */
 .pendiente { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--borde-suave); }
 .pendiente .icono { flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
 .pendiente .que { flex: 1 1 280px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.pendiente .que b { font-size: 15px; font-weight: 500; }
-.pendiente .que span { font-size: 13px; color: var(--tinta-3); }
-.grupo-titulo { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-3); padding-bottom: 4px; }
+.pendiente .que b { font-size: 0.9375rem; font-weight: 500; }
+.pendiente .que span { font-size: 0.8125rem; color: var(--tinta-3); }
+.grupo-titulo { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-3); padding-bottom: 4px; }
 .tono-azul { background: var(--info-f); color: var(--info-t); }
 .tono-verde { background: var(--ok-f); color: var(--ok-t); }
 .tono-ambar { background: var(--aviso-f); color: var(--aviso-t); }
@@ -336,12 +416,12 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .tono-gris { background: var(--neutro-f); color: var(--neutro-t); }
 
 /* Renglón de dato: etiqueta a la izquierda, valor a la derecha. */
-.dato { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--borde-suave); font-size: 14px; }
+.dato { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--borde-suave); font-size: 0.875rem; }
 .dato > :first-child { color: var(--tinta-3); }
 .dato > :last-child { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
 /* Iniciales del cliente en un círculo. */
 .avatar { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; background: var(--acento-suave); color: var(--acento-oscuro); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
-.avatar.grande { width: 64px; height: 64px; font-size: 22px; }
+.avatar.grande { width: 64px; height: 64px; font-size: 1.375rem; }
 
 /* ---- Modal (alta/edición sin salir del listado) ---- */
 .modal-overlay {
@@ -366,6 +446,10 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   flex-direction: column;
   max-height: calc(100vh - 4rem);
 }
+
+/* La ventana misma recibe el foco cuando no tiene un campo que enfocar (o en
+   el celular, para no abrir el teclado): no es un control, no lleva contorno. */
+.modal:focus, [role="dialog"]:focus, [role="alertdialog"]:focus { outline: none; }
 
 /* Formularios cortos (materiales): 900 px se ven vacíos de más. */
 .modal.angosto { max-width: 620px; }
@@ -424,7 +508,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   padding: 18px 24px;
   border-bottom: 1px solid var(--borde);
 }
-.modal-head h2 { margin: 0; font-size: 19px; font-weight: 600; }
+.modal-head h2 { margin: 0; font-size: 1.1875rem; font-weight: 600; }
 .modal-cerrar {
   background: none;
   border: 0;
@@ -458,7 +542,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   background: var(--superficie-2);
   border-radius: 0 0 12px 12px;
 }
-.modal-foot .nota { margin-right: auto; font-size: 13px; color: var(--tinta-3); }
+.modal-foot .nota { margin-right: auto; font-size: 0.8125rem; color: var(--tinta-3); }
 
 .field input:disabled, .field select:disabled, .field textarea:disabled {
   background: var(--superficie-2);
@@ -485,6 +569,17 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   --viz-grid: #e1e0d9;
   --viz-muted: #898781;
   --viz-text: #0b0b0b;
+  /* Rampa ordinal de un solo tono, de claro a oscuro: la antigüedad de una deuda,
+     qué tan seguido compra un cliente. La letra que va encima la elige
+     `shared/charts/contraste.ts → tintaSobre` por contraste. */
+  --viz-rampa-1: #86b6ef;
+  --viz-rampa-2: #3987e5;
+  --viz-rampa-3: #1c5cab;
+  --viz-rampa-4: #0d366b;
+  /* Fondos suaves del ritmo de un cliente (el hueco entre visitas). */
+  --viz-series-1-suave: #BFD6F4;
+  --punto-aviso-suave: #F6DDB0;
+  --punto-alerta-suave: #F3C7B1;
 }
 .viz-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
 /*
@@ -492,8 +587,8 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   dibujan al ancho real y por eso el texto sale de su tamaño sin dejar hueco.
   Un tope aquí volvería a dejar media tarjeta vacía.
 */
-.viz-svg .viz-value { fill: var(--viz-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.viz-svg .viz-axis { fill: var(--viz-muted); font-size: 11px; }
+.viz-svg .viz-value { fill: var(--viz-text); font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.viz-svg .viz-axis { fill: var(--viz-muted); font-size: 0.6875rem; }
 .viz-svg path[fill^='var'] { transition: opacity 0.12s; }
 .viz-svg path:hover { opacity: 0.82; cursor: default; }
 .viz-legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--tinta-2); }
@@ -506,8 +601,8 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .previa-calculo {
   margin-top: 1rem;
   padding: 0.85rem 1rem;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
+  background: var(--superficie-2);
+  border: 1px dashed var(--borde-campo);
   border-radius: 10px;
   font-size: 0.88rem;
 }
@@ -518,7 +613,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   padding: 0.2rem 0;
 }
 .previa-calculo .renglon.total {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--borde);
   margin-top: 0.35rem;
   padding-top: 0.5rem;
   font-size: 1rem;
@@ -532,11 +627,11 @@ table.grid th.num, table.grid td.num { text-align: right; font-variant-numeric: 
   FONDO: `neg` en el <tr> tiñe de rojo todo el texto, hasta el nombre del hilo, y
   el rojo tiene que señalar el dato que falla, no el renglón entero.
 */
-table.grid tr.fila-alerta > td { background: #fef2f2; }
+table.grid tr.fila-alerta > td { background: var(--peligro-f); }
 
 table.grid.mini { border-radius: 8px; }
 table.grid.mini th, table.grid.mini td { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
-table.grid.mini tfoot td { background: #f8fafc; border-top: 1px solid #e5e7eb; }
+table.grid.mini tfoot td { background: var(--superficie-2); border-top: 1px solid var(--borde); }
 
 .form-concepto {
   display: flex;
@@ -545,7 +640,7 @@ table.grid.mini tfoot td { background: #f8fafc; border-top: 1px solid #e5e7eb; }
   flex-wrap: wrap;
   margin-top: 0.9rem;
   padding-top: 0.9rem;
-  border-top: 1px dashed #e5e7eb;
+  border-top: 1px dashed var(--borde);
 }
 .form-concepto .field { flex: 1; min-width: 90px; }
 .form-concepto .field input, .form-concepto .field select { padding: 0.4rem 0.5rem; font-size: 0.85rem; }
@@ -748,14 +843,14 @@ table.bultos { border-collapse: collapse; font-size: 0.8rem; }
 table.bultos th, table.bultos td {
   text-align: left; padding: 0.25rem 1.25rem 0.25rem 0; white-space: nowrap;
 }
-table.bultos th { color: var(--tinta-3); font-weight: 600; border-bottom: 1px solid #e7e5e4; }
+table.bultos th { color: var(--tinta-3); font-weight: 600; border-bottom: 1px solid var(--borde); }
 
-.comprobante { border-top: 1px solid #eee; margin-top: 1.25rem; padding-top: 1rem; }
+.comprobante { border-top: 1px solid var(--borde-suave); margin-top: 1.25rem; padding-top: 1rem; }
 .comprobante h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
 /* Acotada: es una captura de celular y a tamaño completo empujaría el resto de
    la pantalla fuera de la vista. */
 .comprobante-img {
-  max-width: min(420px, 100%); max-height: 520px; border: 1px solid #e7e5e4;
+  max-width: min(420px, 100%); max-height: 520px; border: 1px solid var(--borde);
   border-radius: 8px; display: block; margin: 0.5rem 0;
 }
 /* El input de archivo va oculto dentro de un label con pinta de botón: el
@@ -771,8 +866,8 @@ table.bultos th { color: var(--tinta-3); font-weight: 600; border-bottom: 1px so
 .bloque { margin-bottom: 1.5rem; }
 .bloque .sub { margin: 1.5rem 0 0.6rem; font-size: 0.9rem; color: var(--tinta-3); font-weight: 600; }
 .bloque .filtro { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--tinta-3); }
-.bloque .filtro input { padding: 0.35rem 0.5rem; border: 1px solid #d6d3d1; border-radius: 6px; font: inherit; width: 6rem; }
-.bloque .filtro select { padding: 0.35rem 0.5rem; border: 1px solid #d6d3d1; border-radius: 6px; font: inherit; background: #fff; }
+.bloque .filtro input { padding: 0.35rem 0.5rem; border: 1px solid var(--borde-campo); border-radius: 6px; font: inherit; width: 6rem; }
+.bloque .filtro select { padding: 0.35rem 0.5rem; border: 1px solid var(--borde-campo); border-radius: 6px; font: inherit; background: #fff; }
 
 /* Fila de cifras. La primera es la HERO: una sola por bloque. */
 .cifras { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 0.5rem; }
@@ -788,10 +883,10 @@ table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: 
 table.grid td.num { white-space: nowrap; }
 
 /* Segundo renglón de la etiqueta de una barra. */
-.viz-svg .viz-sub { font-size: 10px; fill: var(--viz-muted); }
+.viz-svg .viz-sub { font-size: 0.625rem; fill: var(--viz-muted); }
 /* Texto dentro de un tramo de color: lo pinta el componente (blanco o tinta)
    según qué tan oscuro sea el relleno. */
-.viz-svg .viz-en-tramo { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.viz-svg .viz-en-tramo { font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* Campo de dinero con su unidad: "$ [____] por kilo". El símbolo y la unidad
    pegados al campo dicen qué se teclea sin gastar una etiqueta en explicarlo. */
@@ -810,62 +905,18 @@ table.grid tr.fila-inactiva > td { opacity: 0.6; }
 
 /* El asterisco de obligatorio. Va con el color de alerta y con el símbolo: el
    color solo no lo comunicaría. */
-.field .req { color: #b91c1c; font-weight: 700; }
+.field .req { color: var(--peligro-t); font-weight: 700; }
 
 /* El bloque de apartados listos para entregar. Va en verde y arriba de todo:
    es la acción más urgente —el cliente ya pagó y su mercancía sigue ocupando
    bodega— y mezclarla con la cobranza la escondía. */
-.card.listos { border-color: #bbf7d0; background: #f0fdf4; }
-.card.listos h2 { margin: 0 0 0.2rem; font-size: 1.05rem; color: #166534; }
+.card.listos { border-color: #BFE3CC; background: var(--ok-f); }
+.card.listos h2 { margin: 0 0 0.2rem; font-size: 1.05rem; color: var(--ok-t); }
 
 /* Un aviso de segundo nivel en la campana: el detalle bajo su encabezado (los
    clientes concretos bajo "3 clientes deben $12,000"). Sangrado y más chico,
    para que se lea como detalle y no como un pendiente aparte. */
 .aviso-item.sub { padding-left: 1.5rem; font-size: 0.82rem; }
-
-/* ---------------------------------------------------------------------------
-   El asistente
---------------------------------------------------------------------------- */
-/* Preguntas de ejemplo: botones grandes, porque con un cuadro vacío nadie sabe
-   qué preguntar. */
-.ejemplos { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
-.ejemplo {
-  background: var(--acento-suave); border: 1px solid #C8D6F5; color: var(--acento-oscuro);
-  padding: 0.45rem 0.8rem; border-radius: 999px; font: inherit; font-size: 0.85rem; cursor: pointer;
-}
-.ejemplo:hover { background: #DCE6FA; }
-
-/* El hilo de la conversación. Alto acotado y con scroll propio: así el cuadro
-   de preguntar no se va de la pantalla al crecer la charla. */
-.chat { max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
-.turno { display: flex; flex-direction: column; align-items: flex-start; }
-.turno.mio { align-items: flex-end; }
-.burbuja {
-  max-width: min(46rem, 85%); padding: 0.7rem 1rem; border-radius: 12px;
-  background: #f5f5f4; white-space: pre-wrap; line-height: 1.55;
-}
-.turno.mio .burbuja { background: var(--acento-oscuro); color: #fff; }
-.burbuja.err { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
-
-/* Los tres puntos de "pensando". */
-.burbuja.pensando { display: flex; gap: 0.3rem; align-items: center; padding: 0.9rem 1rem; }
-/* El aviso de que se está tardando: aparece a los 6 s junto a los puntitos.
-   La capa gratuita de Gemini tarda ~30 s en una respuesta con datos. */
-.burbuja.pensando .tardanza { margin-left: 0.5rem; font-size: 0.8rem; color: var(--tinta-3); }
-/* Solo DENTRO de la burbuja: `.punto` suelto también es el punto de color de
-   las cifras clave (.kpi-label .punto) y les heredaba el parpadeo. */
-.burbuja.pensando .punto { width: 6px; height: 6px; border-radius: 50%; background: #a8a29e; animation: latir 1.2s infinite; }
-.burbuja.pensando .punto:nth-child(2) { animation-delay: 0.2s; }
-.burbuja.pensando .punto:nth-child(3) { animation-delay: 0.4s; }
-@keyframes latir { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
-/* Respeta a quien pidió menos movimiento en su sistema. */
-@media (prefers-reduced-motion: reduce) { .burbuja.pensando .punto { animation: none; opacity: 0.6; } }
-
-.preguntar { display: flex; gap: 0.75rem; align-items: flex-end; margin-top: 1rem; }
-.preguntar textarea {
-  flex: 1; padding: 0.6rem 0.8rem; border: 1px solid #d6d3d1; border-radius: 8px;
-  font: inherit; resize: vertical;
-}
 
 /* ================= Caja: retiros, ingresos y corte ================= */
 /* Dos opciones grandes en vez de un selector: "sacar" y "meter" son
@@ -876,14 +927,14 @@ table.grid tr.fila-inactiva > td { opacity: 0.6; }
 }
 .opciones-tipo .opcion {
   display: flex; flex-direction: column; gap: 0.15rem; cursor: pointer;
-  border: 2px solid #e7e5e4; border-radius: 10px; padding: 0.7rem 0.9rem;
+  border: 2px solid var(--borde-campo); border-radius: 10px; padding: 0.7rem 0.9rem;
 }
 .opciones-tipo .opcion input { position: absolute; opacity: 0; pointer-events: none; }
 .opciones-tipo .opcion.on { border-color: var(--acento-oscuro); background: var(--acento-suave); }
 .opciones-tipo .opcion .muted { font-size: 0.8rem; }
 
 /* Campo obligatorio que quedó vacío al intentar guardar. */
-input.invalido, select.invalido { border-color: #dc2626 !important; background: #fef2f2; }
+input.invalido, select.invalido { border-color: var(--peligro-t) !important; background: var(--peligro-f); }
 
 /* El punto de venta: carrito a la izquierda, caja y cobro a la derecha.
    Columnas con `minmax(0, …)`: con `1fr` una columna no encoge por debajo de

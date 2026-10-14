@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-07
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-13
 ===============================================================================
 
 ⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
@@ -25,7 +25,38 @@
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
-  SE BORRARON LAS VENTAS Y PEDIDOS DE PRUEBA DE hitex (2026-10-07, entrada 30):
+  EL TICKET PARA LA TÉRMICA KINWODON DE 80 MM (2026-10-13, entrada 39,
+  DESPLEGADO: subió con las notas pendientes de la otra sesión en
+  20261013-230540 y un ajuste en 20261013-230831). Corta al terminar el
+  ticket y se rediseñó; se imprime desde la caja al cobrar y desde el detalle
+  de la venta. Falta probarlo en la Kinwodon de verdad.
+  Antes: "TOTAL A COBRAR" Y NOTAS PENDIENTES DE PAGO (2026-10-13, entrada 38,
+  parte 1 de 2; migración 2026-10_notas_pendientes en las dos bases): el punto
+  de venta cobra, da a crédito, guarda notas en espera (sin chofer) o da notas
+  pendientes de pago, que se cobran en abonos en su pantalla o se pasan a
+  crédito. Se quitaron Apartar, Fiar, la pantalla Apartados y la tarjeta.
+  FALTA la parte 2: devoluciones con saldo a favor (ver la entrada 38).
+  Antes: SEGUNDA AUDITORÍA DE DISEÑO (2026-10-13, entrada 37, DESPLEGADO; solo pantalla):
+  el lector del punto de venta siempre tiene el cursor (P1), cada pantalla con su
+  título de pestaña, "Saltar al contenido", aviso al cambiar de pantalla, las
+  gráficas le dicen sus números al lector de pantalla, celular de 320 y letra
+  grande sin salirse, y los colores de las gráficas de Clientes a la hoja.
+  Antes: SE QUITÓ PLAYWRIGHT (2026-10-13, entrada 36), a petición del usuario, después
+  de la prueba de la entrada 35 (149 pasaron). El proyecto quedó como antes de
+  instalarlo.
+  Antes: PRUEBAS EN EL NAVEGADOR CON PLAYWRIGHT (2026-10-13, entrada 35).
+  Antes: ACCESIBILIDAD, CELULAR Y COLORES (2026-10-13, entrada 34, DESPLEGADO en
+  20261013-173129; solo pantalla, la base no se tocó): lo que encontró la
+  auditoría de diseño (15/20). El foco del teclado entra y sale de las ventanas,
+  los avisos se anuncian, Caja y Presentaciones caben en el celular, botones y
+  enlaces de 44 px al tocar, colores repetidos a tokens, letra en rem.
+  Antes: "HITEX" EN PANTALLA Y DESIGN.md (2026-10-13, entrada 33, DESPLEGADO).
+  Antes: PRODUCT.md (2026-10-13, entrada 32): quién usa el sistema, para qué y sus
+  reglas, para el trabajo de diseño. El negocio se llama HITEX (aún no en
+  pantalla).
+  Antes: SE QUITÓ "PREGÚNTAME" (2026-10-13, entrada 31, DESPLEGADO): el asistente con IA
+  y todo lo suyo. Quien no tiene ninguna pantalla va a "Sin acceso".
+  Antes: SE BORRARON LAS VENTAS Y PEDIDOS DE PRUEBA DE hitex (2026-10-07, entrada 30):
   las dos que había, ya canceladas; el inventario quedó idéntico.
   Antes: SURTIR: PAQUETE ENCONTRADO EN OTRO ALMACÉN (2026-10-07, entrada 29,
   DESPLEGADO; sin cambios en la estructura de la base): si se escanea uno que el
@@ -453,6 +484,475 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (39) · El ticket para la térmica Kinwodon de 80 mm (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "En la impresión del ticket tengo la impresora Kinwodon; necesito que la
+  configures para esta, que el corte lo haga donde tiene que ser y no se pase
+  de largo, y el ticket hazlo más bonito." La Kinwodon que vende la marca es
+  térmica de 80 mm con corte automático (ESC/POS): imprime 72 mm.
+
+POR QUÉ SE PASABA DE LARGO
+  · El ticket (solo en el detalle de la venta) se imprimía sin decirle al
+    navegador cuánto mide la hoja: la impresora usaba el largo de su hoja por
+    defecto y sacaba papel en blanco antes de cortar.
+  · Ahora `imprimirTicket` mide el ticket ya dibujado y le pone a la hoja
+    (`@page`) ese largo exacto + 2 mm, con márgenes en 0: la impresora corta
+    al terminar. Probado imprimiendo a PDF: la hoja mide lo mismo que el
+    ticket (151 mm una venta de 3 artículos), una sola página.
+
+EL TICKET NUEVO (shared/ticket/ticket.ts, uno solo para todo)
+  · Negro puro (la térmica no imprime grises), letra Arial del sistema.
+  · HITEX grande, dirección y teléfono de Configuración (si están), una banda
+    negra con lo que fue, folio completo, fecha con año, caja, quién atendió
+    y el cliente ("Chava (Salvador Ayala Cano)").
+  · Cada artículo con su calibre y presentación ("PERLA JASPE 2/30 ·
+    Paquete"), "39.9 kg × $200.00" y su importe, y debajo sus paquetes
+    (código y lote) o cuántos conos eran.
+  · Total de kilos, paquetes y artículos; subtotal, descuento, IVA y envío
+    SOLO si no son cero; TOTAL grande; cómo pagó y, en efectivo, lo recibido
+    y el cambio (el cambio no se guarda: la caja lo pasa al imprimir).
+  · Reglas que el usuario dio en la otra sesión (2026-10-13): "A crédito"
+    dice cuánto quedó a deber; la "Nota pendiente de pago" (nota_pendiente)
+    sí lleva ticket pero sin "pagado" ni "cambio", con "Pendiente de pago";
+    la NOTA EN ESPERA (pedido sin entregar) NO lleva ticket: armarTicket lo
+    rechaza y el detalle no ofrece el botón (llevaTicket). Un apartado viejo
+    dice cuánto falta.
+  · core/services/ticket.service.ts junta la venta con los datos de la tienda
+    (busca sus servicios al imprimir, no al crearse: si no, los specs de Pos y
+    PedidoDetalle que no proveen HttpClient tronaban).
+  · La caja: botón "Imprimir ticket" en la tarjeta que sale al cobrar (pide
+    la venta completa). El detalle de la venta usa el mismo ticket.
+
+LO QUE HAY QUE HACER EN LA COMPUTADORA DE LA CAJA (no es código)
+  · En el cuadro de imprimir de Chrome: destino la Kinwodon, márgenes
+    "Ninguno", escala predeterminada.
+  · En las preferencias de la impresora en Windows: corte al final del
+    documento. Si aun así deja papel en blanco, buscar ahí la opción de
+    ahorrar papel o recortar el espacio en blanco.
+  · Opcional: Chrome con --kiosk-printing imprime directo, sin preguntar, en
+    la impresora predeterminada.
+
+LA VERIFICACIÓN
+  · 9 pruebas nuevas del ticket; 357 de 357 con lo que había en disco de la
+    otra sesión. Visto impreso a PDF a 203 puntos por pulgada (la resolución
+    de la térmica): venta, a crédito y nota pendiente.
+  · Con dos ventas REALES de la base de pruebas (GET /pedidos/:id): salen
+    completas y la hoja mide lo del ticket (111 y 122 mm). Ahí se vio que una
+    fiada ya pagada con abonos decía "Quedó a deber" sin más: ahora agrega
+    "Ya se pagó con abonos" o "Hoy debe de esta venta $X" (credito_por_pagar).
+  · DESPLEGADO: con las notas pendientes de la otra sesión (20261013-230540,
+    que aplicó su migración) y el ajuste de la deuda (20261013-230831, solo
+    el ticket; se comprobó que no había otros archivos cambiados). Producción
+    trae el código nuevo. 367 pruebas de pantallas.
+  · NO se ha probado en la Kinwodon de verdad. Para probar el corte antes:
+    D:\Imagenes\Ticket de ejemplo - Hitex.pdf (fuera del repositorio).
+  · Coordinado con la otra sesión (designed-2d), que está rehaciendo el panel
+    de cobro: ella no copia el botón a la nota en espera; nadie despliega sin
+    avisar.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (38) · "Total a cobrar" y notas pendientes de pago (parte 1 de 2)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "En total a cobrar es cobrar, a crédito, nota en espera (aún no sale como
+  ticket y se puede modificar), nota pendiente de forma de pago (aquí sale el
+  ticket pero aún no se registra cómo te pagó hasta después). Se quita todo lo
+  de pedidos del punto de venta, igual se eliminan los apartados y fiar." Y al
+  preguntarle: la nota en espera es "como el Pedido de hoy, sin chofer"; la
+  pantalla Pedidos pasa a ser Notas en espera; "si no me pagan ese día, que
+  exista un apartado de notas pendientes de pago de los clientes y que se
+  agreguen al corte de caja del día en el que paguen, o si el cliente pide que
+  se vaya a crédito, que exista esa opción"; "los métodos de pago son efectivo,
+  transferencia, crédito"; la nota pendiente se lleva la mercancía y NO cuenta
+  contra su crédito; se paga en abonos. También pidió el SALDO A FAVOR por
+  devoluciones (no regresar dinero): es la parte 2, ya decidida (abajo). Se
+  sube en dos partes (lo eligió él).
+  "No se puede escanear dos veces el mismo bulto": confirmó que es la regla.
+
+LA BASE (migración 2026-10_notas_pendientes.sql, en desarrollo y en hitex)
+  · pedidos.nota_pendiente (1 = salió como nota pendiente de pago; se queda
+    aunque ya esté pagada) y su índice.
+  · Tarjeta, PayPal y Mercado Pago desactivados (activo = 0, no se borran).
+  · Permiso nuevo ver:notas_pendientes para quien ya tenía ver:pos; se quitó
+    ver:apartados; ver:encargos se llama "Notas en espera" y hacer:fiar
+    "Vender a crédito".
+
+EL SERVIDOR
+  · POST /pedidos con pendiente_pago: true: exige cliente, no lleva pago ni
+    crédito; la mercancía sale, nada a la caja, nada a su cuenta.
+  · GET /pedidos/notas-pendientes?q= (las que se deben); los abonos van por
+    POST /pedidos/:id/abonos (efectivo al turno como 'ingreso', al corte de
+    ese día; con el último queda 'pagado'); POST /pedidos/:id/a-credito carga
+    lo que falta a su cuenta (con su límite).
+  · Al entregar una nota en espera: pendiente_pago: true la deja como nota
+    pendiente.
+  · A mano no se marca pagada una nota que se debe (NOTA_PENDIENTE_SIN_PAGAR).
+  · Un método de pago desactivado no cobra (METODO_PAGO_INVALIDO).
+  · Nómina: la nota pendiente paga comisión al liquidarse (tipo 'nota').
+  · Campana: "N notas pendientes de pago" en lugar de "apartados ya pagados".
+
+LAS PANTALLAS
+  · Punto de venta: Cobrar / A crédito / Nota en espera / Pendiente de pago,
+    dos por renglón. La nota en espera ya no pide chofer ni dirección y no da
+    ticket ("Nota en espera guardada"); la pendiente sí ("Nota pendiente de
+    pago", con el botón de imprimir de la entrada 39).
+  · Pantalla nueva Notas pendientes de pago (menú Vender): cifras, lista de la
+    más vieja a la más nueva, "Registrar pago" (ventana con efectivo o
+    transferencia y la caja) y "Pasar a crédito" (pregunta antes).
+  · Pedidos → Notas en espera (/admin/notas-en-espera; /admin/pedidos lleva
+    ahí): sin la pestaña del chofer; al entregar, Cobrar o Pendiente de pago.
+  · Se borró la pantalla Apartados (y su ruta lleva al inicio). Hoy, la
+    campana, Ventas y el detalle dicen "Pendiente de pago" y "A crédito".
+
+LA VERIFICACIÓN
+  · e2e-notas-pendientes.js: 40 comprobaciones, contra la base de pruebas.
+    Siguen pasando e2e-pedidos-encargo (74), e2e-nomina-pdf (29) y
+    e2e-apartados (47).
+  · 366 pruebas de pantallas (14 nuevas o cambiadas) y 20 del servidor.
+  · Visto en Chrome con datos TMP (ya borrados): Notas pendientes, su ventana
+    de pago, el punto de venta con las cuatro opciones y el detalle de la nota.
+  · NO se cobró una venta real desde la pantalla.
+
+LA PARTE 2 (decidida, por hacer)
+  · Devolución desde la nota del cliente, línea por línea: los paquetes
+    cerrados se escanean y vuelven como paquetes con su peso; los conos
+    sueltos se pesan y vuelven como conos (lo que marque la báscula, SIN
+    restar tubos). Lo que regresa queda A FAVOR al precio con que se vendió;
+    no se devuelve dinero.
+  · El saldo a favor va APARTE de la deuda. Al registrarlo se elige:
+    descontarlo de lo que debe o dejarlo a favor; al cobrar aparece "Usar
+    saldo a favor"; y desde su expediente se aplica a su deuda cuando él lo
+    pida.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (37) · Segunda auditoría: el lector del punto de venta, títulos, gráficas (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  La segunda auditoría (/impeccable audit) dio 16 de 20 (antes 15) y propuso cuatro
+  pasos; el usuario: "en este orden vamos a hacerlos". Solo pantalla: la base no se
+  tocó.
+
+1. [P1] EL LECTOR SIEMPRE TIENE EL CURSOR EN EL PUNTO DE VENTA
+  · La pistola escribe donde esté el cursor. Al abrir la caja no estaba en ningún
+    campo (comprobado en Chrome: estaba en la página), y nada lo regresaba al campo
+    después de cobrar o de cerrar la báscula: el código se perdía y el Enter de la
+    pistola apretaba el botón donde se quedó el cursor.
+  · pos.ts → enfocarLector(): al abrir (en cuanto hay turno), al terminar una venta,
+    apartado o pedido, al cerrar la báscula, el alta de cliente o el abono, al
+    quitar algo del carrito y con Enter en los kilos de una línea. Deja marcado lo
+    escrito, para que el siguiente código lo reemplace. Espera a que la pantalla
+    se vuelva a dibujar (afterNextRender): con eventCoalescing, un setTimeout
+    llegaba cuando la báscula todavía estaba abierta y el cursor se quedaba en el
+    aire (se vio en Chrome y se corrigió).
+  · La red, pos.ts → alTeclear(): si el cursor está en un botón, el menú o en
+    ningún lado, la PRIMERA tecla lo lleva al lector y el código entra completo.
+    No se mete con otro campo de texto, una ventana abierta, la barra espaciadora,
+    atajos ni letras sobre un selector.
+  · Al agregar algo al carrito se quita el ticket de la venta anterior.
+  · Probado en Chrome con teclas de verdad (CDP): con el cursor en "Buscar", la
+    pistola escribió 00633586 completo en el lector; con el cursor en el menú,
+    "rojo" reemplazó lo anterior; al cerrar la báscula el cursor volvió al
+    lector. NO se probó con la pistola física ni cobrando una venta de verdad
+    (eso está en 8 pruebas unitarias).
+
+2. [P2] TÍTULOS, "SALTAR AL CONTENIDO", AVISO AL CAMBIAR DE PANTALLA, GRÁFICAS
+  · Cada pestaña dice qué pantalla es: "Inventario · Hitex", "Cuánto debe ·
+    Clientes · Hitex", "Entrar · Hitex". core/titulos.ts (TitleStrategy) y un
+    `title` en cada ruta con nombreDe() de core/navegacion.ts (el mismo nombre
+    que el menú). En pruebas sale "PRUEBAS · Inventario · Hitex".
+  · El primer Tab del panel es "Saltar al contenido" (aparece arriba a la
+    izquierda solo con el cursor) y lleva al título de la pantalla. Antes había
+    que apretar Tab unas 25 veces para pasar el menú.
+  · Al cambiar de pantalla (admin-layout.ts → llegarAPantalla): desde el menú, el
+    cursor pasa al título de la pantalla nueva; en las pestañas de Clientes se
+    queda en la pestaña y el lector de pantalla dice "Cuánto debe · Clientes".
+  · Las dos gráficas de "Cómo va el negocio" (desde cuándo te deben, quién debe
+    más) le dicen al lector de pantalla qué miden y sus cifras
+    (shared/charts/resumen.ts); antes solo decía "imagen".
+
+3. [P2] CELULAR ANGOSTO Y LETRA GRANDE
+  · En un celular de 320 ya no se sale nada (antes Nómina y Clientes): el bloque
+    de botones de un encabezado se deja encoger (.page-head > *, .card-head > *),
+    y el selector de Clientes también.
+  · Con la letra del navegador al doble: los botones Cobrar/Fiar/Apartar/Pedido
+    (.seg) bajan de renglón si no caben (con la letra normal siguen en una fila;
+    una primera versión con rejilla partía la fila y se corrigió), "Sucursal con mostrador" de Inventario y los
+    botones de Surtir sucursal bajan de renglón, la cifra de una barra baja si
+    no cabe, y la cifra grande de las tarjetas se encoge solo si no cabe.
+
+4. [P3] PASADA FINAL
+  · Los colores de las gráficas de Clientes ya no están copiados en el código:
+    son los de la hoja (tokens nuevos --viz-rampa-1..4, --viz-series-1-suave,
+    --punto-aviso-suave, --punto-alerta-suave). contraste.ts → colorReal() lee el
+    color de verdad cuando hace falta elegir la letra.
+  · Los hijos de una .columna ya no llevan margen (como en la página); se
+    quitaron 64 ajustes escritos a mano que lo repetían (margin: 0, gap: 16px).
+    Quedan unos 300 ajustes sueltos de una sola pantalla.
+
+LA VERIFICACIÓN
+  · 352 pruebas unitarias del frontend (19 nuevas); compila sin avisos.
+  · Chrome sin ventana: 25 pantallas a 1280 y a 390, 24 a 320 y cinco con la
+    letra al 150% y al 200%: ninguna se sale de ancho, ningún texto bajo el
+    contraste mínimo, todos los campos con nombre. Con la letra normal la cifra
+    grande sigue en 28 px (26 en el expediente) y los botones Cobrar/Fiar/
+    Apartar/Pedido en una fila. Vistas las fotos de Clientes (Cuánto debe,
+    Cuándo compra), la ventana de almacén y el punto de venta: iguales que antes.
+  · Detector de diseño: las mismas 5 "imágenes rotas" de siempre (falsas: se
+    cargan al momento).
+  · NO se probó con lector de pantalla de verdad, celular físico, Firefox ni
+    Safari.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (36) · Se quitó Playwright
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Ahora puedes eliminar a Playwright", después de la prueba de la entrada 35.
+
+LO QUE SE QUITÓ
+  · Los navegadores que bajó (Chromium 1248, Firefox, WebKit y su ffmpeg), con
+    `npx playwright uninstall`: 1.9 GB → 656 MB. Se QUEDARON Chromium 1208,
+    ffmpeg 1011 y winldd, que usa Artillery (instalado en la computadora,
+    fuera del proyecto) y que ya estaban desde antes.
+  · @playwright/test y @types/node de la raíz (npm uninstall): package.json y
+    package-lock.json quedaron idénticos a los del repositorio.
+  · playwright.config.ts, tests/ (sesion.setup.ts, panel.spec.ts y las dos del
+    usuario: errores.spec.ts y el ejemplo), playwright-report/, test-results/,
+    playwright/.auth/ y capturas/. El .gitignore regresó a como estaba.
+  · La nota de CLAUDE.md. La entrada 35 se queda como registro de lo que se
+    probó.
+  Si se vuelve a querer: `npm init playwright@latest` en la raíz, y lo que se
+  probó está descrito en la entrada 35.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (35) · Pruebas en el navegador con Playwright
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Ahora vamos a hacer una prueba con Playwright, que instalé." Lo instaló en
+  la raíz (@playwright/test 1.64, con Chrome, Firefox y WebKit) y dejó su
+  prueba tests/errores.spec.ts (errores y desborde en localhost:4200), que solo
+  veía la pantalla de entrar porque no tenía sesión.
+
+LO QUE SE HIZO (nada se despliega: son pruebas)
+  · playwright.config.ts: contra el sistema LOCAL (servidor 3000 + pantalla
+    4200, base desarrollo); los arranca solo si no están arriba. Cinco
+    navegadores: chromium, firefox, webkit, celular-chrome (Pixel 5) y
+    celular-safari (iPhone 12). El reporte ya no se abre solo (se quedaba
+    esperando): `npx playwright show-report`.
+  · tests/sesion.setup.ts: firma la sesión del administrador con el secreto
+    de backend/.env y busca una venta, un cliente y un producto para las
+    pantallas de detalle. Se NIEGA si el .env apunta a hitex.
+  · tests/panel.spec.ts (SOLO MIRA): las 24 pantallas del panel —que abran,
+    sin errores de JavaScript, de consola ni de red, sin salirse de ancho, con
+    su foto en el reporte—; que la página diga es-MX y "Hitex"; que la ventana
+    de Materiales lleve el foco adentro, Tab no se escape y el foco regrese al
+    botón; y que el botón enfocado con teclado muestre su contorno.
+  · .gitignore: /capturas/ (las fotos de errores.spec.ts ahora salen con
+    sesión: nombres y montos; el repositorio es público).
+
+RESULTADO
+  · 149 pasan y 2 se saltan (el contorno de teclado en los celulares) en
+    2.5 minutos. Firefox y Safari no tienen errores ni se salen de ancho.
+  · Visto en fotos: Inventario en Firefox, Hoy en Safari, Punto de venta y
+    Cómo va el negocio en iPhone; se ven como en Chrome.
+  · DETALLE ENCONTRADO (sin corregir): en el iPhone las listas desplegables
+    salen con el fondo gris de Safari, no blancas como en los demás.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (34) · Accesibilidad, celular y colores: lo de la auditoría (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Tras la auditoría de diseño (/impeccable audit, 15 de 20: accesibilidad 3,
+  rendimiento 4, colores del sistema 2, celular 3, coherencia 3), "ejecútalos en
+  este orden": harden, adapt, polish, typeset y una pasada final de polish.
+  Despliegue 20261013-173129. Solo pantalla: la base no se tocó.
+
+1. HARDEN: QUE SE PUEDA USAR CON TECLADO Y CON LECTOR DE PANTALLA
+  · index.html decía lang="en": el navegador ofrecía traducir del inglés y el
+    lector de pantalla leía con voz inglesa. Ahora lang="es-MX".
+  · LAS VENTANAS LLEVAN EL FOCO (core/services/foco-ventanas.service.ts, uno
+    para las 30 ventanas, arrancado en app.ts). Antes el foco se quedaba DETRÁS
+    de la ventana: con Tab se recorría el menú. Ahora, al abrirse, el cursor
+    entra al primer campo (o a lo que la ventana enfoque sola, como el lector);
+    Tab y Mayús+Tab dan la vuelta dentro de la ventana de más arriba; al
+    cerrarse, el foco vuelve al botón que la abrió. En pantalla táctil no se
+    enfoca un campo (abriría el teclado del celular encima). 5 pruebas.
+  · LOS AVISOS SE ANUNCIAN: role="alert" en 74 avisos de error (.alert) y
+    role="status" en 30 de "listo" (.ok-msg y el último escaneo).
+  · Los campos en rojo (entrar, producto) llevan aria-invalid con la misma
+    condición.
+  · Los dos selectores de archivo del comprobante estaban con "hidden" y no se
+    llegaba a ellos con el teclado: ahora con la clase "oculto".
+
+2. ADAPT: CELULAR
+  · Caja y Presentaciones se SALÍAN de ancho en el celular (390 px): el campo de
+    la caja tenía 380 px fijos (ahora min(380px, 100%)) y las fichas de lote no
+    se partían en renglones.
+  · En el celular y en pantallas táctiles (menos de 900 px o puntero grueso) los
+    botones chicos, de ícono, los selectores, "Volver" y el nombre del menú
+    miden 44 px; los enlaces y botones de texto agrandan su zona de toque con un
+    área invisible (::after), sin cambiar cómo se ven.
+
+3. POLISH: CONTRASTE, COLORES Y FOCO
+  · El "33%" escrito en blanco sobre el segundo azul de la cartera daba 3.6:1;
+    ahora la letra se elige por contraste de WCAG
+    (shared/charts/contraste.ts → tintaSobre) y ahí va carbón (4.8:1). La rampa
+    de azules, RAMPA_AZUL, vive en ese archivo y la usan el tablero, clientes y
+    la frecuencia.
+  · Tokens nuevos para lo que se repetía a mano: --punto-aviso, --punto-alerta,
+    --foco, --barra-hover, --barra-borde, --barra-claro. Los puntos de las
+    cifras clave de Hoy, Ventas, Tablero, Surtir, Caja, Reportes, Apartados y
+    Nómina ya no llevan hexadecimales, y los colores que quedaban del diseño
+    anterior en styles.scss (bordes, fondos de error, el verde de los
+    liquidados) pasaron a los tokens de siempre. Quedan unos 175 hexadecimales sueltos, casi todos
+    tonos de una sola pantalla o de las gráficas.
+  · CONTORNO DE TECLADO: botones, enlaces, pestañas y opciones muestran un
+    contorno azul de 2 px al llegar con Tab (:focus-visible; con el ratón no
+    sale). En el menú oscuro, azul claro. El botón que abre un selector de
+    archivo lleva el halo de los campos.
+
+4. TYPESET: LA LETRA RESPETA EL TAMAÑO DEL NAVEGADOR
+  · Los 409 tamaños de letra en px pasaron a rem (1 rem = 16 px): se ven igual,
+    pero crecen si alguien sube la letra en su navegador o su celular.
+
+5. PASADA FINAL
+  · Las fichas de lote de Presentaciones salían con letra de 16 px (heredaban la
+    del botón): 13 px como las demás.
+
+LA VERIFICACIÓN
+  · 333 unitarias del frontend y 20 del backend; compila sin avisos de tamaño.
+  · 25 pantallas en Chrome sin ventana, a 1280 px y a 390 px: ninguna se sale
+    de ancho, ningún texto bajo el contraste mínimo, todos los campos con
+    nombre. La ventana de material: abre con el cursor en "Nombre", Escape la
+    cierra y el foco regresa al botón. Con Tab real se ve el contorno.
+  · Producción contesta lang="es-MX" y la hoja trae los tokens nuevos.
+  · NO se probó con un lector de pantalla de verdad (NVDA), ni con un celular
+    físico, ni en Firefox o Safari.
+  · DESIGN.md, .impeccable/design.json y CLAUDE.md (Convenciones de UI →
+    "Accesibilidad y celular") tienen las reglas nuevas.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (33) · "Hitex" en pantalla y DESIGN.md (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Vamos con los cambios", tras ofrecerle (1) poner el nombre Hitex en pantalla
+  y (2) registrar el diseño actual con /impeccable document.
+
+1. EL NOMBRE (despliegue 20261013-165316)
+  · "Tienda de hilos" → "Hitex" en el menú lateral, la pantalla de entrar, el
+    título de la pestaña (index.html; el de pruebas sale "PRUEBAS · Hitex") y
+    el encabezado de los PDF (utils/pdf.js: cargas y reportes; nomina/reporte.js).
+    La tienda en línea (apagada) decía "Hilos & Co." de demostración: ahora
+    "Hitex"; su registro, "Hitex · cuenta de cliente".
+  · Se quedaron como estaban los comentarios internos (deploy.sh, dump-db,
+    README de scripts) y los datos de prueba de las cuentas de banco.
+  · El manual en PDF (fuera del repo) sigue diciendo "Tienda de hilos".
+
+2. DESIGN.md + .impeccable/design.json
+  · Registra el diseño APROBADO el 2026-10-02 tal como está en el código
+    (styles.scss y el marco del panel), sin cambiar nada. Idea que lo resume
+    (la eligió el usuario): "La bodega bien llevada"; se ve "práctico, de
+    trabajo"; botones y campos "firmes y cómodos".
+  · Tokens con los nombres del código (fondo, superficie, tinta-*, acento*,
+    barra*, ok-f/ok-t…, viz-series-*), tipografía IBM Plex, curvas 8/10/12 px,
+    espacios 8/16/24/32, y las reglas que ya se seguían (un solo azul, estados
+    en pareja, tres colores en gráficas, cifras alineadas, plano por defecto).
+  · El complemento .impeccable/design.json trae escalas de tono, sombras,
+    movimientos, cortes de pantalla y 9 piezas de muestra.
+
+LA VERIFICACIÓN
+  · 20 unitarias del backend y 326 del frontend; visto en el navegador (entrar
+    y menú); producción contesta <title>Hitex</title>.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (32) · PRODUCT.md: el producto, para el trabajo de diseño
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "/impeccable init": dejar escrito, para el trabajo de diseño, quién usa el
+  sistema, para qué y qué no se debe romper.
+
+LO QUE CONTESTÓ
+  · Quién lo usa más: TODOS POR IGUAL (mostrador, bodega, dueño/administración;
+    ninguno por encima).
+  · Equipos: PC de mostrador con lector, computadora en bodega y celular (sin
+    tablet).
+  · Nombre que debe mostrar el sistema: HITEX. La pantalla todavía dice "Tienda
+    de hilos": falta aplicarlo.
+
+LO QUE SE ESCRIBIÓ
+  · PRODUCT.md en la raíz: usuarios, propósito, en qué se distingue, cómo se
+    trabaja en la tienda, reglas que pesan al diseñar (apunta a CLAUDE.md para
+    las completas), voz, evidencia (y lo que no existe y no se inventa) y cinco
+    principios. Sin decisiones visuales: eso va en DESIGN.md, que todavía no
+    existe.
+  · .impeccable/live/config.json (modo en vivo del skill sobre
+    frontend/src/index.html; no hay CSP que ajustar).
+  · No toca el código ni la base: nada que desplegar.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (31) · Se quitó "Pregúntame" (el asistente con IA) (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "El apartado de Pregúntame ya no va a existir, lo puedes quitar y todo lo que
+  tenga que ver con eso."
+
+LO QUE SE QUITÓ
+  · Backend: modules/asistente (controller, routes, service, herramientas y
+    proveedor: la conexión a Google Gemini), su ruta /api/v1/asistente, la
+    configuración `ia` de config/env.js, las IA_* de .env.produccion.ejemplo y
+    del .env del servidor (la llave de Gemini), y scripts/e2e-asistente.js.
+  · Frontend: features/admin/asistente (pantalla y sus 4 pruebas),
+    core/services/asistente.service.ts, la opción "Pregúntame" del menú (y su
+    ícono), la ruta /admin/asistente y sus estilos en styles.scss (burbujas,
+    puntitos de "pensando", ejemplos). La regla de nómina que apagaba el
+    parpadeo heredado de esos puntitos ya no hace falta.
+  · Textos: la ayuda del permiso "Ver costos y márgenes" ya no dice "(también en
+    Pregúntame)"; comentarios de análisis e inventario.
+  · Las funciones que usaba el asistente (cobranza, clientes enfriados, hilo
+    parado, margen, apartados, reportes, existencias) se QUEDAN: las usan las
+    pantallas.
+  · No tenía permisos ni tablas en la base: no hubo migración.
+
+LO QUE SE AGREGÓ
+  · /admin/sin-acceso ("Todavía no tienes pantallas"): quien no tiene NINGUNA
+    pantalla antes caía en Pregúntame, que no pedía permiso; sin esto la guarda
+    lo mandaría de una pantalla negada a otra. Si sí tiene alguna, lo manda a la
+    suya.
+  · Un enlace viejo a /admin/asistente lleva a la pantalla de inicio de cada
+    quien (el administrador a Hoy, el cajero al punto de venta).
+
+QUEDA PARA EL USUARIO
+  · Borrar la llave de Google Gemini en aistudio.google.com/apikey (y la de
+    DeepSeek): ya no se usan y siguen vivas.
+  · El manual de uso en PDF (fuera del repo) todavía tiene el capítulo de
+    Pregúntame.
+
+LA VERIFICACIÓN
+  · 20 unitarias del backend y 326 del frontend (las 4 del asistente se fueron
+    y entraron 4 de la pantalla de inicio). El servidor arranca sin la llave.
+  · Visto en el navegador: el menú sin Pregúntame; /admin/asistente lleva al
+    administrador a Hoy y al cajero al punto de venta; /admin/sin-acceso, con
+    pantallas, manda a la propia.
 
 
 -------------------------------------------------------------------------------

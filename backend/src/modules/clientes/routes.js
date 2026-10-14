@@ -113,4 +113,11 @@ router.put('/:id', ...soloStaff, validate(editarSchema), controller.actualizar);
 router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), controller.abonar);
 router.post('/:id/ajustes', ...soloStaff, requirePermiso('hacer:corregir_deuda'), validate(ajusteSchema), controller.ajustar);
 
+// SALDO A FAVOR (2026-10-13): lo que le quedó de una devolución se descuenta de
+// lo que debe cuando él lo pide. Sin `monto`, todo lo que alcance.
+const aplicarSaldoSchema = z
+  .object({ monto: z.coerce.number().positive().max(99999999).optional() })
+  .strict();
+router.post('/:id/saldo-favor/aplicar', ...soloStaff, validate(aplicarSaldoSchema), controller.aplicarSaldoFavor);
+
 module.exports = router;

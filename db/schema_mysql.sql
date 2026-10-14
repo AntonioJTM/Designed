@@ -802,6 +802,7 @@ CREATE TABLE `metodos_pago` (
   `id` smallint(5) unsigned NOT NULL AUTO_INCREMENT,
   `nombre` varchar(40) NOT NULL,
   `activo` tinyint(1) NOT NULL DEFAULT 1,
+  `interno` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `nombre` (`nombre`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -823,6 +824,7 @@ CREATE TABLE `pedidos` (
   `numero_pedido` varchar(40) NOT NULL,
   `canal` varchar(15) NOT NULL,
   `encargo` tinyint(1) NOT NULL DEFAULT 0,
+  `nota_pendiente` tinyint(1) NOT NULL DEFAULT 0,
   `metodo_entrega` varchar(10) NOT NULL DEFAULT 'recoger',
   `cliente_id` bigint(20) unsigned DEFAULT NULL,
   `tipo_cliente_id` smallint(5) unsigned DEFAULT NULL,
@@ -845,6 +847,7 @@ CREATE TABLE `pedidos` (
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
+  KEY `idx_pedidos_nota_pendiente` (`nota_pendiente`,`estado`),
   UNIQUE KEY `numero_pedido` (`numero_pedido`),
   KEY `usuario_id` (`usuario_id`),
   KEY `sesion_caja_id` (`sesion_caja_id`),
@@ -935,6 +938,92 @@ CREATE TABLE `pagos` (
   CONSTRAINT `pagos_ibfk_2` FOREIGN KEY (`metodo_pago_id`) REFERENCES `metodos_pago` (`id`),
   CONSTRAINT `pagos_chk_1` CHECK (`monto` > 0),
   CONSTRAINT `pagos_chk_2` CHECK (`estado` in (_utf8mb4'pendiente',_utf8mb4'procesando',_utf8mb4'completado',_utf8mb4'fallido',_utf8mb4'reembolsado'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: devoluciones ----------
+DROP TABLE IF EXISTS `devoluciones`;
+CREATE TABLE `devoluciones` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `folio` varchar(40) NOT NULL,
+  `pedido_id` bigint(20) unsigned NOT NULL,
+  `cliente_id` bigint(20) unsigned NOT NULL,
+  `almacen_id` smallint(5) unsigned NOT NULL,
+  `usuario_id` bigint(20) unsigned DEFAULT NULL,
+  `total` decimal(12,2) NOT NULL,
+  `aplicado_a_deuda` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `notas` varchar(255) DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_devoluciones_folio` (`folio`),
+  KEY `idx_devoluciones_pedido` (`pedido_id`),
+  KEY `idx_devoluciones_cliente` (`cliente_id`,`creado_en`),
+  KEY `fk_devoluciones_almacen` (`almacen_id`),
+  KEY `fk_devoluciones_usuario` (`usuario_id`),
+  CONSTRAINT `fk_devoluciones_almacen` FOREIGN KEY (`almacen_id`) REFERENCES `almacenes` (`id`),
+  CONSTRAINT `fk_devoluciones_cliente` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`),
+  CONSTRAINT `fk_devoluciones_pedido` FOREIGN KEY (`pedido_id`) REFERENCES `pedidos` (`id`),
+  CONSTRAINT `fk_devoluciones_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `chk_devoluciones_total` CHECK (`total` > 0 and `aplicado_a_deuda` >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: devolucion_detalle ----------
+DROP TABLE IF EXISTS `devolucion_detalle`;
+CREATE TABLE `devolucion_detalle` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `devolucion_id` bigint(20) unsigned NOT NULL,
+  `detalle_id` bigint(20) unsigned NOT NULL,
+  `variante_id` bigint(20) unsigned NOT NULL,
+  `cantidad` decimal(12,3) NOT NULL,
+  `piezas` int(10) unsigned DEFAULT NULL,
+  `importe` decimal(12,2) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_devdet_devolucion` (`devolucion_id`),
+  KEY `idx_devdet_detalle` (`detalle_id`),
+  KEY `fk_devdet_variante` (`variante_id`),
+  CONSTRAINT `fk_devdet_detalle` FOREIGN KEY (`detalle_id`) REFERENCES `pedido_detalle` (`id`),
+  CONSTRAINT `fk_devdet_devolucion` FOREIGN KEY (`devolucion_id`) REFERENCES `devoluciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_devdet_variante` FOREIGN KEY (`variante_id`) REFERENCES `producto_variantes` (`id`),
+  CONSTRAINT `chk_devdet_cantidad` CHECK (`cantidad` > 0 and `importe` >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: devolucion_bultos ----------
+DROP TABLE IF EXISTS `devolucion_bultos`;
+CREATE TABLE `devolucion_bultos` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `devolucion_detalle_id` bigint(20) unsigned NOT NULL,
+  `variante_codigo_id` bigint(20) unsigned DEFAULT NULL,
+  `codigo` varchar(60) NOT NULL,
+  `peso_kg` decimal(12,3) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_devbul_detalle` (`devolucion_detalle_id`),
+  KEY `idx_devbul_codigo` (`variante_codigo_id`),
+  CONSTRAINT `fk_devbul_codigo` FOREIGN KEY (`variante_codigo_id`) REFERENCES `variante_codigos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_devbul_detalle` FOREIGN KEY (`devolucion_detalle_id`) REFERENCES `devolucion_detalle` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: saldo_favor_movimientos ----------
+DROP TABLE IF EXISTS `saldo_favor_movimientos`;
+CREATE TABLE `saldo_favor_movimientos` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `cliente_id` bigint(20) unsigned NOT NULL,
+  `tipo` varchar(12) NOT NULL,
+  `monto` decimal(12,2) NOT NULL,
+  `pedido_id` bigint(20) unsigned DEFAULT NULL,
+  `devolucion_id` bigint(20) unsigned DEFAULT NULL,
+  `usuario_id` bigint(20) unsigned DEFAULT NULL,
+  `notas` varchar(255) DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_sfm_cliente` (`cliente_id`,`creado_en`),
+  KEY `idx_sfm_pedido` (`pedido_id`),
+  KEY `fk_sfm_devolucion` (`devolucion_id`),
+  KEY `fk_sfm_usuario` (`usuario_id`),
+  CONSTRAINT `fk_sfm_cliente` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_sfm_devolucion` FOREIGN KEY (`devolucion_id`) REFERENCES `devoluciones` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_sfm_pedido` FOREIGN KEY (`pedido_id`) REFERENCES `pedidos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_sfm_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `chk_sfm_tipo` CHECK (`tipo` in ('devolucion','uso','aplicado','reintegro','ajuste')),
+  CONSTRAINT `chk_sfm_monto` CHECK (`monto` <> 0 and (`monto` > 0 or `tipo` = 'ajuste'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: envios ----------

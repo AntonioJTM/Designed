@@ -8,12 +8,12 @@
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px;
   padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;
 }
-.almacen-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.almacen-nombre { font-size: 15px; font-weight: 600; }
-.almacen-tipo { font-size: 12px; color: var(--tinta-3); white-space: nowrap; }
-.almacen-cifra { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
-.almacen-cifra .cifra { font-size: 28px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
-.almacen-cifra .cifra.vacia { font-size: 18px; font-weight: 500; color: var(--tinta-3); }
+.almacen-cabeza { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 10px; }
+.almacen-nombre { font-size: 0.9375rem; font-weight: 600; }
+.almacen-tipo { font-size: 0.75rem; color: var(--tinta-3); white-space: nowrap; }
+.almacen-cifra { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 0.8125rem; }
+.almacen-cifra .cifra { font-size: 1.75rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.almacen-cifra .cifra.vacia { font-size: 1.125rem; font-weight: 500; color: var(--tinta-3); }
 
 /* Desglose paquete / enconado: hueco de 2 px entre tramos, nunca un borde. */
 .desglose-barra { display: flex; gap: 2px; height: 10px; }
@@ -25,7 +25,7 @@
 .paq { background: var(--viz-series-1); }
 .cono { background: var(--viz-series-2); }
 
-.almacen-pie { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 13px; color: var(--tinta-2); }
+.almacen-pie { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 0.8125rem; color: var(--tinta-2); }
 .desglose-texto { display: inline-flex; align-items: center; gap: 6px; }
 .desglose-texto i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .almacen-pie .alerta { color: var(--aviso-t); font-weight: 600; }
@@ -38,7 +38,7 @@
 .apilada { display: flex; gap: 2px; height: 20px; flex: 0 0 auto; min-width: 2px; }
 .apilada > span { flex: 1 1 0; min-width: 2px; }
 .apilada > span:last-child { border-radius: 0 4px 4px 0; }
-.nota { margin: 14px 0 0; font-size: 13px; }
+.nota { margin: 14px 0 0; font-size: 0.8125rem; }
 .aviso { margin: 12px 0 0; }
 
 @media (max-width: 640px) {
@@ -52,12 +52,12 @@
 .filtros > .field.check { flex: 0 1 auto; }
 
 table.grid.detalle { min-width: 900px; }
-table.grid.detalle .hilo { font-size: 15px; }
+table.grid.detalle .hilo { font-size: 0.9375rem; }
 /* El nombre del hilo abre su detalle (lotes y paquetes). */
 .grupo-cabeza { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
 .hilo-boton { border: 0; background: none; padding: 0; font: inherit; color: var(--acento-oscuro); cursor: pointer; }
 .hilo-boton:hover .hilo { text-decoration: underline; }
-table.grid.detalle .sub { font-size: 12px; color: var(--tinta-3); margin-top: 2px; }
+table.grid.detalle .sub { font-size: 0.75rem; color: var(--tinta-3); margin-top: 2px; }
 table.grid.detalle .sub.mono { font-family: var(--mono); }
 table.grid.detalle .en-minimo { color: var(--aviso-t); }
 table.grid.detalle .pill { margin-top: 4px; }
@@ -67,5 +67,5 @@ table.grid.detalle td.ultimo { color: var(--tinta-2); }
 
 .pie-tabla {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 12px; margin-top: 14px; font-size: 13px;
+  gap: 12px; margin-top: 14px; font-size: 0.8125rem;
 }

@@ -15,8 +15,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <section class="card">
     <div class="card-head">

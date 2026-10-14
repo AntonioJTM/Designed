@@ -1,5 +1,5 @@
 @if (error()) {
-  <p class="alert" style="margin: 0">{{ error() }}</p>
+  <p class="alert" role="alert" style="margin: 0">{{ error() }}</p>
 } @else if (!datos()) {
   <p class="sin">Cargando…</p>
 } @else {

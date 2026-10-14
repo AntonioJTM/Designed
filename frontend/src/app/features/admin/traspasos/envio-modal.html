@@ -19,7 +19,7 @@
         </p>
       }
 
-      @if (error()) { <p class="alert">{{ error() }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
       <label class="field">
         Código del paquete
@@ -30,7 +30,7 @@
           <button type="button" class="btn btn-ghost" (click)="leer()">Agregar</button>
         </span>
       </label>
-      @if (ultimo()) { <p class="ultimo">✓ {{ ultimo() }}</p> }
+      @if (ultimo()) { <p class="ultimo" role="status">✓ {{ ultimo() }}</p> }
 
       <!-- Lo que se pidió contra lo que va subiendo, hilo por hilo. -->
       <div class="tabla-scroll">

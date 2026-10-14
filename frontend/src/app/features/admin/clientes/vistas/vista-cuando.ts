@@ -9,12 +9,12 @@ import { COLOR, capitalizar, diaCorto, enPeriodo, fechaCorta, horaRango, plural,
  * [fondo, tinta]
  */
 const TONOS: [string, string][] = [
-  ['#F4F5F7', '#5B6270'],
-  ['#DCE8FA', '#1D4596'],
+  ['var(--fondo)', 'var(--tinta-3)'],
+  ['#DCE8FA', 'var(--acento-oscuro)'],
   ['#9EC3F2', '#0F2E5C'],
-  ['#3987e5', '#FFFFFF'],
-  ['#1c5cab', '#FFFFFF'],
-  ['#0d366b', '#FFFFFF'],
+  ['var(--viz-rampa-2)', 'var(--tinta)'], // tinta: 4.78:1 (blanco daba 3.64:1)
+  ['var(--viz-rampa-3)', '#FFFFFF'],
+  ['var(--viz-rampa-4)', '#FFFFFF'],
 ];
 
 /**
@@ -34,14 +34,14 @@ const TONOS: [string, string][] = [
   styles: `
     .calor { display: flex; flex-direction: column; gap: 4px; min-width: 640px; }
     .calor .renglon { display: grid; gap: 4px; }
-    .calor .horas { font-size: 12px; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+    .calor .horas { font-size: 0.75rem; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
     .calor .horas span { text-align: center; }
-    .calor .dia { font-size: 13px; color: var(--tinta-2); display: flex; align-items: center; }
+    .calor .dia { font-size: 0.8125rem; color: var(--tinta-2); display: flex; align-items: center; }
     .calor .celda {
-      height: 40px; border-radius: 5px; font-size: 12px; font-weight: 600;
+      height: 40px; border-radius: 5px; font-size: 0.75rem; font-weight: 600;
       display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
     }
-    .escala { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--tinta-3); }
+    .escala { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--tinta-3); }
     .escala i { width: 18px; height: 12px; border-radius: 3px; display: inline-block; }
   `,
 })

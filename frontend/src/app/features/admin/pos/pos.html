@@ -30,38 +30,42 @@
   </header>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <!-- Ticket de la venta recién cobrada -->
   @if (ticket(); as t) {
     <section class="card verde ticket" aria-live="polite">
-      <!-- Un apartado no es una venta cobrada y no tiene cambio: decir "Venta" y
-           "Cambio $0.00" sería mentir sobre lo que acaba de pasar. -->
+      <!-- Cada caso dice lo que de verdad pasó: decir "Venta" y "Cambio $0.00" en una
+           nota en espera o en una pendiente de pago sería mentir. -->
       @if (t.pedido.encargo) {
-        <h2>Pedido <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
+        <!-- La nota en espera NO es ticket (2026-10-13: "aún no sale como ticket y se
+             puede modificar"). -->
+        <h2>Nota en espera guardada · <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
         <p>
-          Pedido de <b>{{ t.pedido.total | dinero }}</b>: {{ entregaDe(t.pedido) }}.
-          @if (t.pagadoHoy > 0) { Dejó <b>{{ t.pagadoHoy | dinero }}</b>; el resto se cobra al entregarlo. }
-          @else { Se cobra al entregarlo. }
-          La mercancía queda apartada.
+          Nota de <b>{{ t.pedido.total | dinero }}</b>.
+          @if (t.pagadoHoy > 0) { Dejó <b>{{ t.pagadoHoy | dinero }}</b>; el resto se cobra al entregarla. }
+          @else { Se cobra al entregarla. }
+          La mercancía queda apartada y la nota se puede modificar en Notas en espera.
         </p>
         <div class="acciones">
           <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
-          @if (veEncargos()) { <a class="btn btn-ghost" routerLink="/admin/pedidos">Ver pedidos</a> }
+          @if (veEncargos()) { <a class="btn btn-ghost" routerLink="/admin/notas-en-espera">Ver notas en espera</a> }
         </div>
-      } @else if (t.pedido.estado === 'apartado') {
-        <h2>Apartado <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
+      } @else if (t.pedido.nota_pendiente && t.pedido.estado === 'pendiente') {
+        <h2>Nota pendiente de pago · <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
         <p>
-          Apartado de <b>{{ t.pedido.total | dinero }}</b>
-          @if (t.pagadoHoy > 0) { · dejó <b>{{ t.pagadoHoy | dinero }}</b> de anticipo }.
-          La mercancía queda guardada; se entrega cuando la liquide.
+          Total: <b>{{ t.pedido.total | dinero }}</b>. Se lleva la mercancía; el pago se registra
+          después en Notas pendientes de pago, o se pasa a crédito.
         </p>
         <div class="acciones">
           <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
-          @if (veApartados()) { <a class="btn btn-ghost" routerLink="/admin/apartados">Ver apartados</a> }
+          <button type="button" class="btn btn-ghost" (click)="imprimirTicket()" [disabled]="imprimiendo()">
+            {{ imprimiendo() ? 'Preparando…' : 'Imprimir ticket' }}
+          </button>
+          @if (veNotas()) { <a class="btn btn-ghost" routerLink="/admin/notas-pendientes">Ver notas pendientes</a> }
         </div>
       } @else if (num(t.pedido.total) > 0 && t.pedido.estado === 'pendiente') {
-        <h2>Entregado a crédito · <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
+        <h2>A crédito · <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
         <p>
           Total: <b>{{ t.pedido.total | dinero }}</b>.
           @if (t.pagadoHoy > 0) {
@@ -74,6 +78,9 @@
         </p>
         <div class="acciones">
           <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+          <button type="button" class="btn btn-ghost" (click)="imprimirTicket()" [disabled]="imprimiendo()">
+            {{ imprimiendo() ? 'Preparando…' : 'Imprimir ticket' }}
+          </button>
         </div>
       } @else {
         <h2>Venta <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
@@ -83,6 +90,9 @@
         </div>
         <div class="acciones">
           <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
+          <button type="button" class="btn btn-ghost" (click)="imprimirTicket()" [disabled]="imprimiendo()">
+            {{ imprimiendo() ? 'Preparando…' : 'Imprimir ticket' }}
+          </button>
         </div>
       }
     </section>
@@ -237,7 +247,7 @@
                      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M4 8V5h3 M17 5h3v3 M20 16v3h-3 M7 19H4v-3 M8 9v6 M11 9v6 M14 9v6 M17 9v6"></path>
                 </svg>
-                <input type="text" [(ngModel)]="qVar" name="qvar" (keyup.enter)="escanearOBuscar()"
+                <input #lector type="text" [(ngModel)]="qVar" name="qvar" (keyup.enter)="escanearOBuscar()"
                        placeholder="00811389  ·  rojo 2/30" autocomplete="off" />
               </span>
               <button type="button" class="btn btn-primary btn-lg" (click)="escanearOBuscar()">Buscar</button>
@@ -358,6 +368,7 @@
                                  (ngModelChange)="cambiarCantidad(i, $event)"
                                  [readonly]="!!i.bultos?.length"
                                  [title]="i.bultos?.length ? 'Son los kilos de los bultos escaneados: para cobrar menos, quita un bulto' : ''"
+                                 (keyup.enter)="enfocarLector(true)"
                                  [attr.aria-label]="'Kilos de ' + i.producto" />
                           <span class="muted">{{ i.unidad || 'kg' }}</span>
                         </span>
@@ -397,7 +408,7 @@
           }
         </div>
         @if (avisoCotizacion(); as aviso) {
-          <p class="alert" style="margin: 0">{{ aviso }} Quítalo o cambia la cantidad para poder cobrar.</p>
+          <p class="alert" role="alert" style="margin: 0">{{ aviso }} Quítalo o cambia la cantidad para poder cobrar.</p>
         }
 
         @if (tiposCliente().length > 1) {
@@ -412,27 +423,28 @@
           </label>
         }
 
-        <!-- Cobrar, fiar o apartar. Fiar y apartar exigen al cliente: sin saber a
-             quién, ni se le fía ni se le guarda mercancía. Fiar además pide el
-             permiso del puesto. -->
-        <div class="seg" role="radiogroup" aria-label="Cómo se lleva la mercancía">
+        <!-- Cobrar, a crédito, nota en espera o nota pendiente de pago (2026-10-13).
+             Las tres últimas exigen al cliente: sin saber de quién es, ni se le da a
+             crédito, ni se le guarda, ni se le cobra después. A crédito además pide
+             el permiso del puesto. Dos por renglón: los nombres son largos. -->
+        <div class="seg modos" role="radiogroup" aria-label="Cómo se lleva la mercancía">
           <button type="button" role="radio" [attr.aria-checked]="modo() === 'cobrar'"
                   [class.on]="modo() === 'cobrar'" (click)="elegirModo('cobrar')">Cobrar</button>
           @if (puedeFiar()) {
-            <button type="button" role="radio" [attr.aria-checked]="modo() === 'fiar'"
-                    [class.on]="modo() === 'fiar'" [disabled]="!!motivoSinFiar()"
-                    (click)="elegirModo('fiar')">Fiar</button>
+            <button type="button" role="radio" [attr.aria-checked]="modo() === 'credito'"
+                    [class.on]="modo() === 'credito'" [disabled]="!!motivoSinFiar()"
+                    (click)="elegirModo('credito')">A crédito</button>
           }
-          <button type="button" role="radio" [attr.aria-checked]="modo() === 'apartar'"
-                  [class.on]="modo() === 'apartar'" [disabled]="!!motivoSinApartar()"
-                  (click)="elegirModo('apartar')">Apartar</button>
-          <button type="button" role="radio" [attr.aria-checked]="modo() === 'pedido'"
-                  [class.on]="modo() === 'pedido'" [disabled]="!!motivoSinPedido()"
-                  (click)="elegirModo('pedido')">Pedido</button>
+          <button type="button" role="radio" [attr.aria-checked]="modo() === 'espera'"
+                  [class.on]="modo() === 'espera'" [disabled]="!!motivoSinEspera()"
+                  (click)="elegirModo('espera')">Nota en espera</button>
+          <button type="button" role="radio" [attr.aria-checked]="modo() === 'pendiente'"
+                  [class.on]="modo() === 'pendiente'" [disabled]="!!motivoSinPendiente()"
+                  (click)="elegirModo('pendiente')">Pendiente de pago</button>
         </div>
         @if (modo() === 'cobrar') {
           @if (!clienteSel()) {
-            <p class="ayuda-modo">{{ puedeFiar() ? 'Fiar, apartar y pedido' : 'Apartar y pedido' }} piden elegir primero al cliente.</p>
+            <p class="ayuda-modo">{{ puedeFiar() ? 'A crédito, nota en espera y pendiente de pago' : 'Nota en espera y pendiente de pago' }} piden elegir primero al cliente.</p>
           } @else if (puedeFiar() && motivoSinFiar(); as m) {
             <p class="ayuda-modo">{{ m }}</p>
           }
@@ -441,7 +453,7 @@
         @if (fiando()) {
           <div class="bloque-modo">
             <label class="field">
-              Cuánto se le fía
+              Cuánto va a crédito
               <input type="number" min="0" step="0.01" [(ngModel)]="aCredito" name="acred"
                      [placeholder]="propuestaCredito().toFixed(2)" />
               <span class="ayuda">Vacío = todo lo que le alcance. Le quedan {{ creditoDisponible() | dinero }} de crédito.</span>
@@ -451,26 +463,8 @@
         }
 
         @if (pidiendo()) {
-          <!-- PEDIDO: se entrega después; la mercancía se aparta. -->
+          <!-- NOTA EN ESPERA: no sale ticket; la mercancía se aparta y se cobra al entregarla. -->
           <div class="bloque-modo">
-            <div class="seg" role="radiogroup" aria-label="Cómo se entrega">
-              <button type="button" role="radio" [class.on]="entregaPedido() === 'recoger'"
-                      [attr.aria-checked]="entregaPedido() === 'recoger'" (click)="entregaPedido.set('recoger')">Pasa por él</button>
-              <button type="button" role="radio" [class.on]="entregaPedido() === 'envio'"
-                      [attr.aria-checked]="entregaPedido() === 'envio'" (click)="entregaPedido.set('envio')">Lo lleva el chofer</button>
-            </div>
-            @if (entregaPedido() === 'envio') {
-              <label class="field">
-                A dónde
-                <input type="text" [(ngModel)]="direccionPedido" name="ped-dir" maxlength="255" placeholder="Calle, número, colonia, referencias" />
-              </label>
-              <label class="field">
-                <span>Lo del envío <span class="muted">(opcional)</span></span>
-                <input type="number" min="0" step="0.01" [ngModel]="costoEnvio()" (ngModelChange)="costoEnvio.set($event)"
-                       name="ped-envio" placeholder="0.00" />
-                <span class="ayuda">Se suma al total. Vacío = no se cobra.</span>
-              </label>
-            }
             <label class="field">
               <span>Para cuándo <span class="muted">(opcional)</span></span>
               <input type="date" [(ngModel)]="paraCuando" name="ped-cuando" />
@@ -482,9 +476,9 @@
             <label class="field">
               <span>Deja pagado <span class="muted">(opcional)</span></span>
               <input type="number" min="0" step="0.01" [(ngModel)]="anticipo" name="ped-deja" placeholder="0.00" />
-              <span class="ayuda">Lo que falte se cobra al entregarlo (o se le fía).</span>
+              <span class="ayuda">Lo que falte se cobra al entregarla, a crédito o como nota pendiente de pago.</span>
             </label>
-            <p class="ayuda" style="margin: 0">La mercancía se aparta: <b>no sale del inventario</b> hasta que se entrega.</p>
+            <p class="ayuda" style="margin: 0">No sale ticket. La mercancía se aparta: <b>no sale del inventario</b> hasta que se entrega, y la nota se puede modificar.</p>
           </div>
           @if (num(anticipo) > 0) {
             <label class="field">
@@ -496,25 +490,13 @@
           }
         }
 
-        @if (apartando()) {
+        @if (notaPendiente()) {
           <div class="bloque-modo">
-            <label class="field">
-              Cuánto deja de anticipo
-              <input type="number" min="0" step="0.01" [(ngModel)]="anticipo" name="antic" placeholder="0.00" />
-              <span class="ayuda">Puede dejar lo que quiera, o nada y volver a pagar después.</span>
-            </label>
-            <div class="dato"><span>Le quedaría por pagar</span><span>{{ pendienteApartado() | dinero }}</span></div>
-            <p class="ayuda" style="margin: 0">La mercancía se guarda: <b>no sale del inventario</b> hasta que la recoja.</p>
+            <p class="ayuda" style="margin: 0">
+              Se lleva la mercancía y sale el ticket como <b>nota pendiente de pago</b>. Hoy no paga nada y no
+              usa su crédito: el pago se registra después en Notas pendientes de pago (o se pasa a crédito).
+            </p>
           </div>
-          <!-- En un apartado solo hace falta el método si deja algo. -->
-          @if (num(anticipo) > 0) {
-            <label class="field">
-              Con qué deja el anticipo
-              <select [(ngModel)]="metodoSel" name="metodo-ap">
-                @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
-              </select>
-            </label>
-          }
         } @else if (!pidiendo() && aPagarHoy() > 0) {
           <label class="field">
             Método de pago
@@ -545,7 +527,7 @@
                 [disabled]="carrito().length === 0">
           {{ textoBoton() }}
         </button>
-        @if (!apartando() && !pidiendo() && esEfectivoSel() && aPagarHoy() > 0) {
+        @if (!notaPendiente() && !pidiendo() && esEfectivoSel() && aPagarHoy() > 0) {
           <p class="ayuda centro">Se guarda lo cobrado, no el billete.</p>
         }
       </section>
@@ -564,9 +546,9 @@
         <h2 id="alta-titulo">Registrar cliente nuevo</h2>
         <button type="button" class="modal-cerrar" (click)="cerrarAltaCliente()" aria-label="Cerrar">✕</button>
       </div>
-      <div class="modal-body columna" style="gap: 16px">
-        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
-        <p class="muted" style="margin: 0">Solo el nombre y el teléfono. El resto se llena después en Clientes.</p>
+      <div class="modal-body columna">
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+        <p class="muted">Solo el nombre y el teléfono. El resto se llena después en Clientes.</p>
         <label class="field">
           Nombre
           <input type="text" [(ngModel)]="nuevoCliente.nombre" name="ncn" placeholder="Mercería La Esperanza" />
@@ -581,7 +563,7 @@
             <input type="tel" [(ngModel)]="nuevoCliente.telefono" name="nct" maxlength="20" />
           </label>
         </div>
-        <p class="nota-info" style="margin: 0">
+        <p class="nota-info">
           Nace sin crédito: el cobro es completo. El administrador recibe el aviso para decidir si le autoriza fiarle.
         </p>
       </div>
@@ -603,9 +585,9 @@
         <h2 id="abono-titulo">Abono de {{ c.nombre_comercial || c.nombre }}</h2>
         <button type="button" class="modal-cerrar" (click)="cerrarAbono()" aria-label="Cerrar">✕</button>
       </div>
-      <div class="modal-body columna" style="gap: 16px">
-        @if (errorAbono()) { <p class="alert" style="margin: 0">{{ errorAbono() }}</p> }
-        <p class="muted" style="margin: 0">
+      <div class="modal-body columna">
+        @if (errorAbono()) { <p class="alert" role="alert">{{ errorAbono() }}</p> }
+        <p class="muted">
           Debe <b>{{ c.saldo | dinero }}</b>. El abono va a su cuenta y paga primero lo más antiguo que deba.
         </p>
         <div class="form-grid">
@@ -627,7 +609,7 @@
         </div>
         @if (abonoEnEfectivo()) {
           <!-- Un abono no es una venta: entra al turno como ingreso, y no cuenta en las ventas del día. -->
-          <p class="nota-info" style="margin: 0">El efectivo entra al turno de {{ sesion()?.caja ?? 'esta caja' }}.</p>
+          <p class="nota-info">El efectivo entra al turno de {{ sesion()?.caja ?? 'esta caja' }}.</p>
         }
       </div>
       <div class="modal-foot">
@@ -642,5 +624,5 @@
 
 <!-- La báscula: se teclea lo que pesaron y, si son conos, cuántos eran. -->
 @if (pesando(); as h) {
-  <app-pesar-modal [hilo]="h" (cerrado)="pesando.set(null)" (agregado)="alPesar(h, $event)" />
+  <app-pesar-modal [hilo]="h" (cerrado)="cerrarBascula()" (agregado)="alPesar(h, $event)" />
 }

@@ -66,28 +66,29 @@ const PESTANAS: { clave: Pestana; etiqueta: string }[] = [
     .cabeza-cliente { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; border-radius: 12px; padding: 24px; }
     .quien { display: flex; align-items: center; gap: 18px; min-width: 0; }
     .quien > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-    .quien h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
-    .quien p { margin: 0; font-size: 14px; color: var(--tinta-3); }
+    .quien h1 { margin: 0; font-size: 1.625rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+    .quien p { margin: 0; font-size: 0.875rem; color: var(--tinta-3); }
     .quien p b { color: var(--tinta); font-weight: 500; }
     .etiquetas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .etiquetas .tel { font-family: var(--mono); font-size: 13px; color: var(--tinta-2); }
+    .etiquetas .tel { font-family: var(--mono); font-size: 0.8125rem; color: var(--tinta-2); }
     .notas { flex-basis: 100%; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--superficie-2);
-             border: 1px solid var(--borde-suave); font-size: 14px; color: var(--tinta-2); white-space: pre-line; }
+             border: 1px solid var(--borde-suave); font-size: 0.875rem; color: var(--tinta-2); white-space: pre-line; }
     .kpis-exp .kpi { flex: 1 1 150px; padding: 16px 18px; gap: 5px; }
-    .kpis-exp .kpi-valor { font-size: 26px; }
+    /* Se encoge solo si no cabe (letra grande); con la normal, 1.625rem en celular y en PC. */
+    .kpis-exp .kpi-valor { font-size: min(1.625rem, 20cqi); }
     .tabs-exp { margin-top: -2px; }
-    .cuenta-cifras { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .cuenta-cifras { display: flex; justify-content: space-between; gap: 12px; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
     .cuenta-cifras b { font-weight: 600; color: var(--tinta); }
-    .movs { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .movs { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
     .movs td { padding: 9px 0; border-top: 1px solid var(--borde-suave); vertical-align: top; }
     .movs td:first-child { color: var(--tinta-3); white-space: nowrap; width: 64px; font-variant-numeric: tabular-nums; }
     .movs td:nth-child(2) { padding-left: 8px; padding-right: 8px; }
     .movs td:last-child { text-align: right; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .movs .con { color: var(--tinta-3); font-size: 13px; }
-    .grande { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+    .movs .con { color: var(--tinta-3); font-size: 0.8125rem; }
+    .grande { font-size: 1.875rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
     .cifras-cuenta { display: flex; flex-wrap: wrap; gap: 16px 32px; }
     .cifras-cuenta > div { display: flex; flex-direction: column; gap: 4px; }
-    .cifras-cuenta .muted { font-size: 13px; }
+    .cifras-cuenta .muted { font-size: 0.8125rem; }
     .datos-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
     @media (max-width: 640px) { .datos-2 { grid-template-columns: minmax(0, 1fr); } }
   `,

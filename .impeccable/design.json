@@ -1,0 +1,836 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T03:17:41+00:00",
+  "title": "Design System: Hitex",
+  "extensions": {
+    "colorMeta": {
+      "fondo": {
+        "role": "neutral",
+        "displayName": "Gris de piso",
+        "canonical": "oklch(97.0% 0.003 264.5)",
+        "tonalRamp": [
+          "#0B0B0C",
+          "#242526",
+          "#414243",
+          "#606163",
+          "#818284",
+          "#A4A5A7",
+          "#C8C9CB",
+          "#EDEEF0"
+        ]
+      },
+      "superficie": {
+        "role": "neutral",
+        "displayName": "Blanco de tarjeta",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "superficie-2": {
+        "role": "neutral",
+        "displayName": "Blanco humo",
+        "canonical": "oklch(98.8% 0.002 247.8)",
+        "tonalRamp": [
+          "#0B0B0C",
+          "#242526",
+          "#414243",
+          "#606162",
+          "#818283",
+          "#A4A5A6",
+          "#C8C9CA",
+          "#EDEEEF"
+        ]
+      },
+      "borde": {
+        "role": "neutral",
+        "displayName": "Línea de estante",
+        "canonical": "oklch(92.4% 0.008 260.7)",
+        "tonalRamp": [
+          "#090B0E",
+          "#232529",
+          "#404246",
+          "#5F6166",
+          "#808287",
+          "#A2A5AA",
+          "#C6C9CE",
+          "#ECEFF4"
+        ]
+      },
+      "borde-suave": {
+        "role": "neutral",
+        "displayName": "Línea tenue",
+        "canonical": "oklch(95.4% 0.005 258.3)",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#242527",
+          "#404244",
+          "#606164",
+          "#818285",
+          "#A3A5A8",
+          "#C7C9CC",
+          "#EDEFF2"
+        ]
+      },
+      "borde-campo": {
+        "role": "neutral",
+        "displayName": "Marco de campo",
+        "canonical": "oklch(88.4% 0.011 261.8)",
+        "tonalRamp": [
+          "#090B10",
+          "#22252A",
+          "#3F4248",
+          "#5E6167",
+          "#7F8289",
+          "#A1A5AC",
+          "#C5C9D0",
+          "#EBEFF6"
+        ]
+      },
+      "tinta": {
+        "role": "neutral",
+        "displayName": "Tinta carbón",
+        "canonical": "oklch(21.8% 0.019 266.1)",
+        "tonalRamp": [
+          "#080B13",
+          "#21252E",
+          "#3D424C",
+          "#5C616C",
+          "#7D828E",
+          "#9FA5B1",
+          "#C3C9D6",
+          "#E9EFFC"
+        ]
+      },
+      "tinta-2": {
+        "role": "neutral",
+        "displayName": "Tinta pizarra",
+        "canonical": "oklch(39.0% 0.023 265.7)",
+        "tonalRamp": [
+          "#070B15",
+          "#202531",
+          "#3C424F",
+          "#5B616F",
+          "#7C8291",
+          "#9EA5B4",
+          "#C2C9D9",
+          "#E7EFFF"
+        ]
+      },
+      "tinta-3": {
+        "role": "neutral",
+        "displayName": "Tinta gris",
+        "canonical": "oklch(49.5% 0.024 264.3)",
+        "tonalRamp": [
+          "#060B15",
+          "#1F2531",
+          "#3C424F",
+          "#5A616F",
+          "#7B8291",
+          "#9DA5B5",
+          "#C1C9D9",
+          "#E7EFFE"
+        ]
+      },
+      "acento": {
+        "role": "primary",
+        "displayName": "Azul de bodega",
+        "canonical": "oklch(49.1% 0.181 262.8)",
+        "tonalRamp": [
+          "#00062B",
+          "#001A63",
+          "#03339F",
+          "#2558C6",
+          "#457CED",
+          "#78A4F7",
+          "#AFCAFD",
+          "#E7EFFE"
+        ]
+      },
+      "acento-oscuro": {
+        "role": "primary",
+        "displayName": "Azul noche",
+        "canonical": "oklch(41.2% 0.141 262.3)",
+        "tonalRamp": [
+          "#000827",
+          "#031E5B",
+          "#143B8B",
+          "#335DB0",
+          "#5380D6",
+          "#74A3FD",
+          "#AFCAFB",
+          "#E6EFFF"
+        ]
+      },
+      "acento-suave": {
+        "role": "primary",
+        "displayName": "Azul neblina",
+        "canonical": "oklch(94.8% 0.019 266.0)",
+        "tonalRamp": [
+          "#080B13",
+          "#21252E",
+          "#3D424C",
+          "#5C616C",
+          "#7D828E",
+          "#9FA5B1",
+          "#C3C9D6",
+          "#E9EFFC"
+        ]
+      },
+      "barra": {
+        "role": "neutral",
+        "displayName": "Menú de noche",
+        "canonical": "oklch(20.0% 0.019 266.0)",
+        "tonalRamp": [
+          "#080B13",
+          "#21252F",
+          "#3D424D",
+          "#5C616D",
+          "#7D828E",
+          "#9FA5B2",
+          "#C3C9D6",
+          "#E8EFFC"
+        ]
+      },
+      "barra-tinta": {
+        "role": "neutral",
+        "displayName": "Tinta del menú",
+        "canonical": "oklch(85.1% 0.015 264.5)",
+        "tonalRamp": [
+          "#080B12",
+          "#21252D",
+          "#3E424A",
+          "#5D616A",
+          "#7E828C",
+          "#A0A5AF",
+          "#C4C9D3",
+          "#E9EFF9"
+        ]
+      },
+      "barra-titulo": {
+        "role": "neutral",
+        "displayName": "Título del menú",
+        "canonical": "oklch(66.2% 0.022 264.4)",
+        "tonalRamp": [
+          "#070B15",
+          "#202530",
+          "#3C424E",
+          "#5B616E",
+          "#7C8290",
+          "#9EA5B4",
+          "#C2C9D8",
+          "#E7EFFE"
+        ]
+      },
+      "barra-linea": {
+        "role": "neutral",
+        "displayName": "Línea del menú",
+        "canonical": "oklch(29.3% 0.024 264.1)",
+        "tonalRamp": [
+          "#060B15",
+          "#1F2531",
+          "#3C424F",
+          "#5A616F",
+          "#7B8391",
+          "#9EA5B4",
+          "#C1C9D9",
+          "#E7EFFF"
+        ]
+      },
+      "ok-f": {
+        "role": "state",
+        "displayName": "Verde pagado (fondo)",
+        "canonical": "oklch(95.5% 0.018 161.1)",
+        "tonalRamp": [
+          "#050E09",
+          "#1D2822",
+          "#3A453F",
+          "#59655E",
+          "#79867F",
+          "#9CA9A1",
+          "#BFCDC5",
+          "#E5F2EB"
+        ]
+      },
+      "ok-t": {
+        "role": "state",
+        "displayName": "Verde pagado (tinta)",
+        "canonical": "oklch(45.3% 0.098 156.6)",
+        "tonalRamp": [
+          "#010F06",
+          "#052D19",
+          "#044F2E",
+          "#26724A",
+          "#4B946A",
+          "#6EB88C",
+          "#92DDAF",
+          "#C8FEDB"
+        ]
+      },
+      "aviso-f": {
+        "role": "state",
+        "displayName": "Ámbar en espera (fondo)",
+        "canonical": "oklch(96.2% 0.031 81.8)",
+        "tonalRamp": [
+          "#120A00",
+          "#2D2413",
+          "#4A412F",
+          "#6A604E",
+          "#8C816E",
+          "#AFA490",
+          "#D3C8B3",
+          "#F9EDD8"
+        ]
+      },
+      "aviso-t": {
+        "role": "state",
+        "displayName": "Ámbar en espera (tinta)",
+        "canonical": "oklch(45.4% 0.100 68.1)",
+        "tonalRamp": [
+          "#140800",
+          "#361F04",
+          "#5E3803",
+          "#865513",
+          "#A9763B",
+          "#CE995E",
+          "#F4BD81",
+          "#FFEBD6"
+        ]
+      },
+      "alerta-f": {
+        "role": "state",
+        "displayName": "Naranja atención (fondo)",
+        "canonical": "oklch(94.7% 0.023 44.3)",
+        "tonalRamp": [
+          "#130804",
+          "#2F221C",
+          "#4D3E38",
+          "#6D5D57",
+          "#8F7E77",
+          "#B2A199",
+          "#D7C5BD",
+          "#FDEAE2"
+        ]
+      },
+      "alerta-t": {
+        "role": "state",
+        "displayName": "Naranja atención (tinta)",
+        "canonical": "oklch(47.0% 0.143 37.3)",
+        "tonalRamp": [
+          "#1B0300",
+          "#451002",
+          "#72240A",
+          "#A23B1B",
+          "#C85E3F",
+          "#F08261",
+          "#FAB6A2",
+          "#FEE9E3"
+        ]
+      },
+      "peligro-f": {
+        "role": "state",
+        "displayName": "Rojo cancelado (fondo)",
+        "canonical": "oklch(93.7% 0.025 23.6)",
+        "tonalRamp": [
+          "#140706",
+          "#30201F",
+          "#4F3D3B",
+          "#6F5C5A",
+          "#917D7B",
+          "#B59F9D",
+          "#D9C3C1",
+          "#FEE9E7"
+        ]
+      },
+      "peligro-t": {
+        "role": "state",
+        "displayName": "Rojo cancelado (tinta)",
+        "canonical": "oklch(46.5% 0.164 29.7)",
+        "tonalRamp": [
+          "#1E0100",
+          "#4D0100",
+          "#7E0B05",
+          "#AB2D21",
+          "#D25344",
+          "#FB7866",
+          "#FDB4A8",
+          "#FFE9E5"
+        ]
+      },
+      "viz-series-1": {
+        "role": "chart",
+        "displayName": "Serie azul",
+        "canonical": "oklch(57.5% 0.163 255.5)",
+        "tonalRamp": [
+          "#000A20",
+          "#01244E",
+          "#09417F",
+          "#055FBA",
+          "#3582E1",
+          "#63A7FF",
+          "#A8CCFC",
+          "#E4F0FF"
+        ]
+      },
+      "viz-series-2": {
+        "role": "chart",
+        "displayName": "Serie naranja",
+        "canonical": "oklch(67.1% 0.175 40.6)",
+        "tonalRamp": [
+          "#1A0400",
+          "#421503",
+          "#722603",
+          "#A03D12",
+          "#D5531B",
+          "#FD7845",
+          "#FEB59B",
+          "#FFE9E1"
+        ]
+      },
+      "viz-series-3": {
+        "role": "chart",
+        "displayName": "Serie aqua",
+        "canonical": "oklch(66.9% 0.141 162.1)",
+        "tonalRamp": [
+          "#000F07",
+          "#032D1D",
+          "#104E36",
+          "#11734F",
+          "#19996B",
+          "#37C08A",
+          "#65E5AD",
+          "#C2FFDF"
+        ]
+      },
+      "viz-otros": {
+        "role": "chart",
+        "displayName": "Gris \"otros\"",
+        "canonical": "oklch(71.2% 0.003 84.6)",
+        "tonalRamp": [
+          "#0C0B0A",
+          "#262523",
+          "#434240",
+          "#62615F",
+          "#838280",
+          "#A6A5A3",
+          "#CAC9C7",
+          "#EFEEEC"
+        ]
+      },
+      "barra-hover": {
+        "role": "neutral",
+        "displayName": "Menú bajo el puntero",
+        "canonical": "oklch(24.8% 0.022 265.7)",
+        "tonalRamp": [
+          "#070B15",
+          "#202530",
+          "#3C424E",
+          "#5B616E",
+          "#7C8290",
+          "#9EA5B4",
+          "#C2C9D8",
+          "#E7EFFE"
+        ]
+      },
+      "barra-borde": {
+        "role": "neutral",
+        "displayName": "Borde del botón del menú",
+        "canonical": "oklch(34.8% 0.026 264.1)",
+        "tonalRamp": [
+          "#060B16",
+          "#1F2532",
+          "#3B4250",
+          "#5A6171",
+          "#7A8393",
+          "#9DA5B6",
+          "#C1C9DB",
+          "#E6EFFF"
+        ]
+      },
+      "barra-claro": {
+        "role": "neutral",
+        "displayName": "Tinta clara del menú",
+        "canonical": "oklch(92.4% 0.012 264.5)",
+        "tonalRamp": [
+          "#090B10",
+          "#22252B",
+          "#3F4248",
+          "#5E6168",
+          "#7F828A",
+          "#A1A5AD",
+          "#C5C9D1",
+          "#EBEFF7"
+        ]
+      },
+      "punto-aviso": {
+        "role": "state",
+        "displayName": "Ámbar punto",
+        "canonical": "oklch(76.4% 0.142 72.2)",
+        "tonalRamp": [
+          "#130900",
+          "#352001",
+          "#5A3A09",
+          "#855606",
+          "#B0740A",
+          "#DB9529",
+          "#FCBB65",
+          "#FEEBD5"
+        ]
+      },
+      "punto-alerta": {
+        "role": "state",
+        "displayName": "Naranja punto",
+        "canonical": "oklch(55.3% 0.174 38.4)",
+        "tonalRamp": [
+          "#1B0300",
+          "#451101",
+          "#722509",
+          "#A73606",
+          "#D55325",
+          "#FD784C",
+          "#FEB59D",
+          "#FFE9E2"
+        ]
+      },
+      "foco": {
+        "role": "primary",
+        "displayName": "Halo de foco (acento al 20%)",
+        "canonical": "oklch(49.1% 0.181 262.8 / 20%)",
+        "tonalRamp": [
+          "#00062B",
+          "#001A63",
+          "#03339F",
+          "#2558C6",
+          "#457CED",
+          "#78A4F7",
+          "#AFCAFD",
+          "#E7EFFE"
+        ]
+      },
+      "viz-rampa-1": {
+        "role": "chart",
+        "displayName": "Rampa azul 1 (claro)",
+        "canonical": "oklch(76.4% 0.097 253.2)",
+        "tonalRamp": [
+          "#000B1E",
+          "#02254A",
+          "#154374",
+          "#366397",
+          "#5785BB",
+          "#79A9E1",
+          "#A5CDFC",
+          "#E3F0FF"
+        ]
+      },
+      "viz-rampa-2": {
+        "role": "chart",
+        "displayName": "Rampa azul 2",
+        "canonical": "oklch(62.2% 0.161 255.1)",
+        "tonalRamp": [
+          "#000B20",
+          "#01244D",
+          "#08417E",
+          "#025FB9",
+          "#3482E0",
+          "#62A7FE",
+          "#A8CCFB",
+          "#E4F0FF"
+        ]
+      },
+      "viz-rampa-3": {
+        "role": "chart",
+        "displayName": "Rampa azul 3",
+        "canonical": "oklch(48.0% 0.142 256.1)",
+        "tonalRamp": [
+          "#000A1F",
+          "#03244C",
+          "#024083",
+          "#2160AF",
+          "#4483D5",
+          "#67A7FC",
+          "#A9CCFA",
+          "#E4F0FF"
+        ]
+      },
+      "viz-rampa-4": {
+        "role": "chart",
+        "displayName": "Rampa azul 4 (oscuro)",
+        "canonical": "oklch(33.8% 0.103 256.9)",
+        "tonalRamp": [
+          "#000A21",
+          "#002350",
+          "#194177",
+          "#39629B",
+          "#5984BF",
+          "#7BA7E5",
+          "#AACCFA",
+          "#E5EFFF"
+        ]
+      },
+      "viz-series-1-suave": {
+        "role": "chart",
+        "displayName": "Azul suave (cliente al corriente)",
+        "canonical": "oklch(86.9% 0.049 255.1)",
+        "tonalRamp": [
+          "#000B1F",
+          "#14263C",
+          "#30435C",
+          "#4F637D",
+          "#6F84A0",
+          "#91A7C4",
+          "#B5CBE9",
+          "#E4F0FE"
+        ]
+      },
+      "punto-aviso-suave": {
+        "role": "chart",
+        "displayName": "Ámbar suave (ya le toca)",
+        "canonical": "oklch(90.7% 0.065 82.2)",
+        "tonalRamp": [
+          "#120A00",
+          "#322202",
+          "#533E14",
+          "#745E34",
+          "#967F55",
+          "#B9A277",
+          "#DEC699",
+          "#FFECCB"
+        ]
+      },
+      "punto-alerta-suave": {
+        "role": "chart",
+        "displayName": "Naranja suave (se enfría)",
+        "canonical": "oklch(86.2% 0.059 48.0)",
+        "tonalRamp": [
+          "#180600",
+          "#3B1B08",
+          "#5B3826",
+          "#7D5744",
+          "#A07864",
+          "#C49B85",
+          "#EABEA9",
+          "#FEEAE0"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Título de pantalla",
+        "purpose": "El título de cada pantalla."
+      },
+      "cifra": {
+        "displayName": "Cifra",
+        "purpose": "El número grande de una cifra clave, con dígitos de ancho fijo."
+      },
+      "title-ventana": {
+        "displayName": "Título de ventana",
+        "purpose": "El título de un modal."
+      },
+      "title": {
+        "displayName": "Título de tarjeta",
+        "purpose": "El título de una tarjeta."
+      },
+      "body": {
+        "displayName": "Texto",
+        "purpose": "Tablas, campos y texto corrido."
+      },
+      "label": {
+        "displayName": "Etiqueta",
+        "purpose": "Etiquetas de campo, encabezados de tabla y el pie de una cifra."
+      },
+      "overline": {
+        "displayName": "Título de grupo",
+        "purpose": "Grupos en mayúsculas espaciadas (menú, tablas, pendientes)."
+      },
+      "mono": {
+        "displayName": "Código",
+        "purpose": "Códigos de barras, SKU y folios."
+      }
+    },
+    "shadows": [
+      {
+        "name": "ventana-flotante",
+        "value": "0 20px 50px rgba(18, 22, 31, 0.25)",
+        "purpose": "Solo los modales, sobre el velo #12161F99."
+      },
+      {
+        "name": "anillo-foco",
+        "value": "0 0 0 3px var(--foco)",
+        "purpose": "Campos, buscador y el botón que abre un selector de archivo, con el cursor dentro."
+      },
+      {
+        "name": "contorno-teclado",
+        "value": "outline: 2px solid var(--acento); outline-offset: 2px",
+        "purpose": "Botones, enlaces, pestañas y opciones al llegar con Tab (:focus-visible). En el menú oscuro, #8FB2F2."
+      }
+    ],
+    "motion": [
+      {
+        "name": "velo-entra",
+        "value": "opacity 0.12s ease-out",
+        "purpose": "El fondo oscuro de un modal aparece."
+      },
+      {
+        "name": "ventana-entra",
+        "value": "opacity + scale(0.99 → 1) 0.14s ease-out",
+        "purpose": "El modal aparece sin desplazarse; se apaga con prefers-reduced-motion."
+      },
+      {
+        "name": "girar",
+        "value": "rotate 0.7s linear infinite",
+        "purpose": "Spinner del velo de carga (2 s con movimiento reducido)."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "formulario-una-columna",
+        "value": "640px"
+      },
+      {
+        "name": "menu-arriba",
+        "value": "900px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "La acción principal de una pantalla o ventana (Cobrar, Guardar cambios).",
+      "html": "<button class=\"ds-btn ds-btn-primario\">Guardar cambios</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid transparent; font-family: var(--fuente); font-size: 0.875rem; font-weight: 500; line-height: 1.2; cursor: pointer; white-space: nowrap; transition: background 0.12s; } .ds-btn-primario { background: var(--acento); color: #fff; } .ds-btn-primario:hover { background: var(--acento-oscuro); } .ds-btn-primario:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--foco); } .ds-btn-primario:disabled { opacity: 0.55; cursor: default; }"
+    },
+    {
+      "name": "Botón secundario",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Acciones secundarias y \"Cancelar\".",
+      "html": "<button class=\"ds-btn-sec\">Cancelar</button>",
+      "css": ".ds-btn-sec { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--borde-campo); background: #fff; color: var(--tinta); font-family: var(--fuente); font-size: 0.875rem; font-weight: 500; cursor: pointer; } .ds-btn-sec:hover { background: var(--superficie-2); } .ds-btn-sec:focus-visible { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }"
+    },
+    {
+      "name": "Botón de peligro",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Lo que no tiene vuelta: lleva el verbo (Eliminar, Cancelar el pedido).",
+      "html": "<button class=\"ds-btn-peligro\">Cancelar el pedido</button>",
+      "css": ".ds-btn-peligro { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #F1C7BE; background: #fff; color: var(--peligro-t); font-family: var(--fuente); font-size: 0.875rem; font-weight: 500; cursor: pointer; } .ds-btn-peligro:hover { background: var(--peligro-f); } .ds-btn-peligro:focus-visible { outline: none; box-shadow: 0 0 0 3px #A1231833; }"
+    },
+    {
+      "name": "Campo con etiqueta",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de captura: etiqueta arriba, unidad al lado del número, ayuda debajo.",
+      "html": "<label class=\"ds-campo\">Kilos<span class=\"ds-con-unidad\"><input type=\"number\" step=\"0.001\" value=\"19.95\" /><span>kg</span></span><span class=\"ds-ayuda\">O escanea sus paquetes.</span></label>",
+      "css": ".ds-campo { display: flex; flex-direction: column; gap: 6px; font-family: var(--fuente); font-size: 0.8125rem; font-weight: 500; color: var(--tinta-2); max-width: 260px; } .ds-con-unidad { display: flex; align-items: center; gap: 6px; } .ds-con-unidad span { color: var(--tinta-3); font-weight: 400; } .ds-campo input { flex: 1; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid var(--borde-campo); border-radius: 8px; background: #fff; color: var(--tinta); font: inherit; font-size: 0.875rem; font-weight: 400; font-variant-numeric: tabular-nums; } .ds-campo input:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); } .ds-ayuda { font-size: 0.75rem; font-weight: 400; color: var(--tinta-3); }"
+    },
+    {
+      "name": "Etiquetas de estado",
+      "kind": "chip",
+      "refersTo": "pill-ok",
+      "description": "El estado de una venta, pedido o envío: siempre fondo + tinta.",
+      "html": "<span class=\"ds-pill ds-ok\">Pagado</span> <span class=\"ds-pill ds-aviso\">En espera</span> <span class=\"ds-pill ds-alerta\">Atrasado</span> <span class=\"ds-pill ds-peligro\">Cancelado</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-family: var(--fuente); font-size: 0.75rem; font-weight: 600; white-space: nowrap; } .ds-ok { background: var(--ok-f); color: var(--ok-t); } .ds-aviso { background: var(--aviso-f); color: var(--aviso-t); } .ds-alerta { background: var(--alerta-f); color: var(--alerta-t); } .ds-peligro { background: var(--peligro-f); color: var(--peligro-t); }"
+    },
+    {
+      "name": "Cifra clave",
+      "kind": "card",
+      "refersTo": "kpi",
+      "description": "Un número importante con lo que mide: cifra grande, etiqueta con punto y pie.",
+      "html": "<div class=\"ds-kpi\"><span class=\"ds-kpi-etiqueta\"><i></i>En espera</span><span class=\"ds-kpi-valor\">2</span><span class=\"ds-kpi-pie\">pedidos por entregar</span></div>",
+      "css": ".ds-kpi { display: flex; flex-direction: column; gap: 6px; max-width: 260px; padding: 18px 20px; background: #fff; border: 1px solid var(--borde); border-radius: 10px; font-family: var(--fuente); } .ds-kpi-etiqueta { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--tinta-3); } .ds-kpi-etiqueta i { width: 8px; height: 8px; border-radius: 50%; background: var(--aviso-t); } .ds-kpi-valor { font-size: 1.75rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--tinta); } .ds-kpi-pie { font-size: 0.8125rem; color: var(--tinta-3); }"
+    },
+    {
+      "name": "Tarjeta",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "El bloque base de una pantalla: plana, borde de 1 px, título con explicación.",
+      "html": "<section class=\"ds-tarjeta\"><h2>Dónde está</h2><p>\"Hay\" es la existencia del almacén: eso es lo que vale.</p></section>",
+      "css": ".ds-tarjeta { background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 22px 24px; font-family: var(--fuente); max-width: 480px; } .ds-tarjeta h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; color: var(--tinta); } .ds-tarjeta p { margin: 4px 0 0; font-size: 0.875rem; line-height: 1.45; color: var(--tinta-3); }"
+    },
+    {
+      "name": "Menú lateral",
+      "kind": "nav",
+      "refersTo": "nav-bar",
+      "description": "La barra oscura fija: grupos por tarea, opción activa en azul.",
+      "html": "<nav class=\"ds-menu\"><span class=\"ds-menu-grupo\">Vender</span><a class=\"ds-on\">Punto de venta</a><a>Caja</a><a>Ventas</a><a>Pedidos</a></nav>",
+      "css": ".ds-menu { display: flex; flex-direction: column; gap: 1px; width: 248px; padding: 14px; background: var(--barra); font-family: var(--fuente); } .ds-menu-grupo { padding: 0 10px 4px; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--barra-titulo); } .ds-menu a { display: flex; align-items: center; min-height: 38px; padding: 0 12px; border-radius: 8px; color: var(--barra-tinta); font-size: 0.875rem; text-decoration: none; cursor: pointer; } .ds-menu a:hover { background: var(--barra-hover); color: #fff; } .ds-menu a.ds-on { background: var(--acento); color: #fff; font-weight: 500; }"
+    },
+    {
+      "name": "Opciones excluyentes",
+      "kind": "custom",
+      "refersTo": "button-ghost",
+      "description": "Cobrar / Fiar / Apartar / Pedido: botones del mismo ancho, el elegido en azul neblina.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-on\">Cobrar</button><button>Fiar</button><button>Apartar</button><button>Pedido</button></div>",
+      "css": ".ds-seg { display: flex; gap: 8px; max-width: 520px; } .ds-seg button { flex: 1 1 0; min-height: 44px; border-radius: 8px; border: 1px solid var(--borde-campo); background: #fff; color: var(--tinta-2); font-family: var(--fuente); font-size: 0.875rem; font-weight: 600; cursor: pointer; } .ds-seg button:hover { background: var(--superficie-2); } .ds-seg button.ds-on { border-color: var(--acento); background: var(--acento-suave); color: var(--acento-oscuro); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "La bodega bien llevada",
+    "overview": "Todo en su lugar y contado. El sistema se ve como una bodega en orden, no como una vitrina: un fondo gris muy claro, tarjetas blancas con un borde fino, un solo azul que señala lo que se puede hacer, y el menú oscuro a la izquierda que no se mueve. Es **práctico, de trabajo**: cada pantalla existe para una tarea —cobrar, surtir, contar, pagar— y lo que no ayuda a esa tarea no está.\n\nLa densidad es de herramienta. Muchas cifras, tablas y paquetes a la vista, pero en bloques separados por un mismo espacio (24 px) y con letras de un solo tipo. Los números mandan: cantidades en kilos, dinero y paquetes, siempre alineados, con su unidad y sin ceros de relleno. Los botones, campos y tarjetas son **firmes y cómodos**: altos y fáciles de tocar en el mostrador, con la pistola lectora en una mano.\n\nEl color se gasta en significado, no en adorno. Los estados (pagado, en espera, falta, cancelado) llevan su pareja de fondo + tinta, y las gráficas usan una paleta de tres colores validada para daltonismo.",
+    "keyCharacteristics": [
+      "Fondo gris claro, tarjetas blancas planas con borde de 1 px; la sombra solo existe en la ventana que flota encima.",
+      "Un solo acento azul para lo activo y lo que se puede hacer.",
+      "Menú oscuro fijo a la izquierda (248 px); en el celular se vuelve barra arriba con botón.",
+      "IBM Plex Sans y Plex Mono, instaladas en el proyecto (no dependen de internet).",
+      "Controles de 44 px de alto como mínimo; cifras grandes y alineadas.",
+      "Las acciones se hacen en ventanas (modales); la pantalla es para mirar."
+    ],
+    "rules": [
+      {
+        "name": "The Un Solo Azul Rule",
+        "body": "El acento señala lo que se puede hacer o lo que está activo; nunca decora. Ningún otro color compite con él por la atención.",
+        "section": "colors"
+      },
+      {
+        "name": "The Pareja Rule",
+        "body": "Un estado nunca va en tinta suelta: siempre su fondo y su tinta juntos, para que el texto se lea.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tres Colores Rule",
+        "body": "Las gráficas usan tres colores validados para daltonismo y visión normal. Un cuarto no se agrega sin volver a correr el validador: del cuarto en adelante, gris.",
+        "section": "colors"
+      },
+      {
+        "name": "The Cifra Alineada Rule",
+        "body": "Todo número que se compara con otro va con dígitos de ancho fijo (`tabular-nums`), con su unidad al lado (\"1,919.71 kg\") y sin ceros de relleno (\"2.5\", no \"2.500\"). El dinero lleva separador de miles y el signo antes del símbolo (\"-$3,200\").",
+        "section": "typography"
+      },
+      {
+        "name": "The Bloques Sin Margen Rule",
+        "body": "Los bloques de una pantalla no llevan margen propio: el espacio lo pone su contenedor (24 px). Así nunca se suman ni se pierden separaciones.",
+        "section": "layout"
+      },
+      {
+        "name": "The Plano Por Defecto Rule",
+        "body": "Las tarjetas, las cifras y las tablas no llevan sombra. Si algo necesita sobresalir, se resuelve con borde, tono o el azul; la sombra queda para lo que de verdad flota encima.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do usar solo los colores de los tokens, y para una gráfica, solo la paleta validada de tres colores más el gris \"otros\".",
+      "Do poner todo control a 44 px de alto como mínimo (36 px solo dentro de una tabla).",
+      "Do escribir los números con dígitos de ancho fijo, su unidad y separador de miles, y el dinero con el signo antes del símbolo.",
+      "Do separar los bloques con el espacio del contenedor (24 px) y dejar que las tablas anchas se desplacen en su caja.",
+      "Do nombrar el hilo con su calibre (\"ROJO 2/30\") en cualquier lista o selector.",
+      "Do mirar una gráfica ya dibujada antes de darla por buena."
+    ],
+    "donts": [
+      "Don't usar `confirm()`, `alert()` ni `prompt()` del navegador: se pregunta con la ventana de confirmación del sistema, y el botón lleva el verbo.",
+      "Don't cerrar una ventana al tocar el fondo, ni dejar formularios desplegados en una pantalla de consulta.",
+      "Don't cargar fuentes desde internet: IBM Plex va instalada en el proyecto.",
+      "Don't poner sombras a tarjetas o cifras, ni bordes entre los tramos de una gráfica.",
+      "Don't crear nombres de clase genéricos en la hoja global (`.linea`, `.detalle`, `.dato`): lo de una sola pantalla va en su componente.",
+      "Don't meter un SVG de gráfica en media tarjeta: el texto se deforma con el ancho."
+    ]
+  }
+}

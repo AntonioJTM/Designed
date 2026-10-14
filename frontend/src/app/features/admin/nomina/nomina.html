@@ -51,14 +51,14 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   @if (periodo(); as p) {
     @if (p.recibos.length > 0) {
       <div class="kpis">
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" style="background: #2457C5"></span>Sueldos</span>
+          <span class="kpi-label"><span class="punto" style="background: var(--acento)"></span>Sueldos</span>
           <span class="kpi-valor">{{ totales().sueldos | dinero }}</span>
           <span class="kpi-pie">
             {{ totales().empleados }} {{ totales().empleados === 1 ? 'persona' : 'personas' }}
@@ -66,12 +66,12 @@
           </span>
         </div>
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" style="background: #1baf7a"></span>Comisiones</span>
+          <span class="kpi-label"><span class="punto" style="background: var(--viz-series-3)"></span>Comisiones</span>
           <span class="kpi-valor">{{ totales().comisiones | dinero }}</span>
           <span class="kpi-pie">sobre {{ totales().ventas | dinero }} de venta neta</span>
         </div>
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" style="background: #E9A23B"></span>Extras y descuentos</span>
+          <span class="kpi-label"><span class="punto" style="background: var(--punto-aviso)"></span>Extras y descuentos</span>
           <span class="kpi-valor">{{ conSigno(totales().percepciones - totales().deducciones) }}</span>
           <span class="kpi-pie">horas extra menos descuentos</span>
         </div>
@@ -159,7 +159,7 @@
               <tr>
                 <td>
                   <div style="font-weight: 500">{{ r.usuario }}</div>
-                  <div class="muted" style="font-size: 13px; text-transform: capitalize">{{ r.rol }}</div>
+                  <div class="muted" style="font-size: 0.8125rem; text-transform: capitalize">{{ r.rol }}</div>
                 </td>
                 <td class="num">
                   {{ num(r.sueldo_base) + num(r.pago_vacaciones) | dinero }}

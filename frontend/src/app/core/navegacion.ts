@@ -24,12 +24,12 @@ export interface GrupoMenu {
 }
 
 const I = {
-  chat: 'M4 5h16v11H9l-5 4z',
   hoy: 'M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4 M8 14h3',
   cobrar: 'M4 8V5h3 M17 5h3v3 M20 16v3h-3 M7 19H4v-3 M8 9v6 M11 9v6 M14 9v6 M17 9v6',
   caja: 'M3 7h18v11H3z M12 15a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M6 10h.01 M18 15h.01',
   pedidos: 'M6 3h12v18l-3-2-3 2-3-2-3 2z M9 8h6 M9 12h6 M9 16h3',
-  apartados: 'M6 3h12v18l-6-4-6 4z',
+  espera: 'M6 3h12v18H6z M10 8v8 M14 8v8',
+  pendiente: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
   clientes: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5 M16 4.5a3.5 3.5 0 0 1 0 6.5 M18.5 14.5c1.7.8 2.8 2.8 3 5.5',
   existencias: 'M3 8l9-5 9 5v8l-9 5-9-5z M3 8l9 5 9-5 M12 13v8',
   recibir: 'M12 3v11 M8 10l4 4 4-4 M4 15v5h16v-5',
@@ -48,18 +48,19 @@ const I = {
 };
 
 export const MENU: GrupoMenu[] = [
-  { titulo: null, opciones: [{ clave: 'preguntame', nombre: 'Pregúntame', ruta: '/admin/asistente', icono: I.chat, permiso: null }] },
   { titulo: 'Inicio', opciones: [{ clave: 'hoy', nombre: 'Hoy', ruta: '/admin/hoy', icono: I.hoy, permiso: 'ver:hoy' }] },
   {
     titulo: 'Vender',
     opciones: [
       { clave: 'pos', nombre: 'Punto de venta', ruta: '/admin/pos', icono: I.cobrar, permiso: 'ver:pos' },
       { clave: 'caja', nombre: 'Caja', ruta: '/admin/caja', icono: I.caja, permiso: 'ver:caja' },
-      // "Pedidos" eran las ventas: se llaman Ventas desde el 2026-10-06, y Pedidos
-      // son los encargos de clientes (los recogen o los lleva el chofer).
+      // "Pedidos" eran las ventas: se llaman Ventas desde el 2026-10-06. Los
+      // encargos de clientes son las NOTAS EN ESPERA desde el 2026-10-13 (sin
+      // chofer), y las que se llevaron sin pagar, las NOTAS PENDIENTES DE PAGO.
+      // Apartados se quitó ("se eliminan los apartados y fiar").
       { clave: 'ventas', nombre: 'Ventas', ruta: '/admin/ventas', icono: I.pedidos, permiso: 'ver:pedidos' },
-      { clave: 'pedidos', nombre: 'Pedidos', ruta: '/admin/pedidos', icono: I.mandar, permiso: 'ver:encargos' },
-      { clave: 'apartados', nombre: 'Apartados', ruta: '/admin/apartados', icono: I.apartados, permiso: 'ver:apartados' },
+      { clave: 'pedidos', nombre: 'Notas en espera', ruta: '/admin/notas-en-espera', icono: I.espera, permiso: 'ver:encargos' },
+      { clave: 'notas', nombre: 'Notas pendientes de pago', ruta: '/admin/notas-pendientes', icono: I.pendiente, permiso: 'ver:notas_pendientes' },
     ],
   },
   { titulo: 'Clientes', opciones: [{ clave: 'clientes', nombre: 'Clientes', ruta: '/admin/clientes', icono: I.clientes, permiso: 'ver:clientes' }] },
@@ -100,12 +101,23 @@ export const MENU: GrupoMenu[] = [
 ];
 
 /**
+ * El nombre de una pantalla del menú por su clave: es el que lleva el título de
+ * la pestaña ("Inventario · Hitex"), así el menú y la pestaña nunca se
+ * contradicen.
+ */
+export function nombreDe(clave: string): string {
+  for (const g of MENU) for (const o of g.opciones) if (o.clave === clave) return o.nombre;
+  throw new Error(`No hay pantalla "${clave}" en el menú`);
+}
+
+/**
  * A dónde entra cada quien: Hoy si lo puede ver; si no, el punto de venta (el
  * cajero); si tampoco, la primera pantalla de su menú.
  */
 export function rutaDeInicio(puede: (permiso: string | null) => boolean): string {
   if (puede('ver:hoy')) return '/admin/hoy';
   if (puede('ver:pos')) return '/admin/pos';
-  for (const g of MENU) for (const o of g.opciones) if (o.clave !== 'preguntame' && puede(o.permiso)) return o.ruta;
-  return '/admin/asistente';
+  for (const g of MENU) for (const o of g.opciones) if (puede(o.permiso)) return o.ruta;
+  // Un puesto sin ninguna pantalla: se le dice que pida permisos (antes caía en Pregúntame).
+  return '/admin/sin-acceso';
 }

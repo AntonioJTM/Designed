@@ -14,16 +14,16 @@
         <p class="muted" style="margin: 0">Cargando…</p>
       } @else if (datos(); as d) {
         <div class="columna" style="gap: 20px">
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
-          @if (mensaje()) { <p class="ok-msg" style="margin: 0">{{ mensaje() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+          @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
           @if (!d.fecha_ingreso) {
-            <p class="aviso" style="margin: 0">
+            <p class="aviso">
               Falta su <b>fecha de ingreso</b>: con ella se cuentan los días que le tocan. Captúrala en
               <b>Editar</b>, en esta misma tabla.
             </p>
           } @else if (d.horario.length === 0) {
-            <p class="aviso" style="margin: 0">
+            <p class="aviso">
               Falta su <b>horario</b>: con él se cuentan los días de vacaciones (sus descansos no cuentan).
               Captúralo en <b>Editar</b>.
             </p>
@@ -31,7 +31,7 @@
 
           @if (d.saldo; as s) {
             <div>
-              <p class="muted" style="margin: 0 0 10px; font-size: 14px">
+              <p class="muted" style="margin: 0 0 10px; font-size: 0.875rem">
                 Entró el {{ d.fecha_ingreso | fecha }} ·
                 @if (s.anios === 0) {
                   todavía no cumple su primer año: lo cumple el {{ s.proximo_aniversario | fecha }} y desde
@@ -84,7 +84,7 @@
           <section>
             <h3>Las que ha tomado</h3>
             @if (d.registros.length === 0) {
-              <p class="muted" style="margin: 0; font-size: 14px">Todavía no ha tomado vacaciones.</p>
+              <p class="muted" style="margin: 0; font-size: 0.875rem">Todavía no ha tomado vacaciones.</p>
             } @else {
               <div class="tabla-scroll">
                 <table class="grid">
@@ -113,7 +113,7 @@
     </div>
 
     <div class="modal-foot">
-      <span class="muted" style="margin-right: auto; font-size: 13px">Por ley (art. 76 LFT): 12 días el primer año, 2 más cada año hasta 20.</span>
+      <span class="muted" style="margin-right: auto; font-size: 0.8125rem">Por ley (art. 76 LFT): 12 días el primer año, 2 más cada año hasta 20.</span>
       <button type="button" class="btn btn-ghost" (click)="cerrar()">Cerrar</button>
     </div>
   </div>

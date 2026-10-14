@@ -82,6 +82,10 @@ const MIGRACIONES = [
   ['2026-10_pedidos_encargo (permiso)', 'permisos#clave=ver:encargos'],
   ['2026-10_bulto_apartado', "variante_codigos^'apartado'"],
   ['2026-10_comisiones_al_liquidar', 'nomina_comisiones'],
+  ['2026-10_notas_pendientes', 'pedidos.nota_pendiente'],
+  ['2026-10_notas_pendientes (permiso)', 'permisos#clave=ver:notas_pendientes'],
+  ['2026-10_saldo_a_favor', 'saldo_favor_movimientos'],
+  ['2026-10_saldo_a_favor (método)', 'metodos_pago.interno'],
 ];
 
 (async () => {

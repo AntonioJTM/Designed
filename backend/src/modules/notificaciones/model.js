@@ -144,16 +144,25 @@ async function pendientes() {
       ORDER BY p.nombre, p.grosor_calibre`
   );
 
-  // Apartados ya pagados completos: la mercancía sigue en la bodega y el cliente
-  // ya puede llevársela. Es lo más urgente de los apartados.
-  const [listos] = await pool.query(
-    `SELECT pedido_id, numero_pedido, COALESCE(nombre_comercial, cliente) AS cliente,
-            ultimo_abono AS liquidado_en
-       FROM v_apartados WHERE pendiente <= 0 ORDER BY ultimo_abono`
+  // Notas pendientes de pago (2026-10-13): lo que se llevaron sin pagar y
+  // todavía se debe. UN aviso, con cuánto es y cuántos clientes.
+  const [[notas]] = await pool.query(
+    `SELECT COUNT(*) AS num, COUNT(DISTINCT p.cliente_id) AS clientes,
+            COALESCE(SUM(p.total - COALESCE((SELECT SUM(pg.monto) FROM pagos pg
+                                              WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0)), 0) AS monto,
+            DATE_FORMAT(MIN(p.creado_en), '%Y-%m-%d %H:%i:%s') AS desde
+       FROM pedidos p
+      WHERE p.nota_pendiente = 1 AND p.estado = 'pendiente'
+        AND NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')`
   );
 
   return {
-    apartados_listos: { num: listos.length, pedidos: listos },
+    notas_pendientes: {
+      num: Number(notas.num),
+      num_clientes: Number(notas.clientes),
+      monto: Math.round(Number(notas.monto) * 100) / 100,
+      desde: notas.desde,
+    },
     traspasos_por_enviar: porEnviar,
     traspasos_por_recibir: porRecibir,
     alertas_stock: Number(stock.n),
@@ -184,7 +193,7 @@ async function pendientes() {
     // te debe"— aunque dentro haya varios. Contar cada cliente inflaría el
     // globo a decenas y dejaría de significar nada.
     total:
-      (listos.length > 0 ? 1 : 0) +
+      (Number(notas.num) > 0 ? 1 : 0) +
       porEnviar.length +
       porRecibir.length +
       (Number(stock.n) > 0 ? 1 : 0) +

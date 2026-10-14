@@ -19,7 +19,7 @@ import { COLOR, capitalizar, enPeriodo, kilos, plural } from '../clientes-ui';
   host: { class: 'pila' },
   styles: `
     .reparto { display: flex; flex-direction: column; gap: 6px; }
-    .reparto .linea { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+    .reparto .linea { display: flex; justify-content: space-between; gap: 12px; font-size: 0.875rem; }
     .reparto .linea > span:last-child { color: var(--tinta-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .mini { width: 110px; height: 10px; display: flex; gap: 2px; flex: 0 0 110px; }
     .mini > span:first-child { border-radius: 3px 0 0 3px; }

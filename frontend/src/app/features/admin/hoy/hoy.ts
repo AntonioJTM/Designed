@@ -24,7 +24,7 @@ const ICONO = {
   envio: 'M2 6h12v10H2z M14 10h4l3 3v3h-7 M6 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M17 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
   existencias: 'M3 8l9-5 9 5v8l-9 5-9-5z M3 8l9 5 9-5 M12 13v8',
   precio: 'M3 12V4h8l10 10-8 8z M7.5 8.5h.01',
-  apartado: 'M6 3h12v18l-6-4-6 4z',
+  nota: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
   cobro: 'M3 7h18v11H3z M3 11h18 M7 15h4',
   gente: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5',
 };
@@ -46,10 +46,10 @@ const ICONO = {
   styles: `
     .caja-fila { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--borde-suave); }
     .caja-fila > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .caja-fila b { font-size: 15px; font-weight: 500; }
+    .caja-fila b { font-size: 0.9375rem; font-weight: 500; }
     .caja-fila .der { align-items: flex-end; text-align: right; flex: 0 0 auto; white-space: nowrap; }
-    .caja-fila .der b { font-size: 16px; font-weight: 600; }
-    .caja-fila .muted { font-size: 13px; }
+    .caja-fila .der b { font-size: 1rem; font-weight: 600; }
+    .caja-fila .muted { font-size: 0.8125rem; }
   `,
 })
 export class Hoy {
@@ -70,12 +70,12 @@ export class Hoy {
   readonly vePos = computed(() => this.puede('ver:pos'));
   readonly veCaja = computed(() => this.puede('ver:caja'));
   private readonly veClientes = computed(() => this.puede('ver:clientes'));
-  private readonly veApartados = computed(() => this.puede('ver:apartados'));
+  private readonly veNotas = computed(() => this.puede('ver:notas_pendientes'));
   private readonly veSurtir = computed(() => this.puede('ver:surtir'));
   private readonly veInventario = computed(() => this.puede('ver:inventario'));
   private readonly veCatalogo = computed(() => this.puede('ver:catalogo'));
 
-  /** Las cuatro cifras de arriba; las de clientes y apartados, solo si se ven. */
+  /** Las cuatro cifras de arriba; las de clientes y notas pendientes, solo si se ven. */
   readonly kpis = computed(() => {
     const d = this.datos();
     const p = this.pendientes();
@@ -85,7 +85,7 @@ export class Hoy {
         etiqueta: 'Vendido hoy',
         valor: this.pesos(d.vendido_hoy.total),
         pie: `${d.vendido_hoy.ventas} ${d.vendido_hoy.ventas === 1 ? 'venta' : 'ventas'}`,
-        punto: '#2457C5',
+        punto: 'var(--acento)',
       });
       lista.push({
         etiqueta: 'En las cajas',
@@ -94,7 +94,7 @@ export class Hoy {
           d.cajas.length === 0
             ? 'no hay turnos abiertos'
             : `efectivo esperado en ${d.cajas.length} ${d.cajas.length === 1 ? 'turno abierto' : 'turnos abiertos'}`,
-        punto: '#1baf7a',
+        punto: 'var(--viz-series-3)',
       });
     }
     if (p && this.veClientes()) {
@@ -105,16 +105,16 @@ export class Hoy {
           (p.cobranza?.num_clientes ?? 0) === 0
             ? `nadie lleva ${p.cobranza?.dias ?? 30} días sin abonar`
             : `${p.cobranza.num_clientes} ${p.cobranza.num_clientes === 1 ? 'cliente' : 'clientes'}, ${p.cobranza.dias} días o más sin abonar`,
-        punto: '#C2410C',
+        punto: 'var(--punto-alerta)',
       });
     }
-    if (p && this.veApartados()) {
-      const n = p.apartados_listos?.num ?? 0;
+    if (p && this.veNotas()) {
+      const n = p.notas_pendientes?.num ?? 0;
       lista.push({
-        etiqueta: 'Por entregar',
-        valor: String(n),
-        pie: n === 1 ? 'apartado ya liquidado' : 'apartados ya liquidados',
-        punto: '#E9A23B',
+        etiqueta: 'Notas pendientes de pago',
+        valor: this.pesos(p.notas_pendientes?.monto ?? 0),
+        pie: n === 0 ? 'nadie se llevó nada sin pagar' : n === 1 ? '1 nota por cobrar' : `${n} notas por cobrar`,
+        punto: 'var(--punto-aviso)',
       });
     }
     return lista;
@@ -180,22 +180,20 @@ export class Hoy {
       });
     }
 
-    const listos = p.apartados_listos?.num ?? 0;
-    if (this.veApartados() && listos > 0) {
-      const viejo = (p.apartados_listos?.pedidos ?? [])
-        .map((a) => a.liquidado_en)
-        .filter((f): f is string => !!f)
-        .sort()[0];
+    const notas = p.notas_pendientes?.num ?? 0;
+    if (this.veNotas() && notas > 0) {
       ventas.push({
-        icono: ICONO.apartado,
-        tono: 'verde',
+        icono: ICONO.nota,
+        tono: 'ambar',
         titulo:
-          listos === 1
-            ? '1 apartado ya está pagado: falta entregarlo'
-            : `${listos} apartados ya están pagados: falta entregarlos`,
-        detalle: viejo ? `El más viejo se liquidó ${this.cuando(viejo)}` : 'A ellos no se les cobra: se les entrega',
-        accion: 'Entregar',
-        ruta: '/admin/apartados',
+          notas === 1
+            ? `1 nota pendiente de pago: ${this.pesos(p.notas_pendientes!.monto)}`
+            : `${notas} notas pendientes de pago: ${this.pesos(p.notas_pendientes!.monto)}`,
+        detalle: p.notas_pendientes?.desde
+          ? `La más vieja salió ${this.cuando(p.notas_pendientes.desde)} · se cobra o se pasa a crédito`
+          : 'Se cobran o se pasan a crédito',
+        accion: 'Cobrar',
+        ruta: '/admin/notas-pendientes',
       });
     }
 

@@ -40,17 +40,17 @@ const TONO_TIPO: Record<TipoVentaComision, string> = {
   templateUrl: './comisiones-semana.html',
   styles: `
     :host { display: flex; flex-direction: column; gap: 22px; }
-    .regla { margin: 0; font-size: 13.5px; color: var(--tinta-3); line-height: 1.5; }
+    .regla { margin: 0; font-size: 0.84375rem; color: var(--tinta-3); line-height: 1.5; }
     .vendedor { display: flex; flex-direction: column; gap: 10px; }
     .vendedor-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
-    .vendedor-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
-    .vendedor-head .cifras { font-size: 13.5px; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+    .vendedor-head h3 { margin: 0; font-size: 0.9375rem; font-weight: 600; }
+    .vendedor-head .cifras { font-size: 0.84375rem; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
     .vendedor-head .cifras b { color: var(--tinta); }
-    h4 { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--tinta-2); }
-    .sub3 { font-size: 12px; color: var(--tinta-3); }
+    h4 { margin: 4px 0 0; font-size: 0.8125rem; font-weight: 600; color: var(--tinta-2); }
+    .sub3 { font-size: 0.75rem; color: var(--tinta-3); }
     .debe { color: var(--peligro-t); }
-    .nota-chica { font-size: 13px; color: var(--tinta-3); margin: 0; }
-    .sin { font-size: 13.5px; color: var(--tinta-3); margin: 0; }
+    .nota-chica { font-size: 0.8125rem; color: var(--tinta-3); margin: 0; }
+    .sin { font-size: 0.84375rem; color: var(--tinta-3); margin: 0; }
   `,
 })
 export class ComisionesSemanaComponent {

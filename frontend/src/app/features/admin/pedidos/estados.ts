@@ -12,13 +12,16 @@ import { CanalVenta, EstadoPedido } from '../../../core/models/ventas.models';
 export function etiquetaEstado(
   estado: EstadoPedido | string,
   canal?: CanalVenta | null,
-  encargo?: boolean | number | null
+  encargo?: boolean | number | null,
+  notaPendiente?: boolean | number | null
 ): string {
-  // Un PEDIDO (encargo) sin entregar está EN ESPERA (2026-10-07: se modifica y
-  // se entrega cobrando; ya no lleva pasos de preparar ni de chofer).
+  // Una NOTA EN ESPERA (encargo) sin entregar (2026-10-07: se modifica y se
+  // entrega cobrando; ya no lleva pasos de preparar ni de chofer).
   if (encargo && (estado === 'en_preparacion' || estado === 'listo' || estado === 'enviado')) {
     return 'En espera';
   }
+  // Se la llevó sin pagar y todavía se debe (2026-10-13).
+  if (notaPendiente && estado === 'pendiente' && canal !== 'tienda_linea') return 'Pendiente de pago';
   switch (estado) {
     case 'apartado': return 'Apartado';
     case 'pendiente': return canal === 'tienda_linea' ? 'Pendiente de pago' : 'Pendiente · a crédito';

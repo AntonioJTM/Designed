@@ -9,12 +9,12 @@
     <form (ngSubmit)="guardar()">
       <div class="modal-body">
         <div class="columna" style="gap: 16px">
-          <p class="muted" style="margin: 0">
+          <p class="muted">
             Para lo que no es un pago: perdonar una deuda, quitar un cargo capturado de más o agregar
             uno que faltó. Si el cliente trajo dinero, es un abono, no un ajuste.
             <b style="color: var(--tinta)">{{ nombre() }}</b> debe hoy {{ saldo() | dinero }}.
           </p>
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
           <div class="seg" role="radiogroup" aria-label="Sentido del ajuste">
             <label [class.on]="sentido === 'baja'">

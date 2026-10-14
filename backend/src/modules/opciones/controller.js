@@ -40,7 +40,8 @@ async function impuestos(req, res, next) {
 async function metodosPago(req, res, next) {
   try {
     const [rows] = await pool.query(
-      'SELECT id, nombre FROM metodos_pago WHERE activo = 1 ORDER BY nombre'
+      // "Saldo a favor" es interno: lo asienta el sistema, no se elige al cobrar.
+      'SELECT id, nombre FROM metodos_pago WHERE activo = 1 AND interno = 0 ORDER BY nombre'
     );
     res.json({ data: rows, error: null });
   } catch (err) {

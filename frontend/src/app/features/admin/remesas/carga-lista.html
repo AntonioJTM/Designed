@@ -1,4 +1,4 @@
-@if (error()) { <p class="alert">{{ error() }}</p> }
+@if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
 <!-- Comprobante de la última lista cargada -->
 @if (ultima(); as u) {
@@ -179,7 +179,7 @@
     }
 
     @if (p.errores.length) {
-      <div class="alert">
+      <div class="alert" role="alert">
         <b>{{ p.errores.length === 1 ? '1 renglón impide' : p.errores.length + ' renglones impiden' }} cargar la lista.</b>
         Corrígelos en el Excel y vuelve a subirlo.
         <ul>@for (e of erroresVisibles(); track $index) { <li>{{ e.mensaje }}</li> }</ul>
@@ -226,7 +226,7 @@
           </label>
         </div>
         @if (calibresFuera().length) {
-          <p class="alert">
+          <p class="alert" role="alert">
             {{ nombreMaterial() }} no tiene el calibre {{ calibresFuera().join(', ') }}. Agrégalo en Materiales
             o corrige el calibre en el Excel.
           </p>
@@ -292,7 +292,7 @@
       </table>
     </div>
 
-    @if (errorCarga()) { <p class="alert error-carga">{{ errorCarga() }}</p> }
+    @if (errorCarga()) { <p class="alert error-carga" role="alert">{{ errorCarga() }}</p> }
 
     <!--
       Mientras carga, en vez de un botón apagado que dice "Cargando…" (parecía que

@@ -23,7 +23,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
     .moneda > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--tinta-3); font-weight: 600; }
     .moneda > input { padding-left: 26px; }
     .seg > label { flex-direction: column; gap: 2px; padding: 10px 12px; min-height: 64px; text-align: center; }
-    .seg > label .muted { font-size: 12px; font-weight: 400; }
+    .seg > label .muted { font-size: 0.75rem; font-weight: 400; }
   `,
 })
 export class AjusteModal {

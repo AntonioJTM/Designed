@@ -1,6 +1,7 @@
 'use strict';
 
 const model = require('./model');
+const saldoFavor = require('./saldo-favor');
 const { hoyLocal } = require('../../utils/fechas');
 const { withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
@@ -116,12 +117,15 @@ async function expediente(id, { limitePedidos = 20 } = {}) {
   const cliente = await model.obtener(id);
   if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
 
-  const [stats, colores, pedidos, credito, habitos] = await Promise.all([
+  const [stats, colores, pedidos, credito, habitos, favor, favorMovs, deuda] = await Promise.all([
     model.estadisticas(id),
     model.coloresMasComprados(id),
     model.pedidos(id, { limit: limitePedidos }),
     model.movimientosCredito(id, { limit: 20 }),
     model.habitos(id),
+    saldoFavor.saldoFavor(id),
+    saldoFavor.movimientos(id, { limit: 30 }),
+    saldoFavor.deudaTotal(id),
   ]);
 
   return {
@@ -135,7 +139,40 @@ async function expediente(id, { limitePedidos = 20 } = {}) {
     // Su costumbre: cada cuánto viene, qué día, a qué hora, sus visitas de los
     // últimos 90 días y cuánto gasta por mes. Es la vista Resumen del expediente.
     habitos,
+    // Lo que le quedó a favor por devoluciones (2026-10-13), sus movimientos y
+    // cuánto debe en total (cuenta de crédito + notas pendientes de pago).
+    saldo_favor: favor,
+    saldo_favor_movimientos: favorMovs,
+    deuda_total: deuda,
   };
+}
+
+/**
+ * Descuenta su SALDO A FAVOR de lo que debe, cuando él lo pide: primero sus
+ * notas pendientes de pago (de la más vieja) y luego su cuenta de crédito.
+ * `monto` opcional: sin él, todo lo que alcance.
+ */
+async function aplicarSaldoFavor(id, datos, usuarioId) {
+  const cliente = await model.obtener(id);
+  if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
+  const r = await withTransaction(async (conn) => {
+    const favor = await saldoFavor.saldoFavor(id, conn, true);
+    if (favor <= 0.004) {
+      throw new AppError(409, 'SIN_SALDO_FAVOR', `${cliente.nombre} no tiene saldo a favor.`);
+    }
+    if (datos.monto != null && datos.monto > favor + 0.001) {
+      throw new AppError(422, 'SALDO_FAVOR_INSUFICIENTE',
+        `Tiene $${favor.toFixed(2)} a favor y se quieren aplicar $${Number(datos.monto).toFixed(2)}.`);
+    }
+    const res = await saldoFavor.aplicarADeuda(conn, {
+      clienteId: id, monto: datos.monto ?? null, usuarioId, origen: 'desde su expediente',
+    });
+    if (res.aplicado <= 0.004) {
+      throw new AppError(409, 'SIN_DEUDA', `${cliente.nombre} no debe nada: su saldo a favor se queda para sus compras.`);
+    }
+    return res;
+  });
+  return { ...r, saldo_favor: await saldoFavor.saldoFavor(id), deuda_total: await saldoFavor.deudaTotal(id) };
 }
 
 async function buscarParaVenta(q) {
@@ -264,6 +301,7 @@ async function ajustarCredito(id, datos, usuarioId) {
 }
 
 module.exports = {
+  aplicarSaldoFavor,
   registrar,
   iniciarSesion,
   perfil,

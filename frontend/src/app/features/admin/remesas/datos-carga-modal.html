@@ -12,7 +12,7 @@
         {{ carga().num_bultos | cantidad }} bultos · {{ carga().kg_total | cantidad: 'kg' }} en {{ carga().almacen }}
       </p>
 
-      @if (error()) { <p class="alert" style="margin: 0 0 16px">{{ error() }}</p> }
+      @if (error()) { <p class="alert" role="alert" style="margin: 0 0 16px">{{ error() }}</p> }
 
       <app-datos-carga [(datos)]="datos" [conCosto]="veCostos()" />
 

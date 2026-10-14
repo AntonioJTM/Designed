@@ -141,17 +141,17 @@
             <tr>
               <td>
                 <div style="font-weight: 500">{{ r.nombre }}</div>
-                @if (r.nombre_comercial) { <div class="muted" style="font-size: 13px">{{ r.nombre_comercial }}</div> }
+                @if (r.nombre_comercial) { <div class="muted" style="font-size: 0.8125rem">{{ r.nombre_comercial }}</div> }
               </td>
               <td class="num">{{ r.compras_periodo }}</td>
               <!-- Lo del periodo, y abajo lo que se lleva cada vez que viene. -->
               <td class="num">
                 {{ kilos(r.kg_periodo) }}
-                <div class="muted" style="font-size: 12px">{{ kg1(r.kg_por_visita) }} por visita</div>
+                <div class="muted" style="font-size: 0.75rem">{{ kg1(r.kg_por_visita) }} por visita</div>
               </td>
               <td class="num">
                 {{ pesos(r.dinero_periodo) }}
-                <div class="muted" style="font-size: 12px">{{ pesos(r.dinero_por_visita) }} por visita</div>
+                <div class="muted" style="font-size: 0.75rem">{{ pesos(r.dinero_por_visita) }} por visita</div>
               </td>
               <td class="num">{{ r.ritmo ? r.ritmo + ' días' : '—' }}</td>
               <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ fechaCorta(r.ultima) }}</td>

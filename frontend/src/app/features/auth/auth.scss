@@ -47,7 +47,7 @@ input, select {
 input:focus, select:focus {
   outline: none;
   border-color: var(--acento);
-  box-shadow: 0 0 0 3px #2457C533;
+  box-shadow: 0 0 0 3px var(--foco);
 }
 
 button[type='submit'] {

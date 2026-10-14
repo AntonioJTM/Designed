@@ -6,7 +6,7 @@
     </div>
     <div class="acciones">
       @if (cajas().length > 1) {
-        <label class="field" style="min-width: 380px">
+        <label class="field" style="min-width: min(380px, 100%)">
           <span class="oculto">Caja</span>
           <select [ngModel]="cajaSel()" (ngModelChange)="elegir($event)">
             @for (c of cajas(); track c.id) {
@@ -24,8 +24,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <!-- El corte recién hecho. La pantalla regresa a "abrir turno", que no
        muestra la sesión: el resultado va en su propia tarjeta para que no se pierda. -->
@@ -234,7 +234,7 @@
         <button type="button" class="modal-cerrar" (click)="cerrarModalCaja()" aria-label="Cerrar">✕</button>
       </div>
       <div class="modal-body">
-        @if (errorCaja()) { <p class="alert">{{ errorCaja() }}</p> }
+        @if (errorCaja()) { <p class="alert" role="alert">{{ errorCaja() }}</p> }
         <div class="form-grid">
           <label class="field full">
             Nombre

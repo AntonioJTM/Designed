@@ -32,8 +32,8 @@
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
   padding: 18px 20px 14px; border-bottom: 1px solid var(--borde-suave);
 }
-.avisos-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
-.avisos-head p { margin: 4px 0 0; font-size: 13px; color: var(--tinta-3); line-height: 1.4; }
+.avisos-head h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+.avisos-head p { margin: 4px 0 0; font-size: 0.8125rem; color: var(--tinta-3); line-height: 1.4; }
 .avisos-cerrar {
   flex: 0 0 36px; width: 36px; height: 36px; border-radius: 8px; border: 0;
   background: transparent; color: var(--tinta-3); cursor: pointer;
@@ -44,7 +44,7 @@
 .avisos-cuerpo { overflow-y: auto; padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
 .avisos-grupo { display: flex; flex-direction: column; }
 .avisos-grupo h3 {
-  margin: 12px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  margin: 12px 8px 4px; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--tinta-3);
 }
 
@@ -64,9 +64,9 @@
   stroke-linecap: round; stroke-linejoin: round;
 }
 .aviso-fila .que { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.aviso-fila .que b { font-size: 14px; font-weight: 500; line-height: 1.35; }
-.aviso-fila .que span { font-size: 12.5px; color: var(--tinta-3); line-height: 1.35; }
-.aviso-fila .ir { flex: 0 0 auto; font-size: 13px; font-weight: 500; color: var(--tinta-3); white-space: nowrap; }
+.aviso-fila .que b { font-size: 0.875rem; font-weight: 500; line-height: 1.35; }
+.aviso-fila .que span { font-size: 0.78125rem; color: var(--tinta-3); line-height: 1.35; }
+.aviso-fila .ir { flex: 0 0 auto; font-size: 0.8125rem; font-weight: 500; color: var(--tinta-3); white-space: nowrap; }
 
 /* Quién debe: nombre, días y teléfono a la izquierda; cuánto, a la derecha.
    (`.deudor` y no `.quien`: esa clase ya es la del nombre y la campana de abajo,
@@ -82,12 +82,12 @@
 }
 .deudores button:hover { background: var(--superficie-2); }
 .deudores .deudor { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
-.deudores .deudor b { font-size: 13.5px; font-weight: 500; }
-.deudores .deudor span { font-size: 12px; color: var(--tinta-3); }
-.deudores .monto { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.deudores .deudor b { font-size: 0.84375rem; font-weight: 500; }
+.deudores .deudor span { font-size: 0.75rem; color: var(--tinta-3); }
+.deudores .monto { font-size: 0.84375rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .avisos-pie { padding: 12px 20px; border-top: 1px solid var(--borde-suave); }
-.avisos-pie .btn-enlace { font-size: 14px; }
+.avisos-pie .btn-enlace { font-size: 0.875rem; }
 
 @media (max-width: 900px) {
   .avisos { left: 12px; right: 12px; width: auto; max-width: none; }

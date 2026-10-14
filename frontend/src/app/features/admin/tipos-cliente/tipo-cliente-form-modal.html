@@ -15,14 +15,14 @@
     <form [formGroup]="form" (ngSubmit)="guardar()">
       <div class="modal-body">
         <div class="columna" style="gap: 16px">
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
           @if (esPublico()) {
-            <p class="nota-info" style="margin: 0">
+            <p class="nota-info">
               Es la lista base: cobra el precio de la presentación y no se puede apagar ni borrar.
             </p>
           } @else if (uso(); as u) {
-            <p class="muted" style="margin: 0; font-size: 14px">
+            <p class="muted" style="font-size: 0.875rem">
               La usan {{ u.clientes }} {{ u.clientes === 1 ? 'cliente' : 'clientes' }} · precio propio en
               {{ u.precios }} {{ u.precios === 1 ? 'presentación' : 'presentaciones' }}.
             </p>
@@ -45,7 +45,7 @@
             }
           </div>
 
-          <p class="muted" style="margin: 0; font-size: 13px">
+          <p class="muted" style="font-size: 0.8125rem">
             El precio de cada presentación en esta lista se captura en Productos → Presentaciones.
           </p>
         </div>

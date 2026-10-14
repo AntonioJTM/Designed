@@ -31,18 +31,18 @@ const TOPE_RANKING = 12;
   host: { class: 'pila' },
   styles: `
     .reparto { display: flex; flex-direction: column; gap: 6px; }
-    .reparto .linea { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+    .reparto .linea { display: flex; justify-content: space-between; gap: 12px; font-size: 0.875rem; }
     .reparto .linea > span:last-child { color: var(--tinta-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .contra { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
     .contra > div { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: 8px; }
-    .contra b { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .contra span { font-size: 13px; }
-    .cambio { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .contra b { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .contra span { font-size: 0.8125rem; }
+    .cambio { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .cambio.sube { color: var(--info-t); }
     .cambio.baja { color: var(--alerta-t); }
     .filtros-tabla { display: flex; flex-wrap: wrap; gap: 12px; }
-    .filtros-tabla label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-3); }
-    .filtros-tabla select { min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; color: var(--tinta); }
+    .filtros-tabla label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; font-size: 0.8125rem; color: var(--tinta-3); }
+    .filtros-tabla select { max-width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px; background: #fff; font: inherit; font-size: 0.875rem; color: var(--tinta); }
     .pos-num { color: var(--tinta-3); font-variant-numeric: tabular-nums; }
   `,
 })

@@ -13,8 +13,8 @@
         <b>Merma:</b> resta lo que se dañó, se mojó o se perdió.
       </p>
 
-      @if (error()) { <p class="alert">{{ error() }}</p> }
-      @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+      @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
       <div class="campos">
         <!-- Solo esos dos: la entrada la hace la remesa, la devolución el pedido y la salida el traspaso. -->

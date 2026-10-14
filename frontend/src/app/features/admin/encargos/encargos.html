@@ -1,28 +1,28 @@
 <div class="pagina">
   <header class="page-head">
     <div>
-      <h1>Pedidos</h1>
+      <h1>Notas en espera</h1>
       <p class="sub">
-        Lo que encargaron los clientes. Se toman en el punto de venta con el botón <b>Pedido</b> y quedan
-        <b>en espera</b>, con la mercancía apartada: se modifican cuando el cliente quiere agregar o quitar
-        algo, y se cobran al entregarlos.
+        Lo que los clientes encargaron y todavía no se llevan. Se guardan en el punto de venta con
+        <b>Nota en espera</b>, con la mercancía apartada y sin ticket: se modifican cuando el cliente quiere
+        agregar o quitar algo, y al entregarlas se cobran, se dan a crédito o quedan como nota pendiente de pago.
       </p>
     </div>
     @if (puedeVender()) {
       <div class="acciones">
-        <a class="btn btn-primary" routerLink="/admin/pos">Tomar un pedido</a>
+        <a class="btn btn-primary" routerLink="/admin/pos">Nueva nota en espera</a>
       </div>
     }
   </header>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <div class="kpis">
     <div class="kpi">
       <span class="kpi-label"><span class="punto" style="background: var(--aviso-t)"></span>En espera</span>
       <span class="kpi-valor">{{ cuantos().todos }}</span>
-      <span class="kpi-pie">pedidos por entregar</span>
+      <span class="kpi-pie">notas por entregar</span>
     </div>
     <div class="kpi">
       <span class="kpi-label"><span class="punto" style="background: var(--ok-t)"></span>Para hoy</span>
@@ -37,25 +37,23 @@
     <div class="kpi">
       <span class="kpi-label"><span class="punto" style="background: var(--tinta-3)"></span>Por cobrar</span>
       <span class="kpi-valor">{{ datos()?.por_cobrar ?? 0 | dinero }}</span>
-      <span class="kpi-pie">de los pedidos que se ven</span>
+      <span class="kpi-pie">de las notas que se ven</span>
     </div>
   </div>
 
   <section class="card">
     <div class="encabezado-lista">
-      <div class="tabs" role="tablist" aria-label="Qué pedidos ver">
+      <div class="tabs" role="tablist" aria-label="Qué notas ver">
         <button type="button" role="tab" [class.on]="filtro() === 'todos'" [attr.aria-selected]="filtro() === 'todos'"
                 (click)="filtro.set('todos')">Todos · {{ cuantos().todos }}</button>
         <button type="button" role="tab" [class.on]="filtro() === 'hoy'" [attr.aria-selected]="filtro() === 'hoy'"
                 (click)="filtro.set('hoy')">Para hoy · {{ cuantos().hoy }}</button>
         <button type="button" role="tab" [class.on]="filtro() === 'atrasados'" [attr.aria-selected]="filtro() === 'atrasados'"
                 (click)="filtro.set('atrasados')">Atrasados · {{ cuantos().atrasados }}</button>
-        <button type="button" role="tab" [class.on]="filtro() === 'chofer'" [attr.aria-selected]="filtro() === 'chofer'"
-                (click)="filtro.set('chofer')">Los lleva el chofer · {{ cuantos().chofer }}</button>
       </div>
       <label class="buscador">
         <span class="oculto">Buscar</span>
-        <input type="search" [(ngModel)]="q" (ngModelChange)="alTeclear()" placeholder="Folio, cliente, teléfono o dirección" />
+        <input type="search" [(ngModel)]="q" (ngModelChange)="alTeclear()" placeholder="Folio, cliente o teléfono" />
       </label>
     </div>
 
@@ -63,17 +61,17 @@
       <p class="muted">Cargando…</p>
     } @else if (items().length === 0) {
       <p class="vacio">
-        @if (q || filtro() !== 'todos') { Ningún pedido coincide. } @else { No hay pedidos por entregar. Se toman en el punto de venta con el botón «Pedido». }
+        @if (q || filtro() !== 'todos') { Ninguna nota coincide. } @else { No hay notas en espera. Se guardan en el punto de venta con «Nota en espera». }
       </p>
     } @else {
       <div class="tabla-scroll">
         <table class="grid pedidos">
           <thead>
             <tr>
-              <th>Pedido</th>
+              <th>Nota</th>
               <th>Cliente</th>
               <th>Lleva</th>
-              <th>Entrega</th>
+              <th>Para cuándo</th>
               <th class="num">Total</th>
               <th class="num">Falta</th>
               <th><span class="oculto">Acciones</span></th>
@@ -97,14 +95,14 @@
                   @if (e.notas) { <div class="sub nota">“{{ e.notas }}”</div> }
                 </td>
                 <td>
-                  @if (e.metodo_entrega === 'envio') {
-                    <div>Lo lleva el chofer</div>
-                    @if (e.entrega_direccion) { <div class="sub">{{ e.entrega_direccion }}</div> }
-                  } @else {
-                    <div>Pasa por él</div>
-                  }
                   @if (paraCuando(e); as pc) {
-                    <div class="sub" [class.atrasado]="atrasado(e)">{{ atrasado(e) ? 'atrasado · ' : '' }}{{ pc }}</div>
+                    <div [class.atrasado]="atrasado(e)">{{ atrasado(e) ? 'atrasado · ' : '' }}{{ pc }}</div>
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                  <!-- Una de antes del 2026-10-13 pudo quedar con chofer. -->
+                  @if (e.metodo_entrega === 'envio') {
+                    <div class="sub">Lo lleva el chofer{{ e.entrega_direccion ? ' · ' + e.entrega_direccion : '' }}</div>
                   }
                 </td>
                 <td class="num">{{ e.total | dinero }}</td>
@@ -118,7 +116,7 @@
                   }
                 </td>
                 <td class="acciones">
-                  <!-- En espera: se modifica las veces que haga falta y se entrega cobrando. -->
+                  <!-- En espera: se modifica las veces que haga falta y se entrega cobrando, a crédito o pendiente de pago. -->
                   <button type="button" class="btn btn-ghost btn-sm" (click)="modificando.set(e)">Modificar</button>
                   <button type="button" class="btn btn-primary btn-sm" (click)="entregando.set(e)">
                     {{ e.falta > 0 ? 'Entregar y cobrar' : 'Entregar' }}
@@ -138,7 +136,7 @@
   <app-modificar-pedido-modal [pedido]="e" (cerrado)="modificando.set(null)" (guardado)="alModificar($event)" />
 }
 
-<!-- Entregar: cobra lo que falta (o lo fía) y saca la mercancía del inventario. -->
+<!-- Entregar: cobra lo que falta (a crédito o como nota pendiente de pago) y saca la mercancía del inventario. -->
 @if (entregando(); as e) {
   <app-entregar-pedido-modal [pedido]="e" (cerrado)="entregando.set(null)" (entregado)="alEntregar($event)" />
 }

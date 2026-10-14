@@ -7,6 +7,7 @@ import { ReportesService } from '../../../core/services/reportes.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { HiloParado, MargenHilo, Tablero as DatosTablero } from '../../../core/models/analisis.models';
 import { ReporteVentas } from '../../../core/models/reportes.models';
+import { RAMPA_AZUL } from '../../../shared/charts/contraste';
 import { ApiError } from '../../../core/models/auth.models';
 import { Barras, Barra } from '../../../shared/charts/barras';
 import { Composicion, Tramo } from '../../../shared/charts/composicion';
@@ -122,7 +123,7 @@ export class Tablero implements OnInit {
    * de los cuatro pasos ES el mensaje, así que no se reordenan ni se cambian por
    * colores distintos sin volver a correr el validador.
    */
-  private readonly RAMPA_ANTIGUEDAD = ['#86b6ef', '#3987e5', '#1c5cab', '#0d366b'];
+  private readonly RAMPA_ANTIGUEDAD = [...RAMPA_AZUL];
 
   /** Desde qué domingo arrancan las 12 semanas: la última es la que va en curso. */
   private readonly desdeSemanas = iso(sumarDias(inicioSemana(this.hoy), -7 * (SEMANAS - 1)));
@@ -217,7 +218,7 @@ export class Tablero implements OnInit {
       pie: v && a
         ? comparar(Number(v.resumen.total), Number(a.resumen.total), p.antes.nombre)
         : this.errorVentas() ? 'no se pudo consultar' : 'consultando…',
-      punto: '#2457C5',
+      punto: 'var(--acento)',
     });
 
     if (this.veCostos()) {
@@ -229,7 +230,7 @@ export class Tablero implements OnInit {
           : m.venta_analizada > 0
             ? `margen de ${this.pct(m.margen_pct)} sobre la venta`
             : 'falta capturar el precio de compra en las remesas',
-        punto: '#1baf7a',
+        punto: 'var(--viz-series-3)',
       });
     }
 
@@ -243,7 +244,7 @@ export class Tablero implements OnInit {
           : h.num_hilos === 0
             ? 'todo el hilo se está moviendo'
             : `${h.num_hilos} ${h.num_hilos === 1 ? 'hilo lleva' : 'hilos llevan'} ${h.dias} días o más sin venderse`,
-        punto: '#eb6834',
+        punto: 'var(--viz-series-2)',
       });
     }
 
@@ -256,7 +257,7 @@ export class Tablero implements OnInit {
           ? 'nadie te debe ahora mismo'
           : `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente' : 'clientes'}` +
             (c.num_vencidos > 0 ? ` · ${c.num_vencidos} con más de ${c.dias_aviso} días sin abonar` : ''),
-      punto: '#C2410C',
+      punto: 'var(--punto-alerta)',
     });
     return lista;
   });

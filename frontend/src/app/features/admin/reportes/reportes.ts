@@ -231,19 +231,19 @@ export class Reportes implements OnInit {
         pie: dias === 1
           ? (conVentas ? 'en el día' : 'sin ventas ese día')
           : `en ${dias} días · ${conVentas} con ventas`,
-        punto: '#2457C5',
+        punto: 'var(--acento)',
       },
       {
         etiqueta: 'Ventas',
         valor: n.toLocaleString('es-MX'),
         pie: conVentas > 1 ? `unas ${Math.round(n / conVentas)} por día con ventas` : 'en el periodo',
-        punto: '#2a78d6',
+        punto: 'var(--viz-series-1)',
       },
       {
         etiqueta: 'Por venta',
         valor: n > 0 ? pesos(total / n) : '—',
         pie: 'en promedio',
-        punto: '#1baf7a',
+        punto: 'var(--viz-series-3)',
       },
     ];
     // Los kilos los da el reporte desde 2026-10; con un servidor viejo no se inventan.
@@ -252,7 +252,7 @@ export class Reportes implements OnInit {
         etiqueta: 'Kilos vendidos',
         valor: `${kilos.toLocaleString('es-MX', { maximumFractionDigits: 0 })} kg`,
         pie: kilos > 0 ? `${Math.round((kilosPaquete / kilos) * 100)}% en paquete` : 'sin kilos en el periodo',
-        punto: '#eb6834',
+        punto: 'var(--viz-series-2)',
       });
     }
     return lista;
@@ -383,20 +383,20 @@ export class Reportes implements OnInit {
         pie: r.q
           ? (t.pct_del_periodo === null ? 'sin ventas en el periodo' : `${pctTexto(t.pct_del_periodo)} de todo lo vendido`)
           : `en ${t.num_con_venta} ${t.num_con_venta === 1 ? 'hilo' : 'hilos'}`,
-        punto: '#eb6834',
+        punto: 'var(--viz-series-2)',
       },
-      { etiqueta: 'Importe', valor: pesos(t.importe), pie: 'lo cobrado por esos kilos, sin IVA', punto: '#2457C5' },
+      { etiqueta: 'Importe', valor: pesos(t.importe), pie: 'lo cobrado por esos kilos, sin IVA', punto: 'var(--acento)' },
       {
         etiqueta: 'Queda en inventario',
         valor: kilos(t.existencia),
         pie: t.pct_vendido === null ? 'sin ventas ni existencias' : `ya se vendió el ${pctTexto(t.pct_vendido)}`,
-        punto: '#1baf7a',
+        punto: 'var(--viz-series-3)',
       },
       {
         etiqueta: 'Hilos',
         valor: t.num_hilos.toLocaleString('es-MX'),
         pie: `${t.num_con_venta} con ventas · ${sinVenta} sin vender en el periodo`,
-        punto: '#2a78d6',
+        punto: 'var(--viz-series-1)',
       },
     ];
   });

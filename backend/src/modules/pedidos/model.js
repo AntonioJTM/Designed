@@ -6,6 +6,12 @@ const { AppError } = require('../../middlewares/error');
 const almacenesModel = require('../almacenes/model');
 const configuracionModel = require('../configuracion/model');
 const clientesModel = require('../clientes/model');
+const saldoFavor = require('../clientes/saldo-favor');
+// Se pide al usarse: devoluciones.js carga variantes/service → inventario/model,
+// que pide este archivo (se haría un ciclo al arrancar).
+const devoluciones = {
+  deVenta: (...a) => require('./devoluciones').deVenta(...a),
+};
 const archivos = require('../../utils/archivos');
 const { hoyLocal } = require('../../utils/fechas');
 
@@ -376,6 +382,26 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       }
     }
 
+    // Lo que paga con su SALDO A FAVOR (2026-10-13): lo que le quedó de una
+    // devolución. Solo al COBRAR o vender A CRÉDITO en el mostrador, y de un
+    // cliente identificado: el saldo es suyo. Que le alcance se valida al
+    // asentarlo, con su fila bloqueada.
+    const usaSaldo = esCliente ? 0 : round2(datos.saldo_favor ?? 0);
+    if (usaSaldo > 0) {
+      if (!datos.cliente_id) {
+        throw new AppError(422, 'SALDO_SIN_CLIENTE', 'Para usar saldo a favor hay que decir de QUIÉN es.');
+      }
+      if (datos.canal !== 'punto_venta' || datos.apartado === true || datos.encargo === true || datos.pendiente_pago === true) {
+        throw new AppError(422, 'SALDO_FAVOR_SOLO_AL_COBRAR',
+          'El saldo a favor se usa al cobrar o al vender a crédito, no en una nota en espera ni pendiente de pago.');
+      }
+      if (usaSaldo + aCredito > total + 0.0001) {
+        throw new AppError(422, 'SALDO_MAYOR_AL_TOTAL',
+          `Se quieren usar $${usaSaldo.toFixed(2)} de saldo a favor${aCredito ? ' más el crédito' : ''} ` +
+          `en una venta de $${total.toFixed(2)}.`);
+      }
+    }
+
     // Un APARTADO no se cobra completo ni se entrega: el cliente deja lo que
     // quiera y la mercancía se guarda. Se acepta que el anticipo sea menor al
     // total —es lo normal— y por eso salta la validación de pago suficiente.
@@ -397,6 +423,32 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       if (!datos.cliente_id) {
         throw new AppError(422, 'APARTADO_SIN_CLIENTE',
           'Un apartado necesita saber a quién se le guarda: identifica al cliente.');
+      }
+    }
+
+    // Una NOTA PENDIENTE DE PAGO (2026-10-13): el cliente se lleva la mercancía
+    // y sale su ticket, pero cómo pagó se registra DESPUÉS ("si no me pagan ese
+    // día, que exista un apartado de notas pendientes de pago"). No es crédito:
+    // no usa su límite. Se cobra en abonos en la pantalla Notas pendientes de
+    // pago (el efectivo entra al corte del día en que paga) o se pasa a crédito.
+    const esNotaPendiente = datos.pendiente_pago === true;
+    if (esNotaPendiente) {
+      if (!esPOS) {
+        throw new AppError(422, 'NOTA_SOLO_MOSTRADOR', 'Las notas pendientes de pago se dan en el punto de venta.');
+      }
+      if (datos.apartado === true || datos.encargo === true || aCredito > 0) {
+        throw new AppError(422, 'NOTA_PENDIENTE_COMBINADA',
+          'Una nota pendiente de pago no es a crédito ni en espera: es una de las tres.');
+      }
+      if (pagos.length) {
+        throw new AppError(422, 'NOTA_PENDIENTE_CON_PAGO',
+          'Una nota pendiente de pago se lleva sin pagar: su pago se registra después, en Notas ' +
+          'pendientes de pago. Si paga hoy, cóbrala con «Cobrar».');
+      }
+      // Sin cliente no hay a quién cobrarle después.
+      if (!datos.cliente_id) {
+        throw new AppError(422, 'NOTA_SIN_CLIENTE',
+          'Una nota pendiente de pago necesita saber de quién es: identifica al cliente.');
       }
     }
 
@@ -437,12 +489,15 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         throw new AppError(422, 'ANTICIPO_MAYOR_AL_TOTAL',
           `El anticipo ($${pagado.toFixed(2)}) es mayor que el apartado ($${total.toFixed(2)}).`);
       }
+    } else if (esNotaPendiente) {
+      // Salió sin pagar: queda 'pendiente' hasta que sus abonos lleguen al total.
+      estado = 'pendiente';
     } else if (esPOS) {
       // A crédito el cliente cubre la diferencia con su firma, no con dinero.
-      if (pagado + aCredito + 0.0001 < total) {
+      if (pagado + aCredito + usaSaldo + 0.0001 < total) {
         throw new AppError(409, 'PAGO_INSUFICIENTE',
-          `El pago (${pagado})${aCredito ? ` más el crédito (${aCredito})` : ''} ` +
-          `no cubre el total (${total})`);
+          `El pago (${pagado})${aCredito ? ` más el crédito (${aCredito})` : ''}` +
+          `${usaSaldo ? ` más el saldo a favor (${usaSaldo})` : ''} no cubre el total (${total})`);
       }
       // Una venta con parte a crédito NO está pagada: la mercancía salió pero
       // el dinero no ha entrado. Queda 'pendiente' hasta que abone.
@@ -462,10 +517,19 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
     let cambio = 0;
     if (pagos.length) {
       const ids = pagos.map((p) => p.metodo_pago_id);
-      const [mrows] = await conn.query('SELECT id, nombre FROM metodos_pago WHERE id IN (:ids)', { ids });
+      const [mrows] = await conn.query('SELECT id, nombre, activo, interno FROM metodos_pago WHERE id IN (:ids)', { ids });
+      for (const id of ids) {
+        const m = mrows.find((x) => Number(x.id) === Number(id));
+        // Desde el 2026-10-13 se cobra solo en efectivo y transferencia: tarjeta,
+        // PayPal y Mercado Pago están desactivados. "Saldo a favor" es interno:
+        // va por `saldo_favor`, que lo descuenta de su libro.
+        if (!m || !m.activo || Number(m.interno)) {
+          throw new AppError(422, 'METODO_PAGO_INVALIDO', 'Ese método de pago no existe o está desactivado.');
+        }
+      }
       for (const m of mrows) esEfectivo[m.id] = (m.nombre || '').toLowerCase().includes('efectivo');
 
-      const porCobrar = round2(total - aCredito);
+      const porCobrar = round2(total - aCredito - usaSaldo);
       const sobra = round2(pagado - porCobrar);
       if (sobra > 0.0001) {
         const efectivoRecibido = round2(
@@ -482,10 +546,10 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
 
     if (intencionPago) {
       const [mrows] = await conn.query(
-        'SELECT id, activo FROM metodos_pago WHERE id = :id LIMIT 1',
+        'SELECT id, activo, interno FROM metodos_pago WHERE id = :id LIMIT 1',
         { id: intencionPago }
       );
-      if (!mrows[0] || !mrows[0].activo) {
+      if (!mrows[0] || !mrows[0].activo || Number(mrows[0].interno)) {
         throw new AppError(422, 'METODO_PAGO_INVALIDO', 'Ese método de pago no existe o está inactivo');
       }
     }
@@ -494,12 +558,12 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
     const numero = generarNumero(datos.canal);
     const [pr] = await conn.query(
       `INSERT INTO pedidos
-         (numero_pedido, canal, encargo, metodo_entrega, cliente_id, tipo_cliente_id, usuario_id,
+         (numero_pedido, canal, encargo, nota_pendiente, metodo_entrega, cliente_id, tipo_cliente_id, usuario_id,
           sesion_caja_id, almacen_id,
           direccion_envio_id, entrega_direccion, entrega_para, cupon_id, estado, inventario_descontado,
           subtotal, descuento, impuestos, costo_envio, total, notas)
        VALUES
-         (:numero, :canal, :encargo, :metodo_entrega, :cliente_id, :tipo_cliente_id, :usuario_id,
+         (:numero, :canal, :encargo, :nota_pendiente, :metodo_entrega, :cliente_id, :tipo_cliente_id, :usuario_id,
           :sesion_caja_id, :almacen_id,
           :direccion_envio_id, :entrega_direccion, :entrega_para, :cupon_id, :estado, :inventario_descontado,
           :subtotal, :descuento, :impuestos, :costo_envio, :total, :notas)`,
@@ -507,6 +571,7 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         numero,
         canal: datos.canal,
         encargo: esEncargo ? 1 : 0,
+        nota_pendiente: esNotaPendiente ? 1 : 0,
         metodo_entrega: metodoEntrega,
         cliente_id: datos.cliente_id ?? null,
         tipo_cliente_id: tipoClienteId,
@@ -634,6 +699,19 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       if (!esEfectivo[p.metodo_pago_id]) noEfectivo = round2(noEfectivo + monto);
     }
 
+    // Lo que pagó con su saldo a favor: un pago con el método interno "Saldo a
+    // favor" (la venta dice cómo se pagó y se liquida) y su salida del libro.
+    if (usaSaldo > 0) {
+      await conn.query(
+        `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
+         VALUES (:pedido_id, :metodo, :monto, 'completado', 'Saldo a favor')`,
+        { pedido_id: pedidoId, metodo: await saldoFavor.metodoSaldoFavor(conn), monto: usaSaldo }
+      );
+      await saldoFavor.usarEnVenta(conn, {
+        clienteId: datos.cliente_id, monto: usaSaldo, pedidoId, numeroPedido: numero, usuarioId,
+      });
+    }
+
     // Cómo dijo el cliente que va a pagar. Queda como pago 'pendiente' por el
     // total: no es dinero cobrado, es el compromiso, y así el panel sabe si
     // espera un depósito o al cliente en el mostrador.
@@ -651,9 +729,13 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
     // En un APARTADO entra al cajón solo el ANTICIPO, no el total: el resto
     // todavía no lo ha pagado nadie. En una venta normal el total menos lo
     // cubierto con tarjeta y lo fiado.
-    const efectivo = esApartado || esEncargo
-      ? round2(Math.max(0, pagado - noEfectivo))
-      : round2(Math.max(0, total - noEfectivo - aCredito));
+    // Una NOTA PENDIENTE no deja nada en el cajón: el dinero entra el día que
+    // pague (en sus abonos), y entonces al corte de ESE día.
+    const efectivo = esNotaPendiente
+      ? 0
+      : esApartado || esEncargo
+        ? round2(Math.max(0, pagado - noEfectivo))
+        : round2(Math.max(0, total - noEfectivo - aCredito - usaSaldo));
 
     // 8. La mercancía.
     //
@@ -863,6 +945,9 @@ async function _obtenerConn(ejecutor, id) {
     );
     pedido.abonos_cuenta = abonos.reverse();
   }
+  // Lo que el cliente REGRESÓ de esta nota y le quedó a favor (2026-10-13).
+  pedido.devoluciones = await devoluciones.deVenta(ejecutor, id);
+  pedido.devuelto_total = round2(pedido.devoluciones.reduce((s, d) => s + Number(d.total), 0));
   return pedido;
 }
 
@@ -898,7 +983,7 @@ async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, lim
   // `pagado` es lo COBRADO (pagos completados). Con él la pantalla dice cuánto
   // falta de cada venta sin pedir el detalle de cada una.
   const [rows] = await pool.query(
-    `SELECT p.id, p.numero_pedido, p.canal, p.encargo, p.metodo_entrega, p.estado, p.total, p.creado_en,
+    `SELECT p.id, p.numero_pedido, p.canal, p.encargo, p.nota_pendiente, p.metodo_entrega, p.estado, p.total, p.creado_en,
             p.inventario_descontado, p.cliente_id,
             c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial,
             u.nombre AS usuario, cj.nombre AS caja,
@@ -1209,8 +1294,8 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
 
   return withTransaction(async (conn) => {
     const [prev] = await conn.query(
-      `SELECT estado, numero_pedido, almacen_id, sesion_caja_id, canal,
-              inventario_descontado, total, encargo, metodo_entrega
+      `SELECT id, estado, numero_pedido, almacen_id, sesion_caja_id, canal,
+              inventario_descontado, total, encargo, nota_pendiente, metodo_entrega
          FROM pedidos WHERE id = :id FOR UPDATE`,
       { id }
     );
@@ -1219,10 +1304,40 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     const pedido = prev[0];
     if (Number(pedido.encargo)) _validarCaminoEncargo(pedido, estado);
     else _validarCaminoApartado(pedido, estado);
+    await _validarCaminoNota(conn, id, pedido, estado);
     const clienteFiado = await _validarCaminoFiado(conn, id, pedido, estado);
     const { estado: antes, numero_pedido: numero, almacen_id: almacenId } = pedido;
     const eraInactivo = INACTIVOS.includes(antes);
     const esInactivo = INACTIVOS.includes(estado);
+
+    // ---- SALDO A FAVOR (2026-10-13). Una venta con DEVOLUCIONES ya no se
+    // cancela ni se devuelve completa: lo que regresó ya quedó a favor del
+    // cliente y cancelarla lo repondría dos veces. Lo que falte se regresa
+    // también con «Devolución». Y una venta pagada con saldo a favor que se
+    // canceló ya le regresó ese saldo: reactivarla no lo vuelve a tomar.
+    if (!eraInactivo && esInactivo) {
+      const [[dev]] = await conn.query(
+        'SELECT COUNT(*) AS n FROM devoluciones WHERE pedido_id = :id', { id }
+      );
+      if (Number(dev.n) > 0) {
+        throw new AppError(409, 'VENTA_CON_DEVOLUCIONES',
+          `${numero} ya tiene devoluciones: lo que falta también se regresa con «Devolución» ` +
+          '(queda a favor del cliente). No se cancela completa.');
+      }
+      await saldoFavor.reintegrarDeVenta(conn, { pedidoId: id, numeroPedido: numero, usuarioId });
+    }
+    if (eraInactivo && !esInactivo) {
+      const [[usado]] = await conn.query(
+        `SELECT 1 AS si FROM saldo_favor_movimientos
+          WHERE pedido_id = :id AND tipo IN ('uso', 'aplicado') LIMIT 1`,
+        { id }
+      );
+      if (usado) {
+        throw new AppError(409, 'VENTA_CON_SALDO_FAVOR',
+          `${numero} se pagó con saldo a favor y al cancelarla ese saldo le regresó al cliente. ` +
+          'No se reactiva: vuelve a hacer la venta.');
+      }
+    }
 
     // ---- La DEUDA, si la venta fue a crédito: al cancelar se quita, al
     // reactivar vuelve. Va con el resto del dinero y antes del inventario, por
@@ -1583,6 +1698,32 @@ async function _validarCaminoFiado(conn, id, pedido, estado) {
 const POR_COBRADO = ['pagado', 'en_preparacion', 'enviado', 'entregado'];
 
 /**
+ * Una NOTA PENDIENTE DE PAGO se da por pagada SOLA, cuando sus abonos llegan al
+ * total: a mano no se marca pagada debiéndose (antes de la nota el pedido diría
+ * "pagado" sin que nadie hubiera cobrado), ni vuelve a pendiente ya pagada.
+ */
+async function _validarCaminoNota(conn, id, pedido, estado) {
+  if (!Number(pedido.nota_pendiente)) return;
+  const antes = pedido.estado;
+  if (INACTIVOS.includes(antes) || INACTIVOS.includes(estado) || antes === estado) return;
+  const [[cargo]] = await conn.query(
+    "SELECT 1 AS si FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo' LIMIT 1",
+    { id }
+  );
+  if (cargo) return; // pasó a crédito: la cuida `_validarCaminoFiado`
+  const falta = round2(Number(pedido.total) - (await _abonado(conn, id)));
+  if (antes === 'pendiente' && POR_COBRADO.includes(estado) && falta > 0.004) {
+    throw new AppError(409, 'NOTA_PENDIENTE_SIN_PAGAR',
+      `${pedido.numero_pedido} es una nota pendiente de pago y faltan $${falta.toFixed(2)}. ` +
+      'Se da por pagada sola al registrar sus pagos en Notas pendientes de pago.');
+  }
+  if (estado === 'pendiente' && POR_COBRADO.includes(antes) && falta <= 0.004) {
+    throw new AppError(409, 'NOTA_YA_PAGADA',
+      `${pedido.numero_pedido} ya se pagó completa: no puede volver a pendiente.`);
+  }
+}
+
+/**
  * Lo que costaría el pedido, sin crearlo. Es lo que el checkout consulta para
  * mostrar el desglose antes de que el cliente confirme: mismo cálculo que la
  * venta, así que el total que ve es el que se le cobra.
@@ -1834,21 +1975,25 @@ async function _abonado(conn, pedidoId) {
 async function abonarApartado(pedidoId, datos, usuarioId) {
   return withTransaction(async (conn) => {
     const [prows] = await conn.query(
-      `SELECT id, numero_pedido, estado, total, encargo, inventario_descontado
+      `SELECT id, numero_pedido, estado, total, encargo, nota_pendiente, inventario_descontado
          FROM pedidos WHERE id = :id FOR UPDATE`,
       { id: pedidoId }
     );
     const pedido = prows[0];
     if (!pedido) throw new AppError(404, 'NO_ENCONTRADO', 'Pedido no encontrado');
-    // Se abona a un apartado vigente, o a un PEDIDO sin entregar (paga por
-    // adelantado, por ejemplo por transferencia antes de que salga el chofer).
+    // Se abona a un apartado vigente, a una NOTA EN ESPERA (paga por adelantado,
+    // por ejemplo por transferencia) o a una NOTA PENDIENTE DE PAGO.
     const esEncargo = Number(pedido.encargo) === 1;
+    const esNota = Number(pedido.nota_pendiente) === 1;
     const vigente = esEncargo
       ? !Number(pedido.inventario_descontado) && PASOS_ENCARGO.includes(pedido.estado)
-      : pedido.estado === 'apartado';
+      : esNota
+        ? await _notaPorCobrar(conn, pedido)
+        : pedido.estado === 'apartado';
     if (!vigente) {
+      const que = esEncargo ? 'una nota en espera' : esNota ? 'una nota pendiente de pago' : 'un apartado vigente';
       throw new AppError(409, 'NO_ES_APARTADO',
-        `${pedido.numero_pedido} no es un ${esEncargo ? 'pedido sin entregar' : 'apartado vigente'} (está ${pedido.estado}).`);
+        `${pedido.numero_pedido} no es ${que} (está ${pedido.estado}).`);
     }
 
     const monto = round2(datos.monto);
@@ -1866,10 +2011,10 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
     // ¿Entra al cajón? Lo decide el nombre del método, como en la venta.
     let esEfectivo = false;
     const [mrows] = await conn.query(
-      'SELECT nombre, activo FROM metodos_pago WHERE id = :id LIMIT 1',
+      'SELECT nombre, activo, interno FROM metodos_pago WHERE id = :id LIMIT 1',
       { id: datos.metodo_pago_id }
     );
-    if (!mrows[0] || !mrows[0].activo) {
+    if (!mrows[0] || !mrows[0].activo || Number(mrows[0].interno)) {
       throw new AppError(422, 'METODO_PAGO_INVALIDO',
         'Ese método de pago no existe o está inactivo');
     }
@@ -1915,13 +2060,19 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
           sesion: sesionId,
           monto,
           pedido: pedidoId,
-          motivo: `Abono al ${esEncargo ? 'pedido' : 'apartado'} ${pedido.numero_pedido}`,
+          motivo: esNota
+            ? `Pago de la nota ${pedido.numero_pedido}`
+            : `Abono a la nota en espera ${pedido.numero_pedido}`,
         }
       );
     }
 
     const nuevoAbonado = round2(abonado + monto);
     const nuevoPendiente = round2(Number(pedido.total) - nuevoAbonado);
+    // La nota pendiente queda PAGADA en cuanto sus abonos llegan al total.
+    if (esNota && nuevoPendiente <= 0.0001) {
+      await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id", { id: pedidoId });
+    }
     return {
       pedido_id: pedidoId,
       numero_pedido: pedido.numero_pedido,
@@ -1932,6 +2083,128 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
       liquidado: nuevoPendiente <= 0.0001,
     };
   });
+}
+
+/**
+ * ¿La nota pendiente de pago sigue por cobrar? 'pendiente' y sin cargo a
+ * crédito: una que se pasó a crédito ya se cobra en la cuenta del cliente.
+ */
+async function _notaPorCobrar(conn, pedido) {
+  if (!Number(pedido.nota_pendiente) || pedido.estado !== 'pendiente') return false;
+  const [[cargo]] = await conn.query(
+    "SELECT 1 AS si FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo' LIMIT 1",
+    { id: pedido.id }
+  );
+  return !cargo;
+}
+
+/**
+ * PASAR A CRÉDITO una nota pendiente de pago ("si el cliente pide que se vaya a
+ * crédito, que exista esa opción"). Lo que FALTA (total menos lo que ya abonó)
+ * se carga a su cuenta, con su límite como cualquier venta a crédito (409
+ * CREDITO_INSUFICIENTE si no le alcanza), y desde ahí se cobra con abonos a la
+ * cuenta: sale de Notas pendientes de pago. Si tenía saldo a favor, eso la paga.
+ */
+async function pasarACredito(pedidoId, usuarioId) {
+  return withTransaction(async (conn) => {
+    const [prows] = await conn.query(
+      `SELECT id, numero_pedido, estado, total, nota_pendiente, cliente_id
+         FROM pedidos WHERE id = :id FOR UPDATE`,
+      { id: pedidoId }
+    );
+    const pedido = prows[0];
+    if (!pedido) throw new AppError(404, 'NO_ENCONTRADO', 'Pedido no encontrado');
+    if (!(await _notaPorCobrar(conn, pedido))) {
+      throw new AppError(409, 'NO_ES_NOTA_PENDIENTE',
+        `${pedido.numero_pedido} no es una nota pendiente de pago por cobrar.`);
+    }
+    const falta = round2(Number(pedido.total) - (await _abonado(conn, pedidoId)));
+    if (falta <= 0.0001) {
+      throw new AppError(409, 'NOTA_YA_PAGADA', `${pedido.numero_pedido} ya está pagada.`);
+    }
+    await clientesModel.cargarVentaACredito(conn, {
+      clienteId: pedido.cliente_id,
+      monto: falta,
+      pedidoId,
+      numeroPedido: pedido.numero_pedido,
+      usuarioId,
+    });
+    await clientesModel.liquidarVentasACredito(conn, pedido.cliente_id);
+    const resultado = await _obtenerConn(conn, pedidoId);
+    resultado.a_credito = falta;
+    return resultado;
+  });
+}
+
+/**
+ * Las NOTAS PENDIENTES DE PAGO por cobrar, de la más antigua a la más nueva,
+ * con quién es, qué se llevó, lo que ya abonó y lo que falta.
+ */
+async function listarNotasPendientes({ q } = {}) {
+  const where = [
+    'p.nota_pendiente = 1',
+    "p.estado = 'pendiente'",
+    "NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')",
+  ];
+  const params = {};
+  if (q && String(q).trim()) {
+    where.push(`(p.numero_pedido LIKE :q OR c.nombre LIKE :q OR c.nombre_comercial LIKE :q
+                 OR c.telefono LIKE :q OR c.telefono_alt LIKE :q)`);
+    params.q = `%${String(q).trim()}%`;
+  }
+  const [rows] = await pool.query(
+    `SELECT p.id, p.numero_pedido, p.total, p.creado_en, p.almacen_id, a.nombre AS almacen,
+            p.cliente_id, c.nombre AS cliente, c.nombre_comercial, c.telefono,
+            c.limite_credito, u.nombre AS vendedor,
+            DATEDIFF(CURDATE(), DATE(p.creado_en)) AS dias,
+            COALESCE((SELECT SUM(pg.monto) FROM pagos pg WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS pagado
+       FROM pedidos p
+       LEFT JOIN clientes c  ON c.id = p.cliente_id
+       LEFT JOIN usuarios u  ON u.id = p.usuario_id
+       LEFT JOIN almacenes a ON a.id = p.almacen_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY p.creado_en, p.id`,
+    params
+  );
+  for (const r of rows) {
+    r.total = round2(r.total);
+    r.pagado = round2(r.pagado);
+    r.falta = round2(Math.max(0, r.total - r.pagado));
+    r.dias = Number(r.dias);
+    r.hilos = [];
+  }
+  if (rows.length) {
+    const [lineas] = await pool.query(
+      `SELECT d.pedido_id, d.cantidad, d.piezas, pr.nombre AS producto, pr.grosor_calibre AS calibre,
+              pv.tipo_presentacion,
+              (SELECT COUNT(*) FROM pedido_detalle_bultos b WHERE b.detalle_id = d.id) AS paquetes
+         FROM pedido_detalle d
+         JOIN producto_variantes pv ON pv.id = d.variante_id
+         JOIN productos pr          ON pr.id = pv.producto_id
+        WHERE d.pedido_id IN (:ids)
+        ORDER BY d.id`,
+      { ids: rows.map((r) => r.id) }
+    );
+    const porPedido = new Map(rows.map((r) => [r.id, r]));
+    for (const l of lineas) {
+      const r = porPedido.get(l.pedido_id);
+      if (!r) continue;
+      r.hilos.push({
+        hilo: `${l.producto}${l.calibre ? ' ' + l.calibre : ''}`,
+        tipo_presentacion: l.tipo_presentacion,
+        kg: round3(l.cantidad),
+        piezas: l.piezas != null ? Number(l.piezas) : null,
+        paquetes: Number(l.paquetes) || null,
+      });
+    }
+  }
+  return {
+    items: rows,
+    por_cobrar: round2(rows.reduce((s, r) => s + r.falta, 0)),
+    num_notas: rows.length,
+    num_clientes: new Set(rows.map((r) => r.cliente_id)).size,
+    mas_antigua_dias: rows.length ? Math.max(...rows.map((r) => r.dias)) : 0,
+  };
 }
 
 /**
@@ -1972,6 +2245,13 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
     let cambio = 0;
     let aCredito = 0;
     let devuelto = 0;
+    // Se entrega como NOTA PENDIENTE DE PAGO: se lleva la mercancía y lo que
+    // falta se cobra después, en Notas pendientes de pago.
+    const comoNota = datos.pendiente_pago === true && esEncargo && pendiente > 0.004;
+    if (datos.pendiente_pago === true && (datos.pagos?.length || Number(datos.a_credito ?? 0) > 0)) {
+      throw new AppError(422, 'NOTA_PENDIENTE_COMBINADA',
+        'Como nota pendiente de pago no se cobra ni se fía nada ahora: el pago se registra después.');
+    }
     if (!esEncargo && pendiente > 0.0001) {
       throw new AppError(409, 'APARTADO_NO_LIQUIDADO',
         `Le faltan $${pendiente.toFixed(2)} por pagar. Cóbralos antes de entregar, ` +
@@ -1980,6 +2260,8 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
     if (esEncargo && pendiente < -0.004) {
       // Pesó MENOS de lo que dejó pagado: se le devuelve la diferencia.
       devuelto = await _devolverDiferencia(conn, pedido, round2(-pendiente), datos);
+    } else if (comoNota) {
+      // Nada que cobrar ahora.
     } else if (esEncargo) {
       // Lo que falta se COBRA al entregar, o se FÍA. Va antes de tocar el
       // inventario para que un 409 (caja cerrada, crédito) no deje nada movido.
@@ -2043,9 +2325,10 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
     // mercancía salió y el dinero no ha entrado (se da por pagada sola al abonar).
     await conn.query(
       `UPDATE pedidos
-          SET estado = :estado, inventario_descontado = 1, entregado_en = NOW()
+          SET estado = :estado, inventario_descontado = 1, entregado_en = NOW(),
+              nota_pendiente = IF(:nota, 1, nota_pendiente)
         WHERE id = :id`,
-      { id: pedidoId, estado: aCredito > 0 ? 'pendiente' : 'entregado' }
+      { id: pedidoId, estado: aCredito > 0 || comoNota ? 'pendiente' : 'entregado', nota: comoNota ? 1 : 0 }
     );
     if (aCredito > 0) await clientesModel.liquidarVentasACredito(conn, pedido.cliente_id);
 
@@ -2518,11 +2801,11 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
   const esEfectivo = {};
   if (pagos.length) {
     const [mrows] = await conn.query(
-      'SELECT id, nombre, activo FROM metodos_pago WHERE id IN (:ids)', { ids: pagos.map((p) => p.metodo_pago_id) }
+      'SELECT id, nombre, activo, interno FROM metodos_pago WHERE id IN (:ids)', { ids: pagos.map((p) => p.metodo_pago_id) }
     );
     for (const p of pagos) {
       const m = mrows.find((x) => Number(x.id) === Number(p.metodo_pago_id));
-      if (!m || !m.activo) throw new AppError(422, 'METODO_PAGO_INVALIDO', 'Ese método de pago no existe o está inactivo');
+      if (!m || !m.activo || Number(m.interno)) throw new AppError(422, 'METODO_PAGO_INVALIDO', 'Ese método de pago no existe o está inactivo');
       esEfectivo[p.metodo_pago_id] = m.nombre.toLowerCase().includes('efectivo');
     }
   }
@@ -2775,6 +3058,8 @@ async function resumen() {
 }
 
 module.exports = {
+  pasarACredito,
+  listarNotasPendientes,
   resumen,
   crearPedido, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,

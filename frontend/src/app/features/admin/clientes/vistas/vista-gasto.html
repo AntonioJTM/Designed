@@ -19,7 +19,7 @@
           clientes suman hasta ese renglón.
         </p>
       </div>
-      <span class="muted" style="font-size: 13px">acumulado</span>
+      <span class="muted" style="font-size: 0.8125rem">acumulado</span>
     </div>
     @if (ranking().length === 0) {
       <p class="vacio">Ningún cliente identificado compró {{ enPeriodo(dias()) }}.</p>
@@ -34,7 +34,7 @@
               <span class="relleno" [style.width.%]="f.ancho"></span>
               <b>{{ pesos(f.c.total) }}</b>
             </span>
-            <span class="num" style="font-size: 13px; color: var(--tinta-2); text-align: right">
+            <span class="num" style="font-size: 0.8125rem; color: var(--tinta-2); text-align: right">
               {{ f.c.acumulado_pct === null ? '' : f.c.acumulado_pct + '%' }}
             </span>
           </div>
@@ -140,7 +140,7 @@
               <td>
                 <div style="font-weight: 500">{{ r.nombre }}</div>
                 @if (r.nombre_comercial || r.telefono) {
-                  <div class="muted" style="font-size: 13px">
+                  <div class="muted" style="font-size: 0.8125rem">
                     {{ r.nombre_comercial }}{{ r.nombre_comercial && r.telefono ? ' · ' : '' }}<span class="mono">{{ r.telefono }}</span>
                   </div>
                 }
@@ -199,7 +199,7 @@
             <tr>
               <td>
                 <div style="font-weight: 500">{{ c.nombre }}</div>
-                @if (c.nombre_comercial) { <div class="muted" style="font-size: 13px">{{ c.nombre_comercial }}</div> }
+                @if (c.nombre_comercial) { <div class="muted" style="font-size: 0.8125rem">{{ c.nombre_comercial }}</div> }
               </td>
               <td class="mono">{{ c.telefono || '—' }}</td>
               <td>{{ c.cliente_desde ? fechaCorta(c.cliente_desde) : '—' }}</td>

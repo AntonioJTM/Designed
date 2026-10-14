@@ -9,7 +9,7 @@
          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M7 3h10 M7 21h10 M8.5 3v18 M15.5 3v18 M8.5 8l7 3 M8.5 12l7 3 M8.5 16l7 3"></path>
     </svg>
-    <span>Tienda de hilos</span>
+    <span>Hitex</span>
   </div>
   <div class="lema">
     <p class="titulo">Inventario, ventas y clientes, en un solo lugar.</p>
@@ -28,13 +28,15 @@
     <label class="field">
       Correo
       <input type="email" formControlName="correo" autocomplete="username" placeholder="nombre@correo.com"
-             [class.invalido]="form.controls.correo.touched && form.controls.correo.invalid" />
+             [class.invalido]="form.controls.correo.touched && form.controls.correo.invalid"
+             [attr.aria-invalid]="form.controls.correo.touched && form.controls.correo.invalid" />
     </label>
 
     <label class="field">
       Contraseña
       <input type="password" formControlName="contrasena" autocomplete="current-password"
-             [class.invalido]="form.controls.contrasena.touched && form.controls.contrasena.invalid" />
+             [class.invalido]="form.controls.contrasena.touched && form.controls.contrasena.invalid"
+             [attr.aria-invalid]="form.controls.contrasena.touched && form.controls.contrasena.invalid" />
     </label>
 
     @if (error()) {

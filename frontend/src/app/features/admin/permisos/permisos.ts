@@ -29,16 +29,16 @@ interface GrupoFilas {
   host: { '(document:keydown.escape)': 'cerrarNuevo()' },
   styles: `
     table.matriz th.puesto { text-align: center; min-width: 120px; }
-    table.matriz th.puesto span { display: block; font-weight: 400; font-size: 12px; color: var(--tinta-3); }
+    table.matriz th.puesto span { display: block; font-weight: 400; font-size: 0.75rem; color: var(--tinta-3); }
     table.matriz td.marca { text-align: center; }
     table.matriz td.marca input { width: 20px; height: 20px; accent-color: var(--acento); cursor: pointer; }
     table.matriz td.marca input:disabled { cursor: default; }
     table.matriz td.que b { font-weight: 500; display: block; }
-    table.matriz td.que span { font-size: 13px; color: var(--tinta-3); }
+    table.matriz td.que span { font-size: 0.8125rem; color: var(--tinta-3); }
     table.matriz tr.cambiada td { background: #F7F9FE; }
     .barra-guardar { position: sticky; bottom: 16px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-radius: 10px; background: var(--barra); color: #fff; box-shadow: 0 8px 24px rgba(18, 22, 31, 0.25); }
     .barra-guardar .acciones { display: flex; gap: 10px; }
-    .barra-guardar .btn-ghost { background: transparent; color: #fff; border-color: #333A48; }
+    .barra-guardar .btn-ghost { background: transparent; color: #fff; border-color: var(--barra-borde); }
   `,
 })
 export class PermisosPantalla {

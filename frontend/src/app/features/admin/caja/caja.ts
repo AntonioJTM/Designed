@@ -63,23 +63,23 @@ interface FilaMovimiento {
   templateUrl: './caja.html',
   host: { '(document:keydown.escape)': 'cerrarModalCaja()' },
   styles: `
-    .corte-resumen { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 8px; background: var(--fondo); font-size: 14px; }
+    .corte-resumen { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 8px; background: var(--fondo); font-size: 0.875rem; }
     .corte-resumen > div { display: flex; justify-content: space-between; gap: 12px; }
     .corte-resumen > div > span:first-child { color: var(--tinta-3); }
-    .corte-resumen .total { border-top: 1px solid #DDE1E7; padding-top: 8px; font-size: 16px; }
+    .corte-resumen .total { border-top: 1px solid var(--borde); padding-top: 8px; font-size: 1rem; }
     .corte-resumen .total > span:first-child { color: var(--tinta); }
     .caja-fila { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--borde-suave); }
     .caja-fila .que { display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
-    .caja-fila .que b { font-size: 15px; font-weight: 500; }
-    .caja-fila .que > span:not(.pill) { font-size: 13px; color: var(--tinta-3); }
+    .caja-fila .que b { font-size: 0.9375rem; font-weight: 500; }
+    .caja-fila .que > span:not(.pill) { font-size: 0.8125rem; color: var(--tinta-3); }
     .caja-fila .que .pill { align-self: flex-start; margin-top: 4px; }
     .caja-fila.elegida .que b { color: var(--acento-oscuro); }
     .cajas-lista { display: flex; flex-direction: column; }
     .cajas-lista .caja-fila:first-child { border-top: 0; }
     .resultado-corte { display: flex; flex-wrap: wrap; gap: 24px; }
     .resultado-corte > div { display: flex; flex-direction: column; gap: 2px; }
-    .resultado-corte span { font-size: 13px; color: var(--tinta-3); }
-    .resultado-corte b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .resultado-corte span { font-size: 0.8125rem; color: var(--tinta-3); }
+    .resultado-corte b { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
   `,
 })
 export class CajaPantalla {
@@ -140,24 +140,24 @@ export class CajaPantalla {
     if (retiros.length) partes.push(`${retiros.length} ${retiros.length === 1 ? 'retiro' : 'retiros'}`);
     if (devoluciones.length) partes.push(`${devoluciones.length} ${devoluciones.length === 1 ? 'devolución' : 'devoluciones'}`);
     return [
-      { etiqueta: 'Debería haber', valor: this.pesos(s?.esperado_actual), pie: 'en el cajón ahora mismo', punto: '#2457C5' },
+      { etiqueta: 'Debería haber', valor: this.pesos(s?.esperado_actual), pie: 'en el cajón ahora mismo', punto: 'var(--acento)' },
       {
         etiqueta: 'Ventas en efectivo',
         valor: this.pesos(suma(ventas)),
         pie: `${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'}`,
-        punto: '#1baf7a',
+        punto: 'var(--viz-series-3)',
       },
       {
         etiqueta: 'Abonos',
         valor: this.pesos(suma(abonos)),
         pie: abonos.length === 0 ? 'nadie ha abonado en este turno' : `${abonos.length} ${abonos.length === 1 ? 'abono' : 'abonos'} en efectivo`,
-        punto: '#2a78d6',
+        punto: 'var(--viz-series-1)',
       },
       {
         etiqueta: 'Salió del cajón',
         valor: this.pesos(suma(salio)),
         pie: partes.length ? partes.join(' · ') : 'no ha salido dinero',
-        punto: '#C2410C',
+        punto: 'var(--punto-alerta)',
       },
     ];
   });

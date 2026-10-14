@@ -53,12 +53,19 @@ describe('Composicion', () => {
     expect(chico.cabe).toBe(false);
   });
 
-  it('elige texto claro sobre relleno oscuro y tinta sobre claro', async () => {
-    const c = (await montar([50, 50])).componentInstance;
+  it('elige la letra de MAYOR contraste: tinta en los dos azules claros, blanca en los oscuros', async () => {
+    const c = (await montar([25, 25, 25, 25])).componentInstance;
     const t = c.tramos();
 
-    // El primer paso de la rampa es claro; el segundo ya es oscuro.
-    expect(t[0].textoClaro).toBe(false);
-    expect(t[1].textoClaro).toBe(true);
+    // Auditoría 2026-10-13: sobre el segundo azul la blanca daba 3.64:1 y la tinta da 4.78:1.
+    expect(t.map((x) => x.textoClaro)).toEqual([false, false, true, true]);
+  });
+
+  it('el lector de pantalla oye cada tramo con su cifra y su parte del total', async () => {
+    const f = await montar([75, 25]);
+    f.componentRef.setInput('descripcion', 'Desde cuándo te deben');
+    f.detectChanges();
+    const svg = f.nativeElement.querySelector('svg') as SVGElement;
+    expect(svg.getAttribute('aria-label')).toBe('Desde cuándo te deben. T0: $75 (75%); T1: $25 (25%).');
   });
 });

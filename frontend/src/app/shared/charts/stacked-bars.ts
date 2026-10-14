@@ -7,6 +7,7 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { resumenGrafica } from './resumen';
 
 /** Un pedazo de la barra: cuánto hay de esa serie (almacén) en esa categoría. */
 export interface Segmento {
@@ -44,7 +45,7 @@ export interface BarraApilada {
   imports: [],
   template: `
     <svg class="viz-svg" [attr.viewBox]="'0 0 ' + W() + ' ' + alto()"
-         preserveAspectRatio="xMidYMid meet" role="img" width="100%">
+         preserveAspectRatio="xMidYMid meet" role="img" [attr.aria-label]="resumen()" width="100%">
       @for (b of barras(); track b.label) {
         <!-- etiqueta de la categoría (completa en el tooltip si se recortó) -->
         <text [attr.x]="0" [attr.y]="b.cy + 4" class="viz-axis" text-anchor="start">
@@ -73,6 +74,20 @@ export class StackedBars {
   readonly data = input<BarraApilada[]>([]);
   readonly unidad = input('kg');
   readonly decimals = input(0);
+  /** Qué mide, para el lector de pantalla. Le siguen los datos de cada barra. */
+  readonly descripcion = input('');
+  /** El nombre de la gráfica para el lector: cada barra con su total y sus tramos. */
+  readonly resumen = computed(() =>
+    resumenGrafica(
+      this.descripcion(),
+      this.data().map(
+        (b) =>
+          `${b.label}: ${this.fmt(b.total)} ${this.unidad()} (` +
+          b.segmentos.filter((x) => x.value > 0).map((x) => `${x.serie} ${this.fmt(x.value)}`).join(', ') +
+          ')'
+      )
+    )
+  );
 
   readonly gutter = 150; // espacio para el nombre del color
   readonly rowH = 30;

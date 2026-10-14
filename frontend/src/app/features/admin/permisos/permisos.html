@@ -23,8 +23,8 @@
     <span>El administrador siempre lo puede todo: su columna no se puede apagar, para que nunca se quede nadie sin poder entrar a Permisos.</span>
   </div>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
   @if (matriz()?.falta_migracion) {
     <p class="aviso">
       La base todavía no tiene la lista de permisos (falta la migración
@@ -116,7 +116,7 @@
         <button type="button" class="modal-cerrar" (click)="cerrarNuevo()" aria-label="Cerrar">✕</button>
       </div>
       <div class="modal-body">
-        @if (errorNuevo()) { <p class="alert">{{ errorNuevo() }}</p> }
+        @if (errorNuevo()) { <p class="alert" role="alert">{{ errorNuevo() }}</p> }
         <div class="form-grid">
           <label class="field full">
             Nombre del puesto

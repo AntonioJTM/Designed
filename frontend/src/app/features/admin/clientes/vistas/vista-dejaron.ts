@@ -29,9 +29,9 @@ export type CorteSinVenir = (typeof CORTES_SIN_VENIR)[number];
     .corte { flex: 0 0 auto; }
     .corte select { min-width: 210px; }
     table.grid.dejaron { min-width: 720px; }
-    .chico { font-size: 12px; margin-top: 2px; }
-    .tel { margin-top: 2px; font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .nota-corte { margin: 12px 0 0; font-size: 13px; }
+    .chico { font-size: 0.75rem; margin-top: 2px; }
+    .tel { margin-top: 2px; font-size: 0.8125rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .nota-corte { margin: 12px 0 0; font-size: 0.8125rem; }
   `,
 })
 export class VistaDejaron {
