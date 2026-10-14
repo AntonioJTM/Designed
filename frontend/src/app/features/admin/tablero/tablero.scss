@@ -25,17 +25,17 @@
 // pero todavía lo primero que se lee de la tarjeta.
 .cifras-mini { display: flex; flex-wrap: wrap; gap: 12px 40px; }
 .cifras-mini > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.cifras-mini span { font-size: 13px; color: var(--tinta-3); }
-.cifras-mini b { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-.cifras-mini small { font-size: 13px; color: var(--tinta-3); }
+.cifras-mini span { font-size: 0.8125rem; color: var(--tinta-3); }
+.cifras-mini b { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.cifras-mini small { font-size: 0.8125rem; color: var(--tinta-3); }
 
-.subtitulo { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--tinta-2); }
+.subtitulo { margin: 0 0 10px; font-size: 0.875rem; font-weight: 600; color: var(--tinta-2); }
 .espacio-arriba { margin-top: 12px; }
 
 // Celdas de dos renglones: el nombre arriba y su detalle abajo.
 .hilo { font-weight: 500; }
-.chico { font-size: 12px; }
-.resumen-parado { margin: 0; font-size: 14px; color: var(--tinta-2); }
+.chico { font-size: 0.75rem; }
+.resumen-parado { margin: 0; font-size: 0.875rem; color: var(--tinta-2); }
 // Lo que lleva meses parado se dice en la tinta de alerta (texto, no color de serie).
 .dias-parado { color: var(--alerta-t); white-space: nowrap; }
 

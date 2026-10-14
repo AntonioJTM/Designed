@@ -75,7 +75,7 @@
     </label>
   </div>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
   <section class="card">
     <div class="card-head">
@@ -114,7 +114,7 @@
                 <td class="num">
                   @if ((p.falta ?? 0) > 0) { <span class="falta">{{ p.falta | dinero }}</span> }
                 </td>
-                <td><span [class]="'pill ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal, p.encargo) }}</span></td>
+                <td><span [class]="'pill ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal, p.encargo, p.nota_pendiente) }}</span></td>
                 <td class="acciones"><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/ventas', p.id]">Ver</a></td>
               </tr>
             }

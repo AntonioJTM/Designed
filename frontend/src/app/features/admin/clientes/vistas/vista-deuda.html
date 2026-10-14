@@ -63,7 +63,7 @@
         }
       </div>
       @if (porSaldo().resto > 0) {
-        <p class="muted" style="margin: 12px 0 0; font-size: 13px">Y {{ porSaldo().resto }} más en la tabla de abajo.</p>
+        <p class="muted" style="margin: 12px 0 0; font-size: 0.8125rem">Y {{ porSaldo().resto }} más en la tabla de abajo.</p>
       }
     </section>
 
@@ -86,7 +86,7 @@
                     [attr.aria-label]="'Usa el ' + f.texto + ' de su crédito'">
                 <span [style.width.%]="f.pct" [style.background]="f.color"></span>
               </span>
-              <span class="num" style="font-size: 13px; color: var(--tinta-2); text-align: right; white-space: nowrap">
+              <span class="num" style="font-size: 0.8125rem; color: var(--tinta-2); text-align: right; white-space: nowrap">
                 <b style="color: var(--tinta)">{{ f.texto }}</b> ·
                 @if (f.queda >= 0) { quedan {{ pesos(f.queda) }} } @else { se pasó {{ pesos(-f.queda) }} }
               </span>
@@ -94,7 +94,7 @@
           }
         </div>
         @if (porUso().resto > 0) {
-          <p class="muted" style="margin: 12px 0 0; font-size: 13px">Y {{ porUso().resto }} más en la tabla de abajo.</p>
+          <p class="muted" style="margin: 12px 0 0; font-size: 0.8125rem">Y {{ porUso().resto }} más en la tabla de abajo.</p>
         }
       }
     </section>

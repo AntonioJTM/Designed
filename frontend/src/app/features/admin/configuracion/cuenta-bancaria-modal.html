@@ -12,9 +12,9 @@
     <form (ngSubmit)="guardar()">
       <div class="modal-body">
         <div class="columna" style="gap: 16px">
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
-          <p class="muted" style="margin: 0; font-size: 14px">
+          <p class="muted" style="font-size: 0.875rem">
             La cuenta a la que un cliente deposita cuando paga por transferencia. Lleva el número de cuenta,
             la CLABE o los dos.
           </p>

@@ -1,0 +1,113 @@
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Notas pendientes de pago</h1>
+      <p class="sub">
+        Lo que los clientes se llevaron sin pagar. Registra su pago cuando paguen —el efectivo entra al corte
+        de ese día— o pásalo a crédito si el cliente lo pide.
+      </p>
+    </div>
+  </header>
+
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+
+  <div class="kpis">
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" style="background: var(--punto-aviso)"></span>Por cobrar</span>
+      <span class="kpi-valor">{{ datos()?.por_cobrar ?? 0 | dinero }}</span>
+      <span class="kpi-pie">lo que falta de las notas que se ven</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" style="background: var(--acento)"></span>Notas</span>
+      <span class="kpi-valor">{{ datos()?.num_notas ?? 0 }}</span>
+      <span class="kpi-pie">sin pagar completas</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" style="background: var(--viz-series-3)"></span>Clientes</span>
+      <span class="kpi-valor">{{ datos()?.num_clientes ?? 0 }}</span>
+      <span class="kpi-pie">que deben alguna nota</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" style="background: var(--punto-alerta)"></span>La más vieja</span>
+      <span class="kpi-valor">{{ hace(datos()?.mas_antigua_dias ?? 0) }}</span>
+      <span class="kpi-pie">desde que se la llevaron</span>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Por cobrar</h2>
+        <p>De la más vieja a la más nueva. Pueden pagar en partes; con el último pago la nota queda pagada.</p>
+      </div>
+      <label class="buscador">
+        <span class="oculto">Buscar</span>
+        <input type="search" [(ngModel)]="q" (ngModelChange)="alTeclear()" placeholder="Cliente, folio o teléfono" />
+      </label>
+    </div>
+
+    @if (cargando() && !datos()) {
+      <p class="muted">Cargando…</p>
+    } @else if (items().length === 0) {
+      <p class="vacio">
+        @if (q) { Ninguna nota coincide. } @else { Nadie debe ninguna nota. Se dan en el punto de venta con «Nota pendiente de pago». }
+      </p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Nota</th>
+              <th>Cliente</th>
+              <th>Se llevó</th>
+              <th class="num">Total</th>
+              <th class="num">Pagó</th>
+              <th class="num">Falta</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (n of items(); track n.id) {
+              <tr>
+                <td>
+                  <a class="mono" [routerLink]="['/admin/ventas', n.id]" [title]="n.numero_pedido">{{ n.numero_pedido | folio }}</a>
+                  <div class="sub">{{ n.creado_en | fecha }}</div>
+                  <div class="sub" [class.neg]="n.dias > 7">{{ hace(n.dias) }}</div>
+                </td>
+                <td>
+                  @if (veClientes()) {
+                    <a [routerLink]="['/admin/clientes', n.cliente_id]"><b>{{ quien(n) }}</b></a>
+                  } @else {
+                    <b>{{ quien(n) }}</b>
+                  }
+                  @if (n.nombre_comercial && n.cliente) { <div class="sub">{{ n.cliente }}</div> }
+                  @if (n.telefono) { <div class="sub mono">{{ n.telefono }}</div> }
+                </td>
+                <td>
+                  @for (h of n.hilos; track $index) { <div>{{ queLlevo(h) }}</div> }
+                </td>
+                <td class="num">{{ n.total | dinero }}</td>
+                <td class="num">{{ n.pagado | dinero }}</td>
+                <td class="num"><b>{{ n.falta | dinero }}</b></td>
+                <td class="acciones">
+                  @if (puedeCredito()) {
+                    <button type="button" class="btn btn-ghost btn-sm" [disabled]="pasando() === n.id" (click)="pasarACredito(n)">
+                      {{ pasando() === n.id ? 'Pasando…' : 'Pasar a crédito' }}
+                    </button>
+                  }
+                  <button type="button" class="btn btn-primary btn-sm" (click)="pagando.set(n)">Registrar pago</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+<!-- Registrar el pago: efectivo (al corte de hoy) o transferencia, completo o en partes. -->
+@if (pagando(); as n) {
+  <app-pago-nota-modal [nota]="n" (cerrado)="pagando.set(null)" (registrado)="alPagar($event)" />
+}

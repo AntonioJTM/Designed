@@ -8,7 +8,7 @@
 .filtros-bultos .field.peso { flex: 0 1 260px; }
 .filtros-bultos .rango { display: flex; align-items: center; gap: 6px; }
 .filtros-bultos .rango input { width: 100%; }
-.filtros-bultos .resumen { margin-left: auto; font-size: 13.5px; color: var(--tinta-2); text-align: right; }
+.filtros-bultos .resumen { margin-left: auto; font-size: 0.84375rem; color: var(--tinta-2); text-align: right; }
 .filtros-bultos .resumen b { color: var(--tinta); }
-.lotes .ficha.boton { cursor: pointer; border: 1px solid transparent; font: inherit; }
+.lotes .ficha.boton { cursor: pointer; border: 1px solid transparent; font: inherit; font-size: 0.8125rem; }
 .lotes .ficha.boton.on { border-color: var(--acento); color: var(--acento); }

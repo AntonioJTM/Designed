@@ -15,8 +15,7 @@ async function listarStock(filtros) {
 
   // La pantalla de Inventario dice qué fue lo último que le pasó a cada
   // renglón ("Remesa REM-0412", "Venta POS-91B0") con la MISMA etiqueta que el
-  // kardex. Es opcional para no engordar la respuesta del asistente, que pide
-  // existencias y no le sirve el documento.
+  // kardex. Es opcional: quien solo pide existencias no necesita el documento.
   const ultimos = await model.ultimosMovimientos(rows);
   const porFila = new Map(ultimos.map((m) => [`${m.variante_id}-${m.almacen_id}`, m]));
   const items = rows.map((r) => {
@@ -50,7 +49,9 @@ function _describir(m) {
   if (m.referencia_tipo === 'pedido') {
     const canal = m.pedido_canal === 'punto_venta' ? 'mostrador' : 'en línea';
     return {
-      concepto: `Venta ${canal}`,
+      // El cliente regresó mercancía y le quedó a favor (2026-10-13): el folio
+      // DEV-… va en el motivo.
+      concepto: m.tipo === 'devolucion' ? 'Devolución del cliente' : `Venta ${canal}`,
       folio: m.numero_pedido,
       detalle_tipo: 'pedido',
       detalle_id: m.referencia_id,

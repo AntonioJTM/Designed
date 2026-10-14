@@ -2,17 +2,17 @@
 <div class="modal-overlay">
   <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="entregar-titulo">
     <div class="modal-head">
-      <h2 id="entregar-titulo">Entregar el pedido</h2>
+      <h2 id="entregar-titulo">Entregar la nota</h2>
       <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
     </div>
 
     <form (ngSubmit)="entregar()">
-      <div class="modal-body columna" style="gap: 16px">
-        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+      <div class="modal-body columna">
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
         <div class="previa-entrega">
           <div><span>{{ pedido().nombre_comercial || pedido().cliente }}</span><span class="muted mono">{{ pedido().numero_pedido }}</span></div>
-          <div><span>Total del pedido</span><b>{{ pedido().total | dinero }}</b></div>
+          <div><span>Total de la nota</span><b>{{ pedido().total | dinero }}</b></div>
           @if (pedido().pagado > 0) {
             <div><span>Ya dejó pagado</span><span>{{ pedido().pagado | dinero }}</span></div>
           }
@@ -37,6 +37,20 @@
             <p class="nota-modal">Se le devuelven en efectivo del turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>.</p>
           }
         } @else if (falta() > 0) {
+          <!-- Cobrar ahora (y lo que no pague, a crédito) o llevársela como nota pendiente de pago. -->
+          <div class="seg" role="radiogroup" aria-label="Cómo se cobra">
+            <button type="button" role="radio" [class.on]="!comoNota" [attr.aria-checked]="!comoNota"
+                    (click)="comoNota = false">Cobrar</button>
+            <button type="button" role="radio" [class.on]="comoNota" [attr.aria-checked]="comoNota"
+                    (click)="comoNota = true">Pendiente de pago</button>
+          </div>
+        }
+        @if (aFavor() <= 0 && falta() > 0 && comoNota) {
+          <p class="nota-modal">
+            Se lleva la mercancía y sale su ticket como <b>nota pendiente de pago</b>: los {{ falta() | dinero }} se
+            registran después en Notas pendientes de pago, o se pasan a crédito.
+          </p>
+        } @else if (aFavor() <= 0 && falta() > 0) {
           <div class="form-grid">
             <label class="field">
               Cobra ahora
@@ -79,12 +93,12 @@
             @if (puedeFiar()) {
               <label class="field check">
                 <input type="checkbox" [(ngModel)]="fiarResto" name="fiar" />
-                Se le fían los {{ resto() | dinero }} que no paga hoy
+                Los {{ resto() | dinero }} que no paga hoy van a crédito
               </label>
             }
           }
-        } @else {
-          <p class="ok-msg" style="margin: 0">Ya está pagado: solo se entrega.</p>
+        } @else if (aFavor() <= 0) {
+          <p class="ok-msg" role="status">Ya está pagada: solo se entrega.</p>
         }
 
         <p class="nota-modal">Al entregarlo, la mercancía sale del inventario.</p>
@@ -96,8 +110,9 @@
           @if (guardando()) { Entregando… }
           @else if (aFavor() > 0) { Devolver {{ aFavor() | dinero }} y entregar }
           @else if (falta() <= 0) { Entregar }
+          @else if (comoNota) { Entregar como pendiente de pago }
           @else if (aCobrar() > 0) { Cobrar {{ aCobrar() | dinero }} y entregar }
-          @else { Entregar fiado }
+          @else { Entregar a crédito }
         </button>
       </div>
     </form>

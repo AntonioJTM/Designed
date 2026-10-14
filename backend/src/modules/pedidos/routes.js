@@ -61,6 +61,11 @@ const crearSchema = z
     // ocurre de verdad en el mostrador. Exige `cliente_id`: no se le puede
     // fiar a un desconocido.
     a_credito: z.coerce.number().positive().max(99999999).optional(),
+    // NOTA PENDIENTE DE PAGO: se lleva la mercancía y paga después (2026-10-13).
+    pendiente_pago: z.boolean().optional(),
+    // Cuánto paga con su SALDO A FAVOR (2026-10-13): lo que le quedó de una
+    // devolución. Exige cliente y que le alcance.
+    saldo_favor: z.coerce.number().positive().max(99999999).optional(),
     /**
      * APARTADO: el cliente deja un anticipo y la mercancía se guarda. No se
      * descuenta del inventario —se RESERVA— hasta que la entregue.
@@ -82,7 +87,7 @@ const crearSchema = z
 // Lo mismo, pero para pedir el desglose sin comprometer nada. No lleva pagos:
 // cotizar no cobra.
 const cotizarSchema = crearSchema.omit({
-  pagos: true, metodo_pago_id: true, a_credito: true, apartado: true,
+  pagos: true, metodo_pago_id: true, a_credito: true, apartado: true, pendiente_pago: true, saldo_favor: true,
 });
 
 // En qué presentación regresa cada línea al cancelar o devolver. Sin esto vuelve
@@ -106,6 +111,29 @@ const estadoSchema = z
   })
   .strict();
 
+// DEVOLUCIÓN CON SALDO A FAVOR (2026-10-13): de cada línea de la nota, los
+// paquetes cerrados que regresan (escaneados) y lo suelto que regresa (pesado).
+const devolverSchema = z
+  .object({
+    cliente_id: z.coerce.number().int().positive().optional(),
+    destino: z.enum(['favor', 'deuda']),
+    notas: z.string().trim().max(255).optional(),
+    lineas: z
+      .array(
+        z
+          .object({
+            detalle_id: z.coerce.number().int().positive(),
+            codigos: z.array(z.string().trim().min(1).max(60)).max(500).optional(),
+            kg_sueltos: z.coerce.number().nonnegative().max(1000000).optional(),
+            conos: z.coerce.number().int().nonnegative().max(100000).optional(),
+          })
+          .strict()
+      )
+      .min(1)
+      .max(200),
+  })
+  .strict();
+
 // Cuánto costaría, sin crearlo. Lo consulta el checkout para mostrar el
 // desglose —envío, cupón, IVA— antes de que el cliente confirme.
 router.post('/cotizacion', authRequired, validate(cotizarSchema), controller.cotizar);
@@ -121,6 +149,8 @@ router.get('/mis', authRequired, controller.misPedidos);
 router.get('/apartados', ...soloStaff, controller.apartados);
 // Los PEDIDOS (encargos) sin entregar: en espera.
 router.get('/encargos', ...soloStaff, requirePermiso('ver:encargos'), controller.encargos);
+// Las NOTAS PENDIENTES DE PAGO por cobrar (2026-10-13).
+router.get('/notas-pendientes', ...soloStaff, requirePermiso('ver:notas_pendientes'), controller.notasPendientes);
 // Las cifras de arriba de Pedidos: hoy, la semana, lo fiado por cobrar y lo cancelado.
 router.get('/resumen', ...soloStaff, controller.resumen);
 
@@ -141,6 +171,12 @@ const abonoApartadoSchema = z
   .strict();
 
 router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), controller.abonarApartado);
+// Pasar a crédito lo que falta de una nota pendiente de pago (es vender a crédito: pide su permiso).
+router.post('/:id/a-credito', ...soloStaff, requirePermiso('hacer:fiar'), controller.pasarACredito);
+
+// Lo que se puede devolver de una nota y la devolución misma (queda a favor).
+router.get('/:id/devolucion', ...soloStaff, requirePermiso('hacer:cancelar_venta'), controller.previaDevolucion);
+router.post('/:id/devoluciones', ...soloStaff, requirePermiso('hacer:cancelar_venta'), validate(devolverSchema), controller.devolver);
 // Aquí es donde por fin se descuenta del inventario. Un PEDIDO cobra (o fía)
 // aquí lo que le falte.
 const entregaSchema = z
@@ -148,6 +184,8 @@ const entregaSchema = z
     pagos: z.array(pagoSchema).max(10).optional(),
     sesion_caja_id: z.coerce.number().int().positive().optional(),
     a_credito: z.coerce.number().positive().max(99999999).optional(),
+    // Se lleva la mercancía como NOTA PENDIENTE DE PAGO: lo que falta se cobra después.
+    pendiente_pago: z.boolean().optional(),
   })
   .strict();
 router.post('/:id/entregar', ...soloStaff, validate(entregaSchema), controller.entregarApartado);

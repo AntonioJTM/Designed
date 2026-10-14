@@ -16,6 +16,7 @@ import {
   ResultadoAbono,
   SesionCaja,
   Encargos,
+  NotasPendientes,
   ModificarPedidoInput,
 } from '../models/ventas.models';
 
@@ -69,6 +70,12 @@ export interface CrearPedidoInput {
    * se aparta; lo que falte se cobra o se fía al entregar. Exige `cliente_id`.
    */
   encargo?: boolean;
+  /**
+   * NOTA PENDIENTE DE PAGO (2026-10-13): se lleva la mercancía, sale su ticket
+   * y el pago se registra después. Exige `cliente_id`; no lleva `pagos` ni
+   * `a_credito`.
+   */
+  pendiente_pago?: boolean;
   entrega_direccion?: string;
   /** 'YYYY-MM-DD'. Lo del chofer va en `costo_envio`. */
   entrega_para?: string;
@@ -272,7 +279,37 @@ export class VentasService {
       .pipe(map(data));
   }
 
-  /** Los PEDIDOS (encargos) sin entregar: en espera. */
+  /** Las NOTAS PENDIENTES DE PAGO por cobrar (se llevaron la mercancía sin pagar). */
+  notasPendientes(f: { q?: string } = {}): Observable<NotasPendientes> {
+    let p = new HttpParams();
+    if (f.q) p = p.set('q', f.q);
+    return this.http
+      .get<ApiResponse<NotasPendientes>>(`${this.base}/pedidos/notas-pendientes`, { params: p })
+      .pipe(map(data));
+  }
+
+  /**
+   * Registra un pago (o abono) de una nota pendiente de pago. En efectivo hace
+   * falta `sesion_caja_id`: entra al turno, al corte del día en que paga. Con
+   * el último abono la nota queda pagada sola.
+   */
+  pagarNota(
+    pedidoId: number,
+    body: { monto: number; metodo_pago_id: number; sesion_caja_id?: number; referencia?: string }
+  ): Observable<ResultadoAbono> {
+    return this.http
+      .post<ApiResponse<ResultadoAbono>>(`${this.base}/pedidos/${pedidoId}/abonos`, body)
+      .pipe(map(data));
+  }
+
+  /** Pasa a la cuenta de crédito del cliente lo que falta de una nota pendiente. */
+  pasarACredito(pedidoId: number): Observable<Pedido & { a_credito: number }> {
+    return this.http
+      .post<ApiResponse<Pedido & { a_credito: number }>>(`${this.base}/pedidos/${pedidoId}/a-credito`, {})
+      .pipe(map(data));
+  }
+
+  /** Las NOTAS EN ESPERA (encargos) sin entregar. */
   encargos(f: { estado?: string; q?: string } = {}): Observable<Encargos> {
     let p = new HttpParams();
     if (f.estado) p = p.set('estado', f.estado);
@@ -281,13 +318,14 @@ export class VentasService {
   }
 
   /**
-   * Entrega un PEDIDO cobrando lo que falta (`pagos`: lo recibido; solo el
-   * efectivo da cambio y entra al turno `sesion_caja_id`) y/o fiándolo
-   * (`a_credito`). Aquí sale del inventario. Devuelve el pedido con `cambio`.
+   * Entrega una NOTA EN ESPERA cobrando lo que falta (`pagos`: lo recibido; solo
+   * el efectivo da cambio y entra al turno `sesion_caja_id`), poniéndolo a
+   * crédito (`a_credito`) o dejándolo como NOTA PENDIENTE DE PAGO
+   * (`pendiente_pago`). Aquí sale del inventario. Devuelve el pedido con `cambio`.
    */
   entregarPedido(
     pedidoId: number,
-    body: { pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number }
+    body: { pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number; pendiente_pago?: boolean }
   ): Observable<Pedido> {
     return this.http.post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/entregar`, body).pipe(map(data));
   }

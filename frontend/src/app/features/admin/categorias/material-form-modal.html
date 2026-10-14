@@ -12,8 +12,8 @@
 
     @if (confirmandoBorrado()) {
       <div class="modal-body columna" style="gap: 12px">
-        <p style="margin: 0">¿Eliminar el material <b>{{ material()?.nombre }}</b>?</p>
-        <p class="muted" style="margin: 0; font-size: 14px">
+        <p>¿Eliminar el material <b>{{ material()?.nombre }}</b>?</p>
+        <p class="muted" style="font-size: 0.875rem">
           Solo se puede si ningún producto lo usa. Si ya tiene productos, desmárcalo como
           activo en vez de borrarlo.
         </p>
@@ -28,7 +28,7 @@
       <form [formGroup]="form" (ngSubmit)="guardar()">
         <div class="modal-body">
           @if (error()) {
-            <p class="alert" style="margin: 0 0 16px">{{ error() }}</p>
+            <p class="alert" role="alert" style="margin: 0 0 16px">{{ error() }}</p>
           }
 
           <div class="form-grid">

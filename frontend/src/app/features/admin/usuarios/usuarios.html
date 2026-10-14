@@ -17,8 +17,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <section class="card">
     <div class="card-head">
@@ -51,7 +51,7 @@
               <tr [class.fila-inactiva]="!u.activo">
                 <td>
                   <div style="font-weight: 500">{{ u.nombre }}</div>
-                  <div class="muted" style="font-size: 13px">{{ u.correo }}</div>
+                  <div class="muted" style="font-size: 0.8125rem">{{ u.correo }}</div>
                 </td>
                 <td>
                   <!-- El principal primero (el de nómina); después los demás. -->

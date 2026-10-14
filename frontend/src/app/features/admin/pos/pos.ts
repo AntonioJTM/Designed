@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
@@ -10,6 +10,7 @@ import { Caja, ItemCarrito, MetodoPago, Pedido, SesionCaja } from '../../../core
 import { ClientesService } from '../../../core/services/clientes.service';
 import { ClienteParaVenta } from '../../../core/models/clientes.models';
 import { TiendaService } from '../../../core/services/tienda.service';
+import { TicketService } from '../../../core/services/ticket.service';
 import { Cotizacion } from '../../../core/models/tienda.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -51,12 +52,24 @@ function guardarCaja(id: number): void {
   }
 }
 
+/** Campos donde se está escribiendo: ahí el cursor no se le quita a nadie. */
+const TIPOS_DE_TEXTO = new Set(['text', 'search', 'number', 'tel', 'email', 'password', 'url', 'date', 'time', 'datetime-local', 'month', 'week']);
+
+function esCampoDeTexto(e: Element | null): boolean {
+  if (e instanceof HTMLTextAreaElement) return !e.disabled && !e.readOnly;
+  if (e instanceof HTMLInputElement) return TIPOS_DE_TEXTO.has(e.type) && !e.disabled && !e.readOnly;
+  return e instanceof HTMLElement && e.isContentEditable;
+}
+
 /**
  * Cómo se lleva la mercancía. Son excluyentes: fiar es ENTREGAR sin cobrar,
  * apartar es COBRAR sin entregar, y cobrar es las dos cosas a la vez.
  */
-// 'pedido' = un encargo: se entrega después (pasa por él o lo lleva el chofer).
-export type ModoVenta = 'cobrar' | 'fiar' | 'apartar' | 'pedido';
+// "Total a cobrar" (2026-10-13, usuario): cobrar, a crédito, nota en espera
+// (no sale ticket y se modifica) y nota pendiente de pago (sale el ticket y el
+// pago se registra después). Se quitaron apartar, fiar (ahora "a crédito") y el
+// chofer del pedido.
+export type ModoVenta = 'cobrar' | 'credito' | 'espera' | 'pendiente';
 
 /**
  * PUNTO DE VENTA (rediseño 2026-10): aquí solo se COBRA. El turno, el efectivo
@@ -66,7 +79,7 @@ export type ModoVenta = 'cobrar' | 'fiar' | 'apartar' | 'pedido';
  */
 @Component({
   selector: 'app-pos',
-  host: { '(document:keydown.escape)': 'alEscape()' },
+  host: { '(document:keydown.escape)': 'alEscape()', '(document:keydown)': 'alTeclear($event)' },
   imports: [FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal],
   styleUrls: ['./pos.scss', './pos-bultos.scss', './pos-busqueda.scss'],
   templateUrl: './pos.html',
@@ -79,15 +92,17 @@ export class Pos {
   private readonly catalogo = inject(CatalogoService);
   private readonly clientesSvc = inject(ClientesService);
   private readonly tienda = inject(TiendaService);
+  private readonly tickets = inject(TicketService);
   private readonly router = inject(Router);
   private readonly ruta = inject(ActivatedRoute);
+  private readonly injector = inject(Injector);
 
   // ---- Permisos del puesto ----
   // Esconder es solo para no ofrecer lo que va a fallar: el servidor también
   // rechaza (403) lo que el puesto no tiene.
   readonly veCaja = computed(() => this.auth.puede('ver:caja'));
   readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
-  readonly veApartados = computed(() => this.auth.puede('ver:apartados'));
+  readonly veNotas = computed(() => this.auth.puede('ver:notas_pendientes'));
   readonly veEncargos = computed(() => this.auth.puede('ver:encargos'));
   readonly puedeFiar = computed(() => this.auth.puede('hacer:fiar'));
 
@@ -131,28 +146,25 @@ export class Pos {
   nuevoCliente = { nombre: '', telefono: '', nombre_comercial: '' };
 
   /**
-   * Cobrar, fiar o apartar. Es una sola señal y no dos banderas sueltas: así no
-   * hay forma de quedar fiando y apartando a la vez.
+   * Cómo se lleva la mercancía: cobrar, a crédito, nota en espera o nota
+   * pendiente de pago. Es una sola señal y no banderas sueltas: así no hay forma
+   * de quedar en dos a la vez.
    */
   readonly modo = signal<ModoVenta>('cobrar');
-  readonly fiando = computed(() => this.modo() === 'fiar');
+  /** A CRÉDITO (antes "Fiar"): se lo lleva y lo debe en su cuenta, con su límite. */
+  readonly fiando = computed(() => this.modo() === 'credito');
   /**
-   * APARTAR: el cliente deja un anticipo y la mercancía se le guarda sin
-   * descontarse del inventario. Es lo contrario de fiar —fiar es entregar sin
-   * cobrar, apartar es cobrar sin entregar— así que los dos no pueden estar
-   * activos a la vez.
+   * NOTA EN ESPERA (antes "Pedido", sin chofer desde el 2026-10-13): no sale
+   * ticket; la mercancía se aparta, se modifica las veces que haga falta y se
+   * cobra al entregarla, en la pantalla Notas en espera.
    */
-  readonly apartando = computed(() => this.modo() === 'apartar');
+  readonly pidiendo = computed(() => this.modo() === 'espera');
   /**
-   * PEDIDO (2026-10-06): "hacen el pedido por WhatsApp y después van por él, o se
-   * lo lleva el chofer; no es un apartado, es una venta". La mercancía se aparta
-   * y lo que falte se cobra al entregarlo, en la pantalla Pedidos.
+   * NOTA PENDIENTE DE PAGO (2026-10-13): se lleva la mercancía y sale el ticket,
+   * pero cómo pagó se registra después, en Notas pendientes de pago (o se pasa a
+   * crédito). No usa su límite de crédito.
    */
-  readonly pidiendo = computed(() => this.modo() === 'pedido');
-  readonly entregaPedido = signal<'recoger' | 'envio'>('recoger');
-  /** Lo que se cobra por llevarlo (solo con chofer). Señal: mueve el total. */
-  readonly costoEnvio = signal<number | null>(null);
-  direccionPedido = '';
+  readonly notaPendiente = computed(() => this.modo() === 'pendiente');
   paraCuando = '';
   notasPedido = '';
   /**
@@ -182,6 +194,8 @@ export class Pos {
 
   // Búsqueda de variantes
   qVar = '';
+  /** El campo del lector: la pistola escribe el código ahí y manda Enter. */
+  private readonly lector = viewChild<ElementRef<HTMLInputElement>>('lector');
   resultados = signal<(HiloAPesar & { producto_id: number })[]>([]);
 
   /**
@@ -256,10 +270,7 @@ export class Pos {
       const items = this.carrito();
       const tipo = this.tipoClienteSel();
       const s = this.sesion();
-      // Un pedido con chofer suma lo del envío: el total lo dice el servidor.
-      const pedido = this.modo() === 'pedido';
-      const entrega = this.entregaPedido();
-      const envio = this.costoEnvio();
+      const pedido = this.modo() === 'espera';
       if (items.length === 0 || !s) {
         this.totalReal.set(null);
         this.cotizacion.set(null);
@@ -273,9 +284,7 @@ export class Pos {
           sesion_caja_id: s.id,
           tipo_cliente_id: tipo ? Number(tipo) : undefined,
           items: items.map((i) => ({ variante_id: i.variante_id, cantidad: i.cantidad })),
-          ...(pedido
-            ? { encargo: true, metodo_entrega: entrega, costo_envio: entrega === 'envio' ? Number(envio ?? 0) : undefined }
-            : {}),
+          ...(pedido ? { encargo: true, metodo_entrega: 'recoger' as const } : {}),
         })
         .subscribe({
           next: (c) => {
@@ -295,6 +304,12 @@ export class Pos {
             this.cotizando.set(false);
           },
         });
+    });
+
+    // En cuanto hay turno abierto (al entrar o al cambiar de caja), el lector
+    // queda listo para escanear.
+    effect(() => {
+      if (this.sesion()) this.enfocarLector();
     });
 
     // La sesión puede venir vacía al recargar directo en /admin/pos.
@@ -520,6 +535,8 @@ export class Pos {
     if (repetido) {
       this.error.set(`El bulto ${bulto.codigo} ya está en el ticket; no se cobra dos veces.`);
     } else {
+      // Empezó otra venta: el ticket de la anterior ya no aplica.
+      this.ticket.set(null);
       this.mensaje.set(
         `Bulto ${bulto.codigo}: ${peso} kg${r.bulto.lote ? ` · lote ${r.bulto.lote}` : ''}`
       );
@@ -597,9 +614,17 @@ export class Pos {
     this.pesando.set(r);
   }
 
+  /** La báscula se cerró sin pesar: el lector queda listo otra vez. */
+  cerrarBascula(): void {
+    this.pesando.set(null);
+    this.enfocarLector();
+  }
+
   /** La báscula dio su peso: la línea se agrega, o se le suman los kilos y los conos. */
   alPesar(r: HiloAPesar, e: { kg: number; piezas?: number }): void {
     this.pesando.set(null);
+    this.ticket.set(null);
+    this.enfocarLector();
     this.carrito.update((arr) => {
       const existe = arr.find((i) => i.variante_id === r.id);
       if (existe) {
@@ -660,6 +685,7 @@ export class Pos {
       )
     );
     this.mensaje.set(`Se quitó el bulto ${codigo} del ticket.`);
+    this.enfocarLector();
   }
 
   /** La venta es por peso: la cantidad admite decimales (2.5 kg). */
@@ -678,6 +704,7 @@ export class Pos {
 
   quitar(item: ItemCarrito): void {
     this.carrito.update((arr) => arr.filter((i) => i.variante_id !== item.variante_id));
+    this.enfocarLector();
   }
 
   async vaciar(): Promise<void> {
@@ -691,6 +718,7 @@ export class Pos {
       if (!si) return;
     }
     this.carrito.set([]);
+    this.enfocarLector();
   }
 
   /**
@@ -760,6 +788,7 @@ export class Pos {
     this.tipoClienteSel.set(c.tipo_cliente_id ?? this.publicoId);
     this.error.set(null);
     this.cargarApartadoCliente(c.id);
+    this.enfocarLector();
   }
 
   /**
@@ -830,6 +859,7 @@ export class Pos {
 
   cerrarAltaCliente(): void {
     this.creandoCliente.set(false);
+    this.enfocarLector();
   }
 
   guardarNuevoCliente(): void {
@@ -867,6 +897,7 @@ export class Pos {
             credito_disponible: 0,
           });
           this.apartadoCliente.set(null);
+          this.enfocarLector();
           this.mensaje.set(
             `${c.nombre_comercial || c.nombre} quedó registrado. Todavía sin crédito: ` +
               'el cobro es completo hasta que un administrador le autorice un límite.'
@@ -903,33 +934,29 @@ export class Pos {
    */
   motivoSinFiar(): string | null {
     const c = this.clienteSel();
-    if (!c) return 'Para fiar, primero elige al cliente.';
+    if (!c) return 'Para vender a crédito, primero elige al cliente.';
     if (Number(c.limite_credito) <= 0) return `${c.nombre_comercial || c.nombre} no tiene crédito autorizado.`;
     if (this.creditoDisponible() <= 0) {
-      return `Ya llegó a su límite de crédito (${this.dinero(c.limite_credito)}). Tiene que abonar antes de que se le pueda fiar más.`;
+      return `Ya llegó a su límite de crédito (${this.dinero(c.limite_credito)}). Tiene que abonar antes de que se le pueda dar más a crédito.`;
     }
     return null;
   }
 
-  /** Apartar exige saber a quién se le guarda. */
-  motivoSinApartar(): string | null {
-    return this.clienteSel() ? null : 'Para apartar, primero elige al cliente.';
+  /** Una nota en espera exige saber de quién es (y a quién llamarle). */
+  motivoSinEspera(): string | null {
+    return this.clienteSel() ? null : 'Para guardar una nota en espera, primero elige al cliente.';
   }
 
-  /** Un pedido también: hay que saber de quién es (y a quién llamarle). */
-  motivoSinPedido(): string | null {
-    return this.clienteSel() ? null : 'Para tomar un pedido, primero elige al cliente.';
+  /** Una nota pendiente de pago también: hay que saber a quién cobrarle después. */
+  motivoSinPendiente(): string | null {
+    return this.clienteSel() ? null : 'Para dar una nota pendiente de pago, primero elige al cliente.';
   }
 
   elegirModo(m: ModoVenta): void {
-    if (m === 'fiar' && (!this.puedeFiar() || this.motivoSinFiar())) return;
-    if (m === 'apartar' && this.motivoSinApartar()) return;
-    if (m === 'pedido' && this.motivoSinPedido()) return;
-    if (m === 'pedido' && this.modo() !== 'pedido') {
-      // Arranca en "pasa por él"; si lo lleva el chofer, se propone su dirección.
-      this.entregaPedido.set('recoger');
-      this.costoEnvio.set(null);
-      this.direccionPedido = this.clienteSel()?.direccion ?? '';
+    if (m === 'credito' && (!this.puedeFiar() || this.motivoSinFiar())) return;
+    if (m === 'espera' && this.motivoSinEspera()) return;
+    if (m === 'pendiente' && this.motivoSinPendiente()) return;
+    if (m === 'espera' && this.modo() !== 'espera') {
       this.paraCuando = '';
       this.notasPedido = '';
     }
@@ -941,10 +968,8 @@ export class Pos {
   }
 
   // Los nombres de antes, para que se lea igual que la pantalla.
-  abrirCredito(): void { this.elegirModo('fiar'); }
+  abrirCredito(): void { this.elegirModo('credito'); }
   cerrarCredito(): void { if (this.fiando()) this.elegirModo('cobrar'); }
-  abrirApartado(): void { this.elegirModo('apartar'); }
-  cerrarApartado(): void { if (this.apartando()) this.elegirModo('cobrar'); }
 
   /** Lo que se le propone fiar si no teclea nada: todo lo que le alcance. */
   propuestaCredito(): number {
@@ -968,26 +993,19 @@ export class Pos {
     return Math.max(0, Math.round((this.total() - this.fiadoActual()) * 100) / 100);
   }
 
-  /** Lo que le falta por pagar del apartado, para mostrarlo al capturar. Método: lee ngModel. */
-  pendienteApartado(): number {
-    const a = Number(this.anticipo ?? 0);
-    return Math.max(0, Math.round((this.total() - a) * 100) / 100);
-  }
-
   /** El texto del botón grande: dice exactamente lo que va a pasar. */
   textoBoton(): string {
     if (this.pidiendo()) {
       const a = Number(this.anticipo ?? 0);
-      return a > 0 ? `Tomar el pedido · deja ${this.dinero(a)}` : 'Tomar el pedido';
+      return a > 0 ? `Guardar nota en espera · deja ${this.dinero(a)}` : 'Guardar nota en espera';
     }
-    if (this.apartando()) {
-      const a = Number(this.anticipo ?? 0);
-      return a > 0 ? `Apartar · deja ${this.dinero(a)}` : 'Apartar sin anticipo';
+    if (this.notaPendiente()) {
+      return `Dar nota pendiente de pago · ${this.dinero(this.total())}`;
     }
     if (this.fiando()) {
       return this.aPagarHoy() > 0
-        ? `Cobrar ${this.dinero(this.aPagarHoy())} y fiar el resto`
-        : 'Entregar a crédito';
+        ? `Cobrar ${this.dinero(this.aPagarHoy())} y el resto a crédito`
+        : 'Dar a crédito';
     }
     return `Cobrar ${this.dinero(this.total())}`;
   }
@@ -998,19 +1016,15 @@ export class Pos {
       this.error.set('Agrega productos para poder cobrar.');
       return;
     }
-    // --- Pedido: se aparta la mercancía; lo que falte se cobra al entregar ---
+    // --- Nota en espera: se aparta la mercancía; lo que falte se cobra al entregar ---
     if (this.pidiendo()) {
       if (!this.clienteSel()) {
-        this.error.set('Para tomar un pedido hay que decir de quién es: busca al cliente arriba.');
-        return;
-      }
-      if (this.entregaPedido() === 'envio' && !this.direccionPedido.trim()) {
-        this.error.set('Si lo lleva el chofer, escribe a dónde.');
+        this.error.set('Para guardar una nota en espera hay que decir de quién es: busca al cliente arriba.');
         return;
       }
       const deja = Number(this.anticipo ?? 0);
       if (deja > this.total() + 0.001) {
-        this.error.set(`Lo que deja (${this.dinero(deja)}) es más que el pedido (${this.dinero(this.total())}).`);
+        this.error.set(`Lo que deja (${this.dinero(deja)}) es más que la nota (${this.dinero(this.total())}).`);
         return;
       }
       if (deja > 0 && !this.metodoSel) {
@@ -1022,31 +1036,20 @@ export class Pos {
       return;
     }
 
-    // --- Apartado: se guarda la mercancía y solo entra el anticipo ---
-    if (this.apartando()) {
+    // --- Nota pendiente de pago: se lleva la mercancía; el pago, después ---
+    if (this.notaPendiente()) {
       if (!this.clienteSel()) {
-        this.error.set('Para apartar hay que decir a quién se le guarda: busca al cliente arriba.');
-        return;
-      }
-      const anticipo = Number(this.anticipo ?? 0);
-      if (anticipo > this.total() + 0.001) {
-        this.error.set(
-          `El anticipo (${this.dinero(anticipo)}) es mayor que el apartado (${this.dinero(this.total())}).`
-        );
-        return;
-      }
-      if (anticipo > 0 && !this.metodoSel) {
-        this.error.set('Elige con qué está dejando el anticipo.');
+        this.error.set('Para dar una nota pendiente de pago hay que decir de quién es: busca al cliente arriba.');
         return;
       }
       this.error.set(null);
-      this.apartar(s, anticipo);
+      this.darNotaPendiente(s);
       return;
     }
 
     const fiado = this.fiadoActual();
     if (fiado > 0 && !this.clienteSel()) {
-      this.error.set('Para fiar hay que decir a quién: busca al cliente arriba.');
+      this.error.set('Para vender a crédito hay que decir a quién: busca al cliente arriba.');
       return;
     }
     if (fiado > this.creditoDisponible() + 0.001) {
@@ -1108,7 +1111,7 @@ export class Pos {
       });
   }
 
-  /** Deja la caja lista para el siguiente cliente. */
+  /** Deja la caja lista para el siguiente cliente, con el lector esperando. */
   private limpiarVenta(): void {
     this.carrito.set([]);
     this.montoPago = null;
@@ -1116,6 +1119,7 @@ export class Pos {
     this.resultados.set([]);
     this.mensaje.set(null);
     this.quitarCliente();
+    this.enfocarLector();
   }
 
   /** ¿El método elegido es efectivo? Solo el efectivo da cambio. */
@@ -1136,8 +1140,33 @@ export class Pos {
     return Math.max(0, Math.round((this.aPagarHoy() - Number(this.montoPago)) * 100) / 100);
   }
 
+  readonly imprimiendo = signal(false);
+
+  /**
+   * El ticket de lo que se acaba de cobrar (`shared/ticket/ticket.ts`). Se pide
+   * la venta completa —con sus artículos y paquetes— y se le pasa el cambio,
+   * que no se guarda.
+   */
+  imprimirTicket(): void {
+    const t = this.ticket();
+    if (!t) return;
+    this.imprimiendo.set(true);
+    this.tickets.imprimir(t.pedido.id, { cambio: t.cambio }).subscribe({
+      next: () => {
+        this.imprimiendo.set(false);
+        this.enfocarLector();
+      },
+      error: (e) => {
+        this.imprimiendo.set(false);
+        // Una nota en espera no lleva ticket: el motivo viene en el Error.
+        this.error.set(e instanceof Error ? e.message : `No se pudo armar el ticket: ${this.msg(e)}`);
+      },
+    });
+  }
+
   nuevaVenta(): void {
     this.ticket.set(null);
+    this.enfocarLector();
   }
 
   /** Nombre del tipo elegido, para rotular el carrito. */
@@ -1146,14 +1175,13 @@ export class Pos {
   }
 
   /**
-   * Toma el PEDIDO: la mercancía se aparta (no sale todavía) y entra solo lo que
-   * deje pagado. Se sigue en la pantalla Pedidos, donde se entrega cobrando lo
-   * que falte. Los paquetes escaneados van ligados al pedido y quedan
-   * APARTADOS para él (pasan a vendidos al entregarlo); en Pedidos se
-   * modifica: se escanean los que de verdad van, se agrega o se quita.
+   * Guarda la NOTA EN ESPERA: la mercancía se aparta (no sale todavía) y entra
+   * solo lo que deje pagado. Se sigue en la pantalla Notas en espera, donde se
+   * modifica y se entrega cobrando lo que falte. Los paquetes escaneados van
+   * ligados a la nota y quedan APARTADOS para ella (pasan a vendidos al
+   * entregarla). Ya no hay chofer: el cliente pasa por ella (2026-10-13).
    */
   private tomarPedido(s: SesionCaja, deja: number): void {
-    const envio = this.entregaPedido() === 'envio';
     this.ventas
       .crearPedido({
         canal: 'punto_venta',
@@ -1161,9 +1189,7 @@ export class Pos {
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         encargo: true,
-        metodo_entrega: this.entregaPedido(),
-        entrega_direccion: envio ? this.direccionPedido.trim() : undefined,
-        costo_envio: envio && Number(this.costoEnvio() ?? 0) > 0 ? Number(this.costoEnvio()) : undefined,
+        metodo_entrega: 'recoger',
         entrega_para: this.paraCuando || undefined,
         notas: this.notasPedido.trim() || undefined,
         items: this.carrito().map((i) => ({
@@ -1191,39 +1217,28 @@ export class Pos {
   }
 
   /**
-   * Crea el apartado. Va aparte de `cobrar()` porque no es un cobro: la
-   * mercancía no sale del inventario, el anticipo puede ser cero, y el ticket
-   * dice otra cosa.
-   *
-   * Los bultos escaneados van ligados al apartado y quedan APARTADOS (no
-   * vendidos: siguen en la tienda); pasan a vendidos al entregarlo, así el
-   * conteo de paquetes cuadra (2026-10-06).
+   * Da la NOTA PENDIENTE DE PAGO: la mercancía sale (y sus paquetes quedan
+   * vendidos), sale el ticket y no se cobra nada; el pago se registra después en
+   * Notas pendientes de pago. No entra nada al cajón ni se carga a su crédito.
    */
-  private apartar(s: SesionCaja, anticipo: number): void {
+  private darNotaPendiente(s: SesionCaja): void {
     this.ventas
       .crearPedido({
         canal: 'punto_venta',
         sesion_caja_id: s.id,
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
-        apartado: true,
+        pendiente_pago: true,
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
           cantidad: i.cantidad,
           bultos: i.bultos?.length ? i.bultos : undefined,
           piezas: i.piezas || undefined,
         })),
-        // Sin anticipo no se manda pago: hay clientes que apartan y vuelven a
-        // pagar, y un pago de cero no significa nada.
-        pagos:
-          anticipo > 0
-            ? [{ metodo_pago_id: Number(this.metodoSel), monto: anticipo }]
-            : undefined,
       })
       .subscribe({
         next: (pedido) => {
-          // El "cambio" de un apartado es cero: el anticipo se queda tal cual.
-          this.ticket.set({ pedido, cambio: 0, pagadoHoy: anticipo, fiado: 0 });
+          this.ticket.set({ pedido, cambio: 0, pagadoHoy: 0, fiado: 0 });
           this.limpiarVenta();
         },
         error: (e) => this.error.set(this.msg(e)),
@@ -1249,6 +1264,7 @@ export class Pos {
 
   cerrarAbono(): void {
     this.abonando.set(false);
+    this.enfocarLector();
   }
 
   /** ¿El abono es en efectivo? Entonces entra al turno de esta caja. */
@@ -1285,6 +1301,7 @@ export class Pos {
         next: (r) => {
           this.registrandoAbono.set(false);
           this.abonando.set(false);
+          this.enfocarLector();
           const saldo = Number(r.saldo_nuevo);
           const limite = Number(c.limite_credito);
           this.clienteSel.set({
@@ -1321,6 +1338,59 @@ export class Pos {
       if (!si) return;
     }
     this.router.navigateByUrl('/admin/caja');
+  }
+
+  // ------------------------------------------------- el cursor en el lector
+
+  /**
+   * EL CURSOR VUELVE AL LECTOR (2026-10-13, auditoría). La pistola escribe donde
+   * esté el cursor, y al abrir la caja no estaba en ningún campo; después de
+   * cobrar o de pesar se quedaba en un botón: el código escaneado se perdía y el
+   * Enter de la pistola apretaba ese botón. Se llama al abrir, al terminar cada
+   * venta, al cerrar cada ventana y al quitar algo del carrito.
+   *
+   * No le quita el cursor a otro campo donde se esté escribiendo (el cliente,
+   * lo recibido), salvo con `forzar` (el Enter en los kilos de una línea). En
+   * pantalla táctil no lo pone: abriría el teclado encima de la caja. Lo que
+   * ya estaba escrito queda seleccionado, para que el siguiente código lo
+   * reemplace en vez de pegarse detrás.
+   *
+   * Espera a que la pantalla se vuelva a dibujar: con `eventCoalescing` la
+   * ventana que se cerró sigue ahí un instante, y un `setTimeout` llegaba antes
+   * y veía la ventana todavía abierta (pasó con la báscula).
+   */
+  enfocarLector(forzar = false): void {
+    afterNextRender(() => {
+      const campo = this.lector()?.nativeElement;
+      if (!campo || campo.disabled || document.querySelector('[aria-modal="true"]')) return;
+      if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return;
+      const activo = document.activeElement;
+      if (!forzar && activo !== campo && esCampoDeTexto(activo)) return;
+      campo.focus();
+      campo.select();
+    }, { injector: this.injector });
+  }
+
+  /**
+   * La red por si el cursor se fue a otro lado: si se teclea una letra o un
+   * número con el cursor en un botón, en el menú o en ningún lado, esa primera
+   * tecla lleva el cursor al lector y el código entra COMPLETO ahí (las demás
+   * teclas ya caen en el campo). Así el Enter de la pistola busca el código en
+   * vez de apretar el botón donde se quedó el cursor.
+   *
+   * No se mete con un campo donde se está escribiendo, con una ventana abierta,
+   * con la barra espaciadora (aprieta botones) ni con atajos (Ctrl, Alt). En un
+   * selector, solo los números: las letras eligen una opción del selector.
+   */
+  alTeclear(e: KeyboardEvent): void {
+    if (e.key.length !== 1 || e.key === ' ' || e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+    const campo = this.lector()?.nativeElement;
+    const activo = document.activeElement;
+    if (!campo || campo.disabled || activo === campo || esCampoDeTexto(activo)) return;
+    if (document.querySelector('[aria-modal="true"]')) return;
+    if (activo instanceof HTMLSelectElement && !/^[0-9]$/.test(e.key)) return;
+    campo.focus();
+    campo.select();
   }
 
   /** Escape cierra el modal que esté abierto, nunca la venta. */

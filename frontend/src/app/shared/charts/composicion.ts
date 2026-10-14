@@ -7,6 +7,8 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { resumenGrafica } from './resumen';
+import { tintaSobre } from './contraste';
 
 /** Un tramo de la barra: cuánto y de qué color. */
 export interface Tramo {
@@ -47,6 +49,7 @@ export interface Tramo {
       [attr.viewBox]="'0 0 ' + W() + ' ' + alto"
       preserveAspectRatio="none"
       role="img"
+      [attr.aria-label]="resumen()"
       width="100%"
       [attr.height]="alto"
     >
@@ -81,6 +84,17 @@ export class Composicion {
   readonly data = input<Tramo[]>([]);
   readonly prefijo = input('$');
   readonly decimals = input(0);
+  /** Qué mide, para el lector de pantalla ("Desde cuándo te deben"). Le siguen los tramos. */
+  readonly descripcion = input('');
+  /** El nombre de la gráfica para el lector: cada tramo con su cifra y su parte del total. */
+  readonly resumen = computed(() => {
+    const datos = this.data().filter((t) => t.valor > 0);
+    const total = datos.reduce((s, t) => s + t.valor, 0);
+    return resumenGrafica(
+      this.descripcion(),
+      datos.map((t) => `${t.etiqueta}: ${this.prefijo()}${this.fmt(t.valor)} (${total ? Math.round((t.valor / total) * 100) : 0}%)`)
+    );
+  });
 
   readonly barH = 34;
   readonly alto = 34;
@@ -126,7 +140,8 @@ export class Composicion {
         // Solo se escribe dentro si el texto cabe con aire: "100%" son unos
         // 34 px, más 8 px de margen a cada lado.
         cabe: dibujado > 50,
-        textoClaro: this.esOscuro(t.color),
+        // La letra de mayor contraste WCAG (auditoría 2026-10-13).
+        textoClaro: tintaSobre(t.color) === '#FFFFFF',
       };
       x += ancho;
       return pieza;
@@ -149,22 +164,6 @@ export class Composicion {
       ? `L${x + w - r},${h} Q${x + w},${h} ${x + w},${h - r} L${x + w},${r} Q${x + w},0 ${x + w - r},0`
       : `L${x + w},${h} L${x + w},0`;
     return `${izq} ${der} Z`;
-  }
-
-  /**
-   * Si el relleno es oscuro, el texto va en blanco. Se calcula con la luminancia
-   * relativa aproximada del hex; los colores de la rampa vienen de la paleta
-   * validada, así que basta con distinguir claro de oscuro.
-   */
-  private esOscuro(hexOVar: string): boolean {
-    const m = /^#?([0-9a-f]{6})$/i.exec(hexOVar.trim());
-    if (!m) return true; // un var() de la paleta: los pasos usados son oscuros
-    const n = parseInt(m[1], 16);
-    const r = (n >> 16) & 255;
-    const g = (n >> 8) & 255;
-    const b = n & 255;
-    // Luminancia percibida (Rec. 601), suficiente para elegir blanco o tinta.
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.6;
   }
 
   fmt(v: number): string {

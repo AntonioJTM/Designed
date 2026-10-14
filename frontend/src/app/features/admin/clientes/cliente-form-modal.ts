@@ -35,7 +35,7 @@ import { hoyLocal } from '../../../shared/fecha.pipe';
     .moneda { position: relative; display: block; }
     .moneda > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--tinta-3); font-weight: 600; }
     .moneda > input { padding-left: 26px; }
-    .field .error-campo { font-size: 12px; font-weight: 400; color: var(--peligro-t); }
+    .field .error-campo { font-size: 0.75rem; font-weight: 400; color: var(--peligro-t); }
   `,
 })
 export class ClienteFormModal implements OnInit {

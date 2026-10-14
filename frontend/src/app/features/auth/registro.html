@@ -1,6 +1,6 @@
 <div class="auth-card">
   <h1>Crear cuenta</h1>
-  <p class="sub">Tienda de hilos · cuenta de cliente</p>
+  <p class="sub">Hitex · cuenta de cliente</p>
 
   <form [formGroup]="form" (ngSubmit)="enviar()">
     <label>
@@ -29,7 +29,7 @@
     </label>
 
     @if (error()) {
-      <p class="alert">{{ error() }}</p>
+      <p class="alert" role="alert">{{ error() }}</p>
     }
 
     <button type="submit" [disabled]="cargando()">

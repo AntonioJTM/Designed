@@ -21,7 +21,7 @@
         en Reportes → Por reabastecer. Es por almacén: la matriz y cada sucursal llevan el suyo.
       </p>
 
-      @if (error()) { <p class="alert">{{ error() }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
       <div class="campos">
         <!-- Solo los paquetes se cuentan por pieza; el cono y el simple van en kilos. -->

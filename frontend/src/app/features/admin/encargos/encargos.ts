@@ -11,9 +11,10 @@ import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
 import { EntregarPedidoModal } from './entregar-modal';
 import { ModificarPedidoModal } from './modificar-modal';
 
-type Filtro = 'todos' | 'hoy' | 'atrasados' | 'chofer';
+type Filtro = 'todos' | 'hoy' | 'atrasados';
 
 /**
+ * NOTAS EN ESPERA (2026-10-13: antes "Pedidos"; sin chofer). Antes:
  * PEDIDOS de clientes (encargos) (2026-10-06): "tenemos chofer que los lleva, o
  * hacen el pedido por WhatsApp y después van por él; no es un apartado, es una
  * venta" (usuario). Antes "Pedidos" era la lista de ventas: esa ahora se llama
@@ -60,7 +61,6 @@ export class EncargosPantalla {
       todos: ts.length,
       hoy: ts.filter((e) => e.entrega_para === hoyLocal()).length,
       atrasados: ts.filter((e) => this.atrasado(e)).length,
-      chofer: ts.filter((e) => e.metodo_entrega === 'envio').length,
     };
   });
   readonly items = computed(() => {
@@ -68,8 +68,7 @@ export class EncargosPantalla {
     return this.todos().filter((e) =>
       f === 'hoy' ? e.entrega_para === hoyLocal()
         : f === 'atrasados' ? this.atrasado(e)
-          : f === 'chofer' ? e.metodo_entrega === 'envio'
-            : true
+          : true
     );
   });
 
@@ -146,7 +145,7 @@ export class EncargosPantalla {
     const dinero = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const cambios = (p.cambios ?? []).join('; ');
     this.mensaje.set(
-      `${p.numero_pedido} modificado${cambios ? ': ' + cambios : ''}.` +
+      `${p.numero_pedido} modificada${cambios ? ': ' + cambios : ''}.` +
         (Math.abs(total - antes) > 0.004 ? ` El total queda en ${dinero(total)} (era ${dinero(antes)}).` : '') +
         (aFavor > 0 ? ` Dejó ${dinero(aFavor)} de más: se le devuelven al entregar.` : falta > 0 ? ` Falta cobrar ${dinero(falta)}.` : ' Ya está pagado.')
     );
@@ -158,8 +157,12 @@ export class EncargosPantalla {
     const cambio = Number(p.cambio ?? 0);
     const devuelto = Number(p.devuelto ?? 0);
     this.mensaje.set(
-      `${p.numero_pedido} entregado` +
-        (p.estado === 'pendiente' ? ': lo que faltaba quedó en su cuenta.' : '.') +
+      `${p.numero_pedido} entregada` +
+        (p.estado === 'pendiente'
+          ? Number(p.nota_pendiente)
+            ? ': quedó como nota pendiente de pago.'
+            : ': lo que faltaba quedó a crédito en su cuenta.'
+          : '.') +
         (cambio > 0 ? ` Su cambio: $${cambio.toFixed(2)}.` : '') +
         (devuelto > 0 ? ` Se le devolvieron $${devuelto.toFixed(2)} (pesó menos de lo que pagó).` : '')
     );

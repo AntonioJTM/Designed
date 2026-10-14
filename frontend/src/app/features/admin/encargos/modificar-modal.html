@@ -12,7 +12,7 @@
         <b>aparta</b> y lo que quitas queda <b>libre</b> para venderse. Lo que ya llevaba conserva su precio.
       </p>
 
-      @if (error()) { <p class="alert">{{ error() }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
       @if (cargando()) {
         <p class="muted">Cargando el pedido…</p>
@@ -27,7 +27,7 @@
             <button type="button" class="btn btn-ghost" (click)="leer()">Agregar</button>
           </span>
         </label>
-        @if (ultimo()) { <p class="ultimo">✓ {{ ultimo() }}</p> }
+        @if (ultimo()) { <p class="ultimo" role="status">✓ {{ ultimo() }}</p> }
 
         <div class="lineas-mod">
           @for (l of lineas(); track $index) {
@@ -110,14 +110,9 @@
           }
         </div>
 
-        <!-- La entrega, como notas: se puede cambiar cuando haga falta. -->
+        <!-- Para cuándo y las notas. Ya no hay chofer (2026-10-13); una nota de antes
+             que lo tenía conserva su dirección y su envío. -->
         <div class="entrega">
-          <div class="seg" role="radiogroup" aria-label="Cómo se entrega">
-            <button type="button" role="radio" [class.on]="entrega === 'recoger'" [attr.aria-checked]="entrega === 'recoger'"
-                    (click)="entrega = 'recoger'">Pasa por él</button>
-            <button type="button" role="radio" [class.on]="entrega === 'envio'" [attr.aria-checked]="entrega === 'envio'"
-                    (click)="entrega = 'envio'">Lo lleva el chofer</button>
-          </div>
           <div class="form-grid">
             @if (entrega === 'envio') {
               <label class="field full">

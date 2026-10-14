@@ -1,5 +1,6 @@
-import { AfterViewInit, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { AfterViewInit, Component, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
+import { Title } from '@angular/platform-browser';
+import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificacionesService } from '../../core/services/notificaciones.service';
@@ -27,6 +28,17 @@ export class AdminLayout implements AfterViewInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly notif = inject(NotificacionesService);
+  private readonly injector = inject(Injector);
+  private readonly titulo = inject(Title);
+
+  /** Lo que se le dice al lector de pantalla al llegar a otra pantalla. */
+  readonly anuncio = signal('');
+  /** La primera pantalla (al entrar o recargar) no se anuncia: ya la dice el navegador. */
+  private primeraPantalla = true;
+  /** La ruta sin `?filtros`: cambiar un filtro no es cambiar de pantalla. */
+  private rutaAnterior = '';
+  /** El enlace de la pantalla que se apretó (una pestaña de Clientes), para devolverle el cursor. */
+  private enlaceAntes: string | null = null;
 
   readonly sesion = this.auth.sesion;
 
@@ -52,7 +64,7 @@ export class AdminLayout implements AfterViewInit {
   readonly veInventario = computed(() => { this.sesion(); return this.auth.puede('ver:inventario'); });
   readonly veCatalogo = computed(() => { this.sesion(); return this.auth.puede('ver:catalogo'); });
   readonly veClientes = computed(() => { this.sesion(); return this.auth.puede('ver:clientes'); });
-  readonly veApartados = computed(() => { this.sesion(); return this.auth.puede('ver:apartados'); });
+  readonly veNotas = computed(() => { this.sesion(); return this.auth.puede('ver:notas_pendientes'); });
   readonly veHoy = computed(() => { this.sesion(); return this.auth.puede('ver:hoy'); });
 
   /** Los trazos de los iconos del panel de avisos (los mismos de Hoy). */
@@ -60,7 +72,7 @@ export class AdminLayout implements AfterViewInit {
     envio: 'M2 6h12v10H2z M14 10h4l3 3v3h-7 M6 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M17 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
     existencias: 'M3 8l9-5 9 5v8l-9 5-9-5z M3 8l9 5 9-5 M12 13v8',
     precio: 'M3 12V4h8l10 10-8 8z M7.5 8.5h.01',
-    apartado: 'M6 3h12v18l-6-4-6 4z',
+    nota: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
     cobro: 'M3 7h18v11H3z M3 11h18 M7 15h4',
     gente: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5',
   };
@@ -73,7 +85,7 @@ export class AdminLayout implements AfterViewInit {
     if (this.veMercancia()) n += p.traspasos_por_enviar.length + p.traspasos_por_recibir.length;
     if (this.veInventario() && p.alertas_stock > 0) n += 1;
     if (this.veCatalogo() && (p.sin_precio?.num ?? 0) > 0) n += 1;
-    if (this.veApartados() && (p.apartados_listos?.num ?? 0) > 0) n += 1;
+    if (this.veNotas() && (p.notas_pendientes?.num ?? 0) > 0) n += 1;
     if (this.veClientes()) {
       if ((p.cobranza?.num_clientes ?? 0) > 0) n += 1;
       if ((p.enfriados?.num_clientes ?? 0) > 0) n += 1;
@@ -111,7 +123,73 @@ export class AdminLayout implements AfterViewInit {
     }
     this.notif.iniciar();
     // En el celular el menú se cierra solo al elegir una pantalla.
-    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => this.menuAbierto.set(false));
+    this.router.events.pipe(filter((e) => e instanceof NavigationStart)).subscribe(() => {
+      const a = document.activeElement;
+      this.enlaceAntes = a instanceof HTMLAnchorElement && a.closest('.main') ? a.getAttribute('href') : null;
+    });
+    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe((e) => {
+      this.menuAbierto.set(false);
+      this.llegarAPantalla(e.urlAfterRedirects);
+    });
+  }
+
+  /**
+   * AL CAMBIAR DE PANTALLA (2026-10-13, auditoría): antes el cursor se quedaba
+   * en la opción del menú que se apretó y el lector de pantalla no se enteraba
+   * de que había otra pantalla. Ahora:
+   *   · si el cursor estaba en el menú (o se perdió porque el enlace que se
+   *     apretó ya no existe), pasa al título de la pantalla nueva, que el
+   *     lector lee; el siguiente Tab ya recorre la pantalla, no el menú;
+   *   · si estaba dentro de la pantalla (una pestaña de Clientes, un filtro),
+   *     se queda ahí —en la pestaña nueva, si la pantalla se volvió a dibujar—
+   *     y solo se anuncia el nombre de la pantalla.
+   * Una pantalla que pone su propio cursor (el lector del punto de venta) lo
+   * pone después y manda ella.
+   */
+  private llegarAPantalla(url: string): void {
+    const ruta = url.split(/[?#]/)[0];
+    const otra = ruta !== this.rutaAnterior;
+    this.rutaAnterior = ruta;
+    if (this.primeraPantalla) {
+      this.primeraPantalla = false;
+      return;
+    }
+    if (!otra) return;
+    afterNextRender(() => {
+      const activo = document.activeElement;
+      const perdido = !activo || activo === document.body || !activo.isConnected;
+      const enMenu = !!activo?.closest('.side');
+      const nombre = this.titulo.getTitle().split(' · ').slice(0, -1).filter((p) => p !== 'PRUEBAS').join(' · ');
+      // La pestaña que se apretó se volvió a dibujar: el cursor vuelve a ella.
+      const mismo = perdido && this.enlaceAntes
+        ? document.querySelector<HTMLElement>(`.main a[href="${CSS.escape(this.enlaceAntes)}"]`)
+        : null;
+      if (mismo) mismo.focus();
+      if ((perdido && !mismo) || enMenu) {
+        this.enfocarContenido();
+        this.anuncio.set('');
+      } else {
+        // Se vacía y se vuelve a poner: el lector solo habla cuando el texto cambia.
+        this.anuncio.set('');
+        setTimeout(() => this.anuncio.set(nombre), 50);
+      }
+    }, { injector: this.injector });
+  }
+
+  /** "Saltar al contenido": sin cambiar la dirección (el `#` movería el router). */
+  irAlContenido(e: Event): void {
+    e.preventDefault();
+    this.enfocarContenido();
+  }
+
+  /** El cursor al título de la pantalla; si todavía no hay título, a la pantalla misma. */
+  private enfocarContenido(): void {
+    const main = document.getElementById('contenido');
+    const h1 = main?.querySelector<HTMLElement>('h1');
+    const destino = h1 ?? main;
+    if (!destino) return;
+    if (destino !== main && !destino.hasAttribute('tabindex')) destino.setAttribute('tabindex', '-1');
+    destino.focus();
   }
 
   /** Abre o cierra el menú en el celular. */

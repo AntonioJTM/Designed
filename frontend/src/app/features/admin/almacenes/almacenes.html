@@ -13,8 +13,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <!-- Sin matriz, el traspaso no sabe de dónde proponer el origen. -->
   @if (!cargando() && almacenes().length > 0 && !matriz()) {
@@ -30,9 +30,9 @@
     regresarlo, descomentar este bloque y `surteTienda` en almacenes.ts.
 
   @if (surteTienda(); as t) {
-    <p class="ok-msg">La tienda en línea surte de <b>{{ t.nombre }}</b>.</p>
+    <p class="ok-msg" role="status">La tienda en línea surte de <b>{{ t.nombre }}</b>.</p>
   } @else {
-    <p class="alert">
+    <p class="alert" role="alert">
       Ningún almacén está marcado como tienda en línea. Marca uno para que el catálogo web y el
       checkout miren las mismas existencias.
     </p>

@@ -9,8 +9,9 @@ import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 
 /**
- * ENTREGAR un pedido (encargo): aquí se cobra lo que falta —o se fía— y la
- * mercancía sale del inventario. Lo que ya dejó pagado se descuenta solo.
+ * ENTREGAR una nota en espera (encargo): aquí se cobra lo que falta —a crédito,
+ * o como NOTA PENDIENTE DE PAGO (2026-10-13)— y la mercancía sale del
+ * inventario. Lo que ya dejó pagado se descuenta solo.
  *
  *   · Se cobra con un método; en efectivo se teclea lo recibido y se da cambio,
  *     y el dinero entra a un turno de caja abierto (el de la caja elegida en el
@@ -50,8 +51,13 @@ export class EntregarPedidoModal implements OnInit {
   /** Lo que entrega en efectivo (vacío = justo). */
   recibido: number | null = null;
   turnoId: number | null = null;
-  /** Lo que no se cobra, se le fía. */
+  /** Lo que no se cobra, va a crédito. */
   fiarResto = false;
+  /**
+   * Se la lleva como NOTA PENDIENTE DE PAGO: no se cobra nada ahora y el pago se
+   * registra después, en Notas pendientes de pago.
+   */
+  comoNota = false;
 
   ngOnInit(): void {
     forkJoin({
@@ -98,6 +104,7 @@ export class EntregarPedidoModal implements OnInit {
 
   /** Por qué no se puede entregar todavía, o null. */
   motivo(): string | null {
+    if (this.comoNota && this.falta() > 0) return null;
     if (this.aFavor() > 0) {
       if (this.turnoId) return null;
       return this.turnos().length === 0
@@ -107,8 +114,8 @@ export class EntregarPedidoModal implements OnInit {
     if (this.aCobrar() > this.falta() + 0.001) return 'No se puede cobrar más de lo que falta.';
     if (this.resto() > 0.004 && !this.fiarResto) {
       return this.puedeFiar()
-        ? `Faltan ${this.dinero(this.resto())}: cóbralos o marca que se le fían.`
-        : `Faltan ${this.dinero(this.resto())} por cobrar.`;
+        ? `Faltan ${this.dinero(this.resto())}: cóbralos, márcalos a crédito o entrégala como pendiente de pago.`
+        : `Faltan ${this.dinero(this.resto())}: cóbralos o entrégala como pendiente de pago.`;
     }
     if (this.aCobrar() > 0 && !this.metodoId) return 'Elige con qué paga.';
     if (this.aCobrar() > 0 && this.esEfectivo()) {
@@ -132,6 +139,10 @@ export class EntregarPedidoModal implements OnInit {
     }
     if (this.aFavor() > 0) {
       this.enviar({ sesion_caja_id: Number(this.turnoId) });
+      return;
+    }
+    if (this.comoNota && this.falta() > 0) {
+      this.enviar({ pendiente_pago: true });
       return;
     }
     const cobra = this.aCobrar();

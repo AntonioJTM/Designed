@@ -77,20 +77,20 @@ const PESTANAS: { vista: VistaClientes; etiqueta: string; d: string }[] = [
       border: 0; border-radius: 8px; background: none; font: inherit; text-align: left; cursor: pointer; color: var(--tinta);
     }
     .resultados button:hover, .resultados li.activo button { background: var(--acento-suave); }
-    .resultados .avatar { width: 32px; height: 32px; font-size: 12px; }
+    .resultados .avatar { width: 32px; height: 32px; font-size: 0.75rem; }
     .resultados .quien { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-    .resultados .quien b { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .resultados .quien span { font-size: 12px; color: var(--tinta-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .resultados .nada { padding: 10px; font-size: 13px; color: var(--tinta-3); }
+    .resultados .quien b { font-size: 0.875rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .resultados .quien span { font-size: 0.75rem; color: var(--tinta-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .resultados .nada { padding: 10px; font-size: 0.8125rem; color: var(--tinta-3); }
     .tabs-fila {
       display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
-      gap: 12px; border-bottom: 1px solid #DDE1E7;
+      gap: 12px; border-bottom: 1px solid var(--borde);
     }
     .tabs-fila .tabs { border-bottom: 0; }
-    .periodo { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-3); padding-bottom: 8px; }
+    .periodo { display: flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--tinta-3); padding-bottom: 8px; }
     .periodo select {
       min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px;
-      background: #fff; font: inherit; font-size: 14px; color: var(--tinta);
+      background: #fff; font: inherit; font-size: 0.875rem; color: var(--tinta);
     }
   `,
 })

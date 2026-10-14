@@ -11,8 +11,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   @if (cargando()) {
     <p class="muted">Cargando…</p>
@@ -124,7 +124,7 @@
           borrar nada, para cuando se quiera abrir.
         </p>
       </div>
-      <span class="pill gris" style="font-size: 13px; padding: 5px 12px">Apagada</span>
+      <span class="pill gris" style="font-size: 0.8125rem; padding: 5px 12px">Apagada</span>
     </div>
   </section>
 </div>

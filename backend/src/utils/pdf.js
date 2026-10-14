@@ -49,7 +49,7 @@ function asegurar(doc, alto) {
 /** Nombre de la tienda, título del reporte y su subtítulo, con una raya abajo. */
 function encabezado(doc, { titulo, subtitulo, derecha }) {
   const x = MARGEN;
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR.tinta3).text('TIENDA DE HILOS', x, MARGEN, {
+  doc.font('Helvetica').fontSize(9).fillColor(COLOR.tinta3).text('HITEX', x, MARGEN, {
     characterSpacing: 1,
   });
   if (derecha) {

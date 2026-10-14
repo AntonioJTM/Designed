@@ -1,7 +1,7 @@
 /* Lo común de los modales de Inventario (bajar conos, ajuste / merma y mínimo).
    El marco (overlay, cabeza, cuerpo, pie) es el del sistema de diseño. */
 
-.explica { margin: 0 0 16px; font-size: 14px; color: var(--tinta-2); line-height: 1.5; }
+.explica { margin: 0 0 16px; font-size: 0.875rem; color: var(--tinta-2); line-height: 1.5; }
 .explica b { color: var(--tinta); }
 .modal-body > .alert, .modal-body > .ok-msg, .modal-body > .aviso { margin: 0 0 16px; }
 
@@ -16,7 +16,7 @@
 /* Número con su unidad pegada (kg, paquetes). */
 .cant { display: flex; align-items: center; gap: 8px; }
 .cant input { flex: 1; text-align: right; }
-.cant > span { font-size: 13px; color: var(--tinta-3); white-space: nowrap; }
+.cant > span { font-size: 0.8125rem; color: var(--tinta-3); white-space: nowrap; }
 
 /* Opciones excluyentes (ajuste / merma, kilos / paquetes) en el segmentado. */
 .seg > button { min-height: 44px; }
@@ -25,28 +25,28 @@
 .previa {
   margin-top: 16px; padding: 14px 16px; border-radius: 10px;
   background: var(--superficie-2); border: 1px solid var(--borde);
-  display: flex; flex-direction: column; gap: 6px; font-size: 14px;
+  display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem;
 }
 .previa .renglon { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .previa .renglon > :last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.previa .renglon.total { border-top: 1px solid var(--borde); margin-top: 4px; padding-top: 8px; font-size: 15px; }
+.previa .renglon.total { border-top: 1px solid var(--borde); margin-top: 4px; padding-top: 8px; font-size: 0.9375rem; }
 .previa .aviso { margin: 6px 0 0; }
-.previa .nota { margin: 4px 0 0; font-size: 12px; color: var(--tinta-3); line-height: 1.45; }
-.mono { font-family: var(--mono); font-size: 13px; }
+.previa .nota { margin: 4px 0 0; font-size: 0.75rem; color: var(--tinta-3); line-height: 1.45; }
+.mono { font-family: var(--mono); font-size: 0.8125rem; }
 
 /* Captura a mano, plegada: es la excepción, no el flujo normal. */
 details.a-mano { margin-top: 20px; border-top: 1px solid var(--borde-suave); padding-top: 14px; }
-details.a-mano > summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--acento); }
+details.a-mano > summary { cursor: pointer; font-size: 0.875rem; font-weight: 500; color: var(--acento); }
 details.a-mano > summary:hover { color: var(--acento-oscuro); }
 details.a-mano[open] > summary { margin-bottom: 14px; }
 .acciones-a-mano { margin-top: 14px; }
 
 /* Las últimas bajadas, dentro del modal. */
 .recientes { margin-top: 24px; }
-.recientes h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
-.recientes table.grid th, .recientes table.grid td { padding: 8px 10px; font-size: 13px; }
-.recientes p { margin: 8px 0 0; font-size: 13px; }
-.ayuda { font-size: 12px; font-weight: 400; color: var(--tinta-3); }
+.recientes h3 { margin: 0 0 8px; font-size: 0.9375rem; font-weight: 600; }
+.recientes table.grid th, .recientes table.grid td { padding: 8px 10px; font-size: 0.8125rem; }
+.recientes p { margin: 8px 0 0; font-size: 0.8125rem; }
+.ayuda { font-size: 0.75rem; font-weight: 400; color: var(--tinta-3); }
 /* El paquete no está en la tienda elegida: los conos solo se bajan donde está. */
 .ayuda.aviso-tienda { color: var(--aviso-t); }
 .modal-body > .alert.alerta-ubicacion { margin: 12px 0 16px; }

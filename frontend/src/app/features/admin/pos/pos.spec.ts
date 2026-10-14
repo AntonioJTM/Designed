@@ -47,6 +47,7 @@ describe('Pos', () => {
   let pedidoEnviado: {
     pagos?: { metodo_pago_id: number; monto: number }[];
     a_credito?: number;
+    pendiente_pago?: boolean;
     items?: { variante_id: number; cantidad: number; piezas?: number }[];
     encargo?: boolean;
     metodo_entrega?: string;
@@ -218,22 +219,37 @@ describe('Pos', () => {
     expect(c.subtitulo()).toContain('sin turno abierto');
   });
 
-  // ---- Cobrar / Fiar / Apartar ----
+  // ---- Cobrar / A crédito / Nota en espera / Pendiente de pago (2026-10-13) ----
 
-  it('fiar y apartar exigen elegir al cliente', async () => {
+  it('a crédito, nota en espera y pendiente de pago exigen elegir al cliente', async () => {
     const { c } = await montar();
     llenarCarrito(c);
-    c.elegirModo('fiar');
-    expect(c.modo()).toBe('cobrar');
-    c.elegirModo('apartar');
-    expect(c.modo()).toBe('cobrar');
+    for (const m of ['credito', 'espera', 'pendiente'] as const) {
+      c.elegirModo(m);
+      expect(c.modo()).withContext(m).toBe('cobrar');
+    }
     expect(c.motivoSinFiar()).toContain('elige al cliente');
+    expect(c.motivoSinPendiente()).toContain('elige al cliente');
+  });
+
+  it('la nota pendiente de pago se lleva sin pagar: no manda pago ni crédito', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente(mayoreo);
+    c.elegirModo('pendiente');
+    expect(c.notaPendiente()).toBe(true);
+    expect(c.textoBoton()).toBe('Dar nota pendiente de pago · $432.00');
+    c.cobrar();
+    expect(pedidoEnviado).toEqual(jasmine.objectContaining({ pendiente_pago: true, cliente_id: 20 }));
+    expect(pedidoEnviado!.pagos).toBeUndefined();
+    expect(pedidoEnviado!.a_credito).toBeUndefined();
+    expect(c.ticket()).not.toBeNull();
   });
 
   it('a un cliente sin crédito no se le puede fiar, y dice por qué', async () => {
     const { c } = await montar();
     c.elegirCliente({ ...mayoreo, limite_credito: '0', credito_disponible: '0' });
-    c.elegirModo('fiar');
+    c.elegirModo('credito');
     expect(c.modo()).toBe('cobrar');
     expect(c.motivoSinFiar()).toContain('no tiene crédito');
   });
@@ -242,7 +258,7 @@ describe('Pos', () => {
     permisos = new Set(['ver:caja']);
     const { c } = await montar();
     c.elegirCliente(mayoreo);
-    c.elegirModo('fiar');
+    c.elegirModo('credito');
     expect(c.modo()).toBe('cobrar');
   });
 
@@ -250,7 +266,7 @@ describe('Pos', () => {
     const { c } = await montar();
     llenarCarrito(c);
     c.elegirCliente(mayoreo);
-    c.elegirModo('fiar');
+    c.elegirModo('credito');
     expect(c.fiando()).toBe(true);
     expect(c.aPagarHoy()).toBe(0);
     // Era un computed sobre un campo con ngModel: se quedaba pegado al teclear.
@@ -265,8 +281,8 @@ describe('Pos', () => {
   it('quitar al cliente regresa a cobrar', async () => {
     const { c } = await montar();
     c.elegirCliente(mayoreo);
-    c.elegirModo('apartar');
-    expect(c.apartando()).toBe(true);
+    c.elegirModo('pendiente');
+    expect(c.notaPendiente()).toBe(true);
     c.quitarCliente();
     expect(c.modo()).toBe('cobrar');
   });
@@ -369,37 +385,131 @@ describe('Pos', () => {
     expect(c.hayAqui(negro.filas[0])).toBe('no hay aquí');
   });
 
-  // ---- Pedido: se entrega después (2026-10-06) ----
+  // ---- Nota en espera: se entrega después, sin chofer (2026-10-13) ----
 
-  it('el pedido pide al cliente, y propone su dirección si lo lleva el chofer', async () => {
+  it('la nota en espera pide al cliente', async () => {
     const { c } = await montar();
-    c.elegirModo('pedido');
+    c.elegirModo('espera');
     expect(c.modo()).toBe('cobrar');
-    c.elegirCliente({ ...mayoreo, direccion: 'Calle Hidalgo 5' });
-    c.elegirModo('pedido');
+    c.elegirCliente(mayoreo);
+    c.elegirModo('espera');
     expect(c.pidiendo()).toBe(true);
-    expect(c.direccionPedido).toBe('Calle Hidalgo 5');
-    expect(c.textoBoton()).toBe('Tomar el pedido');
+    expect(c.textoBoton()).toBe('Guardar nota en espera');
   });
 
-  it('tomar el pedido manda la entrega, lo que deja y no cobra el resto', async () => {
+  it('guardar la nota en espera manda para cuándo y lo que deja, sin chofer', async () => {
     const { c } = await montar();
     c.elegirCliente(mayoreo);
     llenarCarrito(c);
-    c.elegirModo('pedido');
-    c.entregaPedido.set('envio');
-    c.direccionPedido = '';
-    c.cobrar();
-    expect(c.error()).toContain('a dónde');
-    c.direccionPedido = 'Calle Hidalgo 5';
-    c.costoEnvio.set(50);
+    c.elegirModo('espera');
     c.paraCuando = '2030-01-15';
     c.anticipo = 100;
     c.metodoSel = 1;
     c.cobrar();
     expect(pedidoEnviado).toEqual(jasmine.objectContaining({
-      encargo: true, metodo_entrega: 'envio', entrega_direccion: 'Calle Hidalgo 5', costo_envio: 50,
-      entrega_para: '2030-01-15', cliente_id: 20, pagos: [{ metodo_pago_id: 1, monto: 100 }],
+      encargo: true, metodo_entrega: 'recoger', entrega_para: '2030-01-15', cliente_id: 20,
+      pagos: [{ metodo_pago_id: 1, monto: 100 }],
     }));
+    expect(pedidoEnviado!.entrega_direccion).toBeUndefined();
+  });
+
+  // ---- El cursor en el lector (auditoría 2026-10-13) ----
+  //
+  // La pistola escribe donde esté el cursor. Al abrir la caja no estaba en
+  // ningún campo y después de cobrar o de pesar se quedaba en un botón: el
+  // código se perdía y el Enter apretaba ese botón.
+
+  const esperar = () => new Promise((r) => setTimeout(r, 0));
+  const lectorDe = (f: { nativeElement: HTMLElement }) =>
+    f.nativeElement.querySelector('input[name="qvar"]') as HTMLInputElement;
+  const tecla = (en: Element, key: string) =>
+    en.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+
+  it('al abrir la caja con turno, el cursor queda en el lector', async () => {
+    const { fixture } = await montar();
+    fixture.detectChanges();
+    await esperar();
+    expect(document.activeElement).toBe(lectorDe(fixture));
+  });
+
+  it('si el cursor quedó en un botón, la primera tecla de la pistola lo lleva al lector', async () => {
+    const { fixture } = await montar();
+    await esperar();
+    const boton = fixture.nativeElement.querySelector('.btn-cobrar') as HTMLButtonElement;
+    boton.removeAttribute('disabled');
+    boton.focus();
+    tecla(boton, '0');
+    expect(document.activeElement).toBe(lectorDe(fixture));
+  });
+
+  it('la barra espaciadora y los atajos no mueven el cursor', async () => {
+    const { fixture } = await montar();
+    await esperar();
+    const boton = fixture.nativeElement.querySelector('.btn-cobrar') as HTMLButtonElement;
+    boton.removeAttribute('disabled');
+    boton.focus();
+    tecla(boton, ' ');
+    boton.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }));
+    expect(document.activeElement).toBe(boton);
+  });
+
+  it('no le quita el cursor a otro campo donde se está escribiendo', async () => {
+    permisos.add('ver:clientes');
+    const { fixture } = await montar();
+    await esperar();
+    const cliente = fixture.nativeElement.querySelector('input[name="qcli"]') as HTMLInputElement;
+    cliente.focus();
+    tecla(cliente, 'r');
+    fixture.componentInstance.enfocarLector();
+    fixture.detectChanges();
+    await esperar();
+    expect(document.activeElement).toBe(cliente);
+  });
+
+  it('con la báscula abierta no se mete: la ventana es la que manda', async () => {
+    const { c, fixture } = await montar();
+    c.agregar(conoRojo);
+    fixture.detectChanges();
+    await esperar();
+    const enVentana = fixture.nativeElement.querySelector('[aria-modal="true"] button') as HTMLButtonElement;
+    enVentana.focus();
+    tecla(enVentana, '7');
+    expect(document.activeElement).toBe(enVentana);
+  });
+
+  it('al pesar, el lector queda listo y se quita el ticket de la venta anterior', async () => {
+    const { c, fixture } = await montar();
+    c.ticket.set({ pedido: { id: 1, numero_pedido: 'POS-1', estado: 'pagado', total: '432.00' } as never, cambio: 68, pagadoHoy: 432, fiado: 0 });
+    c.agregar(conoRojo);
+    fixture.detectChanges();
+    c.alPesar(conoRojo, { kg: 2.5 });
+    fixture.detectChanges();
+    await esperar();
+    expect(c.ticket()).toBeNull();
+    expect(document.activeElement).toBe(lectorDe(fixture));
+  });
+
+  it('al cerrar la báscula sin pesar, el cursor regresa al lector', async () => {
+    const { c, fixture } = await montar();
+    c.agregar(conoRojo);
+    fixture.detectChanges();
+    await esperar();
+    c.cerrarBascula();
+    fixture.detectChanges();
+    await esperar();
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull();
+    expect(document.activeElement).toBe(lectorDe(fixture));
+  });
+
+  it('después de cobrar, el lector queda listo para el siguiente cliente', async () => {
+    const { c, fixture } = await montar();
+    llenarCarrito(c);
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.btn-cobrar') as HTMLButtonElement).focus();
+    c.cobrar();
+    fixture.detectChanges();
+    await esperar();
+    expect(c.ticket()).not.toBeNull();
+    expect(document.activeElement).toBe(lectorDe(fixture));
   });
 });

@@ -11,8 +11,7 @@ const { puede } = require('../permisos/service');
  * pero esas dos secciones solo van a quien además tiene «Ver costos y
  * márgenes» (`hacer:ver_costos`). Esconderlas en la pantalla no basta: el JSON
  * se puede leer en el navegador, así que a quien no tiene el permiso el margen
- * ni se le calcula y llega en `null`. Es la misma regla que aplica el asistente
- * con sus herramientas de costos.
+ * ni se le calcula y llega en `null`.
  *
  * El hilo parado SÍ le llega, valorado a PRECIO DE VENTA, que no expone nada:
  * lo pidió el usuario el 2026-10-03, cuando la tienda dejó de llevar el costo

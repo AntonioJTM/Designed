@@ -175,6 +175,30 @@ async function encargos(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function notasPendientes(req, res, next) {
+  try {
+    res.json({ data: await service.notasPendientes(req.query), error: null });
+  } catch (err) { next(err); }
+}
+
+async function pasarACredito(req, res, next) {
+  try {
+    res.json({ data: await service.pasarACredito(Number(req.params.id), req.auth?.sub), error: null });
+  } catch (err) { next(err); }
+}
+
+async function previaDevolucion(req, res, next) {
+  try {
+    res.json({ data: await service.previaDevolucion(Number(req.params.id)), error: null });
+  } catch (err) { next(err); }
+}
+
+async function devolver(req, res, next) {
+  try {
+    res.status(201).json({ data: await service.devolver(Number(req.params.id), req.body, req.auth?.sub), error: null });
+  } catch (err) { next(err); }
+}
+
 async function resumen(req, res, next) {
   try {
     res.json({ data: await service.resumen(), error: null });
@@ -186,4 +210,5 @@ module.exports = {
   crear, obtener, listar, misPedidos, cambiarEstado, cotizar,
   subirComprobante, verComprobante, eliminarComprobante,
   apartados, abonarApartado, entregarApartado, modificarEncargo, encargos,
+  notasPendientes, pasarACredito, previaDevolucion, devolver,
 };

@@ -22,8 +22,8 @@ import { guardarArchivo, mensajeDeError, nombreArchivo } from '../../../shared/d
   styles: `
     .bloque { display: flex; flex-direction: column; gap: 12px; }
     .bloque + .bloque { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--borde-suave); }
-    .bloque h3 { margin: 0; font-size: 15px; font-weight: 600; }
-    .bloque > p { margin: 0; font-size: 13px; color: var(--tinta-3); }
+    .bloque h3 { margin: 0; font-size: 0.9375rem; font-weight: 600; }
+    .bloque > p { margin: 0; font-size: 0.8125rem; color: var(--tinta-3); }
     .periodo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     .periodo .field { flex: 1 1 160px; }
     .lista { max-height: 320px; overflow-y: auto; }

@@ -7,6 +7,7 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { resumenGrafica } from './resumen';
 
 /** Una barra: qué es, cuánto vale y qué contexto se muestra al pasar el ratón. */
 export interface Barra {
@@ -58,6 +59,7 @@ export interface Barra {
       [attr.viewBox]="'0 0 ' + W() + ' ' + alto()"
       preserveAspectRatio="xMidYMid meet"
       role="img"
+      [attr.aria-label]="resumen()"
       width="100%"
     >
       <!-- La línea del cero. Solo se dibuja cuando hay negativos: con todo
@@ -125,6 +127,15 @@ export class Barras {
   readonly decimals = input(0);
   /** Ancho reservado para los nombres. Se sube cuando son largos. */
   readonly gutter = input(170);
+  /** Qué mide, para el lector de pantalla ("Quién debe más"). Le siguen los datos. */
+  readonly descripcion = input('');
+  /** El nombre de la gráfica para el lector: el título y cada barra con su cifra. */
+  readonly resumen = computed(() =>
+    resumenGrafica(
+      this.descripcion(),
+      this.data().map((b) => `${b.label}: ${this.conSigno(b.value)}${this.unidad() ? ' ' + this.unidad() : ''}`)
+    )
+  );
 
   readonly rowH = 34;
   readonly barH = 20; // por debajo del tope de 24 px de la guía

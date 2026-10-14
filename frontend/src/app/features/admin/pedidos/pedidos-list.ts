@@ -43,8 +43,8 @@ function haceDias(dias: number): string {
   imports: [FolioPipe, FormsModule, RouterLink, DineroPipe],
   templateUrl: './pedidos-list.html',
   styles: `
-    .kpi-valor { font-size: 28px; }
-    td.folio a { font-family: var(--mono); font-size: 13px; text-decoration: none; white-space: nowrap; }
+    .kpi-valor { font-size: 1.75rem; }
+    td.folio a { font-family: var(--mono); font-size: 0.8125rem; text-decoration: none; white-space: nowrap; }
     td.cliente { font-weight: 500; }
     td.tenue { color: var(--tinta-2); }
     td .falta { color: var(--alerta-t); }
@@ -101,14 +101,14 @@ export class PedidosList {
     const ventas = (n: number) => `${n} ${n === 1 ? 'venta' : 'ventas'}`;
     return [
       { etiqueta: 'Hoy', valor: d(r.hoy.total), pie: ventas(r.hoy.ventas), punto: 'var(--acento)' },
-      { etiqueta: 'Esta semana', valor: d(r.semana.total), pie: `${ventas(r.semana.ventas)} desde el lunes`, punto: '#2a78d6' },
+      { etiqueta: 'Esta semana', valor: d(r.semana.total), pie: `${ventas(r.semana.ventas)} desde el lunes`, punto: 'var(--viz-series-1)' },
       {
         etiqueta: 'Por cobrar',
         valor: d(r.por_cobrar.total),
         // Lo fiado se debe en la CUENTA del cliente, no venta por venta: por eso
         // se cuentan clientes, no ventas.
         pie: `${r.por_cobrar.ventas} ${r.por_cobrar.ventas === 1 ? 'cliente debe' : 'clientes deben'} en su cuenta`,
-        punto: '#E9A23B',
+        punto: 'var(--punto-aviso)',
       },
       {
         etiqueta: 'Canceladas',
@@ -116,7 +116,7 @@ export class PedidosList {
         // Es lo que valían esas ventas, no dinero devuelto: en una fiada o un
         // apartado no se devolvió eso.
         pie: `este mes · ${d(r.canceladas_mes.total)} en ventas`,
-        punto: '#C2410C',
+        punto: 'var(--punto-alerta)',
       },
     ];
   }

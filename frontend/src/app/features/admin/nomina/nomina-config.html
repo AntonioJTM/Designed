@@ -15,8 +15,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <section class="card">
     <div class="card-head">
@@ -53,7 +53,7 @@
               <tr [class.fila-inactiva]="!e.usuario_activo">
                 <td>
                   <div style="font-weight: 500">{{ e.nombre }}</div>
-                  <div class="muted" style="font-size: 13px; text-transform: capitalize">{{ e.rol }}</div>
+                  <div class="muted" style="font-size: 0.8125rem; text-transform: capitalize">{{ e.rol }}</div>
                 </td>
                 <td class="num">{{ e.en_nomina ? (e.sueldo_base_semanal | dinero) : '—' }}</td>
                 <td>
@@ -61,7 +61,7 @@
                     <span class="muted">—</span>
                   } @else if (e.dias_laborales > 0) {
                     {{ e.dias_laborales }} {{ e.dias_laborales === 1 ? 'día' : 'días' }} · {{ e.horas_semana }} h
-                    <div class="muted" style="font-size: 12px">{{ diasDe(e) }}</div>
+                    <div class="muted" style="font-size: 0.75rem">{{ diasDe(e) }}</div>
                   } @else {
                     <span class="pill ambar">Sin horario</span>
                   }
@@ -70,7 +70,7 @@
                 <td class="num">
                   @if (e.en_nomina && e.valor_hora_extra_calculado !== null) {
                     {{ e.valor_hora_extra_calculado | dinero }}
-                    <div class="muted" style="font-size: 12px">al doble de {{ e.valor_hora | dinero }}</div>
+                    <div class="muted" style="font-size: 0.75rem">al doble de {{ e.valor_hora | dinero }}</div>
                   } @else { — }
                 </td>
                 <td class="num">{{ e.paga_comision ? num(e.porcentaje_comision) + '%' : '—' }}</td>
@@ -79,10 +79,10 @@
                     <span class="muted">—</span>
                   } @else if (e.vacaciones; as v) {
                     @if (v.anios === 0) {
-                      <span class="muted" style="font-size: 13px">desde el {{ v.proximo_aniversario | fecha }}</span>
+                      <span class="muted" style="font-size: 0.8125rem">desde el {{ v.proximo_aniversario | fecha }}</span>
                     } @else {
                       Le quedan <b>{{ v.restan }}</b> de {{ v.corresponden }}
-                      <div class="muted" style="font-size: 12px">{{ v.anios }} {{ v.anios === 1 ? 'año' : 'años' }} de antigüedad</div>
+                      <div class="muted" style="font-size: 0.75rem">{{ v.anios }} {{ v.anios === 1 ? 'año' : 'años' }} de antigüedad</div>
                     }
                   } @else {
                     <span class="pill gris">Sin fecha de ingreso</span>
@@ -94,7 +94,7 @@
                   } @else {
                     <span class="pill gris">No</span>
                   }
-                  @if (!e.usuario_activo) { <div class="muted" style="font-size: 12px; margin-top: 4px">sin acceso al sistema</div> }
+                  @if (!e.usuario_activo) { <div class="muted" style="font-size: 0.75rem; margin-top: 4px">sin acceso al sistema</div> }
                 </td>
                 <td class="acciones">
                   @if (e.en_nomina) {

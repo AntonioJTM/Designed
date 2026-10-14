@@ -43,16 +43,16 @@ const VENTANA = 90;
   styles: `
     :host { display: block; }
     .linea { position: relative; height: 64px; margin: 6px 6px 0; }
-    .base { position: absolute; left: 0; right: 0; top: 23px; height: 2px; background: #E6E8EC; }
+    .base { position: absolute; left: 0; right: 0; top: 23px; height: 2px; background: var(--borde); }
     .hueco { position: absolute; top: 20px; height: 8px; right: 0; border-radius: 4px; }
-    .hueco-texto { position: absolute; top: 0; transform: translateX(-50%); font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .hueco-texto { position: absolute; top: 0; transform: translateX(-50%); font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
     .punto { position: absolute; top: 17px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #2a78d6; box-shadow: 0 0 0 2px #fff; }
     .hoy { position: absolute; top: 13px; right: 0; width: 2px; height: 22px; background: var(--tinta); }
-    .marca { position: absolute; top: 44px; transform: translateX(-50%); font-size: 12px; color: var(--tinta-3); white-space: nowrap; }
+    .marca { position: absolute; top: 44px; transform: translateX(-50%); font-size: 0.75rem; color: var(--tinta-3); white-space: nowrap; }
     .marca.inicio { transform: none; }
     .marca.fin { left: auto; right: 0; transform: none; font-weight: 600; color: var(--tinta); }
     .pie {
-      display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; color: var(--tinta-2);
+      display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 0.8125rem; color: var(--tinta-2);
       border-top: 1px solid var(--borde-suave); padding-top: 12px; margin-top: 14px;
     }
     .pie b { color: var(--tinta); font-weight: 600; }

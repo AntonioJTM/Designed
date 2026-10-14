@@ -8,7 +8,7 @@
     <div class="modal-head">
       <h2 id="modal-empleado-titulo">
         {{ empleado().nombre }}
-        <span class="muted" style="font-weight: 400; font-size: 15px; text-transform: capitalize"> · {{ empleado().rol }}</span>
+        <span class="muted" style="font-weight: 400; font-size: 0.9375rem; text-transform: capitalize"> · {{ empleado().rol }}</span>
       </h2>
       <button type="button" class="modal-cerrar" (click)="cerrar()" aria-label="Cerrar">✕</button>
     </div>
@@ -16,7 +16,7 @@
     <form [formGroup]="form" (ngSubmit)="guardar()">
       <div class="modal-body">
         <div class="columna" style="gap: 22px">
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
           <div class="form-grid">
             <label class="field">
@@ -101,7 +101,7 @@
                 <div><span>Su hora extra (al doble)</span><b>{{ valorHoraExtra() | dinero }}</b></div>
               </div>
             } @else {
-              <p class="alert" style="margin: 0">Marca al menos un día de trabajo.</p>
+              <p class="alert" role="alert" style="margin: 0">Marca al menos un día de trabajo.</p>
             }
           </div>
 

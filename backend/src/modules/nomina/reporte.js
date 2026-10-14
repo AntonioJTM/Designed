@@ -147,7 +147,7 @@ function pastilla(doc, texto, derecha, y, fondo, tinta) {
 function cabecera(doc, { etiqueta, titulo, subtitulo, estado }) {
   banda(doc);
   const w = ancho(doc);
-  t(doc, `TIENDA DE HILOS  ·  ${etiqueta}`, M, M, { size: 8, color: C.tinta3, espacio: 1.2, width: w - 110 });
+  t(doc, `HITEX  ·  ${etiqueta}`, M, M, { size: 8, color: C.tinta3, espacio: 1.2, width: w - 110 });
   const e = ESTADO[estado];
   if (e) pastilla(doc, e.texto, M + w, M - 4, e.fondo, e.tinta);
   t(doc, titulo, M, M + 16, { size: 22, bold: true, width: w });
@@ -610,11 +610,12 @@ function hojaRecibo(doc, periodo, r) {
     } else {
       const QUE = {
         contado: 'de contado, pagadas al venderlas',
-        credito: 'fiadas que se terminaron de pagar',
+        credito: 'a crédito, que se terminaron de pagar',
         apartado: 'apartados liquidados',
-        pedido: 'pedidos pagados',
+        pedido: 'notas en espera pagadas',
+        nota: 'notas pendientes que se terminaron de pagar',
       };
-      const grupos = ['contado', 'credito', 'apartado', 'pedido']
+      const grupos = ['contado', 'credito', 'nota', 'pedido', 'apartado']
         .map((tipo) => ({ tipo, ventas: cm.ventas.filter((v) => v.tipo === tipo) }))
         .filter((g) => g.ventas.length);
       const sum = (lista, k) => r2(lista.reduce((a, v) => a + n(v[k]), 0));

@@ -53,7 +53,7 @@ interface Grupo {
     .campos { display: flex; flex-wrap: wrap; gap: 16px; }
     .campos > .field { flex: 1 1 240px; }
     .card.suave .card-head { margin-bottom: 0; align-items: center; }
-    .cuenta-num { font-family: var(--mono); font-size: 14px; white-space: nowrap; }
+    .cuenta-num { font-family: var(--mono); font-size: 0.875rem; white-space: nowrap; }
   `,
 })
 export class Configuracion implements OnInit {

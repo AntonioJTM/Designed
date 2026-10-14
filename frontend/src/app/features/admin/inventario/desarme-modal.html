@@ -14,11 +14,11 @@
         <b>Solo en tiendas:</b> si el paquete está en la bodega, primero mándalo con Surtir sucursal.
       </p>
       @if (tiendas().length === 0) {
-        <p class="alert">No hay ninguna tienda (almacén con mostrador): los conos solo se bajan en una tienda.</p>
+        <p class="alert" role="alert">No hay ninguna tienda (almacén con mostrador): los conos solo se bajan en una tienda.</p>
       }
 
-      @if (error()) { <p class="alert">{{ error() }}</p> }
-      @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+      @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
       <!-- 1 · Escanear el bulto: es el flujo normal -->
       <label class="field">

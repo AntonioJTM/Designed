@@ -13,8 +13,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <section class="card">
     <div class="card-head">
@@ -51,7 +51,7 @@
               <tr>
                 <td>
                   <div style="font-weight: 600">{{ t.nombre }}</div>
-                  <div class="muted" style="font-size: 13px">{{ nota(t) }}</div>
+                  <div class="muted" style="font-size: 0.8125rem">{{ nota(t) }}</div>
                 </td>
                 <td class="num">{{ t.orden }}</td>
                 <td class="num">{{ clientes(t) ?? '—' }}</td>

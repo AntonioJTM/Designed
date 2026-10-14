@@ -56,8 +56,8 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
     }
     .icono.peligro { background: var(--peligro-f); color: var(--peligro-t); }
     .texto { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-top: 2px; }
-    .texto h2 { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-    .texto p { margin: 0; font-size: 14px; color: var(--tinta-3); line-height: 1.5; white-space: pre-line; }
+    .texto h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+    .texto p { margin: 0; font-size: 0.875rem; color: var(--tinta-3); line-height: 1.5; white-space: pre-line; }
     .btn-rojo { background: var(--peligro-t); color: #fff; }
     .btn-rojo:hover { background: #861D14; color: #fff; }
   `,

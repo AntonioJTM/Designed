@@ -12,7 +12,7 @@
         cuenta en el corte, así que el cajón cuadra al cerrar.
       </p>
 
-      @if (error()) { <p class="alert">{{ error() }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
       <div class="opciones-tipo" role="radiogroup" aria-label="Qué se hace">
         <label class="opcion" [class.on]="tipo === 'retiro'">

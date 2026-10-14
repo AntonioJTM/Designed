@@ -69,8 +69,8 @@
     </div>
   </header>
 
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
-  @if (error()) { <p class="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
   @switch (vista()) {
     @case ('frecuencia') {
@@ -94,7 +94,7 @@
       @if (gasto(); as d) { <app-vista-gasto [datos]="d" [dias]="dias()" /> }
     }
   }
-  @if (cargando()) { <p class="muted" style="margin: 0">Cargando…</p> }
+  @if (cargando()) { <p class="muted">Cargando…</p> }
 </div>
 
 <!-- Los modales se crean al abrirlos y se destruyen al cerrarlos: arrancan limpios. -->

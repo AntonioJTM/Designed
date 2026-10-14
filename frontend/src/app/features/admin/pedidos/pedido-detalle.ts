@@ -2,6 +2,8 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
+import { TicketService } from '../../../core/services/ticket.service';
+import { llevaTicket } from '../../../shared/ticket/ticket';
 import { AuthService } from '../../../core/services/auth.service';
 import {
   DevolucionLinea,
@@ -65,6 +67,7 @@ const MESES_LARGOS = [
 })
 export class PedidoDetalle implements OnDestroy {
   private readonly ventas = inject(VentasService);
+  private readonly tickets = inject(TicketService);
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
@@ -75,8 +78,8 @@ export class PedidoDetalle implements OnDestroy {
 
   readonly puedeCancelar = computed(() => this.auth.puede('hacer:cancelar_venta'));
   readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
-  readonly veApartados = computed(() => this.auth.puede('ver:apartados'));
   readonly veEncargos = computed(() => this.auth.puede('ver:encargos'));
+  readonly veNotas = computed(() => this.auth.puede('ver:notas_pendientes'));
   private readonly fechaPipe = new FechaPipe();
 
   readonly etiquetaEstado = etiquetaEstado;
@@ -128,19 +131,35 @@ export class PedidoDetalle implements OnDestroy {
     // pagó. El servidor lo valida igual (VENTA_FIADA_SIN_PAGAR / _PAGADA).
     const fiadaVigente = !!p && this.fiado(p) > 0 && !this.inactivo(p);
     const debe = fiadaVigente ? this.fiadoPorPagar(p!) > 0.004 : false;
+    // Una NOTA PENDIENTE DE PAGO igual: se da por pagada sola con sus abonos
+    // (NOTA_PENDIENTE_SIN_PAGAR / NOTA_YA_PAGADA en el servidor).
+    const nota = !!p && this.esNotaPendiente(p) && !fiadaVigente && !this.inactivo(p);
+    const notaDebe = nota ? this.faltaNota(p!) > 0.004 : false;
     return this.estados().filter((e) => {
       if (e === actual) return true;
       if (!this.puedeCancelar() && (e === 'cancelado' || e === 'devuelto')) return false;
       if (!enLinea && !pasosDePedido && (e === 'en_preparacion' || e === 'enviado')) return false;
       if (fiadaVigente && actual === 'pendiente' && debe && e !== 'cancelado' && e !== 'devuelto') return false;
       if (fiadaVigente && e === 'pendiente' && !debe) return false;
+      if (nota && actual === 'pendiente' && notaDebe && e !== 'cancelado' && e !== 'devuelto') return false;
+      if (nota && e === 'pendiente' && !notaDebe) return false;
       return true;
     });
   });
 
-  /** ¿Es un PEDIDO de cliente (encargo)? */
+  /** ¿Es una NOTA EN ESPERA (encargo)? */
   esEncargo(p: Pedido): boolean {
     return !!Number(p.encargo ?? 0);
+  }
+
+  /** ¿Salió como NOTA PENDIENTE DE PAGO (se la llevó y paga después)? */
+  esNotaPendiente(p: Pedido): boolean {
+    return !!Number(p.nota_pendiente ?? 0);
+  }
+
+  /** Lo que falta de una nota pendiente de pago (sus abonos son pagos). */
+  faltaNota(p: Pedido): number {
+    return Math.max(0, Math.round((Number(p.total) - this.pagado(p)) * 100) / 100);
   }
 
   /** Cómo se entrega un pedido, en palabras: "lo recoge" o "lo lleva el chofer a…", y para cuándo. */
@@ -219,6 +238,14 @@ export class PedidoDetalle implements OnDestroy {
         { etiqueta: 'Total', valor: total },
         { etiqueta: 'Ya dejó', valor: pagado },
         { etiqueta: 'Falta', valor: Math.max(0, total - pagado), alerta: total - pagado > 0.004 },
+      ];
+    }
+    if (this.esNotaPendiente(p) && this.fiado(p) <= 0 && !this.inactivo(p)) {
+      const falta = this.faltaNota(p);
+      return [
+        { etiqueta: 'Total', valor: total },
+        { etiqueta: 'Ya pagó', valor: pagado, pie: 'en sus abonos' },
+        { etiqueta: 'Falta', valor: falta, alerta: falta > 0.004, pie: falta > 0.004 ? 'nota pendiente de pago' : 'ya está pagada' },
       ];
     }
     const fiado = this.fiado(p);
@@ -467,60 +494,22 @@ export class PedidoDetalle implements OnDestroy {
   // ---- Ticket ----
 
   /**
-   * Imprime el ticket del pedido. Va en un marco aparte y no con
-   * `window.print()` de la pantalla: así sale solo el ticket, angosto como el
-   * papel de la impresora, sin el menú ni los botones.
+   * Imprime el ticket del pedido, el mismo que sale en la caja
+   * (`shared/ticket/ticket.ts`): angosto como el papel de la térmica y con la
+   * hoja del largo exacto del ticket, para que la impresora corte al terminar.
    */
   imprimirTicket(): void {
     const p = this.pedido();
     if (!p) return;
-    const e = (s: unknown) =>
-      String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-    const renglon = (izq: string, der: string, fuerte = false) =>
-      `<div class="r${fuerte ? ' f' : ''}"><span>${izq}</span><span>${der}</span></div>`;
-    const lineas = (p.detalle ?? [])
-      .map((d) =>
-        `<div class="l"><div>${e(this.nombreDelHilo(d))}</div>` +
-        renglon(`${e(Number(d.cantidad).toLocaleString('es-MX', { maximumFractionDigits: 3 }))} kg × ${e(this.dinero(d.precio_unitario))}`, e(this.dinero(d.subtotal))) +
-        ((d.bultos ?? []).length ? `<div class="b">${(d.bultos ?? []).map((b) => e(b.codigo)).join(' · ')}</div>` : '') +
-        `</div>`
-      )
-      .join('');
-    const pagos = this.filasPago()
-      .map((f) => renglon(e(f.como) + (f.estado === 'Cobrado' ? '' : ` (${e(f.estado.toLowerCase())})`), e(this.dinero(f.monto))))
-      .join('');
-    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${e(p.numero_pedido)}</title>
-<style>
-  body { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; width: 72mm; margin: 0 auto; color: #000; }
-  h1 { font-size: 16px; margin: 8px 0 2px; } p { margin: 0 0 6px; }
-  .r { display: flex; justify-content: space-between; gap: 8px; } .f { font-weight: 700; font-size: 14px; }
-  .l { padding: 4px 0; border-bottom: 1px dashed #999; } .b { font-size: 10px; color: #444; }
-  hr { border: 0; border-top: 1px dashed #999; margin: 6px 0; }
-</style></head><body>
-<h1>${e(p.numero_pedido)}</h1>
-<p>${e(this.fechaLarga(p.creado_en))}<br>${e(this.dondeYQuien(p))}<br>Cliente: ${e(p.cliente_nombre_comercial || p.cliente || 'de paso')}</p>
-${lineas}
-<hr>${renglon('Subtotal', e(this.dinero(p.subtotal)))}${Number(p.descuento) > 0 ? renglon('Descuento', '-' + e(this.dinero(p.descuento))) : ''}${renglon('IVA', e(this.dinero(p.impuestos)))}${Number(p.costo_envio) > 0 ? renglon('Envío', e(this.dinero(p.costo_envio))) : ''}${renglon('Total', e(this.dinero(p.total)), true)}
-<hr>${pagos}
-<p style="margin-top:8px">${e(etiquetaEstado(p.estado, p.canal, p.encargo))}</p>
-</body></html>`;
+    this.tickets.imprimirPedido(p).subscribe({
+      error: (e) => this.error.set(e instanceof Error ? e.message : this.msg(e)),
+    });
+  }
 
-    const marco = document.createElement('iframe');
-    marco.setAttribute('aria-hidden', 'true');
-    marco.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
-    document.body.appendChild(marco);
-    const doc = marco.contentDocument;
-    if (!doc || !marco.contentWindow) {
-      marco.remove();
-      return;
-    }
-    doc.open();
-    doc.write(html);
-    doc.close();
-    marco.contentWindow.focus();
-    marco.contentWindow.print();
-    // El diálogo de impresión detiene el hilo hasta cerrarse; luego se quita el marco.
-    setTimeout(() => marco.remove(), 1000);
+  /** Una nota en espera no lleva ticket (todavía se puede modificar): no se ofrece el botón. */
+  llevaTicket(): boolean {
+    const p = this.pedido();
+    return !!p && llevaTicket(p);
   }
 
   /**

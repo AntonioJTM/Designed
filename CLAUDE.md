@@ -234,6 +234,15 @@ tienda-hilos/
   no tenía ("no cuadra con lo que hay" en el detalle del hilo, +19.95 en un lado y −19.95 en el
   otro). Un paquete que pasa a otra tienda va por Surtir sucursal. Al SURTIR la regla es otra
   (ver "Paquete encontrado en otro almacén" en el traspaso).
+- **El TICKET impreso es uno solo** (`shared/ticket/ticket.ts` + `core/services/ticket.service.ts`,
+  2026-10-13): para la térmica Kinwodon de 80 mm (imprime 72 mm), en negro puro. Lo usan la caja
+  (botón "Imprimir ticket" al cobrar) y el detalle de la venta. **El corte depende del LARGO de la
+  hoja:** `imprimirTicket` mide el ticket dibujado y pone `@page { size: 80mm <largo>mm; margin: 0 }`;
+  sin eso la impresora saca papel en blanco hasta el largo de su hoja. Dice qué fue: Venta, A
+  crédito (cuánto quedó a deber), Nota pendiente de pago (sin "pagado" ni "cambio"), Apartado.
+  **Una NOTA EN ESPERA no lleva ticket** (todavía se modifica): `armarTicket` lo rechaza
+  (`SIN_TICKET`) y `llevaTicket()` esconde el botón. El cambio no se guarda: la caja lo pasa al
+  imprimir.
 - **El pago en efectivo se asienta por lo COBRADO, no por el billete.** Una venta de $432 pagada
   con $500 deja un `pagos` de $432: `crearPedido` resta el cambio del efectivo antes de
   insertarlo y devuelve `cambio` en la respuesta (no se guarda: no es dinero de la tienda). Si
@@ -574,8 +583,7 @@ tienda-hilos/
   por la migración `2026-10_carga_proveedor_costo.sql` (con Surtir inventario, Reportes, Cómo va
   el negocio, Inventario y Kardex); al GERENTE se le quitó. Con eso vuelven, solo para ellos: el
   costo por kilo al cargar y en el historial (y el aviso "Sin costo"), el costo promedio en
-  Presentaciones, la ganancia y el margen del tablero, las herramientas de costo del asistente y
-  el precio de compra en los PDF. A los demás el servidor ni se los manda, y si mandan un costo
+  Presentaciones, la ganancia y el margen del tablero y el precio de compra en los PDF. A los demás el servidor ni se los manda, y si mandan un costo
   contestan 403.
   Del 2026-10-03 al 2026-10-06 estuvo APAGADO ("no necesito lo que me costó"): entonces no lo
   veía nadie, ni el administrador; con `false` se vuelve a ese estado.
@@ -615,13 +623,12 @@ tienda-hilos/
 - **El tablero contesta cuatro preguntas** (`modules/analisis`, `GET /analisis/tablero`), todas
   calculadas de la base al momento — no hay tablas de resumen que mantener ni proceso nocturno.
   Llegan JUNTAS en ese único endpoint: tuvieron una ruta cada una, pero la pantalla siempre pide
-  las cuatro y el asistente lee los models directo, así que se quitaron el 2026-10-01 por no
-  tener quién las llamara.
+  las cuatro, así que se quitaron el 2026-10-01 por no tener quién las llamara.
   · **Cobranza** (`cartera`): quién debe, por antigüedad. Los días se miden desde el
     ÚLTIMO MOVIMIENTO de la cuenta, no desde el cargo: quien abonó la semana pasada está pagando, y
     tratarlo como moroso llevaría a cobrarle a quien no toca.
   · **Clientes enfriados** (ya NO se pintan en el tablero: viven en Clientes → Dejaron de venir;
-    el endpoint los sigue mandando y el asistente los usa): exige **2 compras mínimo** —quien vino
+    el endpoint los sigue mandando): exige **2 compras mínimo** —quien vino
     una vez hace meses no es un cliente perdido, es alguien que pasó— y compara los días sin venir
     contra SU PROPIO ritmo (`veces_su_ritmo`), no contra un número fijo.
   · **Hilo muerto** ("Hilo parado" en la pantalla): existencias sin venderse. **Lo ve todo el que
@@ -645,6 +652,12 @@ tienda-hilos/
 - **`v_movimiento_hilo` mira solo las salidas por VENTA** (`referencia_tipo='pedido'`, cantidad
   negativa). Un traspaso o un desarme mueven la mercancía de sitio pero no la venden, y contarlos
   haría parecer vivo un hilo que nadie compra.
+- **APARTADOS Y FIAR SE QUITARON DEL PUNTO DE VENTA (2026-10-13)** ("se eliminan los apartados y
+  fiar", usuario). La pantalla Apartados ya no existe (`/admin/apartados` lleva al inicio) ni su
+  permiso `ver:apartados`; "Fiar" se llama **"A crédito"** (mismo `a_credito`, mismo permiso
+  `hacer:fiar`, rotulado "Vender a crédito"). El servidor SIGUE aceptando apartados y su lógica se
+  queda (lo de abajo) para los que hubiera: un apartado de antes se ve en Ventas y se cancela ahí.
+  En producción no había ninguno.
 - **Apartado = venta que todavía no se entrega.** Es un `pedidos` con estado `'apartado'`, NO una
   tabla aparte: mismo cliente, mismo detalle, mismos pagos, mismos precios congelados — una tabla
   `apartados` duplicaría todo eso, igual que habría pasado separando la tienda en línea del
@@ -745,6 +758,52 @@ tienda-hilos/
     `apartado` y pasan a `vendido` al entregarlos (antes no se mandaban y al entregar quedaban
     "disponibles": el conteo de paquetes no cuadraba).
   · Pendiente: el PEDIDO AL PROVEEDOR (compras), que el usuario también llama "pedido".
+  · **Desde el 2026-10-13 se llaman NOTAS EN ESPERA y ya no hay chofer** ("nota en espera: aún no
+    sale como ticket y se puede modificar"). La pantalla es `/admin/notas-en-espera` (el enlace viejo
+    `/admin/pedidos` lleva ahí; permiso `ver:encargos`, rotulado "Notas en espera"). El punto de
+    venta las guarda SIEMPRE como `recoger`: sin dirección ni costo de envío; una de antes que tenía
+    chofer lo conserva. NO sale ticket. Al entregarla (`entregar-modal.ts`) se cobra, se da a crédito
+    o se deja como **nota pendiente de pago** (`pendiente_pago: true`, ver abajo).
+- **"TOTAL A COBRAR" (2026-10-13): Cobrar, A crédito, Nota en espera y Nota pendiente de pago**
+  (`pos.ts → ModoVenta = 'cobrar' | 'credito' | 'espera' | 'pendiente'`, dos por renglón en
+  `.seg.modos`). Las formas de pago son **solo efectivo y transferencia** ("crédito" es el modo A
+  crédito): la migración `2026-10_notas_pendientes.sql` DESACTIVÓ tarjeta, PayPal y Mercado Pago
+  (no se borran: las ventas de antes los nombran) y `crearPedido` rechaza un método desactivado (422
+  `METODO_PAGO_INVALIDO`).
+- **NOTA PENDIENTE DE PAGO (2026-10-13)**: "sale el ticket pero aún no se registra cómo te pagó
+  hasta después… que exista un apartado de notas pendientes de pago de los clientes y que se
+  agreguen al corte de caja del día en que paguen, o si el cliente pide que se vaya a crédito, que
+  exista esa opción" (usuario).
+  · `pedidos.nota_pendiente = 1` (migración `2026-10_notas_pendientes.sql`, en LAS DOS bases) y
+    queda PARA SIEMPRE: así se sabe que salió así aunque ya esté pagada. `POST /pedidos` con
+    `pendiente_pago: true`: exige cliente (422 `NOTA_SIN_CLIENTE`), solo POS, no lleva `pagos` (422
+    `NOTA_PENDIENTE_CON_PAGO`) ni crédito, apartado o encargo (422 `NOTA_PENDIENTE_COMBINADA`). Nace
+    `'pendiente'`; la mercancía SALE (y sus paquetes quedan vendidos); NO entra nada a la caja ni se
+    carga a su cuenta: **no usa su límite de crédito**. Sale ticket ("Nota pendiente de pago").
+  · **Por cobrar** = `nota_pendiente = 1`, `'pendiente'` y SIN cargo en `credito_movimientos`
+    (`pedidos/model.js → _notaPorCobrar`). La pantalla **Notas pendientes de pago**
+    (`/admin/notas-pendientes`, permiso nuevo `ver:notas_pendientes`, que la migración dio a quien ya
+    tenía `ver:pos`; `GET /pedidos/notas-pendientes?q=`) las lista de la más vieja a la más nueva.
+  · **Se paga en abonos** con `POST /pedidos/:id/abonos` (el mismo de los apartados y las notas en
+    espera; `notas-pendientes/pago-nota-modal.ts`): el EFECTIVO entra al turno abierto como
+    `'ingreso'` —al corte del DÍA EN QUE PAGA—, la transferencia no toca la caja, y con el último
+    abono pasa sola a `'pagado'`. A mano no se marca pagada debiéndose (409
+    `NOTA_PENDIENTE_SIN_PAGAR`) ni vuelve a pendiente pagada (409 `NOTA_YA_PAGADA`); el selector del
+    detalle ni las ofrece.
+  · **Pasar a crédito**: `POST /pedidos/:id/a-credito` (`hacer:fiar`) carga lo que FALTA (total −
+    abonado) a su cuenta con `cargarVentaACredito` (su límite: 409 `SIN_CREDITO` /
+    `CREDITO_INSUFICIENTE`) y desde ahí es una venta a crédito como cualquiera (se liquida con abonos
+    a la cuenta). Sale de la lista porque ya tiene cargo.
+  · Cancelarla repone la mercancía y devuelve del turno el efectivo que haya abonado, como cualquier
+    venta. La comisión se paga al liquidarse (tipo `'nota'`, "Nota pendiente de pago", en
+    `nomina/comisiones.js`). La campana y Hoy avisan "N notas pendientes de pago" (en lugar del aviso de
+    apartados ya pagados). `e2e-notas-pendientes.js` (40 comprobaciones).
+  · **FALTA (parte 2, aprobada por el usuario):** las DEVOLUCIONES con SALDO A FAVOR. Desde la nota
+    del cliente, línea por línea: los paquetes cerrados se escanean y vuelven como paquetes con su
+    peso; los conos sueltos se pesan y vuelven como conos —**lo que marque la báscula, sin restar
+    tubos**—; lo que regresa queda A FAVOR al precio con que se vendió (no se devuelve dinero). El
+    saldo a favor va APARTE de la deuda y el cliente elige: descontarlo de lo que debe o usarlo en sus
+    compras ("Usar saldo a favor" al cobrar), y también se aplica a su deuda desde el expediente.
 - **Precio de lista en el producto.** `productos.precio_kg` es el precio del HILO por unidad de
   peso, que es como lo piensa la tienda. NO es el que se cobra —ese sigue siendo
   `producto_variantes.precio`, y es el que congela el pedido— pero las presentaciones que se creen
@@ -937,47 +996,15 @@ tienda-hilos/
   sembrada solo recorre lo posterior a la siembra). Un script con su propia conexión (las E2E)
   habla en UTC: no compares horas suyas con las del sistema.
 
-- **El asistente con IA no ve la base y no escribe SQL.** `modules/asistente` le da al
-  modelo un catálogo de **herramientas** —14 consultas ya programadas, TODAS de solo
-  lectura— y él elige cuál necesita; el servidor la ejecuta y le devuelve el resultado, y
-  la IA solo redacta la respuesta. **No dejes que genere consultas:** una consulta generada
-  puede leer lo que no debe (sueldos, `contrasena_hash`) o bloquear tablas en plena venta,
-  y un modelo se equivoca en un JOIN y devuelve una cifra que parece buena. El asistente
-  **no puede cambiar nada**: no registra ventas, no mueve inventario, no perdona deudas.
-  · Las herramientas llaman a los **services**, no a los modelos: los services ya
-    normalizan los rangos de fecha (`hastaExcl` es exclusivo) y son los mismos que
-    alimentan los reportes, así que el asistente y las pantallas nunca se contradicen.
-  · **El rol sale del TOKEN**, no del body. Las que exponen costo o margen llevan
-    `soloJefes: true` y a un cajero ni se le ofrecen; si el modelo insiste, la ejecución
-    las niega con un motivo.
-  · Una herramienta que falla o no existe devuelve `{ error: '…' }` **en texto**, no lanza:
-    así el modelo puede corregir en vez de tumbar la conversación.
-  · El bucle tiene tope (`IA_MAX_VUELTAS`) y el historial se recorta a 6 turnos: mandar
-    toda la charla en cada pregunta la encarece sin mejorarla.
-  · Al agregar una herramienta, **agrégala también a `scripts/e2e-asistente.js`**, que las
-    corre TODAS contra la base. Cuatro de ellas nacieron llamando a funciones que no
-    existen y eso solo se ve ejecutándolas: si no, el error aparece cuando el modelo la
-    pide, o sea en producción.
-  · El proveedor vive aislado en `proveedor.js`, y ESO YA SE COBRÓ: el 2026-09-10 se
-    cambió de DeepSeek a **Google Gemini** (capa gratuita) y el bucle de herramientas no
-    se tocó ni una línea. Se le habla por el endpoint **compatible con OpenAI** de Google
-    (`/v1beta/openai/chat/completions`), que acepta el mismo `messages` + `tools`.
-    Cambiar de proveedor es cambiar `IA_BASE_URL` y `IA_MODELO`; las pruebas lo sustituyen
-    por un doble y no gastan cuota. La llave **nunca** se manda al cliente ni a los logs.
-  · **`IA_MODELO` usa el alias `-latest`** a propósito: los nombres fijos se RETIRAN
-    (`gemini-2.5-flash-lite` ya contesta 404 "no longer available to new projects") y el
-    asistente dejaría de funcionar sin que nadie tocara nada. Un 404 se traduce a
-    `IA_MODELO_NO_EXISTE`, que dice qué variable cambiar.
-  · **El error de Gemini viene dentro de un ARREGLO** (`[{ error: {...} }]`), no como
-    objeto suelto: leerlo con `cuerpo.error.message` daba `undefined` y todos los fallos
-    se veían como un "HTTP 429" sin explicación. `leerError` normaliza las dos formas.
-  · **La cuota agotada NO es lo mismo que no tener saldo.** `IA_SIN_CUOTA` (429 /
-    `RESOURCE_EXHAUSTED`) se repone sola, así que el mensaje dice "espera unos minutos";
-    `IA_SIN_SALDO` (proveedor de paga) dice "recarga". Decirle "recarga" a quien está en
-    la capa gratuita lo mandaría a pagar algo que no necesita.
-  · **El 503 pasajero se reintenta UNA vez.** Gemini contesta "high demand" de cuando en
-    cuando —pasó en la primera prueba que se le hizo— y es algo que se arregla solo. Solo
-    se reintenta lo pasajero: una llave mala o la cuota agotada no se arreglan insistiendo.
+- **"Pregúntame" (el asistente con IA) YA NO EXISTE** (2026-10-13: "el apartado de Pregúntame ya
+  no va a existir, lo puedes quitar y todo lo que tenga que ver con eso"). Se borraron
+  `modules/asistente` (con su ruta `/api/v1/asistente` y su conexión a Google Gemini), la
+  configuración `ia` de `config/env.js` y las `IA_*` de los `.env`, `scripts/e2e-asistente.js`, la
+  pantalla `features/admin/asistente`, su servicio, su opción del menú y sus estilos. No tenía
+  permisos ni tablas en la base. Un enlace viejo a `/admin/asistente` lleva a la pantalla de
+  inicio de cada quien, y quien no tiene NINGUNA pantalla (antes caía en Pregúntame, que no pedía
+  permiso) va a `/admin/sin-acceso` ("Todavía no tienes pantallas"; si sí tiene alguna, lo manda a
+  la suya). Si algún día vuelve, está en git hasta el 2026-10-13 y en CAMBIOS.txt.
 - **Un cliente registrado desde la caja nace SIN crédito.** El alta rápida del POS pide
   nombre, apodo y teléfono y nada más, con `limite_credito: 0`, así que el cobro sale
   completo. Es la decisión del usuario para un cliente nuevo: no se le fía todavía. La
@@ -1084,7 +1111,74 @@ tienda-hilos/
   `.card` + `.card-head`, `.kpis/.kpi`, `.fila > .ancha/.angosta/.mitad`, `.filtros-barra`,
   `.tabs`, `.seg`, `.pill.*`, `.barras`, `.columnas`, `.pendiente`, `.pila`. Antes de inventar un
   estilo en una pantalla, búscalo ahí; lo propio de una pantalla va en su componente. No inventes
-  colores fuera de los tokens y la paleta de gráficas.
+  colores fuera de los tokens y la paleta de gráficas. `DESIGN.md` (raíz) describe el sistema y
+  `PRODUCT.md` a quién sirve; los dos los lee la herramienta de diseño (`/impeccable`).
+- **Accesibilidad y celular (auditoría del 2026-10-13; las reglas en `DESIGN.md`):**
+  · **El foco del teclado en las ventanas lo lleva UN servicio** (`core/services/
+    foco-ventanas.service.ts`, arrancado en `app.ts`): al abrirse una ventana el cursor entra a su
+    primer campo, Tab da la vuelta dentro de ella y al cerrarla regresa al botón que la abrió. No
+    lo repitas en cada modal; basta con que la ventana lleve `role="dialog"` (o `alertdialog`) y
+    `aria-modal="true"`. Si una ventana pone su propio foco (el lector), el servicio no lo toca.
+  · **Los mensajes que aparecen solos se anuncian:** todo `.alert` lleva `role="alert"` y todo
+    `.ok-msg` / `p.ultimo` lleva `role="status"`. Un campo pintado de rojo (`.invalido`) lleva
+    `[attr.aria-invalid]` con la MISMA condición.
+  · **El campo de archivo que abre una etiqueta va con `class="oculto"`, no con `hidden`:** con
+    `hidden` no se llega a él con el teclado.
+  · **Los tamaños de letra van en `rem`** (1 rem = 16 px), para que respeten el tamaño que cada
+    quien tenga en su navegador. Espacios, bordes y alturas siguen en `px`.
+  · **En el celular y en pantallas táctiles** (menos de 900 px o puntero grueso) los botones
+    chicos, de ícono, los selectores y "Volver" miden 44 px, y los enlaces agrandan su zona de
+    toque con un `::after` invisible (bloque al final de `styles.scss`). Una pantalla con un campo
+    de ancho fijo lo pone con `min(Npx, 100%)`, o ensancha la página en el celular (pasó en Caja).
+  · **Colores que se repiten son tokens:** `--punto-aviso`, `--punto-alerta` (los puntos de las
+    cifras clave y el globo de la campana), `--foco` (el halo del campo) y `--barra-hover`,
+    `--barra-borde`, `--barra-claro` (el menú). El número escrito sobre un tramo de gráfica elige
+    su letra con `shared/charts/contraste.ts → tintaSobre` (la de MÁS contraste, por WCAG), y la
+    rampa de azules es `RAMPA_AZUL` del mismo archivo.
+  · **Los colores de las gráficas viven en la hoja, no en el código** (2026-10-13, segunda
+    auditoría): `--viz-rampa-1..4` (la rampa azul), `--viz-series-1-suave`,
+    `--punto-aviso-suave`, `--punto-alerta-suave` (el ritmo de un cliente). `COLOR` y
+    `ESTADO_RITMO` de `clientes/clientes-ui.ts` y `RAMPA_AZUL` son `var(--…)`; cuando hace falta
+    el color de verdad (para elegir la letra), `contraste.ts → colorReal` lo lee de la hoja.
+    Un color nuevo de gráfica va como token, nunca en hexadecimal dentro de un `.ts`.
+  · **EN EL PUNTO DE VENTA EL CURSOR VIVE EN EL LECTOR** (segunda auditoría, P1: "la pistola
+    escribe donde esté el cursor"). `pos.ts → enfocarLector()` lo regresa al abrir la caja (al
+    haber turno), al terminar una venta, apartado o pedido, al cerrar cualquier ventana (báscula,
+    alta de cliente, abono), al quitar algo del carrito y con Enter en los kilos de una línea;
+    deja seleccionado lo escrito para que el siguiente código lo reemplace. Espera al siguiente
+    dibujado (`afterNextRender`): con `eventCoalescing` un `setTimeout` llegaba antes de que se
+    quitara la ventana. No le quita el cursor a otro campo de texto y en pantalla táctil no lo
+    pone. Y la red: `alTeclear` (keydown del documento) lleva el cursor al lector con la PRIMERA
+    tecla si estaba en un botón, el menú o ningún lado —el código entra completo y el Enter de la
+    pistola ya no aprieta el botón—, salvo con una ventana abierta, la barra espaciadora, atajos o
+    letras sobre un selector. Al agregar algo al carrito se quita el ticket de la venta anterior.
+    Probado en Chrome con teclas reales (CDP), no con la pistola.
+  · **Cada pantalla tiene su título de pestaña** ("Inventario · Hitex"): `title` en cada ruta
+    (`admin.routes.ts`, con `nombreDe(clave)` de `core/navegacion.ts`, el mismo nombre que el
+    menú) y `core/titulos.ts` (TitleStrategy) le pega el nombre del sistema. En pruebas queda
+    "PRUEBAS · Inventario · Hitex" (toma el título con que abrió la página, el que pone nginx).
+    Una pantalla nueva lleva su `title`; `titulos.spec.ts` lo exige.
+  · **Al cambiar de pantalla** (`admin-layout.ts → llegarAPantalla`): si el cursor estaba en el
+    menú o se perdió, pasa al `h1` de la pantalla nueva; si el enlace que se apretó existe en la
+    pantalla nueva (las pestañas de Clientes), vuelve a él; si estaba dentro de la pantalla, no
+    se mueve y un `role="status"` oculto dice el nombre. Cambiar solo `?filtros` no cuenta. Y el
+    primer Tab es **"Saltar al contenido"** (`.saltar-contenido`, no se ve hasta tener el cursor),
+    que no usa el `#` (movería el router).
+  · **Una gráfica SVG lleva `descripcion`** (`barras`, `composicion`, `stacked-bars`; `columnas`
+    ya la tenía): el `aria-label` es esa descripción y los datos en orden
+    (`shared/charts/resumen.ts → resumenGrafica`, los primeros 10 y "y N más"). `role="img"`
+    esconde todo lo de adentro: sin nombre, el lector solo decía "imagen".
+  · **Lo de un encabezado se encoge** (`.page-head > *, .card-head > * { min-width: 0 }`): sin
+    eso el bloque de botones medía lo que su texto más largo y sacaba de la pantalla la flecha de
+    "semana siguiente" de Nómina en 320 px. **`.seg` es una fila que se parte** (`flex-wrap`, cada
+    opción `flex: 1 1 0` y al menos su texto): con la letra normal van todas en una fila del mismo
+    ancho, como siempre; si no caben (320 px o letra grande, donde "Pedido" se salía) bajan de
+    renglón. Se probó una rejilla y partía la fila del punto de venta aun con la letra normal.
+  · **Los hijos de una `.columna` no llevan margen** (como `.pagina` y `.pila`), y
+    `.modal-body.columna` va a 16 px: no escribas `style="margin: 0"` ahí.
+  · **La cifra grande de una `.kpi` se encoge si no cabe** (`font-size: min(1.75rem, 15cqi)`,
+    con `.kpi { container-type: inline-size }`): con la letra del navegador al doble,
+    "$14,000.00" se salía de la tarjeta y ensanchaba la página. Con la letra normal sigue en 28 px.
 - **El menú es UNO** (`core/navegacion.ts`): de ahí salen el menú lateral, la guarda de cada ruta
   y la pantalla de inicio de cada puesto. Siete grupos por tarea; los nombres de pantalla son los
   de siempre (el usuario pidió conservarlos).
@@ -1171,7 +1265,7 @@ tienda-hilos/
   no "el mínimo es cero". La condición vive en `COND_ALERTA` (`inventario/model.js`) y exige
   `stock_minimo > 0`; sin eso, una fila en cero contaba como alerta y la pantalla decía
   "0 productos · sin existencias · 1 bajo mínimo" en un almacén vacío. La vista
-  `v_alertas_stock` (Reportes → Por reabastecer y el asistente) aplica la MISMA regla desde la
+  `v_alertas_stock` (Reportes → Por reabastecer) aplica la MISMA regla desde la
   migración `2026-10_alertas_stock_con_minimo.sql`: antes listaba hilos agotados sin mínimo y
   contradecía a la campana.
   **El mínimo se captura en Inventario**, en la columna "Mínimo" de la tabla de existencias, que
@@ -1180,12 +1274,9 @@ tienda-hilos/
   teclear en paquetes (con el peso promedio REAL de los bultos de ahí, como en Ajuste / merma) y
   se guarda en kilos con `PUT /inventario/configuracion`. Ese endpoint escribe mínimo, máximo y
   ubicación juntos, así que el modal manda los dos que no cambia para no borrarlos.
-- **Si algo tarda más de unos segundos, la pantalla lo dice.** El asistente avisa
-  "Consultando tus datos… suele tardar medio minuto" a los 6 s (señal `tardando` en
-  `asistente.ts`), porque la capa gratuita de Gemini se toma ~30 s en una respuesta
-  con datos. Tres puntitos parpadeando durante medio minuto se leen como que se
-  trabó: la gente vuelve a preguntar o cierra la pantalla. El reloj se limpia al
-  contestar Y al fallar, o el aviso salta después de una respuesta ya recibida.
+- **Si algo tarda más de unos segundos, la pantalla lo dice** (la carga de la lista del
+  proveedor pinta su avance por partes). Un "Cargando…" mudo durante medio minuto se lee como que
+  se trabó: la gente vuelve a intentarlo o cierra la pantalla.
 - **Una gráfica se MIRA antes de darla por buena.** El validador de la paleta revisa color, no
   geometría: hay que renderizarla y verla. Así se encontraron tres cosas que ninguna prueba
   detecta: la gráfica de "quién debe más" venía ordenada por antigüedad (la barra más larga
@@ -1368,16 +1459,7 @@ tienda-hilos/
 - [ ] Las listas de precio REALES siguen sin definirse: hoy solo hay "Público" y dos DEMO.
       Falta que el usuario diga cuáles son (medio mayoreo, mayoreo, especial) y capturarles
       precio en las presentaciones.
-- [x] Asistente con IA (Admin → Asistente, `modules/asistente`): se le pregunta en
-      español y contesta con datos reales, diciendo qué consultó. 14 herramientas de
-      solo lectura, 5 de ellas solo para jefes.
-      **Proveedor: Google Gemini** (`gemini-flash-lite-latest`), por su endpoint
-      compatible con OpenAI. Se cambió de DeepSeek el 2026-09-10 porque Gemini tiene
-      capa gratuita. Probado contra la IA real: contesta con datos de la base y a un
-      cajero le niega el margen sin dar cifras.
-- [ ] **El asistente TARDA ~30 s** en una respuesta que consulta datos (picos de 50 s);
-      medido con el flujo real en la capa gratuita. La pantalla avisa a los 6 segundos.
-      Si molesta, activar facturación en Google sube los límites sin tocar código.
+- [x] ~~Asistente con IA "Pregúntame"~~: se QUITÓ completo el 2026-10-13 a petición del usuario.
 - [x] Alta rápida de cliente desde el POS, sin salir de la venta.
 - [ ] El checkout se abrió en el navegador y se armó el pedido, pero NUNCA se ha confirmado
       uno desde la pantalla (sí por E2E: 31 comprobaciones).
@@ -1388,8 +1470,7 @@ tienda-hilos/
       Migración: `db/migrations/2026-09_clientes_expediente_credito.sql`.
 - [x] Frontend de clientes: el POS identifica al cliente, Clientes tiene sus cinco pestañas y el
       expediente su Resumen y las mismas miradas (rediseño 2026-10).
-- [ ] Falta el asistente de preguntas predefinidas (sin IA, por decisión del usuario el
-      2026-09-09).
+- [ ] ~~Asistente de preguntas predefinidas~~: descartado junto con Pregúntame (2026-10-13).
 - [x] Costo y margen (BACKEND): el costo se captura en la remesa, se promedia ponderado y se
       congela en la venta. Migración: `db/migrations/2026-09_costo_y_margen.sql`.
 - [x] Módulo de análisis (BACKEND): cobranza por antigüedad, clientes enfriados, hilo muerto y
@@ -1575,12 +1656,11 @@ tienda-hilos/
 - **La configuración de la tienda está vacía en `hitex`.** El checkout ya funciona, pero el envío
   sale en $0.00 y no hay datos de depósito, así que al cliente que elija transferencia se le pide
   que llame. Va en Admin → Configuración. (En pruebas tiene datos de demostración.)
-- **Cambiar dos contraseñas.** La contraseña de root de MySQL del servidor y la
-  llave de la API de Google Gemini se escribieron en el chat del asistente de
-  código, así que quedaron en un historial de conversación. Al cambiarlas,
-  actualizar `backend/.env`, `backend/.env.produccion` y el `.env` del servidor.
-  La de Gemini se saca en aistudio.google.com/apikey. Conviene además borrar la
-  llave de DeepSeek en su consola: ya no se usa, pero sigue viva.
+- **Cambiar la contraseña de root de MySQL del servidor** (se escribió en el chat del asistente
+  de código y quedó en un historial de conversación); al cambiarla, actualizar `backend/.env` y el
+  `.env` del servidor. Y **BORRAR las llaves de IA**: la de Google Gemini (en
+  aistudio.google.com/apikey) y la de DeepSeek. Pregúntame se quitó el 2026-10-13 y ninguna se usa
+  ya; la de Gemini se quitó del `.env` del servidor, pero sigue viva en Google.
 - **Cerrar el puerto 3306 del servidor.** Hoy MySQL acepta conexiones desde
   cualquier parte de internet y lo único que la protege es la contraseña; adentro
   hay correos de clientes y hashes. Debería aceptar solo local y llegarle por

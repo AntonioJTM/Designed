@@ -26,7 +26,7 @@
     @if (creado(); as p) {
       <!-- Guardado: el paso que sigue es capturar sus presentaciones -->
       <div class="modal-body columna" style="gap: 12px">
-        <p class="ok-msg" style="margin: 0">
+        <p class="ok-msg" role="status">
           Producto <b>{{ p.nombre }}</b> guardado.
           @if (!p.presentacion_pendiente) {
             Su presentación en kilos se creó sola; los bultos y el inventario entran
@@ -34,7 +34,7 @@
           }
         </p>
         @if (p.presentacion_pendiente) {
-          <p class="alert" style="margin: 0">
+          <p class="alert" role="alert">
             Pero su presentación <b>no se creó</b>: {{ p.presentacion_pendiente }}
             Edita el producto y ponle el precio por kilo, y se crea sola.
           </p>
@@ -53,11 +53,11 @@
         no con el diálogo del navegador, para poder decir qué se pierde.
       -->
       <div class="modal-body columna" style="gap: 12px">
-        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
-        <p style="margin: 0">
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+        <p>
           ¿Eliminar <b>{{ form.getRawValue().nombre }}{{ form.getRawValue().grosor_calibre ? ' ' + form.getRawValue().grosor_calibre : '' }}</b>?
         </p>
-        <p class="muted" style="margin: 0; font-size: 14px">
+        <p class="muted" style="font-size: 0.875rem">
           No tiene nada cargado, así que se borra junto con su presentación vacía, sus
           precios por lista y sus imágenes. No se puede deshacer.
         </p>
@@ -78,7 +78,7 @@
       <form [formGroup]="form" (ngSubmit)="guardar()">
         <div class="modal-body">
           @if (error()) {
-            <p class="alert" style="margin: 0 0 16px">{{ error() }}</p>
+            <p class="alert" role="alert" style="margin: 0 0 16px">{{ error() }}</p>
           }
 
           <div class="form-grid">
@@ -120,7 +120,7 @@
             <label class="field">
               Precio por {{ unidadSel() }}
               <input type="number" step="0.01" min="0" formControlName="precio_kg"
-                     placeholder="Ej. 200.00" [class.invalido]="faltaPrecio() && form.touched" />
+                     placeholder="Ej. 200.00" [class.invalido]="faltaPrecio() && form.touched" [attr.aria-invalid]="faltaPrecio() && form.touched" />
               @if (sinPrecio()) {
                 <span class="ayuda" style="color: var(--aviso-t); font-weight: 500">
                   Entró con la lista del proveedor y todavía no tiene precio, así que no se puede vender.
@@ -197,7 +197,7 @@
             </label>
             <!-- Por qué no se puede borrar, junto a "Activo", que es lo que se hace en su lugar. -->
             @if (esEdicion() && eliminacion() && !eliminacion()!.se_puede) {
-              <p class="aviso full" style="margin: 0; font-size: 13px">
+              <p class="aviso full" style="margin: 0; font-size: 0.8125rem">
                 {{ eliminacion()!.mensaje }} Para dejar de venderlo sin perder su historia,
                 desmarca <b>Activo</b>.
               </p>

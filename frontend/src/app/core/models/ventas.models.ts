@@ -195,6 +195,49 @@ export interface Encargos {
   por_cobrar: number;
 }
 
+/** Lo que se llevó en una nota pendiente de pago, por hilo. */
+export interface NotaPendienteHilo {
+  hilo: string;
+  tipo_presentacion: string | null;
+  kg: number;
+  /** Conos pesados en la báscula ("6 conos"). */
+  piezas: number | null;
+  /** Paquetes escaneados. */
+  paquetes: number | null;
+}
+
+/**
+ * Una NOTA PENDIENTE DE PAGO por cobrar (2026-10-13): se llevó la mercancía y
+ * salió su ticket; el pago se registra después (abonos) o se pasa a crédito.
+ */
+export interface NotaPendiente {
+  id: number;
+  numero_pedido: string;
+  total: number;
+  creado_en: string;
+  almacen_id: number;
+  almacen: string | null;
+  cliente_id: number;
+  cliente: string | null;
+  nombre_comercial: string | null;
+  telefono: string | null;
+  limite_credito: string | number | null;
+  vendedor: string | null;
+  /** Días desde que se la llevó. */
+  dias: number;
+  pagado: number;
+  falta: number;
+  hilos: NotaPendienteHilo[];
+}
+
+export interface NotasPendientes {
+  items: NotaPendiente[];
+  por_cobrar: number;
+  num_notas: number;
+  num_clientes: number;
+  mas_antigua_dias: number;
+}
+
 /**
  * Un apartado vigente: la mercancía está guardada y el cliente va abonando.
  * Viene de la vista `v_apartados`.
@@ -259,8 +302,13 @@ export interface Pedido {
   canal: CanalVenta;
   /** Cómo llega la mercancía: recogen en tienda o se envía a domicilio. */
   metodo_entrega: MetodoEntrega;
-  /** 1 = PEDIDO de cliente (encargo): se entrega después, cobrando lo que falte. */
+  /** 1 = NOTA EN ESPERA (antes "pedido", encargo): se entrega después, cobrando lo que falte. */
   encargo?: number | boolean;
+  /**
+   * 1 = salió como NOTA PENDIENTE DE PAGO (2026-10-13): se llevó la mercancía y
+   * el pago se registra después, en abonos, o se pasa a crédito.
+   */
+  nota_pendiente?: number | boolean;
   /** A dónde lo lleva el chofer (pedido con entrega 'envio'). */
   entrega_direccion?: string | null;
   /** Para cuándo lo quiere el cliente ('YYYY-MM-DD'). */

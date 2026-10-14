@@ -10,7 +10,7 @@
     </div>
 
     <div class="modal-body">
-      @if (error()) { <p class="alert">{{ error() }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
       @if (!loteSel()) {
         <!-- ===== El hilo: cuánto hay, dónde, y sus lotes ===== -->
@@ -241,7 +241,7 @@
             </div>
           </div>
 
-          @if (errorBultos()) { <p class="alert">{{ errorBultos() }}</p> }
+          @if (errorBultos()) { <p class="alert" role="alert">{{ errorBultos() }}</p> }
 
           <div class="bultos-caja">
             @if (cargandoBultos()) {

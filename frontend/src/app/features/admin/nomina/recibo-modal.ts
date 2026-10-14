@@ -56,27 +56,27 @@ interface DiaDeLaSemana {
   host: { '(document:keydown.escape)': 'cerrar()' },
   styles: `
     .resumen-recibo { display: flex; flex-direction: column; }
-    .resumen-recibo .dato.total { border-bottom: 0; font-size: 16px; }
+    .resumen-recibo .dato.total { border-bottom: 0; font-size: 1rem; }
     .resumen-recibo .dato.total > :last-child { font-weight: 600; }
-    .resumen-recibo .como { font-size: 13px; color: var(--tinta-3); }
+    .resumen-recibo .como { font-size: 0.8125rem; color: var(--tinta-3); }
     /* Dos columnas que caben en el modal de 900 px (las .mitad globales piden 420 y se apilaban). */
     .dos { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
     .dos > .col { flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 22px; }
-    h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+    h3 { margin: 0 0 8px; font-size: 0.9375rem; font-weight: 600; }
     .concepto { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--borde-suave); }
-    .concepto .que { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
-    .concepto .que span { font-size: 13px; color: var(--tinta-3); }
+    .concepto .que { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 0.875rem; }
+    .concepto .que span { font-size: 0.8125rem; color: var(--tinta-3); }
     .concepto .monto { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
     .form-concepto { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--borde); }
     .form-concepto .field { flex: 1 1 110px; }
     .form-concepto .field.ancho { flex: 2 1 200px; }
-    .nota-chica { font-size: 13px; color: var(--tinta-3); margin: 8px 0 0; }
-    .previa { font-size: 13.5px; margin: 8px 0 0; }
+    .nota-chica { font-size: 0.8125rem; color: var(--tinta-3); margin: 8px 0 0; }
+    .previa { font-size: 0.84375rem; margin: 8px 0 0; }
     .previa.mal { color: var(--alerta-t); }
     .dias-fila { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
     .dias-fila .field { width: 140px; }
     .chips-dias { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
-    .chips-dias span { font-size: 12.5px; padding: 2px 8px; border-radius: 999px; background: var(--superficie-2); color: var(--tinta-2); }
+    .chips-dias span { font-size: 0.78125rem; padding: 2px 8px; border-radius: 999px; background: var(--superficie-2); color: var(--tinta-2); }
     .chips-dias span.descanso { color: var(--tinta-3); text-decoration: line-through; }
   `,
 })

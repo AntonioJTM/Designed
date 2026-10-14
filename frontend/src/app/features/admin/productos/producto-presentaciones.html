@@ -24,8 +24,8 @@
     </div>
   </header>
 
-  @if (error() && modal() === null) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error() && modal() === null) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   @if (cargando()) {
     <p class="muted">Cargando…</p>
@@ -151,7 +151,7 @@
       @if (paquete() && conos().length === 0) {
         <section class="card suave">
           <div class="pres-titulo"><h2>Conos para mostrador</h2></div>
-          <p class="muted" style="margin: 0; font-size: 14px; line-height: 1.5">
+          <p class="muted" style="margin: 0; font-size: 0.875rem; line-height: 1.5">
             Este hilo todavía no tiene cono. No hay que darlo de alta: se crea solo la primera
             vez que se baja un paquete a mostrador, y se cobra al mismo precio por kilo que el
             paquete.
@@ -165,7 +165,7 @@
       @if (!yaTienePresentacion()) {
         <section class="card suave">
           <div class="pres-titulo"><h2>Todavía sin presentación</h2></div>
-          <p class="muted" style="margin: 0; font-size: 14px; line-height: 1.5">
+          <p class="muted" style="margin: 0; font-size: 0.875rem; line-height: 1.5">
             Normalmente se crea sola: al dar de alta el producto con su precio por kilo, o con la
             primera carga del Excel. Mientras no tenga, el producto no se vende ni se inventaría.
           </p>
@@ -212,7 +212,7 @@
                 <tr>
                   <td>
                     <b style="font-weight: 500">Público</b>
-                    <div class="muted" style="font-size: 12px">el precio de la presentación</div>
+                    <div class="muted" style="font-size: 0.75rem">el precio de la presentación</div>
                   </td>
                   @for (v of variantesOrdenadas(); track v.id) {
                     <td class="num">{{ v.precio | dinero }}</td>
@@ -223,7 +223,7 @@
                     <td>
                       <b style="font-weight: 500">{{ t.nombre }}</b>
                       @if (!t.activo) { <span class="pill gris" style="margin-left: 6px">inactiva</span> }
-                      @if (listaSinPrecio(t.id)) { <div class="muted" style="font-size: 12px">paga el público</div> }
+                      @if (listaSinPrecio(t.id)) { <div class="muted" style="font-size: 0.75rem">paga el público</div> }
                     </td>
                     @for (v of variantesOrdenadas(); track v.id) {
                       <td class="num">
@@ -246,14 +246,14 @@
           </div>
 
           @if (tiposConPrecio().length === 0) {
-            <p class="muted" style="margin: 14px 0 0; font-size: 14px">
+            <p class="muted" style="margin: 14px 0 0; font-size: 0.875rem">
               Solo hay precio público. Las listas (medio mayoreo, mayoreo…) se dan de alta en Listas de
               precio.
               @if (veListas()) { <a routerLink="/admin/tipos-cliente">Ir a Listas de precio</a> }
             </p>
           } @else if (puedeCambiarPrecios()) {
             <div class="pie-tarjeta">
-              <span class="muted" style="font-size: 13px">
+              <span class="muted" style="font-size: 0.8125rem">
                 Lo vendido antes no cambia: cada venta guarda el precio con que se cobró.
               </span>
               <button type="button" class="btn btn-primary btn-sm" (click)="guardarPreciosLista()"
@@ -262,7 +262,7 @@
               </button>
             </div>
           } @else {
-            <p class="muted" style="margin: 14px 0 0; font-size: 13px">
+            <p class="muted" style="margin: 14px 0 0; font-size: 0.8125rem">
               Los precios los cambia quien tiene permiso de cambiar precios.
             </p>
           }
@@ -283,7 +283,7 @@
 
         <!-- Subir la lista da ENTRADA a mercancía: es el permiso de Surtir inventario. -->
         @if (!puedeCargarRemesa()) {
-          <p class="muted" style="margin: 0; font-size: 14px">
+          <p class="muted" style="margin: 0; font-size: 0.875rem">
             Cargar mercancía es parte de Surtir inventario, y tu puesto no lo tiene.
           </p>
         } @else {
@@ -324,7 +324,7 @@
               ⚠ Estás en <b>{{ nombreProducto() }}{{ calibreProducto() ? ' ' + calibreProducto() : '' }}</b>.
               {{ aviso }}
               <br />
-              <span style="font-size: 13px">
+              <span style="font-size: 0.8125rem">
                 Si el nombre del archivo está mal y el producto es el correcto, cárgala sin problema.
               </span>
             </p>
@@ -364,7 +364,7 @@
         }
 
         @if (bloqueantes().length) {
-          <div class="alert" style="margin-bottom: 12px">
+          <div class="alert" role="alert" style="margin-bottom: 12px">
             No se puede cargar: {{ bloqueantes().length }}
             {{ bloqueantes().length === 1 ? 'código ya está registrado' : 'códigos ya están registrados' }}.
             <ul class="avisos-lista">
@@ -408,7 +408,7 @@
         }
 
         <div class="pie-tarjeta">
-          <span class="muted" style="font-size: 14px">
+          <span class="muted" style="font-size: 0.875rem">
             Entra a <b>{{ nombreAlmacenCarga() }}</b>
             @if (puedeVerCostos() && datosCarga().costo_kg) { · a {{ datosCarga().costo_kg | dinero }} el kilo }
           </span>
@@ -438,12 +438,12 @@
             <button type="button" class="btn btn-ghost btn-sm" (click)="ultimaCarga.set(null)">Listo</button>
           </div>
         </div>
-        <p style="margin: 0; font-size: 14px">
+        <p style="margin: 0; font-size: 0.875rem">
           Inventario de esta presentación: {{ u.saldo_anterior | cantidad: 'kg' }} →
           <b>{{ u.saldo_nuevo | cantidad: 'kg' }}</b>
         </p>
         @if (puedeVerCostos() && u.costo_promedio != null) {
-          <p class="muted" style="margin: 8px 0 0; font-size: 14px">
+          <p class="muted" style="margin: 8px 0 0; font-size: 0.875rem">
             Costo del hilo: {{ u.costo_promedio | dinero }} por kilo, promediado con lo que ya había.
           </p>
         }
@@ -580,7 +580,7 @@
         }
 
         @if (principal(); as p) {
-          <p class="muted" style="margin: 14px 0 0; font-size: 13px; line-height: 1.5">
+          <p class="muted" style="margin: 14px 0 0; font-size: 0.8125rem; line-height: 1.5">
             Escanea cualquiera y el sistema lo reconoce como esta presentación. El código principal
             es <span class="mono">{{ p.codigo_barras || '—' }}</span>. Dónde está cada bulto es
             aproximado: se corrige solo cuando lo escanean al vender o al bajarlo a conos.
@@ -599,7 +599,7 @@
         <button type="button" class="btn btn-ghost btn-sm" (click)="abrirImagen()">Agregar imagen</button>
       </div>
       @if (imagenes().length === 0) {
-        <p class="muted" style="margin: 0; font-size: 14px">Sin imágenes.</p>
+        <p class="muted" style="margin: 0; font-size: 0.875rem">Sin imágenes.</p>
       } @else {
         <div class="imagenes">
           @for (img of imagenes(); track img.id) {
@@ -649,8 +649,8 @@
           <button type="button" class="modal-cerrar" (click)="cerrarModal()" aria-label="Cerrar">✕</button>
         </div>
         <form (ngSubmit)="guardarPublico(v)">
-          <div class="modal-body columna" style="gap: 16px">
-            @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          <div class="modal-body columna">
+            @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
             @if (precioEditable(v)) {
               <label class="field">
                 Precio público
@@ -661,7 +661,7 @@
                 </span>
               </label>
             } @else {
-              <p class="muted" style="margin: 0">El precio del cono sigue al del paquete: se cambia allá.</p>
+              <p class="muted">El precio del cono sigue al del paquete: se cambia allá.</p>
             }
             @if (pesoEditable(v)) {
               <label class="field">
@@ -675,7 +675,7 @@
                 </span>
               </label>
             }
-            <p class="muted" style="margin: 0; font-size: 13px; line-height: 1.5">
+            <p class="muted" style="font-size: 0.8125rem; line-height: 1.5">
               Lo vendido antes no cambia: cada venta guarda el precio con que se cobró.
               @if (v.tipo_presentacion === 'paquete' && conos().length > 0) {
                 Los conos de precio calculado se ajustan solos.
@@ -702,10 +702,10 @@
         <h2 id="modal-bulto-titulo">Agregar bulto a mano</h2>
         <button type="button" class="modal-cerrar" (click)="cerrarModal()" aria-label="Cerrar">✕</button>
       </div>
-      <div class="modal-body columna" style="gap: 16px">
-        @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
-        @if (avisoBulto()) { <p class="ok-msg" style="margin: 0">{{ avisoBulto() }}</p> }
-        <p class="muted" style="margin: 0; font-size: 14px; line-height: 1.5">
+      <div class="modal-body columna">
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+        @if (avisoBulto()) { <p class="ok-msg" role="status">{{ avisoBulto() }}</p> }
+        <p class="muted" style="font-size: 0.875rem; line-height: 1.5">
           Va a <span class="mono">{{ principal()?.sku }}</span>. El bulto <b>entra al inventario</b>: sus kilos se
           suman al almacén que elijas y queda en el kardex como «Bulto capturado a mano». Para una lista completa
           del proveedor, mejor carga su Excel.
@@ -774,8 +774,8 @@
         <button type="button" class="modal-cerrar" (click)="cerrarModal()" aria-label="Cerrar">✕</button>
       </div>
       <form [formGroup]="imgForm" (ngSubmit)="agregarImagen()">
-        <div class="modal-body columna" style="gap: 16px">
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+        <div class="modal-body columna">
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
           <label class="field">
             Dirección de la imagen
             <input type="url" formControlName="url" placeholder="https://…" />
@@ -802,8 +802,8 @@
       </div>
       <form [formGroup]="varForm" (ngSubmit)="agregarVariante()">
         <div class="modal-body">
-          @if (error()) { <p class="alert" style="margin: 0 0 16px">{{ error() }}</p> }
-          <p class="muted" style="margin: 0 0 16px; font-size: 14px; line-height: 1.5">
+          @if (error()) { <p class="alert" role="alert" style="margin: 0 0 16px">{{ error() }}</p> }
+          <p class="muted" style="margin: 0 0 16px; font-size: 0.875rem; line-height: 1.5">
             Normalmente no hace falta: la crea la carga del Excel. Es un
             <b>{{ esMultipresentacion() ? 'paquete' : 'producto simple' }}</b> que se vende por kilo,
             como todo el hilo.
@@ -873,7 +873,7 @@
                 </span>
               </label>
             } @else {
-              <p class="muted full" style="margin: 0; font-size: 14px">
+              <p class="muted full" style="margin: 0; font-size: 0.875rem">
                 El precio será el de lista del producto
                 ({{ precioProducto() != null ? (precioProducto() | dinero) + ' por kg' : 'sin capturar' }}).
               </p>

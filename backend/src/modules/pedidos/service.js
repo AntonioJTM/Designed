@@ -1,6 +1,7 @@
 'use strict';
 
 const model = require('./model');
+const devoluciones = require('./devoluciones');
 const { AppError } = require('../../middlewares/error');
 const { paginado } = require('../../utils/query');
 
@@ -97,7 +98,28 @@ async function resumen() {
   return model.resumen();
 }
 
+/** Las notas pendientes de pago por cobrar. */
+async function notasPendientes(filtros = {}) {
+  return model.listarNotasPendientes({ q: filtros.q });
+}
+
+/** Lo que falta de una nota pendiente de pago, a la cuenta de crédito del cliente. */
+async function pasarACredito(id, usuarioId) {
+  return model.pasarACredito(id, usuarioId);
+}
+
+/** Lo que se puede devolver de una nota (solo lee). */
+async function previaDevolucion(id) {
+  return devoluciones.previa(id);
+}
+
+/** El cliente regresa mercancía de la nota: entra al inventario y le queda a favor. */
+async function devolver(id, datos, usuarioId) {
+  return devoluciones.registrar(id, datos, usuarioId);
+}
+
 module.exports = {
+  notasPendientes, pasarACredito, previaDevolucion, devolver,
   resumen,
   crear, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,

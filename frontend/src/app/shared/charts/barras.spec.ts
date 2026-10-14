@@ -85,4 +85,13 @@ describe('Barras', () => {
     // El nombre completo se queda para el tooltip.
     expect(b.label).toBe(largo);
   });
+
+  it('el lector de pantalla oye qué mide y la cifra de cada barra, con su signo', async () => {
+    const f = await montar([{ label: 'Doña Mari', value: 3200 }, { label: 'Ajuste', value: -150 }]);
+    f.componentRef.setInput('descripcion', 'Quién debe más');
+    f.detectChanges();
+    const svg = f.nativeElement.querySelector('svg') as SVGElement;
+    expect(svg.getAttribute('role')).toBe('img');
+    expect(svg.getAttribute('aria-label')).toBe('Quién debe más. Doña Mari: $3,200; Ajuste: -$150.');
+  });
 });

@@ -16,10 +16,10 @@
           <div class="modal-cargando"><span class="spinner"></span></div>
         }
         <div class="columna" style="gap: 16px">
-          <p class="muted" style="margin: 0">
+          <p class="muted">
             <b style="color: var(--tinta)">{{ nombre() }}</b> debe {{ saldo() | dinero }}.
           </p>
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
           <div class="form-grid">
             <label class="field">
@@ -62,11 +62,11 @@
 
           @if (esEfectivo()) {
             @if (turnos().length === 1) {
-              <p class="nota-info" style="margin: 0">
+              <p class="nota-info">
                 El efectivo entra al turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>, así el corte cuadra.
               </p>
             } @else if (turnos().length === 0 && !cargando()) {
-              <p class="aviso" style="margin: 0">
+              <p class="aviso">
                 No hay ningún turno de caja abierto. Un abono en efectivo tiene que entrar a un turno o
                 el corte no va a cuadrar: abre el turno en Caja, o registra el abono con otro método.
               </p>

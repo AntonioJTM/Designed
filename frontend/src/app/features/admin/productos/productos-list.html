@@ -16,8 +16,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <div class="filtros-barra">
     <div class="crece">
@@ -99,7 +99,7 @@
                   <!-- Entró con la lista del proveedor y no se puede vender hasta ponerle precio. -->
                   @if (p.sin_precio) {
                     <span class="pill ambar" style="margin-left: 6px">Falta precio</span>
-                    <div class="muted" style="font-size: 12px; margin-top: 2px">{{ llego(p) }} · no se puede vender</div>
+                    <div class="muted" style="font-size: 0.75rem; margin-top: 2px">{{ llego(p) }} · no se puede vender</div>
                   }
                 </td>
                 <td>{{ p.grosor_calibre || '—' }}</td>

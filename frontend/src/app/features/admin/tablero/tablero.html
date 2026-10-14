@@ -22,8 +22,8 @@
     </div>
   </header>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (errorVentas()) { <p class="alert">{{ errorVentas() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (errorVentas()) { <p class="alert" role="alert">{{ errorVentas() }}</p> }
 
   <!-- Las cifras del periodo. La ganancia, solo con «Ver costos». -->
   <div class="kpis">
@@ -286,12 +286,12 @@
               }
             </div>
             <div class="espacio-arriba">
-              <app-composicion [data]="tramosCartera()" />
+              <app-composicion [data]="tramosCartera()" descripcion="Desde cuándo te deben" />
             </div>
           </div>
           <div>
             <h3 class="subtitulo">Quién debe más</h3>
-            <app-barras [data]="barrasDeudores()" prefijo="$" [gutter]="200" [decimals]="0" />
+            <app-barras [data]="barrasDeudores()" prefijo="$" [gutter]="200" [decimals]="0" descripcion="Quién debe más" />
           </div>
         </div>
 

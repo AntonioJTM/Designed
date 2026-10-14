@@ -1,15 +1,18 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { TitleStrategy, provideRouter } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { TituloPorPantalla } from './core/titulos';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
+    // Cada pestaña dice qué pantalla es: "Inventario · Hitex".
+    { provide: TitleStrategy, useClass: TituloPorPantalla },
     provideHttpClient(withInterceptors([authInterceptor])),
   ],
 };

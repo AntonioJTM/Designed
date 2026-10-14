@@ -61,7 +61,7 @@ export interface BarraCero {
       display: grid; align-items: center; gap: 12px;
       grid-template-columns: var(--bc-etiqueta, 170px) minmax(0, 1fr) var(--bc-cola, 120px);
     }
-    .bc-etiqueta { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .bc-etiqueta { font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .bc-carril { position: relative; height: 18px; }
     /* La raya del cero: 1 px, sólida y recesiva. */
     .bc-cero { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--viz-baseline); }
@@ -71,7 +71,7 @@ export interface BarraCero {
     }
     .bc-barra.negativa { background: var(--viz-series-2); border-radius: 4px 0 0 4px; }
     .bc-rotulo {
-      font-size: 13px; font-weight: 600; text-align: right; white-space: nowrap;
+      font-size: 0.8125rem; font-weight: 600; text-align: right; white-space: nowrap;
       font-variant-numeric: tabular-nums; color: var(--tinta);
     }
     .bc-rotulo.negativa { color: var(--alerta-t); }

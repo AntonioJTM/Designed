@@ -81,10 +81,13 @@ export interface Pendientes {
     num_clientes: number;
     dias: number;
   };
-  /** Apartados ya pagados completos: falta entregarlos. */
-  apartados_listos?: {
+  /** Notas pendientes de pago (se llevaron la mercancía sin pagar): UN aviso. */
+  notas_pendientes?: {
     num: number;
-    pedidos: { pedido_id: number; numero_pedido: string; cliente: string; liquidado_en?: string | null }[];
+    num_clientes: number;
+    monto: number;
+    /** Cuándo salió la más antigua. */
+    desde: string | null;
   };
   /**
    * El globo rojo. Cuenta UN aviso por asunto, no uno por cliente: con veinte

@@ -1,4 +1,5 @@
 import { EstadoRitmo, PeriodoClientes } from '../../../core/models/rediseno.models';
+import { RAMPA_AZUL } from '../../../shared/charts/contraste';
 
 // Piezas comunes de la sección Clientes (las cinco pestañas y el expediente):
 // cómo se nombra un periodo, cómo se pinta el ritmo de un cliente y cómo se
@@ -31,24 +32,25 @@ export function contraAnterior(dias: number): string {
 }
 
 /**
- * Colores de la sección, tal como los trae el diseño aprobado. Las series de
- * gráfica (azul, naranja, aqua) y la rampa ordinal son las de la paleta
- * validada (`--viz-series-*`); el ámbar y el naranja oscuro son los puntos de
- * estado del diseño. No agregues otros a ojo.
+ * Colores de la sección. Son los TOKENS de la hoja (`styles.scss`), no copias:
+ * antes estaban escritos aquí en hexadecimal y, si un color del sistema
+ * cambiaba, estas gráficas se quedaban con el viejo (auditoría 2026-10-13). Las
+ * series (azul, naranja, aqua) y la rampa son las de la paleta validada; el
+ * ámbar y el naranja oscuro, los puntos de estado. No agregues otros a ojo.
  */
 export const COLOR = {
-  acento: '#2457C5',
-  serie1: '#2a78d6',
-  serie2: '#eb6834',
-  serie3: '#1baf7a',
-  ambar: '#E9A23B',
-  alerta: '#C2410C',
-  otros: '#a3a2a0',
-  linea: '#c3c2b7',
+  acento: 'var(--acento)',
+  serie1: 'var(--viz-series-1)',
+  serie2: 'var(--viz-series-2)',
+  serie3: 'var(--viz-series-3)',
+  ambar: 'var(--punto-aviso)',
+  alerta: 'var(--punto-alerta)',
+  otros: 'var(--viz-otros)',
+  linea: 'var(--viz-baseline)',
   /** Rampa ordinal, de claro a oscuro: la antigüedad de una deuda, la frecuencia. */
-  rampa: ['#86b6ef', '#3987e5', '#1c5cab', '#0d366b'],
+  rampa: [...RAMPA_AZUL],
   /** Tinta de alerta para un pie de cifra que preocupa ("lleva 24 sin venir"). */
-  tintaAlerta: '#9A3412',
+  tintaAlerta: 'var(--alerta-t)',
 };
 
 /**
@@ -59,11 +61,11 @@ export const COLOR = {
  * que ya le toca.
  */
 export const ESTADO_RITMO: Record<EstadoRitmo, { texto: string; pill: string; color: string; suave: string }> = {
-  bien: { texto: 'Al corriente', pill: 'azul', color: COLOR.serie1, suave: '#BFD6F4' },
-  toca: { texto: 'Ya le toca', pill: 'ambar', color: COLOR.ambar, suave: '#F6DDB0' },
-  frio: { texto: 'Se está enfriando', pill: 'naranja', color: COLOR.alerta, suave: '#F3C7B1' },
-  perdido: { texto: 'Dejó de venir', pill: 'gris', color: COLOR.otros, suave: '#E3E6EB' },
-  una: { texto: 'Una sola compra', pill: 'gris', color: COLOR.otros, suave: '#E3E6EB' },
+  bien: { texto: 'Al corriente', pill: 'azul', color: COLOR.serie1, suave: 'var(--viz-series-1-suave)' },
+  toca: { texto: 'Ya le toca', pill: 'ambar', color: COLOR.ambar, suave: 'var(--punto-aviso-suave)' },
+  frio: { texto: 'Se está enfriando', pill: 'naranja', color: COLOR.alerta, suave: 'var(--punto-alerta-suave)' },
+  perdido: { texto: 'Dejó de venir', pill: 'gris', color: COLOR.otros, suave: 'var(--borde)' },
+  una: { texto: 'Una sola compra', pill: 'gris', color: COLOR.otros, suave: 'var(--borde)' },
 };
 
 /** `null` = nunca ha comprado: no es lo mismo que llevar mucho sin volver. */

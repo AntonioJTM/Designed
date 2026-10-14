@@ -15,8 +15,8 @@
     </div>
   </header>
 
-  @if (error() && !recibiendo() && !cancelando()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error() && !recibiendo() && !cancelando()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   <div class="kpis">
     @for (k of kpis(); track k.etiqueta) {
@@ -285,7 +285,7 @@
       </div>
 
       @if (hayInsuficientes()) {
-        <p class="alert">
+        <p class="alert" role="alert">
           Hay líneas que piden más de lo que hay libre en {{ nombreAlmacen(origen) }}. Ajusta las
           cantidades o quítalas: la solicitud no se puede mandar así.
         </p>
@@ -398,7 +398,7 @@
         </p>
         @if (t.envio_notas) { <p class="aviso">Nota del envío: {{ t.envio_notas }}</p> }
 
-        @if (error()) { <p class="alert">{{ error() }}</p> }
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
         <div class="tabla-scroll">
           <table class="grid">
@@ -481,7 +481,7 @@
             }
           }
         </p>
-        @if (error()) { <p class="alert">{{ error() }}</p> }
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
         <label class="field">
           ¿Por qué se cancela? <span class="muted">(opcional)</span>
           <input type="text" [(ngModel)]="motivoCancelacion" (keydown.enter)="confirmarCancelacion()"

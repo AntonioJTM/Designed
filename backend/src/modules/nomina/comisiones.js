@@ -32,10 +32,14 @@ const DESDE = '2026-10-04';
 const TOL = 0.005;
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
-const NOMBRE_TIPO = { contado: 'Contado', credito: 'Fiada', apartado: 'Apartado', pedido: 'Pedido' };
+const NOMBRE_TIPO = {
+  contado: 'Contado', credito: 'A crédito', apartado: 'Apartado', pedido: 'Nota en espera', nota: 'Nota pendiente de pago',
+};
 
 function tipoDe(p, fiada) {
   if (fiada) return 'credito';
+  // Salió sin pagar y se cobra en abonos (2026-10-13): paga comisión al liquidarse.
+  if (Number(p.nota_pendiente)) return 'nota';
   if (Number(p.encargo)) return 'pedido';
   if (p.estado === 'apartado' || p.entregado_en) return 'apartado';
   return 'contado';
@@ -50,7 +54,7 @@ function tipoDe(p, fiada) {
 async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }) {
   if (!usuarioIds.length) return [];
   const [ventas] = await conn.query(
-    `SELECT p.id, p.numero_pedido, p.usuario_id, p.cliente_id, p.estado, p.encargo, p.entregado_en,
+    `SELECT p.id, p.numero_pedido, p.usuario_id, p.cliente_id, p.estado, p.encargo, p.nota_pendiente, p.entregado_en,
             p.total, (p.subtotal - p.descuento) AS venta_neta,
             DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS vendida_en,
             COALESCE(c.nombre_comercial, c.nombre) AS cliente
@@ -224,7 +228,7 @@ async function reporte(periodo, { usuarioId = null } = {}) {
   } else if (reglaAnterior) {
     const [rows] = await pool.query(
       `SELECT p.id AS pedido_id, p.numero_pedido, p.usuario_id, COALESCE(c.nombre_comercial, c.nombre) AS cliente,
-              p.estado, p.encargo, p.entregado_en,
+              p.estado, p.encargo, p.nota_pendiente, p.entregado_en,
               EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo') AS fiada,
               DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS vendida_en, p.total, (p.subtotal - p.descuento) AS venta_neta
          FROM pedidos p LEFT JOIN clientes c ON c.id = p.cliente_id

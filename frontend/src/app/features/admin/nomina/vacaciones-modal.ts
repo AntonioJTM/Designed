@@ -28,14 +28,14 @@ import { sumarDias } from './semana';
       display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 10px;
       background: var(--superficie-2);
     }
-    .saldo span { font-size: 12.5px; color: var(--tinta-3); }
-    .saldo b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .saldo span { font-size: 0.78125rem; color: var(--tinta-3); }
+    .saldo b { font-size: 1.375rem; font-weight: 600; font-variant-numeric: tabular-nums; }
     .saldo .queda { background: var(--ok-f); }
     .saldo .queda b { color: var(--ok-t); }
     .form-vac { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
     .form-vac .field { flex: 1 1 150px; }
     .form-vac .field.ancho { flex: 2 1 220px; }
-    h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+    h3 { margin: 0 0 8px; font-size: 0.9375rem; font-weight: 600; }
   `,
 })
 export class VacacionesModal implements OnInit {

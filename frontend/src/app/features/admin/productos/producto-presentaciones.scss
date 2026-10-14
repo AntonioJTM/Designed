@@ -29,15 +29,15 @@
   gap: 10px;
   min-width: 0;
 }
-.pres-titulo h2 { margin: 0; font-size: 17px; font-weight: 600; }
-.pres-titulo .mono { color: var(--tinta-3); font-size: 12px; }
+.pres-titulo h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+.pres-titulo .mono { color: var(--tinta-3); font-size: 0.75rem; }
 .datos { display: flex; flex-direction: column; }
 .datos .dato:last-child { border-bottom: 0; }
 // El valor de "Hay" puede traer varios almacenes, uno por renglón.
 .dato .lineas { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
-.dato .lineas .muted { font-weight: 400; font-size: 13px; }
+.dato .lineas .muted { font-weight: 400; font-size: 0.8125rem; }
 .pres-pie { display: flex; justify-content: flex-end; margin-top: auto; }
-.btn-enlace.peligro { color: var(--peligro-t); font-size: 13px; }
+.btn-enlace.peligro { color: var(--peligro-t); font-size: 0.8125rem; }
 
 // Zona para soltar la lista de empaque del proveedor.
 .zona-carga {
@@ -53,12 +53,14 @@
   border-radius: 10px;
   background: var(--superficie-2);
   text-align: center;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--tinta-2);
 }
 .zona-carga.encima { border-color: var(--acento); background: var(--acento-suave); }
+/* El campo de archivo va escondido dentro: con el teclado, el foco se ve en la zona. */
+.zona-carga:focus-within { border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }
 .zona-carga > svg { color: var(--tinta-3); }
-.zona-carga .archivo { font-size: 13px; color: var(--tinta-3); }
+.zona-carga .archivo { font-size: 0.8125rem; color: var(--tinta-3); }
 
 // Precio con su símbolo y su unidad pegados al número.
 .campo-moneda {
@@ -66,7 +68,7 @@
   align-items: center;
   gap: 8px;
   color: var(--tinta-3);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 400;
 }
 .campo-moneda input { flex: 1; min-width: 0; }
@@ -81,12 +83,12 @@
   border: 1px solid var(--borde-campo);
   border-radius: 6px;
   font: inherit;
-  font-size: 14px;
+  font-size: 0.875rem;
   text-align: right;
   color: var(--tinta);
   background: #fff;
 }
-.input-lista:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px #2457C533; }
+.input-lista:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }
 
 .pie-tarjeta {
   display: flex;
@@ -102,13 +104,19 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 28px;
-  font-size: 14px;
+  font-size: 0.875rem;
   margin-bottom: 14px;
 }
-.resumen-previa b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; display: block; }
-.resumen-previa span { color: var(--tinta-3); font-size: 13px; }
+.resumen-previa b { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; display: block; }
+.resumen-previa span { color: var(--tinta-3); font-size: 0.8125rem; }
 .lotes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.avisos-lista { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--tinta-3); }
+/* "Lote 0095859 · 588 de 588 disponibles · 11,560 kg" no cabe en un celular:
+   la ficha se parte en renglones en vez de ensanchar la página. */
+.lotes .ficha { white-space: normal; max-width: 100%; text-align: left; }
+@media (max-width: 900px), (pointer: coarse) {
+  .input-lista, .card-head select { min-height: 44px; }
+}
+.avisos-lista { margin: 6px 0 0; padding-left: 18px; font-size: 0.8125rem; color: var(--tinta-3); }
 
 .card-head .derecha { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .card-head select {
@@ -117,7 +125,7 @@
   border: 1px solid var(--borde-campo);
   border-radius: 8px;
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   background: #fff;
   color: var(--tinta);
   min-width: 180px;
@@ -130,7 +138,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--tinta-3);
 }
 .imagen img, .imagen .sin-foto {

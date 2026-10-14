@@ -22,8 +22,8 @@
     </button>
   </div>
 
-  @if (error()) { <p class="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg">{{ mensaje() }}</p> }
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
 
   @if (modo() === 'lista') {
     <app-carga-lista [almacenes]="almacenes()" (cargada)="cargarHistorial()" />
@@ -217,7 +217,7 @@
       }
 
       @if (bloqueantes().length) {
-        <div class="alert">
+        <div class="alert" role="alert">
           {{ bloqueantes().length }}
           {{ bloqueantes().length === 1 ? 'código ya está registrado' : 'códigos ya están registrados' }},
           así que no se puede cargar. Si esta remesa ya se recibió antes, revísala en el historial.

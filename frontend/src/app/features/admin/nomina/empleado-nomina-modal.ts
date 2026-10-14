@@ -44,28 +44,28 @@ interface DiaCaptura {
   templateUrl: './empleado-nomina-modal.html',
   host: { '(document:keydown.escape)': 'cerrar()' },
   styles: `
-    .horario { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .horario th { text-align: left; font-weight: 500; color: var(--tinta-3); font-size: 12.5px; padding: 0 8px 6px; }
+    .horario { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .horario th { text-align: left; font-weight: 500; color: var(--tinta-3); font-size: 0.78125rem; padding: 0 8px 6px; }
     .horario td { padding: 4px 8px; border-top: 1px solid var(--borde-suave); }
     .horario td.dia { width: 120px; }
     .horario td.dia label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .horario input[type=time] {
       min-height: 38px; padding: 0 8px; border: 1px solid var(--borde-campo); border-radius: 8px;
-      font: inherit; font-size: 14px; background: #fff; color: var(--tinta);
+      font: inherit; font-size: 0.875rem; background: #fff; color: var(--tinta);
     }
     .horario input[type=time]:disabled { background: var(--superficie-2); color: var(--tinta-3); }
     .horario td.horas { color: var(--tinta-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .horario tr.descanso td.dia { color: var(--tinta-3); }
     .seccion { display: flex; flex-direction: column; gap: 10px; }
-    .seccion h3 { margin: 0; font-size: 15px; font-weight: 600; }
-    .seccion .ayuda-sec { margin: -6px 0 0; font-size: 13px; color: var(--tinta-3); }
+    .seccion h3 { margin: 0; font-size: 0.9375rem; font-weight: 600; }
+    .seccion .ayuda-sec { margin: -6px 0 0; font-size: 0.8125rem; color: var(--tinta-3); }
     .resumen-jornada {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
       padding: 12px 14px; border-radius: 10px; background: var(--superficie-2);
     }
     .resumen-jornada div { display: flex; flex-direction: column; gap: 2px; }
-    .resumen-jornada span { font-size: 12.5px; color: var(--tinta-3); }
-    .resumen-jornada b { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .resumen-jornada span { font-size: 0.78125rem; color: var(--tinta-3); }
+    .resumen-jornada b { font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
     .fila-botones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   `,
 })

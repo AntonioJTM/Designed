@@ -88,6 +88,14 @@ async function abonar(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Descuenta su saldo a favor de lo que debe (notas pendientes y crédito). */
+async function aplicarSaldoFavor(req, res, next) {
+  try {
+    const data = await service.aplicarSaldoFavor(Number(req.params.id), req.body, req.auth?.sub);
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
 async function ajustar(req, res, next) {
   try {
     const data = await service.ajustarCredito(Number(req.params.id), req.body, req.auth?.sub);
@@ -116,6 +124,7 @@ async function analisisVista(req, res, next) {
 }
 
 module.exports = {
+  aplicarSaldoFavor,
   analisis: analisisVista,
   registrar, iniciarSesion, perfil,
   listar, expediente, buscar, crearDesdeStaff, actualizar,

@@ -63,15 +63,13 @@ describe('EncargosPantalla', () => {
     expect((f.nativeElement as HTMLElement).textContent).toContain('Doña Chela');
   });
 
-  it('se filtran por para hoy, atrasados y los que lleva el chofer', async () => {
+  it('se filtran por para hoy y atrasados (ya no hay chofer, 2026-10-13)', async () => {
     const f = await montar();
     const c = f.componentInstance;
-    expect(c.cuantos()).toEqual({ todos: 3, hoy: 1, atrasados: 1, chofer: 1 });
+    expect(c.cuantos()).toEqual({ todos: 3, hoy: 1, atrasados: 1 });
     c.filtro.set('hoy');
     expect(c.items().map((e) => e.id)).toEqual([3]);
     c.filtro.set('atrasados');
-    expect(c.items().map((e) => e.id)).toEqual([2]);
-    c.filtro.set('chofer');
     expect(c.items().map((e) => e.id)).toEqual([2]);
   });
 
@@ -136,11 +134,19 @@ describe('EntregarPedidoModal', () => {
     expect(enviado).toEqual({ pagos: [{ metodo_pago_id: 2, monto: 500 }], sesion_caja_id: undefined, a_credito: 1000 });
   });
 
-  it('sin permiso de fiar no ofrece fiar', async () => {
+  it('sin permiso de vender a crédito no lo ofrece', async () => {
     const c = await montar(porPreparar, []);
     c.cobra = 500;
     expect(c.puedeFiar()).toBe(false);
-    expect(c.motivo()).toBe('Faltan $1,000.00 por cobrar.');
+    expect(c.motivo()).toBe('Faltan $1,000.00: cóbralos o entrégala como pendiente de pago.');
+  });
+
+  it('se entrega como nota pendiente de pago: no cobra nada ahora (2026-10-13)', async () => {
+    const c = await montar(porPreparar);
+    c.comoNota = true;
+    expect(c.motivo()).toBeNull();
+    c.entregar();
+    expect(enviado).toEqual({ pendiente_pago: true });
   });
 
   it('pesó menos de lo que pagó: se le devuelve del turno', async () => {

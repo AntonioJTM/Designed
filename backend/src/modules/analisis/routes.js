@@ -12,8 +12,8 @@ const router = Router();
 const soloJefes = [authRequired, requireTipo('usuario'), requirePermiso('ver:negocio')];
 
 // Las cuatro preguntas de un viaje: cobranza, clientes enfriados, hilo muerto y
-// margen. Tenían una ruta cada una, pero la pantalla siempre pide las cuatro y
-// el asistente lee los models directo, así que nadie las usaba sueltas.
+// margen. Tenían una ruta cada una, pero la pantalla siempre pide las cuatro,
+// así que nadie las usaba sueltas.
 router.get('/tablero', ...soloJefes, controller.tablero);
 
 module.exports = router;

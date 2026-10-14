@@ -13,7 +13,7 @@
     @if (creado(); as c) {
       <!-- Alta guardada: capturar el siguiente o ir a su expediente. -->
       <div class="modal-body">
-        <p class="ok-msg" style="margin: 0">
+        <p class="ok-msg" role="status" style="margin: 0">
           Se guardó a <b>{{ c.nombre_comercial || c.nombre }}</b>.
           @if (num(c.limite_credito) <= 0) { Nace sin crédito: se le cobra completo hasta que se le autorice un límite. }
         </p>
@@ -30,7 +30,7 @@
             <!-- El velo tapa el formulario ya dibujado, así no crece de tamaño. -->
             <div class="modal-cargando"><span class="spinner"></span></div>
           }
-          @if (error()) { <p class="alert" style="margin-top: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert" role="alert" style="margin-top: 0">{{ error() }}</p> }
 
           <p class="muted" style="margin: 0 0 16px">
             Lo único obligatorio es el nombre. Lo demás se completa cuando lo sepas.

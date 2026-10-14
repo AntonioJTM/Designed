@@ -13,7 +13,7 @@
     <form [formGroup]="form" (ngSubmit)="guardar()">
       <div class="modal-body">
         <div class="columna" style="gap: 16px">
-          @if (error()) { <p class="alert" style="margin: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
           <div class="form-grid">
             <label class="field full">
