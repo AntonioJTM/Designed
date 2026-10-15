@@ -47,7 +47,7 @@
     @if (p.metodo_entrega === 'recoger') {
       <p>
         <b>Recoges en la tienda.</b>
-        @if (config().tienda_direccion) { {{ config().tienda_direccion }} }
+        @if (config().tienda_direccion || config().fiscal_domicilio) { {{ config().tienda_direccion || config().fiscal_domicilio }} }
         @if (config().tienda_telefono) { · Tel. {{ config().tienda_telefono }} }
       </p>
     } @else {
@@ -89,8 +89,8 @@
           >
             <b>Recoger en tienda</b>
             <span class="muted">Sin costo de envío</span>
-            @if (config().tienda_direccion) {
-              <span class="muted">{{ config().tienda_direccion }}</span>
+            @if (config().tienda_direccion || config().fiscal_domicilio) {
+              <span class="muted">{{ config().tienda_direccion || config().fiscal_domicilio }}</span>
             }
           </button>
           <button

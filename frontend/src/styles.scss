@@ -46,6 +46,27 @@
   --barra-hover: #1C212C;
   --barra-borde: #333A48;
   --barra-claro: #E2E6EE;
+  /* Texto secundario sobre lo oscuro (el lema de Entrar). */
+  --barra-suave: #A9B0BD;
+  /* El contorno del foco sobre lo oscuro: el azul de siempre casi no se ve ahí. */
+  --barra-foco: #8FB2F2;
+  /* Los tonos de apoyo de cada estado (2026-10-15, colores sueltos pasados a la
+     paleta): la tarjeta "lista", el borde del botón rojo y el color de cada
+     botón lleno al pasar el puntero. */
+  --ok-suave: #F2FAF5;
+  --ok-borde: #BFE3CC;
+  --ok-oscuro: #12512F;
+  --peligro-borde: #F1C7BE;
+  --peligro-oscuro: #861D14;
+  /* El renglón con un cambio sin guardar (Permisos): un azul apenas visible. */
+  --acento-tenue: #F7F9FE;
+  /* Texto secundario SOBRE el azul (la cifra total). */
+  --sobre-acento: #DCE6FA;
+  /* El velo detrás de una ventana y el de "cargando" encima de ella. */
+  --velo: #12161F99;
+  --velo-claro: #FFFFFFE0;
+  /* La barra de desplazamiento de la página y de las tablas. */
+  --desplazamiento: #C5CAD3;
   --fuente: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -53,7 +74,7 @@
 * { box-sizing: border-box; }
 /* Barras de desplazamiento delgadas y discretas: solo salen cuando de verdad
    hace falta bajar, y no deben verse como parte de la pantalla. */
-html { scrollbar-width: thin; scrollbar-color: #C5CAD3 transparent; }
+html { scrollbar-width: thin; scrollbar-color: var(--desplazamiento) transparent; }
 /* Los tamaños de letra van en rem (auditoría 2026-10-13): con la letra normal
    del navegador (16 px) se ven igual que antes, y si alguien la agranda en su
    navegador, todo el sistema crece parejo. Las medidas de caja siguen en px. */
@@ -147,7 +168,7 @@ button, input, select, textarea { font-family: inherit; }
 .card-head h2, .card-head h3 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
 .card-head p { margin: 4px 0 0; font-size: 0.875rem; color: var(--tinta-3); line-height: 1.45; }
 .card.suave { background: var(--superficie-2); }
-.card.verde { background: #F2FAF5; border-color: #BFE3CC; }
+.card.verde { background: var(--ok-suave); border-color: var(--ok-borde); }
 .card.verde h2, .card.verde h3 { color: var(--ok-t); }
 
 /* Filas y columnas de tarjetas que se acomodan solas al ancho. */
@@ -176,6 +197,10 @@ button, input, select, textarea { font-family: inherit; }
 }
 .kpi-label, .kpi > .muted:first-child { font-size: 0.8125rem; color: var(--tinta-3); display: inline-flex; align-items: center; gap: 8px; }
 .kpi-label .punto { width: 8px; height: 8px; border-radius: 50%; background: var(--acento); flex: 0 0 8px; }
+.kpi-label .punto.tono-aviso { background: var(--punto-aviso); }
+.kpi-label .punto.tono-alerta { background: var(--punto-alerta); }
+.kpi-label .punto.tono-serie-3 { background: var(--viz-series-3); }
+.kpi-label .punto.tono-tinta { background: var(--tinta); }
 /* La cifra grande se encoge solo si no cabe en su tarjeta (con la letra del
    navegador al doble, "$14,000.00" se salía: un número no se parte en dos
    renglones). Con la letra normal y la tarjeta de siempre mide 1.75rem. */
@@ -183,7 +208,7 @@ button, input, select, textarea { font-family: inherit; }
 .kpi-valor, .kpi b { font-size: min(1.75rem, 15cqi); font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .kpi-pie { font-size: 0.8125rem; color: var(--tinta-3); line-height: 1.4; }
 .kpi.total { background: var(--acento); border-color: var(--acento); color: #fff; }
-.kpi.total .muted, .kpi.total .kpi-label, .kpi.total .kpi-pie { color: #DCE6FA; }
+.kpi.total .muted, .kpi.total .kpi-label, .kpi.total .kpi-pie { color: var(--sobre-acento); }
 
 /* ---- Botones ------------------------------------------------------------- */
 .btn {
@@ -199,10 +224,10 @@ button, input, select, textarea { font-family: inherit; }
 .btn-primary:disabled, .btn:disabled { opacity: 0.55; cursor: default; }
 .btn-ghost { background: #fff; border-color: var(--borde-campo); color: var(--tinta); }
 .btn-ghost:hover { background: var(--superficie-2); color: var(--tinta); }
-.btn-danger { background: #fff; border-color: #F1C7BE; color: var(--peligro-t); }
+.btn-danger { background: #fff; border-color: var(--peligro-borde); color: var(--peligro-t); }
 .btn-danger:hover { background: var(--peligro-f); color: var(--peligro-t); }
 .btn-ok { background: var(--ok-t); color: #fff; }
-.btn-ok:hover { background: #12512F; color: #fff; }
+.btn-ok:hover { background: var(--ok-oscuro); color: #fff; }
 .btn-sm { min-height: 36px; padding: 0 12px; font-size: 0.8125rem; }
 .btn-lg { min-height: 52px; padding: 0 22px; font-size: 1rem; }
 .btn-bloque { width: 100%; }
@@ -226,6 +251,10 @@ label.btn:focus-within { box-shadow: 0 0 0 3px var(--foco); }
 @media (max-width: 900px), (pointer: coarse) {
   body .btn-sm { min-height: 44px; }
   body .btn-icono { width: 44px; height: 44px; }
+  /* La ✕ de cada ventana y la de cada paquete, y el renglón de una casilla
+     (toda la etiqueta es la zona de toque). 2026-10-14, tercera auditoría. */
+  body .modal-cerrar, body .ficha-quitar { width: 44px; height: 44px; }
+  body .field.check { min-height: 44px; }
   body .volver { min-height: 44px; }
   /* Varias pantallas le ponen su propio alto (36 px) al selector; con el dedo
      manda este. Es la única excepción con !important, y solo en táctil. */
@@ -241,6 +270,16 @@ label.btn:focus-within { box-shadow: 0 0 0 3px var(--foco); }
 /* Van dentro de una tarjeta, sin marco propio. Una tabla ancha se desplaza en
    su caja (.tabla-scroll) en vez de ensanchar la página. */
 .tabla-scroll { overflow-x: auto; position: relative; }
+/* Cuando NO cabe, `core/services/tablas-desplazables.service.ts` la deja enfocable
+   y marca de qué lado hay más columnas: esa orilla se desvanece (sin sombra:
+   el sistema es plano). Con el cursor del teclado dentro, se ve completa y con
+   su contorno por dentro, para que la tarjeta no lo recorte. */
+.tabla-scroll.hay-mas-der { mask-image: linear-gradient(to right, black calc(100% - 32px), transparent); }
+.tabla-scroll.hay-mas-izq { mask-image: linear-gradient(to left, black calc(100% - 32px), transparent); }
+.tabla-scroll.hay-mas-izq.hay-mas-der {
+  mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent);
+}
+.tabla-scroll:focus-visible { mask-image: none; outline-offset: -2px; border-radius: 4px; }
 /* `position: relative` a propósito: sin él, los `.oculto` (texto solo para
    lector de pantalla, con position: absolute) de las columnas de la derecha se
    salían de la caja y ensanchaban TODA la página en el celular. */
@@ -315,6 +354,32 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- Etiquetas de estado ------------------------------------------------- */
+/*
+  FICHA DE UN PAQUETE ESCANEADO, con su botón para quitarlo (2026-10-14). La
+  misma en la caja (los paquetes de una línea) y en la devolución (los que
+  regresan cerrados): el código, su peso y la ✕. Es la "ficha" de DESIGN.md:
+  6 px de curva, gris neutro.
+*/
+.fichas-paquete { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ficha-paquete {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 2px 2px 2px 8px; border-radius: 6px;
+  background: var(--superficie-2); border: 1px solid var(--borde-suave);
+  font-size: 0.8125rem; color: var(--tinta-2); font-variant-numeric: tabular-nums;
+}
+.ficha-paquete .mono, .ficha-paquete b { white-space: nowrap; }
+/* El código y el peso: si no caben (el carrito en el celular), el peso baja
+   abajo del código, entero; la ✕ se queda a la derecha. */
+.ficha-texto { display: inline-flex; flex-wrap: wrap; gap: 0 6px; min-width: 0; }
+.ficha-paquete .mono { color: var(--tinta); }
+.ficha-paquete b { font-weight: 600; color: var(--tinta); }
+.ficha-quitar {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 4px;
+  background: none; color: var(--tinta-3); cursor: pointer;
+}
+.ficha-quitar svg { width: 12px; height: 12px; }
+.ficha-quitar:hover { background: var(--peligro-f); color: var(--peligro-t); }
+
 .pill {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 10px; border-radius: 999px;
@@ -328,7 +393,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .pill.off, .pill.rojo { background: var(--peligro-f); color: var(--peligro-t); }
 .pill.gris { background: var(--neutro-f); color: var(--neutro-t); }
 /* Ficha neutra (un calibre, un hilo que también lleva). */
-.ficha { display: inline-block; font-size: 0.75rem; padding: 4px 9px; border-radius: 6px; background: #F1F3F6; color: var(--tinta-2); white-space: nowrap; }
+.ficha { display: inline-block; font-size: 0.75rem; padding: 4px 9px; border-radius: 6px; background: var(--neutro-f); color: var(--neutro-t); white-space: nowrap; }
 
 /* ---- Avisos -------------------------------------------------------------- */
 .alert { background: var(--peligro-f); color: var(--peligro-t); padding: 12px 14px; border-radius: 8px; font-size: 0.875rem; }
@@ -347,7 +412,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .tabs a, .tabs button {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px;
   margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none;
-  color: #4A5160; font: inherit; font-size: 0.9375rem; font-weight: 500; text-decoration: none; cursor: pointer;
+  color: var(--tinta-2); font: inherit; font-size: 0.9375rem; font-weight: 500; text-decoration: none; cursor: pointer;
 }
 .tabs a:hover, .tabs button:hover { color: var(--tinta); }
 .tabs a.on, .tabs button.on { border-bottom-color: var(--acento); color: var(--acento-oscuro); font-weight: 600; }
@@ -396,7 +461,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 /* Columnas verticales (ventas por semana, por hora). */
 .columnas { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; align-items: end; border-bottom: 1px solid var(--borde); }
 .columnas > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; }
-.columnas > div > i { width: 100%; max-width: 44px; background: #9EC3F2; border-radius: 4px 4px 0 0; display: block; }
+.columnas > div > i { width: 100%; max-width: 44px; background: var(--viz-columna); border-radius: 4px 4px 0 0; display: block; }
 .columnas > div > i.fuerte { background: var(--viz-rampa-3); }
 .columnas > div > span { font-size: 0.6875rem; font-weight: 600; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
 .columnas-pie { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin-top: 6px; }
@@ -428,7 +493,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: #12161F99;
+  background: var(--velo);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -476,7 +541,7 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   inset: 0;
   z-index: 2;
   border-radius: 12px;
-  background: #ffffffe0;
+  background: var(--velo-claro);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -541,8 +606,12 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   border-top: 1px solid var(--borde);
   background: var(--superficie-2);
   border-radius: 0 0 12px 12px;
+  flex-wrap: wrap;
 }
-.modal-foot .nota { margin-right: auto; font-size: 0.8125rem; color: var(--tinta-3); }
+/* La nota ocupa lo que dejan los botones, pero no menos de 14rem: si no le
+   alcanza (en el celular), toma su propio renglón ARRIBA de los botones en vez
+   de partirse en una columnita de una palabra (2026-10-15, auditoría). */
+.modal-foot .nota { margin-right: auto; flex: 1 1 14rem; font-size: 0.8125rem; color: var(--tinta-3); }
 
 .field input:disabled, .field select:disabled, .field textarea:disabled {
   background: var(--superficie-2);
@@ -578,7 +647,14 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   --viz-rampa-4: #0d366b;
   /* Fondos suaves del ritmo de un cliente (el hueco entre visitas). */
   --viz-series-1-suave: #BFD6F4;
+  /* Las columnas de las gráficas de cajas (`.columnas`): gasto por mes, ventas por hora. */
+  --viz-columna: #9EC3F2;
   --punto-aviso-suave: #F6DDB0;
+  /* El mapa de "Cuándo compra" (día × hora): los dos pasos claros antes de la
+     rampa, y la letra que va sobre el segundo. */
+  --viz-calor-1: #DCE8FA;
+  --viz-calor-2: #9EC3F2;
+  --viz-calor-tinta: #0F2E5C;
   --punto-alerta-suave: #F3C7B1;
 }
 .viz-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
@@ -855,7 +931,7 @@ table.bultos th { color: var(--tinta-3); font-weight: 600; border-bottom: 1px so
 }
 /* El input de archivo va oculto dentro de un label con pinta de botón: el
    control nativo no se puede estilar y se ve fuera de lugar. */
-.comprobante label.btn { cursor: pointer; display: inline-block; }
+.comprobante label.btn { cursor: pointer; }
 
 /* ---------------------------------------------------------------------------
    Tablero del negocio

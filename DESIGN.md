@@ -14,6 +14,8 @@ colors:
   acento: "#2457C5"
   acento-oscuro: "#1D4596"
   acento-suave: "#E8EEFB"
+  acento-tenue: "#F7F9FE"
+  sobre-acento: "#DCE6FA"
   barra: "#12161F"
   barra-tinta: "#C9CED8"
   barra-titulo: "#8C93A1"
@@ -21,17 +23,27 @@ colors:
   barra-hover: "#1C212C"
   barra-borde: "#333A48"
   barra-claro: "#E2E6EE"
+  barra-suave: "#A9B0BD"
+  barra-foco: "#8FB2F2"
   punto-aviso: "#E9A23B"
   punto-alerta: "#C2410C"
   foco: "#2457C533"
+  velo: "#12161F99"
+  velo-claro: "#FFFFFFE0"
+  desplazamiento: "#C5CAD3"
   ok-f: "#E6F4EC"
   ok-t: "#17663F"
+  ok-suave: "#F2FAF5"
+  ok-borde: "#BFE3CC"
+  ok-oscuro: "#12512F"
   aviso-f: "#FDF1DC"
   aviso-t: "#7A4A00"
   alerta-f: "#FCE9E1"
   alerta-t: "#9A3412"
   peligro-f: "#FBE4E2"
   peligro-t: "#A12318"
+  peligro-borde: "#F1C7BE"
+  peligro-oscuro: "#861D14"
   viz-series-1: "#2a78d6"
   viz-series-2: "#eb6834"
   viz-series-3: "#1baf7a"
@@ -41,8 +53,12 @@ colors:
   viz-rampa-3: "#1c5cab"
   viz-rampa-4: "#0d366b"
   viz-series-1-suave: "#BFD6F4"
+  viz-columna: "#9EC3F2"
   punto-aviso-suave: "#F6DDB0"
   punto-alerta-suave: "#F3C7B1"
+  viz-calor-1: "#DCE8FA"
+  viz-calor-2: "#9EC3F2"
+  viz-calor-tinta: "#0F2E5C"
 typography:
   headline:
     fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, sans-serif"
@@ -215,7 +231,9 @@ parejas suaves.
   los enlaces, el anillo de foco de los campos y la cifra total destacada. Al pasar el puntero baja
   a **Azul noche** (`acento-oscuro`), que también es la tinta del texto activo y de los avisos
   informativos. **Azul neblina** (`acento-suave`) es el fondo de una opción elegida, de un aviso
-  informativo y del círculo con las iniciales del cliente.
+  informativo y del círculo con las iniciales del cliente. **Azul apenas** (`acento-tenue`) marca
+  el renglón con un cambio sin guardar (Permisos), y **azul sobre azul** (`sobre-acento`) es el
+  texto secundario encima del azul lleno (la cifra total).
 
 ### Neutral
 - **Gris de piso** (`fondo`): el fondo de toda la página, detrás de las tarjetas.
@@ -233,7 +251,13 @@ parejas suaves.
   para el botón del menú en el celular): solo la barra del menú lateral.
 - **Puntos de las cifras clave:** el punto de color junto a la etiqueta de una cifra usa el
   acento, **ámbar punto** (`punto-aviso`), **naranja punto** (`punto-alerta`, también el globo de
-  la campana) o un color de serie. Nunca un hexadecimal suelto en la pantalla.
+  la campana), **tinta carbón** (`.tono-tinta`, el "Total a pagar" de Nómina) o un color de
+  serie. Van por clase (`.punto.tono-…`), nunca con `style=`, y nunca un hexadecimal suelto en la
+  pantalla.
+- **Velo de ventana** (`velo`): el oscuro translúcido detrás de una ventana; **velo blanco**
+  (`velo-claro`): el de "cargando" encima de una ventana.
+- **Riel de desplazamiento** (`desplazamiento`): la barra de desplazamiento de la página y de las
+  tablas.
 
 ### Estados (parejas fondo + tinta)
 - **Verde pagado** (`ok-f` / `ok-t`): pagado, entregado, listo, a favor.
@@ -241,6 +265,10 @@ parejas suaves.
 - **Naranja atención** (`alerta-f` / `alerta-t`): atrasado, alerta de inventario.
 - **Rojo cancelado** (`peligro-f` / `peligro-t`): errores, cancelado, quitar, borrar.
 - El informativo usa `acento-suave` / `acento-oscuro`, y el neutro usa `borde-suave` / `tinta-2`.
+- **Tonos de apoyo:** **verde listo** (`ok-suave` / `ok-borde`), el fondo y el borde de la tarjeta
+  "verde"; **verde hondo** (`ok-oscuro`), el botón Ok bajo el puntero; **borde rosado**
+  (`peligro-borde`), el borde del botón Danger; y **rojo hondo** (`peligro-oscuro`), el botón rojo
+  lleno de la ventana de confirmación bajo el puntero.
 
 ### Gráficas
 - **Serie azul, serie naranja y serie aqua** (`viz-series-1..3`) para hasta tres series, y
@@ -249,6 +277,8 @@ parejas suaves.
   una deuda, qué tan seguido compra un cliente.
 - **Fondos suaves del ritmo** (`viz-series-1-suave`, `punto-aviso-suave`, `punto-alerta-suave`):
   el hueco entre visitas de un cliente al corriente, al que ya le toca y al que se enfría.
+- **Mapa de calor** (`viz-calor-1`, `viz-calor-2` y luego la rampa azul): "Cuándo compra" (día ×
+  hora). Sobre el segundo paso la letra es `viz-calor-tinta`.
 - Los colores de gráfica se nombran en el código como `var(--token)`, nunca en hexadecimal.
 
 ### Named Rules
@@ -324,7 +354,7 @@ contorno azul de 2 px separado 2 px del borde (en el menú oscuro, un azul claro
 
 ### Shadow Vocabulary
 - **Ventana flotante** (`box-shadow: 0 20px 50px rgba(18, 22, 31, 0.25)`): solo los modales,
-  sobre el velo `#12161F99`.
+  sobre el velo (`velo`, `#12161F99`).
 - **Anillo de foco** (`box-shadow: 0 0 0 3px var(--foco)`): campos, buscador y el botón que
   abre el selector de archivo, con el cursor dentro.
 - **Contorno de teclado** (`outline: 2px solid var(--acento); outline-offset: 2px`, solo con
@@ -351,9 +381,11 @@ Firmes y cómodos: altos, con texto de peso medio y nada de mayúsculas.
   puntero, azul noche.
 - **Ghost (secundario):** blanco con borde de campo y texto carbón; al pasar el puntero, blanco
   humo.
-- **Danger:** blanco con borde rosado y texto rojo; al pasar el puntero, fondo rojo suave. Es el
-  que lleva el verbo de lo que no tiene vuelta ("Eliminar", "Cancelar el pedido").
-- **Ok:** verde pagado lleno, para confirmar una entrega o un cobro.
+- **Danger:** blanco con borde rosado (`peligro-borde`) y texto rojo; al pasar el puntero, fondo
+  rojo suave. Es el que lleva el verbo de lo que no tiene vuelta ("Eliminar", "Cancelar el
+  pedido"). Lleno de rojo en la ventana de confirmación, baja a rojo hondo (`peligro-oscuro`).
+- **Ok:** verde pagado lleno, para confirmar una entrega o un cobro; al pasar el puntero, verde
+  hondo (`ok-oscuro`).
 - **Tamaños:** chico de 36 px para acciones dentro de una tabla y grande de 52 px para el cobro.
   Deshabilitado, al 55% de opacidad. **En el celular y en pantallas táctiles** (menos de 900 px o
   puntero grueso) el chico, el de solo ícono, los selectores y el "Volver" suben a 44 px, y los
@@ -364,12 +396,16 @@ Firmes y cómodos: altos, con texto de peso medio y nada de mayúsculas.
 ### Chips
 - **Etiqueta de estado:** cápsula de 12 px de letra, seminegrita, con la pareja de su estado
   (verde, ámbar, naranja, rojo, azul o gris).
-- **Ficha:** rectángulo chico de 6 px de curva, gris neutro, para un calibre o un dato al margen.
+- **Ficha:** rectángulo chico de 6 px de curva, con la pareja neutra (`neutro-f` / `neutro-t`),
+  para un calibre o un dato al margen.
+- **Ficha de paquete:** la misma ficha con el código (mono), el peso (seminegrita) y una ✕ dibujada
+  para quitarlo (`.ficha-paquete`). Es la pieza de un paquete escaneado en la caja y en la
+  devolución; con el dedo, la ✕ mide 44 px.
 
 ### Cards / Containers
 - **Corner Style:** 10 px.
-- **Background:** blanco de tarjeta; "suave" en blanco humo; "verde" para lo que ya está listo
-  (por ejemplo, los apartados liquidados).
+- **Background:** blanco de tarjeta; "suave" en blanco humo; "verde" (`ok-suave` con borde
+  `ok-borde`) para lo que ya está listo (por ejemplo, los apartados liquidados).
 - **Shadow Strategy:** ninguna (ver Elevation & Depth).
 - **Border:** 1 px de línea de estante.
 - **Internal Padding:** 22 px arriba y abajo, 24 px a los lados. Su encabezado lleva el título a
@@ -378,6 +414,9 @@ Firmes y cómodos: altos, con texto de peso medio y nada de mayúsculas.
 ### Inputs / Fields
 - **Style:** blanco, borde de campo de 1 px, 8 px de curva y 44 px de alto. La etiqueta va arriba
   en tono pizarra, y la ayuda debajo, en gris.
+- **Opcional:** el texto de la etiqueta va envuelto en un `<span>`
+  (`<span>Teléfono <span class="muted">(opcional)</span></span>`), para que quede en un renglón y
+  los campos vecinos se alineen.
 - **Focus:** el borde se vuelve azul con el halo de 3 px; sin el contorno del navegador.
 - **Disabled:** blanco humo con texto gris.
 - **Cantidades:** paso de 0.001 y la unidad junto al número ("kg").
@@ -389,7 +428,8 @@ Firmes y cómodos: altos, con texto de peso medio y nada de mayúsculas.
   la que está bajo el puntero, un tono apenas más claro que la barra. Abajo, siempre a la vista,
   van el nombre, el puesto, la campana y "Salir". La lista se desplaza sin barra visible y se
   desvanece al final mientras haya más opciones.
-- **Pestañas:** texto de 15 px con un subrayado azul de 2 px en la elegida.
+- **Pestañas:** texto de 15 px con un subrayado azul de 2 px en la elegida; las demás van en
+  `tinta-2`.
 - **Opciones excluyentes** (Cobrar / Fiar / Apartar / Pedido): botones del mismo ancho; el elegido
   lleva borde azul y fondo azul neblina. Si no caben (celular muy angosto, letra grande) bajan de
   renglón en vez de salirse.
@@ -402,7 +442,9 @@ Firmes y cómodos: altos, con texto de peso medio y nada de mayúsculas.
 Las acciones se hacen aquí, sin salir del listado. Velo oscuro, ventana blanca de 900 px máximo
 (620 px para formularios cortos) con 12 px de curva. Tiene encabezado con título y ✕, un cuerpo
 que se desplaza y un pie en blanco humo con los botones a la derecha, siempre a la vista. Aparece
-con un desvanecido corto (0.12–0.14 s), sin moverse. No se cierra al tocar el fondo.
+con un desvanecido corto (0.12–0.14 s), sin moverse. No se cierra al tocar el fondo. La nota del
+pie ocupa lo que dejan los botones, pero no menos de 14rem; si no le alcanza (celular), toma su
+renglón ARRIBA de los botones.
 
 **El foco entra y sale con la ventana** (`core/services/foco-ventanas.service.ts`, uno solo para
 todas): al abrirse, el cursor va al primer campo de su cuerpo (o a lo que la ventana enfoque por
@@ -410,6 +452,14 @@ su cuenta, como el lector); Tab da la vuelta DENTRO de la ventana de más arriba
 foco regresa al botón que la abrió. En pantalla táctil no se enfoca un campo, para no tapar la
 ventana con el teclado del celular. Toda ventana lleva `role="dialog"` (o `alertdialog`) y
 `aria-modal="true"`: sin eso el servicio no la ve.
+
+### Tablas que se mueven de lado
+Una tabla ancha va en `.tabla-scroll` y se desplaza dentro de su caja. Cuando no cabe, el servicio
+`core/services/tablas-desplazables.service.ts` (arrancado una vez en `app.ts`, como el foco de las
+ventanas) la deja enfocable con Tab (`tabindex="0"`), le da nombre para el lector de pantalla
+(`role="region"`, "Tabla: <título de su tarjeta>") y desvanece con `mask-image` la orilla donde
+hay más columnas (`hay-mas-der` / `hay-mas-izq`). Con el cursor del teclado dentro se ve completa,
+con su contorno por dentro. Sin sombras: el sistema es plano.
 
 ### Punto de venta: el lector
 El campo del lector tiene el cursor siempre que no se esté escribiendo en otro campo: al abrir la
@@ -420,6 +470,12 @@ queda marcado para que el siguiente código lo reemplace.
 ### Cifras clave
 Una tarjeta por número: la etiqueta con un punto de color, la cifra grande y un pie que dice
 contra qué se mide. La cifra "total" puede ir llena de azul con texto blanco.
+
+### Marca
+Los logos publicados (`frontend/public/`) van a su tamaño de uso: `hitex-marca.png` (65 × 96, el
+cono del menú y de Entrar) y `hitex-logo.png` (720 × 420), con paleta de 64 colores. Sobre la barra
+oscura la marca va en un cuadro blanco. Los originales (`Hitex.jpeg`, `hitex-*-original.png`,
+`icono-512.png`) viven en `frontend/marca/`, que no se publica.
 
 ## Do's and Don'ts
 
@@ -453,3 +509,5 @@ contra qué se mide. La cifra "total" puede ir llena de azul con texto blanco.
 - **Don't** esconder con `hidden` un campo de archivo que se abre desde una etiqueta: no se llega
   a él con el teclado. Va con la clase `oculto`.
 - **Don't** escribir un color suelto en una pantalla: si se repite, es un token.
+- **Don't** ponerle `tabindex` a mano a una tabla desplazable, ni sombras en sus orillas: eso lo
+  hace el servicio de las tablas, con `mask-image`.

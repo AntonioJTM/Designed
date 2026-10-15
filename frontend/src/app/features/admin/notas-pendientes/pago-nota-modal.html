@@ -12,12 +12,12 @@
           <!-- El velo tapa el formulario ya dibujado, así la ventana no crece. -->
           <div class="modal-cargando"><span class="spinner"></span></div>
         }
-        <div class="columna" style="gap: 16px">
+        <div class="columna pago-nota">
           <p class="muted">
-            <b style="color: var(--tinta)">{{ quien() }}</b> se llevó la nota
+            <b>{{ quien() }}</b> se llevó la nota
             <span class="mono">{{ nota().numero_pedido }}</span> de {{ nota().total | dinero
             }}{{ nota().pagado > 0 ? ' y ya pagó ' + (nota().pagado | dinero) : '' }}. Le faltan
-            <b style="color: var(--tinta)">{{ nota().falta | dinero }}</b>.
+            <b>{{ nota().falta | dinero }}</b>.
           </p>
           @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 

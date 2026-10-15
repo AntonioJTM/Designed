@@ -1,10 +1,10 @@
 import { Pedido } from '../../core/models/ventas.models';
-import { SIN_TICKET, armarTicket, llevaTicket, pxAMm, tipoDeTicket } from './ticket';
+import { SIN_TICKET, armarTicket, llevaTicket, papelDe, prepararHoja, telefonoLegible, tipoDeTicket, armarPrueba } from './ticket';
 
 /**
  * El ticket impreso: dice qué fue (venta, apartado, pedido, a crédito), qué hilo
  * se llevó con su calibre y sus paquetes, y cuánto quedó pendiente. Lo de
- * imprimir (el marco y el largo de la hoja) se prueba en el navegador.
+ * imprimir (el marco y la espera del logo) se prueba en un marco de verdad.
  */
 describe('Ticket impreso', () => {
   const tienda = { nombre: 'Hitex', direccion: 'Calle Uno 10, Centro', telefono: '445 000 0000' };
@@ -134,7 +134,123 @@ describe('Ticket impreso', () => {
     expect(html).not.toContain('<b>Doña</b>');
   });
 
-  it('convierte el largo medido a milímetros (96 pixeles = 1 pulgada = 25.4 mm)', () => {
-    expect(pxAMm(96)).toBeCloseTo(25.4, 5);
+  it('el encabezado lleva el logo y los datos fiscales, y la leyenda va al pie', () => {
+    const html = armarTicket(venta(), {
+      ...tienda,
+      logo: 'http://localhost/hitex-ticket.png',
+      razonSocial: 'EMPRESA DE PRUEBA, S.A. DE C.V.',
+      rfc: 'XAXX010101000',
+      regimen: '601 General de Ley Personas Morales',
+      domicilio: 'Calle Dos 20, C.P. 10000',
+      leyenda: 'Este ticket no es un comprobante fiscal.',
+    });
+    expect(html).toContain('<img class="logo" src="http://localhost/hitex-ticket.png"');
+    expect(html).toContain('EMPRESA DE PRUEBA, S.A. DE C.V.');
+    expect(html).toContain('RFC: <b>XAXX010101000</b>');
+    expect(html).toContain('Régimen: 601 General de Ley Personas Morales');
+    // El domicilio fiscal va en lugar de la dirección de la tienda, no junto a ella.
+    expect(html).toContain('Calle Dos 20, C.P. 10000');
+    expect(html).not.toContain('Calle Uno 10');
+    expect(html).toContain('Tel. 445 000 0000');
+    expect(html).toContain('<div class="leyenda">Este ticket no es un comprobante fiscal.</div>');
+    // Si el logo no carga, queda el nombre en letras listo para ponerse.
+    expect(html).toContain('<template id="sin-logo"><h1>HITEX</h1></template>');
+  });
+
+  it('si el régimen o el RFC se copiaron con su rótulo, no lo repite', () => {
+    const html = armarTicket(venta(), {
+      ...tienda,
+      rfc: 'RFC: XAXX010101000',
+      regimen: 'REGIMEN: 601 GENERAL DE LEY PERSONAS MORALES',
+    });
+    expect(html).toContain('RFC: <b>XAXX010101000</b>');
+    expect(html).toContain('Régimen: 601 GENERAL DE LEY PERSONAS MORALES');
+    expect(html).not.toMatch(/Régimen: R[EÉ]GIMEN/i);
+    // Sin los dos puntos es parte del dato: no se toca.
+    const resico = armarTicket(venta(), { ...tienda, rfc: 'RFCA800101AB1', regimen: 'Régimen Simplificado de Confianza' });
+    expect(resico).toContain('RFC: <b>RFCA800101AB1</b>');
+    expect(resico).toContain('Régimen: Régimen Simplificado de Confianza');
+  });
+
+  it('va pegado a la izquierda, no centrado: en una impresora que imprime menos de lo que dice su hoja no se corta', () => {
+    const html = armarTicket(venta(), tienda);
+    expect(html).toContain('.t { width: 46mm; margin: 0 0 0 1mm;');
+    expect(html).not.toContain('margin: 0 auto; padding: 2mm');
+  });
+
+  it('la hoja de prueba trae la regla hasta 80 mm y el recuadro del ancho elegido', () => {
+    const de58 = armarPrueba('58');
+    expect(de58).toContain('Ancho elegido: <b>58 mm</b>');
+    expect(de58).toContain('width: 46mm');
+    expect(de58).toContain('<b style="left:77.5mm">80</b>');
+    expect(armarPrueba('80')).toContain('width: 60mm');
+  });
+
+  it('sin datos fiscales capturados no deja renglones vacíos ni leyenda', () => {
+    const html = armarTicket(venta(), { nombre: 'Hitex' });
+    expect(html).toContain('<h1>HITEX</h1>');
+    expect(html).not.toContain('RFC:');
+    expect(html).not.toContain('class="leyenda"');
+  });
+
+  it('el teléfono de 10 dígitos se lee en tres partes; lo demás se deja como está', () => {
+    expect(telefonoLegible('7786542453')).toBe('778 654 2453');
+    expect(telefonoLegible('778 654 2453')).toBe('778 654 2453');
+    expect(telefonoLegible('Ext. 12')).toBe('Ext. 12');
+  });
+
+  it('NO pide tamaño de hoja: en la impresora (rollo de 58 × 3276 mm) Chrome lo encogía a la mitad', () => {
+    const html = armarTicket(venta(), tienda);
+    expect(html).toContain('@page { margin: 0; }');
+    expect(html).not.toMatch(/@page[^}]*size/);
+  });
+
+  it('se acomoda al papel: 58 mm por omisión (la POS-58 de la tienda) u 80 mm', () => {
+    expect(papelDe(null).mm).toBe(58);
+    expect(papelDe('58').mm).toBe(58);
+    expect(papelDe('80').mm).toBe(80);
+    const angosto = armarTicket(venta(), { ...tienda, logo: 'x.png' });
+    expect(angosto).toContain('.t { width: 46mm;');
+    expect(angosto).toContain('width: 36mm; height: auto;');
+    expect(angosto).toContain('font-size: 10.1px'); // 12 × 0.84: la letra baja para que quepan los importes
+    // El de 80 mide 53 mm: lo que cupo en la WL88S de la tienda (2026-10-14).
+    const ancho = armarTicket(venta(), { ...tienda, logo: 'x.png', papelMm: '80' });
+    expect(ancho).toContain('.t { width: 60mm;');
+    expect(ancho).toContain('width: 44mm; height: auto;');
+    expect(ancho).toContain('font-size: 10.1px'); // 12 × 0.84
+  });
+
+  describe('la hoja, antes de imprimir', () => {
+    let marco: HTMLIFrameElement;
+
+    async function preparar(html: string): Promise<Document> {
+      marco = document.createElement('iframe');
+      marco.style.cssText = 'position:fixed;left:-10000px;top:0;width:58mm;height:50mm;border:0';
+      document.body.appendChild(marco);
+      const doc = marco.contentDocument!;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      await prepararHoja(doc);
+      return doc;
+    }
+
+    afterEach(() => marco?.remove());
+
+    it('si el logo no carga, pone el nombre en letras y no se queda esperando', async () => {
+      const doc = await preparar(armarTicket(venta(), { nombre: 'Hitex', logo: 'data:image/png;base64,AAAA' }));
+      expect(doc.querySelector('img.logo')).toBeNull();
+      expect(doc.querySelector('.tienda h1')?.textContent).toBe('HITEX');
+    });
+
+    it('espera a que cargue el logo antes de imprimir', async () => {
+      const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const doc = await preparar(armarTicket(venta(), { nombre: 'Hitex', logo: png }));
+      const logo = doc.querySelector<HTMLImageElement>('img.logo');
+      expect(logo?.complete).toBe(true);
+      expect(logo?.naturalWidth).toBe(1);
+      // 36 mm de ancho en papel de 58 (unos 136 pixeles), con la proporción del logo.
+      expect(Math.round(logo!.getBoundingClientRect().width)).toBe(136);
+    });
   });
 });

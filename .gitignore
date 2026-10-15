@@ -26,3 +26,13 @@ backend/uploads/
 # PÚBLICO: no se suben. Las pruebas arman su propio Excel en memoria.
 /HTX 1.ARAC FFAU 721502-4 - INVENTARIO.xlsx
 /carga de productos.xlsx
+
+# Superpowers (complemento de Claude Code): sus diseños y planes van FUERA del
+# repositorio, en D:\Imagenes\Hitex - planes\ (el repo es público). Por si acaso.
+/docs/superpowers/
+/.superpowers/
+
+# La Constancia de Situación Fiscal de la empresa (de ahí salen los datos del
+# ticket, que viven en la base: Configuración -> Datos fiscales). El repositorio
+# es PÚBLICO: no se sube.
+/ticketinfo.pdf

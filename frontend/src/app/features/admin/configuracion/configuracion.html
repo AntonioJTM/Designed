@@ -25,12 +25,21 @@
               <h2>{{ g.titulo }}</h2>
               @if (g.sub) { <p>{{ g.sub }}</p> }
             </div>
+            @if (g.prueba) {
+              <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirPrueba()">Imprimir una prueba</button>
+            }
           </div>
           <div class="campos">
             @for (o of opcionesDe(g.prefijos); track o.clave) {
               <label class="field" [style.flex]="campo(o).ancho || null">
                 {{ campo(o).etiqueta }}
-                @if (campo(o).tipo === 'number') {
+                @if (campo(o).tipo === 'select') {
+                  <select [(ngModel)]="valores[o.clave]" [name]="o.clave">
+                    @for (op of campo(o).opciones; track op.valor) {
+                      <option [value]="op.valor">{{ op.texto }}</option>
+                    }
+                  </select>
+                } @else if (campo(o).tipo === 'number') {
                   <input type="number" min="0" step="0.01" [(ngModel)]="valores[o.clave]" [name]="o.clave" />
                 } @else {
                   <input

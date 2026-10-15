@@ -34,6 +34,15 @@ export interface ConfiguracionTienda {
   envio_costo_fijo?: string | null;
   tienda_telefono?: string | null;
   tienda_direccion?: string | null;
+  /** Encabezado del ticket (2026-10-14), como vienen en la Constancia de Situación Fiscal. */
+  fiscal_razon_social?: string | null;
+  fiscal_rfc?: string | null;
+  fiscal_regimen?: string | null;
+  fiscal_domicilio?: string | null;
+  /** Lo que va al pie del ticket. */
+  ticket_leyenda?: string | null;
+  /** El ancho del rollo de la impresora de tickets: '58' u '80'. */
+  ticket_papel_mm?: string | null;
   /** Las cuentas ACTIVAS a las que se puede depositar (2026-10-06: pueden ser varias). */
   cuentas_bancarias?: CuentaBancariaPublica[];
 }

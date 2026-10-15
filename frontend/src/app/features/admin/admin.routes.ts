@@ -15,12 +15,14 @@ const p = (permiso: string | null) => ({ canActivate: [permisoGuard], data: { pe
  * título de la pestaña del navegador dice "Cuánto debe · Clientes · Hitex".
  */
 const VISTAS_CLIENTES: [string, string][] = [
+  ['todos', 'Todos los clientes'],
   ['frecuencia', 'Frecuencia de compra'],
   ['dejaron', 'Dejaron de venir'],
   ['deuda', 'Cuánto debe'],
   ['que-compra', 'Qué compra'],
   ['cuando', 'Cuándo compra'],
   ['gasto', 'Cuánto gasta'],
+  ['lugares', 'Dónde entrego'],
 ];
 
 export const ADMIN_ROUTES: Routes = [
@@ -57,7 +59,8 @@ export const ADMIN_ROUTES: Routes = [
 
       // ---- Clientes: seis pestañas (rutas literales, ANTES de ':id' para que
       // "deuda" no se tome por el id de un cliente) y el expediente.
-      { path: 'clientes', pathMatch: 'full', redirectTo: 'clientes/frecuencia' },
+      // Clientes abre en la lista de todos (2026-10-14: "no tengo un lugar donde ver todos los clientes").
+      { path: 'clientes', pathMatch: 'full', redirectTo: 'clientes/todos' },
       ...VISTAS_CLIENTES.map(([vista, nombre]) => ({
         path: 'clientes/' + vista,
         title: `${nombre} · ${nombreDe('clientes')}`,

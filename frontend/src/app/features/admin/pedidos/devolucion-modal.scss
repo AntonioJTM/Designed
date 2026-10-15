@@ -1,0 +1,49 @@
+// Ventana de devolución: el lector, una tarjeta por línea y el resumen de abajo.
+.modal { max-width: 760px; }
+.explica { margin: 0 0 16px; font-size: 0.875rem; color: var(--tinta-2); line-height: 1.5; }
+.explica b { color: var(--tinta); }
+.modal-body > .alert { margin: 0 0 16px; }
+.debe-esta { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: var(--info-f); color: var(--info-t); font-size: 0.875rem; }
+.quien { margin: 0 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 0.9375rem; }
+.sin-cliente { margin-bottom: 16px; }
+.resultados {
+  list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--borde); border-radius: 8px;
+  max-height: 200px; overflow-y: auto;
+}
+.resultados li + li { border-top: 1px solid var(--borde); }
+.resultados button {
+  width: 100%; display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; text-align: left;
+  padding: 10px 12px; border: 0; background: none; font: inherit; cursor: pointer; color: var(--tinta);
+}
+.resultados button:hover { background: var(--superficie-2); }
+.escaneo { display: flex; gap: 8px; }
+.escaneo input { flex: 1; min-width: 0; }
+.ultimo { margin: 8px 0 0; font-size: 0.84375rem; color: var(--ok-t); }
+.sub { font-size: 0.78125rem; }
+.ya { color: var(--aviso-t); }
+.aviso-txt { color: var(--peligro-t); margin: 8px 0 0; }
+.dev-lineas { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.dev-linea { border: 1px solid var(--borde); border-radius: 10px; padding: 12px 14px; }
+.dev-linea.excede { border-color: var(--peligro-t); }
+.dev-linea > p { margin: 8px 0 0; }
+.dev-linea-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.dev-linea-top > :first-child { min-width: 0; }
+.dev-linea-top .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+// Los paquetes que regresan: la ficha de styles.scss (la misma de la caja).
+.dev-linea .fichas-paquete { margin-top: 10px; }
+.sueltos { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; align-items: flex-end; }
+.sueltos .field { flex: 1 1 200px; margin: 0; }
+.sueltos .conos { flex: 0 1 140px; }
+.con-unidad { display: flex; align-items: center; gap: 8px; }
+.con-unidad input { flex: 1; min-width: 0; }
+.destino { border: 0; padding: 0; margin: 16px 0 0; min-width: 0; }
+.destino legend { padding: 0; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500; }
+.notas { margin-top: 16px; }
+.resumen {
+  display: flex; flex-wrap: wrap; gap: 12px 28px; margin-top: 16px; padding: 12px 14px;
+  border-radius: 10px; background: var(--superficie-2);
+}
+.resumen div { display: flex; flex-direction: column; }
+.resumen span { font-size: 0.75rem; color: var(--tinta-3); }
+.resumen b { font-size: 1.125rem; font-variant-numeric: tabular-nums; }
+.resumen .queda { color: var(--ok-t); }

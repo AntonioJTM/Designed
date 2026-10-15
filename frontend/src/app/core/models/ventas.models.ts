@@ -342,6 +342,10 @@ export interface Pedido {
    */
   credito_pagado?: number | null;
   credito_por_pagar?: number | null;
+  /** Detalle: lo que el cliente REGRESÓ de esta nota y le quedó a favor (2026-10-13). */
+  devoluciones?: DevolucionHecha[];
+  /** Cuánto suman esas devoluciones. */
+  devuelto_total?: number;
   actualizado_en?: string;
   subtotal: string;
   descuento: string;
@@ -428,4 +432,104 @@ export interface BultoEnCarrito {
   codigo: string;
   peso_kg: number;
   lote?: string | null;
+}
+
+// ---- Devoluciones con SALDO A FAVOR (2026-10-13) ----
+
+/** Un paquete de la nota: si todavía puede regresar cerrado. */
+export interface BultoDevolvible {
+  codigo: string;
+  peso_kg: number;
+  lote?: string | null;
+  /** Sigue vendido y no se ha devuelto: puede regresar cerrado. */
+  devolvible: boolean;
+  /** Ya regresó en otra devolución. */
+  devuelto: boolean;
+  /** Se bajó a conos: ya no regresa cerrado. */
+  abierto: boolean;
+}
+
+/** Una línea de la nota y lo que todavía puede regresar de ella. */
+export interface LineaDevolvible {
+  detalle_id: number;
+  /** "ROJO 2/30". */
+  hilo: string;
+  descripcion: string;
+  tipo_presentacion: 'paquete' | 'cono' | 'simple';
+  /** Lo que se llevó, en kg. */
+  cantidad: number;
+  piezas?: number | null;
+  /** Lo que ya regresó en devoluciones anteriores. */
+  devuelto: number;
+  /** Lo que todavía puede regresar. */
+  disponible: number;
+  /** A cómo queda el kilo a favor: lo que de verdad se cobró por kilo. */
+  precio_kg: number;
+  /** Lo suelto entra como conos (paquete o cono) o como kilos (hilo por kilo). */
+  sueltos_como: 'conos' | 'kilos';
+  bultos: BultoDevolvible[];
+}
+
+/** Lo que se puede devolver de una nota (GET /pedidos/:id/devolucion). */
+export interface PreviaDevolucion {
+  pedido_id: number;
+  numero_pedido: string;
+  estado: EstadoPedido;
+  almacen_id: number;
+  almacen?: string | null;
+  cliente_id?: number | null;
+  cliente?: string | null;
+  /** Entregada y viva: se puede devolver. */
+  se_puede: boolean;
+  lineas: LineaDevolvible[];
+  saldo_favor: number;
+  deuda: { credito: number; notas: number; total: number };
+  /**
+   * Lo que todavía debe ESTA venta (fiada o nota pendiente de pago). Lo que
+   * regrese se descuenta de ella primero, sin preguntar (2026-10-14).
+   */
+  debe_esta?: number;
+  debe_esta_tipo?: 'credito' | 'nota' | null;
+}
+
+/** Lo que se manda al registrar la devolución. */
+export interface DevolverInput {
+  /** Solo si la venta no tenía cliente: a quién se le pone el saldo a favor. */
+  cliente_id?: number;
+  /** 'favor': se queda para sus compras; 'deuda': se descuenta de lo que debe. */
+  destino: 'favor' | 'deuda';
+  notas?: string;
+  lineas: { detalle_id: number; codigos?: string[]; kg_sueltos?: number; conos?: number }[];
+}
+
+/** La devolución ya registrada. */
+export interface ResultadoDevolucion {
+  devolucion_id: number;
+  folio: string;
+  pedido_id: number;
+  numero_pedido: string;
+  cliente_id: number;
+  cliente: string;
+  total: number;
+  kg: number;
+  aplicado_a_deuda: number;
+  /** De eso, lo que se descontó de ESTA venta (la que todavía se debía). */
+  descontado_de_esta?: number;
+  aplicaciones: { a: 'nota' | 'credito'; monto: number; numero_pedido?: string; pagada?: boolean; de_esta?: boolean }[];
+  saldo_favor: number;
+}
+
+/** Una devolución de la nota, como la trae su detalle. */
+export interface DevolucionHecha {
+  id: number;
+  folio: string;
+  total: number;
+  aplicado_a_deuda: number;
+  notas?: string | null;
+  creado_en: string;
+  cliente_id: number;
+  cliente?: string | null;
+  nombre_comercial?: string | null;
+  usuario?: string | null;
+  lineas: { detalle_id: number; hilo: string; como: string; kg: number; piezas?: number | null; importe: number; codigos: string[] }[];
 }

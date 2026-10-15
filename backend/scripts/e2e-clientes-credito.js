@@ -105,25 +105,58 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
 
     // ------------------------------------------------------ 1. El expediente
     console.log('\n1 · El expediente');
+    // El lugar de entrega (2026-10-14): de una lista, municipio y estado.
+    const lugar = await api('POST', '/clientes/lugares-entrega', { nombre: 'TMPCC Tulancingo ' + SUF, estado: 'Hidalgo' });
+    ck('se da de alta un lugar de entrega', lugar.status === 201 && lugar.data.id > 0, lugar.error?.code);
+    const lugarRep = await api('POST', '/clientes/lugares-entrega', { nombre: ' tmpcc tulancingo ' + SUF, estado: 'hidalgo' });
+    ck('el mismo lugar en el mismo estado no se repite (aunque cambien mayúsculas y espacios)',
+      lugarRep.status === 409 && lugarRep.error.code === 'LUGAR_REPETIDO', lugarRep.error?.code);
+    const sinEstado = await api('POST', '/clientes/lugares-entrega', { nombre: 'TMPCC Tenango ' + SUF, estado: '' });
+    ck('un lugar sin estado no entra', sinEstado.status === 422, String(sinEstado.status));
+
     const cli = (await api('POST', '/clientes', {
-      codigo: 'TMPCC-' + SUF, nombre: 'TMPCC Cliente Viejo',
-      nombre_comercial: 'Doña TMPCC', telefono: '4459998888',
+      nombre: 'TMPCC Cliente Viejo', telefono: '4459998888',
       ciudad: 'Moroleón', cliente_desde: '2019-03-15', limite_credito: 1000,
+      lugar_entrega_id: lugar.data.id,
     })).data;
     ck('se da de alta sin cuenta ni contraseña', cli.tiene_cuenta === 0, `tiene_cuenta=${cli.tiene_cuenta}`);
     ck('respeta la antigüedad real, no la de captura', cli.cliente_desde === '2019-03-15',
       cli.cliente_desde);
+    const esperado = 'C-' + (cli.id < 10000 ? String(cli.id).padStart(4, '0') : String(cli.id));
+    ck('el número de cliente lo da el sistema (C-0001…)', cli.codigo === esperado, `${cli.codigo} / ${esperado}`);
+    ck('queda con su lugar de entrega', Number(cli.lugar_entrega_id) === lugar.data.id && cli.lugar_entrega_estado === 'Hidalgo',
+      `${cli.lugar_entrega} · ${cli.lugar_entrega_estado}`);
 
-    const dupCodigo = await api('POST', '/clientes', {
-      codigo: 'TMPCC-' + SUF, nombre: 'Otro',
-    });
-    ck('no deja repetir el código',
-      dupCodigo.status === 409 && dupCodigo.error.code === 'CLIENTE_DUPLICADO',
-      dupCodigo.error?.code);
+    const conCodigo = await api('POST', '/clientes', { codigo: 'TMPCC-' + SUF, nombre: 'TMPCC Otro' });
+    ck('el número no se pone a mano (422)', conCodigo.status === 422, String(conCodigo.status));
+    const cambiarCodigo = await api('PUT', '/clientes/' + cli.id, { codigo: 'X-1' });
+    ck('ni se cambia al editar (422)', cambiarCodigo.status === 422, String(cambiarCodigo.status));
+    const lugarMalo = await api('POST', '/clientes', { nombre: 'TMPCC Otro', lugar_entrega_id: 999999999 });
+    ck('un lugar que no está en la lista se rechaza', lugarMalo.status === 422 && lugarMalo.error.code === 'LUGAR_INVALIDO',
+      lugarMalo.error?.code);
 
-    const porApodo = await api('GET', '/clientes/buscar?q=' + encodeURIComponent('doña tmpcc'));
-    ck('se encuentra por el apodo, no solo por el nombre',
-      porApodo.data.some((c) => c.id === cli.id), porApodo.data?.length + ' resultado(s)');
+    const editado = (await api('PUT', '/clientes/' + cli.id, { notas: 'TMPCC nota' })).data;
+    ck('al editar conserva su número y su lugar', editado.codigo === esperado && Number(editado.lugar_entrega_id) === lugar.data.id,
+      `${editado.codigo} · ${editado.lugar_entrega_id}`);
+
+    const lista = (await api('GET', '/clientes/lugares-entrega')).data;
+    const suyo = lista.lugares.find((l) => l.id === lugar.data.id);
+    ck('la lista de lugares cuenta a sus clientes', suyo?.num_clientes === 1, String(suyo?.num_clientes));
+    const delLugar = (await api('GET', '/clientes?lugar_entrega_id=' + lugar.data.id)).data;
+    ck('y lista a los clientes de ese lugar', delLugar.items.length === 1 && delLugar.items[0].id === cli.id,
+      String(delLugar.items.length));
+    const corregido = await api('PUT', '/clientes/lugares-entrega/' + lugar.data.id, { nombre: 'TMPCC Tulancingo de Bravo ' + SUF, estado: 'Hidalgo' });
+    ck('el lugar se corrige y sus clientes lo siguen', corregido.status === 200 &&
+      (await api('GET', '/clientes/' + cli.id)).data.lugar_entrega === 'TMPCC Tulancingo de Bravo ' + SUF, corregido.error?.code);
+
+    const porNumero = await api('GET', '/clientes/buscar?q=' + encodeURIComponent(esperado));
+    ck('se encuentra por su número', porNumero.data.some((c) => c.id === cli.id), porNumero.data?.length + ' resultado(s)');
+    // La lista de todos (Clientes → Todos los clientes): por número y con su cuenta.
+    const otro = (await api('POST', '/clientes', { nombre: 'TMPCC Segundo ' + SUF })).data;
+    const porNum = (await api('GET', '/clientes?orden=numero&q=TMPCC')).data;
+    ck('la lista ordena por número y cuenta a todos', porNum.total === 2 &&
+      porNum.items[0].id === cli.id && porNum.items[1].id === otro.id,
+      porNum.items.map((c) => c.codigo).join(', ') + ` · total ${porNum.total}`);
     const porTel = await api('GET', '/clientes/buscar?q=4459998888');
     ck('y por teléfono', porTel.data.some((c) => c.id === cli.id));
     ck('una sola letra no busca nada',
@@ -358,6 +391,7 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       }
       await db.query('DELETE FROM clientes WHERE id IN (?)', [ids]); // arrastra credito_movimientos
     }
+    await db.query("DELETE FROM lugares_entrega WHERE nombre LIKE 'TMPCC%'");
     const [prods] = await db.query("SELECT id FROM productos WHERE nombre LIKE 'TMPCC%'");
     const pr = prods.map((r) => r.id);
     if (pr.length) {

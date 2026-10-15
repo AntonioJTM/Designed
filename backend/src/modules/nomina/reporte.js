@@ -449,9 +449,14 @@ function hojaComisiones(doc, periodo, recibos, { reglaAnterior }) {
       tabla(doc, COLS_PAGADAS,
         cm.ventas.map((v) => [
           ...ventaYTipo(v),
-          v.liquidada_en ? diaCorto(v.liquidada_en) : { t: 'al venderla', sub: 'regla anterior' },
+          v.tipo === 'devolucion'
+            ? { t: diaCorto(v.liquidada_en), sub: 'regresó mercancía' }
+            : v.liquidada_en ? diaCorto(v.liquidada_en) : { t: 'al venderla', sub: 'regla anterior' },
           pdf.dinero(v.total),
-          pdf.dinero(v.venta_neta),
+          // Lo que regresó no paga comisión (2026-10-14).
+          n(v.devuelto) > 0 && v.tipo !== 'devolucion'
+            ? { t: pdf.dinero(v.venta_neta), sub: `regresaron ${pdf.dinero(v.devuelto)}` }
+            : pdf.dinero(v.venta_neta),
           { t: pdf.dinero(v.comision), bold: true },
         ]),
         { total: ['Se paga', `${cm.ventas.length} ${cm.ventas.length === 1 ? 'venta' : 'ventas'}`, '', pdf.dinero(sum('total')), pdf.dinero(sum('venta_neta')), pdf.dinero(sum('comision'))] }
@@ -614,8 +619,9 @@ function hojaRecibo(doc, periodo, r) {
         apartado: 'apartados liquidados',
         pedido: 'notas en espera pagadas',
         nota: 'notas pendientes que se terminaron de pagar',
+        devolucion: 'lo que regresó de ventas que ya habían pagado comisión',
       };
-      const grupos = ['contado', 'credito', 'nota', 'pedido', 'apartado']
+      const grupos = ['contado', 'credito', 'nota', 'pedido', 'apartado', 'devolucion']
         .map((tipo) => ({ tipo, ventas: cm.ventas.filter((v) => v.tipo === tipo) }))
         .filter((g) => g.ventas.length);
       const sum = (lista, k) => r2(lista.reduce((a, v) => a + n(v[k]), 0));

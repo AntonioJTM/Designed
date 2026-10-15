@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
-import { Pos } from './pos';
+import { of, throwError } from 'rxjs';
+import { Pos, pareceCodigo } from './pos';
 import { VentasService } from '../../../core/services/ventas.service';
 import { InventarioService } from '../../../core/services/inventario.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -47,6 +47,7 @@ describe('Pos', () => {
   let pedidoEnviado: {
     pagos?: { metodo_pago_id: number; monto: number }[];
     a_credito?: number;
+    saldo_favor?: number;
     pendiente_pago?: boolean;
     items?: { variante_id: number; cantidad: number; piezas?: number }[];
     encargo?: boolean;
@@ -74,6 +75,7 @@ describe('Pos', () => {
       of([
         { id: 1, nombre: 'Efectivo' },
         { id: 2, nombre: 'Tarjeta' },
+        { id: 3, nombre: 'Transferencia' },
       ]),
     apartados: () => of({ items: [], num_apartados: 0, total_apartado: 0, total_abonado: 0 }),
     crearPedido: (body: { pagos?: { metodo_pago_id: number; monto: number }[] }) => {
@@ -278,6 +280,84 @@ describe('Pos', () => {
     expect(pedidoEnviado!.pagos).toEqual([{ metodo_pago_id: 2, monto: 332 }]);
   });
 
+  it('con saldo a favor: se usa solo si lo pide, y paga hoy lo que falte (2026-10-13)', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo_favor: '300' });
+    expect(c.ofreceSaldo()).toBe(true);
+    // No se usa sin que lo pida: puede guardarlo para otra compra.
+    expect(c.saldoActual()).toBe(0);
+    expect(c.aPagarHoy()).toBe(432);
+    c.usarSaldo = true;
+    expect(c.saldoActual()).toBe(300);
+    expect(c.aPagarHoy()).toBe(132);
+    expect(c.textoBoton()).toBe('Cobrar $132.00 y $300.00 de su saldo a favor');
+    c.saldoAUsar = 100;
+    expect(c.aPagarHoy()).toBe(332);
+    c.metodoSel = 2;
+    c.cobrar();
+    expect(pedidoEnviado!.saldo_favor).toBe(100);
+    expect(pedidoEnviado!.pagos).toEqual([{ metodo_pago_id: 2, monto: 332 }]);
+  });
+
+  it('el saldo a favor que cubre todo no manda pago, y no se usa más del que tiene', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo_favor: '1000' });
+    c.usarSaldo = true;
+    expect(c.saldoActual()).toBe(432);
+    expect(c.textoBoton()).toBe('Pagar con su saldo a favor · $432.00');
+    c.saldoAUsar = 2000;
+    c.cobrar();
+    expect(pedidoEnviado).toBeNull();
+    expect(c.error()).toContain('Solo tiene');
+    c.saldoAUsar = null;
+    c.cobrar();
+    expect(pedidoEnviado!.saldo_favor).toBe(432);
+    expect(pedidoEnviado!.pagos).toBeUndefined();
+  });
+
+  it('el saldo a favor no se ofrece en una nota en espera ni pendiente de pago', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo_favor: '300' });
+    c.usarSaldo = true;
+    c.elegirModo('pendiente');
+    expect(c.ofreceSaldo()).toBe(false);
+    expect(c.saldoActual()).toBe(0);
+    c.elegirModo('espera');
+    expect(c.ofreceSaldo()).toBe(false);
+  });
+
+  it('parte y parte: la transferencia y el resto en efectivo, con su cambio (2026-10-14)', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    expect(c.permiteMixto()).toBe(true);
+    c.metodoSel = 'mixto';
+    c.cobrar();
+    expect(pedidoEnviado).toBeNull();
+    expect(c.error()).toContain('por transferencia');
+    c.montoTransferencia = 132;
+    expect(c.aCobrarEnEfectivo()).toBe(300);
+    c.montoPago = 500;
+    expect(c.cambioPrevio()).toBe(200);
+    c.cobrar();
+    expect(pedidoEnviado!.pagos).toEqual([
+      { metodo_pago_id: 3, monto: 132 },
+      { metodo_pago_id: 1, monto: 500 },
+    ]);
+  });
+
+  it('parte y parte: la transferencia no puede pasar del total (no da cambio)', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.metodoSel = 'mixto';
+    c.montoTransferencia = 500;
+    c.cobrar();
+    expect(pedidoEnviado).toBeNull();
+    expect(c.error()).toContain('no da cambio');
+  });
+
   it('quitar al cliente regresa a cobrar', async () => {
     const { c } = await montar();
     c.elegirCliente(mayoreo);
@@ -310,6 +390,42 @@ describe('Pos', () => {
     expect(c.carrito().length).toBe(0);
   });
 
+  it('un código que no existe se avisa junto al lector y el campo queda vacío; un texto se busca', async () => {
+    // 2026-10-14: "escaneé uno que no existe y me deja eso así; retrasa el escaneo".
+    const buscados: string[] = [];
+    invFalso['resolverCodigo'] = () => throwError(() => ({ status: 404 }));
+    invFalso['buscarVariantes'] = (q: string) => { buscados.push(q); return of([]); };
+    const { c } = await montar();
+    c.qVar = '1234567812345678';
+    c.escanearOBuscar();
+    expect(c.avisoLector()).toBe('El código 1234567812345678 no está registrado. Revisa la etiqueta o escanea otro.');
+    expect(c.qVar).toBe('');
+    expect(buscados).toEqual([]);
+    expect(c.carrito().length).toBe(0);
+    // Un color con su calibre no es un código: se busca, y si no hay nada se dice.
+    c.qVar = 'rojo 2/30';
+    c.escanearOBuscar();
+    expect(buscados).toEqual(['rojo 2/30']);
+    expect(c.avisoLector()).toContain('No encontré ningún hilo con «rojo 2/30»');
+    expect(c.qVar).toBe('rojo 2/30');
+    // Si el servidor no contesta, no dice que no existe.
+    invFalso['resolverCodigo'] = () => throwError(() => ({ status: 0 }));
+    c.qVar = '00621999';
+    c.escanearOBuscar();
+    expect(c.avisoLector()).toBe('No se pudo revisar el código 00621999. Vuelve a escanearlo.');
+    expect(c.qVar).toBe('');
+  });
+
+  it('distingue un código de barras de un color escrito', () => {
+    expect(pareceCodigo('00621999')).toBe(true);
+    expect(pareceCodigo('1234567812345678')).toBe(true);
+    expect(pareceCodigo('TMPVV-PAQ-1234')).toBe(true);
+    expect(pareceCodigo('rojo')).toBe(false);
+    expect(pareceCodigo('rojo 2/30')).toBe(false);
+    expect(pareceCodigo('MARINO-2-30')).toBe(false);
+    expect(pareceCodigo('1234')).toBe(false);
+  });
+
   it('solo vende paquetes de SU tienda: el de la bodega o el que viene en camino se rechazan', async () => {
     // 2026-10-07: "si está en Tienda Principal solo se venden los paquetes que están ahí".
     const rojo = { id: 5, sku: 'ROJO', producto: 'ROJO', calibre: '2/30', precio: '200', unidad: 'kg', tipo_presentacion: 'paquete' };
@@ -324,11 +440,13 @@ describe('Pos', () => {
     // La Caja 1 es de «Matriz».
     c.qVar = 'B1';
     c.escanearOBuscar();
-    expect(c.error()).toBe('El paquete B1 sí existe, pero está en «Almacén General», no en «Matriz»: toma uno que esté en esta tienda.');
+    // El aviso va junto al lector, y el campo queda vacío para el siguiente.
+    expect(c.avisoLector()).toBe('El paquete B1 sí existe, pero está en «Almacén General», no en «Matriz»: toma uno que esté en esta tienda.');
+    expect(c.qVar).toBe('');
     expect(c.carrito().length).toBe(0);
     c.qVar = 'C1';
     c.escanearOBuscar();
-    expect(c.error()).toContain('viene en camino (TRA-9)');
+    expect(c.avisoLector()).toContain('viene en camino (TRA-9)');
     expect(c.carrito().length).toBe(0);
     // El de aquí sí; y el capturado a mano sin almacén también.
     c.qVar = 'T1';

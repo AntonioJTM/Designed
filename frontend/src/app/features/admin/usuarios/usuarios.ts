@@ -94,6 +94,11 @@ export class Usuarios {
     return nombrePuesto(rol);
   }
 
+  /** ¿Entra al sistema? El cargador no: no tiene correo ni contraseña. */
+  entra(u: Usuario): boolean {
+    return !!u.correo;
+  }
+
   /** Administrador y gerente en azul (deciden); el resto en gris. */
   puestoAzul(rol: string): boolean {
     return rol === 'administrador' || rol === 'gerente';
@@ -144,7 +149,11 @@ export class Usuarios {
   }
 
   guardado(u: Usuario, eraAlta: boolean): void {
-    this.mensaje.set(eraAlta ? `${u.nombre} quedó dado de alta.` : `Se guardaron los cambios de ${u.nombre}.`);
+    // Al cargador hay que darle su sueldo en Nómina: se le recuerda dónde.
+    const nomina = this.entra(u) ? '' : ' No entra al sistema; su sueldo se pone en Nómina.';
+    this.mensaje.set(
+      (eraAlta ? `${u.nombre} quedó dado de alta.` : `Se guardaron los cambios de ${u.nombre}.`) + nomina
+    );
     this.cargar();
   }
 

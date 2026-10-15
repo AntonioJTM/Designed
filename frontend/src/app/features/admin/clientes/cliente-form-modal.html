@@ -13,8 +13,9 @@
     @if (creado(); as c) {
       <!-- Alta guardada: capturar el siguiente o ir a su expediente. -->
       <div class="modal-body">
-        <p class="ok-msg" role="status" style="margin: 0">
-          Se guardó a <b>{{ c.nombre_comercial || c.nombre }}</b>.
+        <p class="ok-msg sin-margen" role="status">
+          Se guardó a <b>{{ c.nombre }}</b>
+          @if (c.codigo) { con el número <b class="mono">{{ c.codigo }}</b> }.
           @if (num(c.limite_credito) <= 0) { Nace sin crédito: se le cobra completo hasta que se le autorice un límite. }
         </p>
       </div>
@@ -30,9 +31,9 @@
             <!-- El velo tapa el formulario ya dibujado, así no crece de tamaño. -->
             <div class="modal-cargando"><span class="spinner"></span></div>
           }
-          @if (error()) { <p class="alert" role="alert" style="margin-top: 0">{{ error() }}</p> }
+          @if (error()) { <p class="alert sin-margen-arriba" role="alert">{{ error() }}</p> }
 
-          <p class="muted" style="margin: 0 0 16px">
+          <p class="muted intro">
             Lo único obligatorio es el nombre. Lo demás se completa cuando lo sepas.
           </p>
 
@@ -40,15 +41,18 @@
             <div class="grupo grupo-titulo">Quién es</div>
             <label class="field">
               <span>Nombre <span class="req" aria-hidden="true">*</span></span>
-              <input type="text" formControlName="nombre" placeholder="Mercería La Esperanza" required />
+              <input type="text" formControlName="nombre" placeholder="Mercería La Esperanza" required
+                     [attr.aria-invalid]="form.controls.nombre.touched && form.controls.nombre.invalid" />
               @if (form.controls.nombre.touched && form.controls.nombre.invalid) {
                 <span class="error-campo">Ponle al menos un nombre.</span>
               }
             </label>
+            <!-- El número lo da el sistema al guardar (C-0001) y no se modifica (2026-10-14). -->
             <label class="field">
-              Como le dicen
-              <input type="text" formControlName="nombre_comercial" placeholder="Doña Chela" />
-              <span class="ayuda">Con esto lo vas a buscar en el mostrador.</span>
+              Número de cliente
+              <input type="text" class="numero mono" readonly [value]="cliente()?.codigo ?? ''"
+                     placeholder="Se le asigna al guardar" />
+              <span class="ayuda">Lo da el sistema y no se cambia.</span>
             </label>
             <label class="field">
               Teléfono
@@ -84,10 +88,43 @@
               <input type="date" formControlName="cliente_desde" />
               <span class="ayuda">Si es de años, pon cuándo empezó a comprarte de verdad, no hoy.</span>
             </label>
-            <label class="field">
-              Número de cliente
-              <input type="text" formControlName="codigo" maxlength="20" placeholder="Opcional" />
-            </label>
+
+            <div class="grupo grupo-titulo">A dónde se le entrega</div>
+            <div class="field full">
+              <label for="lugar-entrega">Lugar de entrega</label>
+              @if (agregandoLugar()) {
+                <!-- Alta de un lugar sin salir del cliente. Enter guarda el LUGAR, no el cliente. -->
+                <span class="nuevo-lugar">
+                  <input id="lugar-entrega" type="text" [formControl]="lugarNombre" maxlength="100"
+                         placeholder="Municipio, ej. Tulancingo" aria-label="Lugar o municipio"
+                         (keydown.enter)="$event.preventDefault(); guardarLugar()" />
+                  <input type="text" [formControl]="lugarEstado" maxlength="100" list="estados-mx"
+                         placeholder="Estado, ej. Hidalgo" aria-label="Estado"
+                         (keydown.enter)="$event.preventDefault(); guardarLugar()" />
+                  <span class="botones">
+                    <button type="button" class="btn btn-primary btn-sm" [disabled]="guardandoLugar()" (click)="guardarLugar()">
+                      {{ guardandoLugar() ? 'Guardando…' : 'Guardar lugar' }}
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="cancelarLugar()">Cancelar</button>
+                  </span>
+                </span>
+                @if (errorLugar()) { <span class="error-campo" role="alert">{{ errorLugar() }}</span> }
+              } @else {
+                <span class="elige-lugar">
+                  <select id="lugar-entrega" formControlName="lugar_entrega_id">
+                    <option [ngValue]="null">— Sin lugar de entrega —</option>
+                    @for (l of lugares(); track l.id) {
+                      <option [ngValue]="l.id">{{ l.nombre }}, {{ l.estado }}</option>
+                    }
+                  </select>
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="abrirLugar()">Nuevo lugar</button>
+                </span>
+              }
+              <span class="ayuda">
+                El municipio y el estado a donde se le entrega. Con esto ves a cuántos clientes les entregas en
+                cada lugar (Clientes → Dónde entrego).
+              </span>
+            </div>
 
             <div class="grupo grupo-titulo">Dónde está</div>
             <label class="field full">
@@ -100,7 +137,11 @@
             </label>
             <label class="field">
               Estado
-              <input type="text" formControlName="estado" maxlength="100" />
+              <input type="text" formControlName="estado" maxlength="100" list="estados-mx" />
+              <!-- Los estados de México, de sugerencia (también para el lugar de entrega). -->
+              <datalist id="estados-mx">
+                @for (e of ESTADOS; track e) { <option [value]="e"></option> }
+              </datalist>
             </label>
 
             <div class="grupo grupo-titulo">Más datos</div>
@@ -110,10 +151,6 @@
               <datalist id="origenes-cliente">
                 @for (o of origenes; track o) { <option [value]="o"></option> }
               </datalist>
-            </label>
-            <label class="field">
-              Cumpleaños
-              <input type="date" formControlName="fecha_nacimiento" />
             </label>
             <label class="field">
               Correo

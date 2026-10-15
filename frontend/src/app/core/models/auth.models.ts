@@ -20,8 +20,11 @@ export interface Usuario {
   id: number;
   rol_id: number;
   rol: string;
+  /** El de su puesto principal: 0/false = no entra al sistema (el cargador). */
+  entra_al_sistema?: boolean | number;
   nombre: string;
-  correo: string;
+  /** `null` = no entra al sistema (el cargador): no tiene correo ni contraseña. */
+  correo: string | null;
   telefono?: string | null;
   activo: boolean;
   ultimo_acceso?: string | null;
@@ -41,6 +44,11 @@ export interface Rol {
   id: number;
   nombre: string;
   descripcion?: string | null;
+  /**
+   * `false` = el puesto NO entra al sistema (el cargador, 2026-10-14): sin
+   * correo ni contraseña, sin otros puestos y fuera de Permisos.
+   */
+  entra_al_sistema?: boolean;
 }
 
 /** Cliente de la tienda (tabla `clientes`). */

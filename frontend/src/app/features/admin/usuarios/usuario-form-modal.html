@@ -30,47 +30,61 @@
               <span class="ayuda">El que sale en nómina.</span>
             </label>
             <label class="field">
-              Teléfono <span class="muted" style="font-weight: 400">(opcional)</span>
+              <span>Teléfono <span class="muted" style="font-weight: 400">(opcional)</span></span>
               <input type="tel" formControlName="telefono" />
             </label>
-            <!-- Los demás puestos: puede lo de todos juntos. -->
-            <fieldset class="field full otros-puestos">
-              <legend>También trabaja como <span class="muted" style="font-weight: 400">(opcional)</span></legend>
-              <div class="casillas">
-                @for (r of otrosDisponibles(); track r.id) {
-                  <label class="field check">
-                    <input type="checkbox" [checked]="tieneOtro(r.id)"
-                           (change)="alternarOtro(r.id, $any($event.target).checked)" />
-                    {{ nombrePuesto(r) }}
-                  </label>
+            @if (sinAcceso()) {
+              <!-- El cargador no entra al sistema: sin correo, contraseña ni otros puestos. -->
+              <div class="full columna" style="gap: 8px">
+                <p class="nota-info"><span><b>{{ nombrePuesto(rolElegido()) }}: no entra al sistema.</b>
+                  No lleva correo ni contraseña. Su sueldo se pone en Nómina, como el de todos.</span></p>
+                @if (pierdeAcceso()) {
+                  <p class="aviso">Al guardar, {{ usuario()?.nombre }} ya no podrá entrar al sistema: se le quitan su correo, su contraseña y sus otros puestos.</p>
                 }
               </div>
-              <span class="ayuda">Puede lo de todos sus puestos juntos. Lo que puede cada puesto se decide en Permisos.</span>
-            </fieldset>
-            <label class="field full">
-              Correo
-              <input type="email" formControlName="correo" placeholder="correo@tienda.mx" autocomplete="off" />
-              @if (esEdicion()) {
-                <span class="ayuda">El correo no se puede cambiar: es con lo que entra.</span>
-              } @else {
-                <span class="ayuda">Con este correo entra al sistema.</span>
-              }
-            </label>
-            <label class="field full">
-              {{ esEdicion() ? 'Nueva contraseña' : 'Contraseña' }}
-              <input
-                type="password"
-                formControlName="contrasena"
-                autocomplete="new-password"
-                [placeholder]="esEdicion() ? 'Déjala vacía para no cambiarla' : 'Mínimo 8 caracteres'"
-              />
-              <span class="ayuda">
-                {{ esEdicion() ? 'Solo si hay que restablecerla. La actual no se puede ver.' : 'Dásela en persona; aquí no se vuelve a mostrar.' }}
-              </span>
-            </label>
+            } @else {
+              <!-- Los demás puestos: puede lo de todos juntos. -->
+              <fieldset class="field full otros-puestos">
+                <legend>También trabaja como <span class="muted" style="font-weight: 400">(opcional)</span></legend>
+                <div class="casillas">
+                  @for (r of otrosDisponibles(); track r.id) {
+                    <label class="field check">
+                      <input type="checkbox" [checked]="tieneOtro(r.id)"
+                             (change)="alternarOtro(r.id, $any($event.target).checked)" />
+                      {{ nombrePuesto(r) }}
+                    </label>
+                  }
+                </div>
+                <span class="ayuda">Puede lo de todos sus puestos juntos. Lo que puede cada puesto se decide en Permisos.</span>
+              </fieldset>
+              <label class="field full">
+                Correo
+                <input type="email" formControlName="correo" placeholder="correo@tienda.mx" autocomplete="off" />
+                @if (!pideCorreo()) {
+                  <span class="ayuda">El correo no se puede cambiar: es con lo que entra.</span>
+                } @else if (esEdicion()) {
+                  <span class="ayuda">Ahora sí va a entrar al sistema: con este correo entra.</span>
+                } @else {
+                  <span class="ayuda">Con este correo entra al sistema.</span>
+                }
+              </label>
+              <label class="field full">
+                {{ pideCorreo() ? 'Contraseña' : 'Nueva contraseña' }}
+                <input
+                  type="password"
+                  formControlName="contrasena"
+                  autocomplete="new-password"
+                  [placeholder]="pideCorreo() ? 'Mínimo 8 caracteres' : 'Déjala vacía para no cambiarla'"
+                />
+                <span class="ayuda">
+                  {{ pideCorreo() ? 'Dásela en persona; aquí no se vuelve a mostrar.' : 'Solo si hay que restablecerla. La actual no se puede ver.' }}
+                </span>
+              </label>
+            }
             @if (esEdicion()) {
               <label class="field check full">
-                <input type="checkbox" formControlName="activo" /> Activo: puede entrar al sistema
+                <input type="checkbox" formControlName="activo" />
+                {{ sinAcceso() ? 'Activo: sigue trabajando en la tienda' : 'Activo: puede entrar al sistema' }}
               </label>
             }
           </div>

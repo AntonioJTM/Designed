@@ -9,8 +9,10 @@ const { pool, withTransaction } = require('../../config/db');
 // PRINCIPAL (el de nómina y el que se ve junto a su nombre) y `otros_roles`
 // los demás, que viven en `usuario_roles` y nunca repiten el principal.
 
+// `entra_al_sistema` es el de su puesto PRINCIPAL: 0 = no entra (el cargador),
+// y entonces su correo viene en NULL.
 const CAMPOS_PUBLICOS = `
-  u.id, u.rol_id, r.nombre AS rol, u.nombre, u.correo, u.telefono,
+  u.id, u.rol_id, r.nombre AS rol, r.entra_al_sistema, u.nombre, u.correo, u.telefono,
   u.activo, u.ultimo_acceso, u.creado_en, u.actualizado_en
 `;
 
@@ -82,26 +84,45 @@ async function buscarPorId(id) {
   return u;
 }
 
-/** Verifica que exista un rol activo con ese id. */
-async function existeRol(rolId) {
-  const [rows] = await pool.query('SELECT id FROM roles WHERE id = :id LIMIT 1', { id: rolId });
+/** Un puesto: `{ id, nombre, entra_al_sistema }` (booleano), o null si no existe. */
+async function obtenerRol(rolId) {
+  const [rows] = await pool.query(
+    'SELECT id, nombre, entra_al_sistema FROM roles WHERE id = :id LIMIT 1',
+    { id: rolId }
+  );
+  const r = rows[0];
+  return r ? { id: Number(r.id), nombre: r.nombre, entra_al_sistema: !!Number(r.entra_al_sistema) } : null;
+}
+
+/** Esos puestos, con `entra_al_sistema` (booleano). Los que no existen no vienen. */
+async function obtenerRoles(ids) {
+  if (!ids.length) return [];
+  const [rows] = await pool.query(
+    'SELECT id, nombre, entra_al_sistema FROM roles WHERE id IN (:ids)',
+    { ids }
+  );
+  return rows.map((r) => ({ id: Number(r.id), nombre: r.nombre, entra_al_sistema: !!Number(r.entra_al_sistema) }));
+}
+
+/** ¿Ya lo usa alguien más? (el correo es con lo que se entra: no se repite) */
+async function correoEnUso(correo, salvoId = 0) {
+  const [rows] = await pool.query(
+    'SELECT id FROM usuarios WHERE correo = :correo AND id <> :salvo LIMIT 1',
+    { correo, salvo: salvoId }
+  );
   return rows.length > 0;
 }
 
-/** True si existen TODOS esos puestos. */
-async function existenRoles(ids) {
-  if (!ids.length) return true;
-  const [rows] = await pool.query('SELECT COUNT(*) AS n FROM roles WHERE id IN (:ids)', { ids });
-  return Number(rows[0].n) === new Set(ids).size;
-}
-
-/** Inserta un usuario (con sus demás puestos) y devuelve el registro público recién creado. */
+/**
+ * Inserta un usuario (con sus demás puestos) y devuelve el registro público recién creado.
+ * Quien no entra al sistema (el cargador) llega sin correo ni contraseña: quedan en NULL.
+ */
 async function crear({ rol_id, nombre, correo, telefono, contrasena_hash, otros_roles = [] }) {
   const id = await withTransaction(async (conn) => {
     const [result] = await conn.query(
       `INSERT INTO usuarios (rol_id, nombre, correo, telefono, contrasena_hash)
        VALUES (:rol_id, :nombre, :correo, :telefono, :contrasena_hash)`,
-      { rol_id, nombre, correo, telefono: telefono ?? null, contrasena_hash }
+      { rol_id, nombre, correo: correo ?? null, telefono: telefono ?? null, contrasena_hash: contrasena_hash ?? null }
     );
     await _guardarOtrosRoles(conn, result.insertId, otros_roles);
     return result.insertId;
@@ -150,6 +171,11 @@ async function actualizar(id, datos) {
       params[c] = datos[c];
     }
   }
+  // `null` en los dos = ya no entra al sistema (pasó a cargador).
+  if (datos.correo !== undefined) {
+    campos.push('correo = :correo');
+    params.correo = datos.correo;
+  }
   if (datos.contrasena_hash !== undefined) {
     campos.push('contrasena_hash = :contrasena_hash');
     params.contrasena_hash = datos.contrasena_hash;
@@ -171,18 +197,19 @@ async function actualizar(id, datos) {
   return buscarPorId(id);
 }
 
-/** Catálogo de roles para poblar selects. */
+/** Catálogo de roles para poblar selects; `entra_al_sistema` dice si lleva correo y contraseña. */
 async function listarRoles() {
-  const [rows] = await pool.query('SELECT id, nombre, descripcion FROM roles ORDER BY id');
-  return rows;
+  const [rows] = await pool.query('SELECT id, nombre, descripcion, entra_al_sistema FROM roles ORDER BY id');
+  return rows.map((r) => ({ ...r, entra_al_sistema: !!Number(r.entra_al_sistema) }));
 }
 
 module.exports = {
   buscarPorCorreoConHash,
   buscarPorId,
   conOtrosRoles,
-  existeRol,
-  existenRoles,
+  obtenerRol,
+  obtenerRoles,
+  correoEnUso,
   crear,
   registrarAcceso,
   listar,

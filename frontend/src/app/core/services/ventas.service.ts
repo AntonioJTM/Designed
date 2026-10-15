@@ -18,6 +18,9 @@ import {
   Encargos,
   NotasPendientes,
   ModificarPedidoInput,
+  PreviaDevolucion,
+  DevolverInput,
+  ResultadoDevolucion,
 } from '../models/ventas.models';
 
 function data<T>(r: ApiResponse<T>): T {
@@ -76,6 +79,11 @@ export interface CrearPedidoInput {
    * `a_credito`.
    */
   pendiente_pago?: boolean;
+  /**
+   * Cuánto paga con su SALDO A FAVOR (lo que le quedó de una devolución).
+   * Exige `cliente_id`; solo al cobrar o vender a crédito.
+   */
+  saldo_favor?: number;
   entrega_direccion?: string;
   /** 'YYYY-MM-DD'. Lo del chofer va en `costo_envio`. */
   entrega_para?: string;
@@ -306,6 +314,25 @@ export class VentasService {
   pasarACredito(pedidoId: number): Observable<Pedido & { a_credito: number }> {
     return this.http
       .post<ApiResponse<Pedido & { a_credito: number }>>(`${this.base}/pedidos/${pedidoId}/a-credito`, {})
+      .pipe(map(data));
+  }
+
+  /** Lo que se puede devolver de una nota (solo lee). */
+  previaDevolucion(pedidoId: number, clienteId?: number): Observable<PreviaDevolucion> {
+    // `cliente_id`: el que se elige cuando la venta no tenía (dice cuánto debe ese).
+    const params = clienteId ? new HttpParams().set('cliente_id', clienteId) : undefined;
+    return this.http
+      .get<ApiResponse<PreviaDevolucion>>(`${this.base}/pedidos/${pedidoId}/devolucion`, { params })
+      .pipe(map(data));
+  }
+
+  /**
+   * El cliente REGRESA mercancía de la nota: los paquetes cerrados (escaneados)
+   * y lo suelto (pesado). Entra al inventario y le queda a favor; no sale dinero.
+   */
+  devolver(pedidoId: number, body: DevolverInput): Observable<ResultadoDevolucion> {
+    return this.http
+      .post<ApiResponse<ResultadoDevolucion>>(`${this.base}/pedidos/${pedidoId}/devoluciones`, body)
       .pipe(map(data));
   }
 

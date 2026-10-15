@@ -28,9 +28,13 @@
   gap: 12px;
 }
 .marca span { font-size: 1.25rem; font-weight: 600; color: #fff; }
+/* La marca a color sobre un cuadro blanco: sobre lo oscuro sus colores no se leen. */
+.marca .icono { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--superficie); }
+.marca .icono img { display: block; width: auto; height: 30px; }
+.logo { display: block; width: min(240px, 70%); height: auto; margin-bottom: 6px; }
 
 .lema { display: flex; flex-direction: column; gap: 14px; max-width: 460px; }
-.lema p { margin: 0; font-size: 1rem; line-height: 1.5; color: #A9B0BD; }
+.lema p { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--barra-suave); }
 .lema .titulo { font-size: 2.125rem; line-height: 1.2; font-weight: 600; color: #fff; letter-spacing: -0.01em; }
 
 .pie { font-size: 0.8125rem; color: var(--barra-titulo); }
@@ -66,4 +70,5 @@ form {
   .lema .titulo { font-size: 1.5rem; }
   .lema p:not(.titulo) { display: none; }
   main { padding: 32px 16px 48px; align-items: flex-start; }
+  .logo { width: min(180px, 60%); }
 }

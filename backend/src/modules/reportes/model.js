@@ -6,6 +6,18 @@ const { porPalabras } = require('../../utils/query');
 // Reportes de solo lectura. Los pedidos cancelados/devueltos no cuentan como venta.
 const VENTA_VALIDA = "estado NOT IN ('cancelado','devuelto')";
 
+/**
+ * Lo que REGRESÓ de cada línea vendida (devoluciones con saldo a favor). No
+ * cuenta como vendido: "como regresa a inventario, se le resta y se actualiza,
+ * porque al final es hilo que se regresó" (usuario, 2026-10-14). Se resta de la
+ * línea de donde salió, en su fecha de venta, aunque haya regresado como conos.
+ * Va con `d` = pedido_detalle.
+ */
+const DEVUELTO = `LEFT JOIN (SELECT detalle_id, SUM(cantidad) AS kg FROM devolucion_detalle GROUP BY detalle_id) dev
+         ON dev.detalle_id = d.id`;
+const KG_NETO = '(d.cantidad - COALESCE(dev.kg, 0))';
+const IMPORTE_NETO = '(d.subtotal - COALESCE(dev.kg * d.subtotal / NULLIF(d.cantidad, 0), 0))';
+
 /** Resumen de ventas en un rango [desde, hastaExcl). */
 async function ventasResumen(desde, hastaExcl) {
   const [[resumen]] = await pool.query(
@@ -49,12 +61,13 @@ async function ventasPorDia(desde, hastaExcl) {
     ),
     pool.query(
       `SELECT DATE(ped.creado_en) AS dia,
-              COALESCE(SUM(d.cantidad), 0) AS kilos,
-              COALESCE(SUM(CASE WHEN pv.tipo_presentacion = 'paquete' THEN d.cantidad ELSE 0 END), 0)
+              COALESCE(SUM(${KG_NETO}), 0) AS kilos,
+              COALESCE(SUM(CASE WHEN pv.tipo_presentacion = 'paquete' THEN ${KG_NETO} ELSE 0 END), 0)
                 AS kilos_paquete
          FROM pedido_detalle d
          JOIN pedidos ped           ON ped.id = d.pedido_id
          JOIN producto_variantes pv ON pv.id = d.variante_id
+         ${DEVUELTO}
         WHERE ped.creado_en >= :desde AND ped.creado_en < :hasta
           AND ped.estado NOT IN ('cancelado','devuelto')
         GROUP BY DATE(ped.creado_en)`,
@@ -69,7 +82,10 @@ async function ventasPorDia(desde, hastaExcl) {
   }));
 }
 
-/** Productos más vendidos (vista v_mas_vendidos). */
+/**
+ * Productos más vendidos (vista v_mas_vendidos, que ya resta lo que regresó:
+ * migración 2026-10_comision_devoluciones). Lo que regresó completo no sale.
+ */
 async function masVendidos(limite) {
   // Con el calibre y la presentación: "ROJO" y "ROJO-2" no dicen qué hilo es,
   // y el mismo color en dos calibres son dos productos.
@@ -78,6 +94,7 @@ async function masVendidos(limite) {
        FROM v_mas_vendidos mv
        JOIN producto_variantes pv ON pv.id = mv.variante_id
        JOIN productos p           ON p.id = pv.producto_id
+      WHERE mv.unidades_vendidas > 0
       ORDER BY mv.unidades_vendidas DESC LIMIT :limite`,
     { limite }
   );
@@ -172,16 +189,18 @@ async function ventaPorColor(desde, hastaExcl, q) {
          LEFT JOIN lineas l       ON l.id = p.linea_id
          LEFT JOIN (
            -- Lo vendido de cada hilo: en el rango y desde siempre, en una pasada.
+           -- Sin lo que regresó (DEVUELTO).
            SELECT pv.producto_id,
                   SUM(CASE WHEN ped.creado_en >= :desde AND ped.creado_en < :hasta
-                           THEN d.cantidad ELSE 0 END) AS kg_periodo,
+                           THEN ${KG_NETO} ELSE 0 END) AS kg_periodo,
                   SUM(CASE WHEN ped.creado_en >= :desde AND ped.creado_en < :hasta
-                           THEN d.subtotal ELSE 0 END) AS importe,
-                  SUM(d.cantidad) AS kg_total,
+                           THEN ${IMPORTE_NETO} ELSE 0 END) AS importe,
+                  SUM(${KG_NETO}) AS kg_total,
                   DATE_FORMAT(MAX(ped.creado_en), '%Y-%m-%d') AS ultima_venta
              FROM pedido_detalle d
              JOIN pedidos ped           ON ped.id = d.pedido_id
              JOIN producto_variantes pv ON pv.id = d.variante_id
+             ${DEVUELTO}
             WHERE ${VENDIDO}
             GROUP BY pv.producto_id
          ) v ON v.producto_id = p.id
@@ -196,9 +215,10 @@ async function ventaPorColor(desde, hastaExcl, q) {
       params
     ),
     pool.query(
-      `SELECT COALESCE(SUM(d.cantidad), 0) AS kg_vendidos, COALESCE(SUM(d.subtotal), 0) AS importe
+      `SELECT COALESCE(SUM(${KG_NETO}), 0) AS kg_vendidos, COALESCE(SUM(${IMPORTE_NETO}), 0) AS importe
          FROM pedido_detalle d
          JOIN pedidos ped ON ped.id = d.pedido_id
+         ${DEVUELTO}
         WHERE ${VENDIDO} AND ped.creado_en >= :desde AND ped.creado_en < :hasta`,
       { desde, hasta: hastaExcl }
     ),

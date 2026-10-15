@@ -39,7 +39,8 @@
             <a class="btn btn-ghost" routerLink="/admin/notas-pendientes">Registrar su pago</a>
           }
           @if (puedeDevolverEste(p)) {
-            <button type="button" class="btn btn-ghost" (click)="abrirDevolver()">Devolver mercancía</button>
+            <!-- Lo que regresa queda A FAVOR del cliente; no sale dinero (2026-10-13). -->
+            <button type="button" class="btn btn-ghost" (click)="devolviendo.set(true)">Devolución</button>
           }
           @if (puedeCancelarEste(p)) {
             <button type="button" class="btn btn-danger" (click)="abrirCancelar()">
@@ -57,7 +58,7 @@
             <b class="cliente">{{ p.cliente_nombre_comercial || p.cliente || 'Cliente de paso' }}</b>
           }
         </div>
-        @for (c of cifras(); track c.etiqueta) {
+        @for (c of cifrasConDevolucion(); track c.etiqueta) {
           <div>
             <span>{{ c.etiqueta }}</span>
             <b class="cifra" [class.alerta]="c.alerta">{{ c.valor | dinero }}</b>
@@ -162,6 +163,59 @@
         </div>
       </div>
     </section>
+
+    <!-- Lo que el cliente regresó de esta nota: le quedó a favor (2026-10-13). -->
+    @if (p.devoluciones?.length) {
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Devoluciones</h2>
+            <p>Lo que regresó entró al inventario de {{ p.almacen || 'la tienda' }} y le quedó a favor al precio con que se vendió.</p>
+          </div>
+        </div>
+        <div class="devoluciones">
+          @for (d of p.devoluciones; track d.id) {
+            <div class="devolucion">
+              <div class="devolucion-top">
+                <div>
+                  <b class="mono">{{ d.folio }}</b>
+                  <span class="muted"> · {{ fechaCorta(d.creado_en) }}{{ d.usuario ? ' · la registró ' + d.usuario : '' }}</span>
+                  @if (d.cliente_id !== p.cliente_id) {
+                    <div class="muted">A favor de {{ d.nombre_comercial || d.cliente }}</div>
+                  }
+                  @if (d.notas) { <div class="muted">{{ d.notas }}</div> }
+                </div>
+                <div class="num">
+                  <b>{{ d.total | dinero }}</b>
+                  <div class="muted">
+                    @if (+d.aplicado_a_deuda > 0) { se descontaron {{ d.aplicado_a_deuda | dinero }} de lo que debía }
+                    @else { a favor }
+                  </div>
+                </div>
+              </div>
+              <ul class="devolucion-lineas">
+                @for (l of d.lineas; track $index) {
+                  <li>
+                    <span>
+                      {{ l.hilo }} ·
+                      @if (l.codigos.length) {
+                        {{ l.codigos.length }} {{ l.codigos.length === 1 ? 'paquete cerrado' : 'paquetes cerrados' }}
+                        <span class="muted mono">({{ l.codigos.join(', ') }})</span>
+                      } @else if (l.como === 'cono') {
+                        {{ l.piezas ? l.piezas + (l.piezas === 1 ? ' cono suelto' : ' conos sueltos') : 'conos sueltos' }}
+                      } @else {
+                        suelto
+                      }
+                    </span>
+                    <span class="num">{{ l.kg | cantidad: 'kg' }} · {{ l.importe | dinero }}</span>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      </section>
+    }
 
     <div class="fila">
       <section class="card mitad">
@@ -279,6 +333,11 @@
     </div>
   }
 </div>
+
+@if (devolviendo() && pedido(); as p) {
+  <app-devolucion-modal [pedidoId]="p.id" [numero]="p.numero_pedido"
+                        (hecho)="alDevolver($event)" (cerrado)="devolviendo.set(false)" />
+}
 
 <!--
   Cancelar o devolver mueve mercancía y dinero: se confirma antes, diciendo

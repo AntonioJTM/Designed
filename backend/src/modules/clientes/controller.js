@@ -2,6 +2,7 @@
 
 const service = require('./service');
 const analisis = require('./analisis');
+const lugares = require('./lugares');
 const { DIAS_SIN_VENIR } = require('../notificaciones/model');
 const { parsePagination, parseBool } = require('../../utils/query');
 
@@ -43,6 +44,8 @@ async function listar(req, res, next) {
       q: req.query.q,
       con_saldo: parseBool(req.query.con_saldo),
       activo: parseBool(req.query.activo),
+      lugar_entrega_id: Number(req.query.lugar_entrega_id) || undefined,
+      sin_lugar: parseBool(req.query.sin_lugar),
       orden: req.query.orden,
       page, limit, offset,
     });
@@ -96,6 +99,14 @@ async function aplicarSaldoFavor(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Dinero a cuenta, sin nota: le queda a favor. */
+async function recibirAnticipo(req, res, next) {
+  try {
+    const data = await service.recibirAnticipo(Number(req.params.id), req.body, req.auth?.sub);
+    res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
 async function ajustar(req, res, next) {
   try {
     const data = await service.ajustarCredito(Number(req.params.id), req.body, req.auth?.sub);
@@ -123,8 +134,24 @@ async function analisisVista(req, res, next) {
   }
 }
 
+// --- Lugares de entrega (2026-10-14) ---
+
+async function lugaresListar(req, res, next) {
+  try { res.json({ data: await lugares.listar(), error: null }); } catch (err) { next(err); }
+}
+
+async function lugaresCrear(req, res, next) {
+  try { res.status(201).json({ data: await lugares.crear(req.body), error: null }); } catch (err) { next(err); }
+}
+
+async function lugaresActualizar(req, res, next) {
+  try { res.json({ data: await lugares.actualizar(Number(req.params.id), req.body), error: null }); } catch (err) { next(err); }
+}
+
 module.exports = {
+  lugaresListar, lugaresCrear, lugaresActualizar,
   aplicarSaldoFavor,
+  recibirAnticipo,
   analisis: analisisVista,
   registrar, iniciarSesion, perfil,
   listar, expediente, buscar, crearDesdeStaff, actualizar,

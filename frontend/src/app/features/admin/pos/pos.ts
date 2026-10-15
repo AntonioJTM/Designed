@@ -18,6 +18,7 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { HiloAPesar, PesarModal } from './pesar-modal';
 import { paqueteFueraDeAqui } from '../../../shared/paquete-aqui';
+import { AnticipoModal } from '../clientes/anticipo-modal';
 
 /** Un hilo de la búsqueda con sus presentaciones (paquete y cono) juntas. */
 interface HiloEncontrado {
@@ -80,7 +81,7 @@ export type ModoVenta = 'cobrar' | 'credito' | 'espera' | 'pendiente';
 @Component({
   selector: 'app-pos',
   host: { '(document:keydown.escape)': 'alEscape()', '(document:keydown)': 'alTeclear($event)' },
-  imports: [FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal],
+  imports: [FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal, AnticipoModal],
   styleUrls: ['./pos.scss', './pos-bultos.scss', './pos-busqueda.scss'],
   templateUrl: './pos.html',
 })
@@ -143,7 +144,8 @@ export class Pos {
    */
   readonly creandoCliente = signal(false);
   readonly guardandoCliente = signal(false);
-  nuevoCliente = { nombre: '', telefono: '', nombre_comercial: '' };
+  /** El alta rápida: nombre y teléfono (sin apodo desde el 2026-10-14; el número lo da el sistema). */
+  nuevoCliente = { nombre: '', telefono: '' };
 
   /**
    * Cómo se lleva la mercancía: cobrar, a crédito, nota en espera o nota
@@ -181,6 +183,12 @@ export class Pos {
   readonly metodos = signal<MetodoPago[]>([]);
   readonly sesion = signal<SesionCaja | null>(null);
   readonly error = signal<string | null>(null);
+  /**
+   * El aviso del LECTOR, debajo del campo donde se escanea (2026-10-14: "cuando
+   * escaneo un código que no existe… no quiero que me deje eso así, ya que
+   * retrasa el escaneo"). Arriba de la pantalla no se veía mientras se escanea.
+   */
+  readonly avisoLector = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
   readonly ticket = signal<{
     pedido: Pedido;
@@ -188,6 +196,8 @@ export class Pos {
     /** Lo que pagó hoy y lo que se le fió: una venta mixta lleva las dos cosas. */
     pagadoHoy: number;
     fiado: number;
+    /** Lo que pagó con su saldo a favor (2026-10-13). */
+    saldoUsado?: number;
   } | null>(null);
 
   cajaSel: number | '' = '';
@@ -250,11 +260,16 @@ export class Pos {
   readonly total = computed(() => this.totalReal() ?? this.subtotalEstimado());
 
   // Cobro
-  metodoSel: number | '' = '';
+  /** El método de pago; 'mixto' = parte por transferencia y el resto en efectivo (2026-10-14). */
+  metodoSel: number | '' | 'mixto' = '';
   montoPago: number | null = null;
+  /** Con 'mixto': lo que paga por transferencia. */
+  montoTransferencia: number | null = null;
 
   // ---- Abono a la cuenta del cliente, sin salir de la venta ----
   readonly abonando = signal(false);
+  /** "Recibir anticipo": el cliente deja dinero a cuenta, sin nota (2026-10-14). */
+  readonly recibiendoAnticipo = signal(false);
   readonly registrandoAbono = signal(false);
   readonly errorAbono = signal<string | null>(null);
   montoAbono: number | null = null;
@@ -440,11 +455,38 @@ export class Pos {
     const q = this.qVar.trim();
     if (!q) return;
     this.error.set(null);
+    this.avisoLector.set(null);
     this.inv.resolverCodigo(q).subscribe({
       next: (r) => this.agregarPorCodigo(r),
-      // 404 = no es un código registrado; se busca como texto.
-      error: () => this.buscar(),
+      // 404 = no es un código registrado. Si lo que llegó tiene forma de código
+      // de barras, es una etiqueta que no está en el sistema: se avisa y el campo
+      // se vacía para el siguiente (antes se buscaba como texto, no salía nada y
+      // el número se quedaba ahí: el siguiente escaneo se pegaba a él). Si es
+      // texto ("rojo 2/30"), se busca.
+      error: (e) => {
+        if (!pareceCodigo(q)) {
+          this.buscar();
+          return;
+        }
+        const noExiste = (e as { status?: number })?.status === 404;
+        this.avisarLector(
+          noExiste
+            ? `El código ${q} no está registrado. Revisa la etiqueta o escanea otro.`
+            : `No se pudo revisar el código ${q}. Vuelve a escanearlo.`
+        );
+      },
     });
+  }
+
+  /**
+   * Avisa debajo del lector y lo deja vacío y con el cursor, listo para el
+   * siguiente escaneo: un código que no sirvió no se queda pegado al siguiente.
+   */
+  private avisarLector(texto: string): void {
+    this.avisoLector.set(texto);
+    this.qVar = '';
+    this.resultados.set([]);
+    this.enfocarLector();
   }
 
   /** Mete al carrito lo que resolvió el lector. */
@@ -459,12 +501,11 @@ export class Pos {
       // envío a sucursal que se está surtiendo: sigue aquí, pero ya tiene dueño.
       const folio = r.bulto.consumido_folio;
       const deQue = folio?.startsWith('TRA') ? 'va en un envío a sucursal' : 'es de un pedido';
-      this.error.set(
+      this.avisarLector(
         r.bulto.estado === 'apartado'
           ? `El paquete ${r.bulto.codigo} está apartado${folio ? ' para ' + folio : ''}: ${deQue}. Escanea otro.`
           : `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${folio ? ' en ' + folio : ''}. Escanea otro.`
       );
-      this.qVar = '';
       return;
     }
 
@@ -473,8 +514,7 @@ export class Pos {
     const caja = this.cajaActual();
     const fuera = r.bulto ? paqueteFueraDeAqui(r.bulto, caja?.almacen_id, caja?.almacen) : null;
     if (fuera) {
-      this.error.set(fuera);
-      this.qVar = '';
+      this.avisarLector(fuera);
       return;
     }
 
@@ -489,8 +529,8 @@ export class Pos {
       return;
     }
 
-    if (this.sinPrecio(this.nombreHilo(v), Number(v.precio_oferta ?? v.precio))) {
-      this.qVar = '';
+    if (Number(v.precio_oferta ?? v.precio) <= 0) {
+      this.avisarLector(this.textoSinPrecio(this.nombreHilo(v)));
       return;
     }
 
@@ -533,7 +573,8 @@ export class Pos {
     });
 
     if (repetido) {
-      this.error.set(`El bulto ${bulto.codigo} ya está en el ticket; no se cobra dos veces.`);
+      this.avisarLector(`El bulto ${bulto.codigo} ya está en el ticket; no se cobra dos veces.`);
+      return;
     } else {
       // Empezó otra venta: el ticket de la anterior ya no aplica.
       this.ticket.set(null);
@@ -552,8 +593,12 @@ export class Pos {
    */
   private sinPrecio(nombre: string, precio: number): boolean {
     if (precio > 0) return false;
-    this.error.set(`«${nombre}» todavía no tiene precio, así que no se puede vender. Se le pone en Productos.`);
+    this.error.set(this.textoSinPrecio(nombre));
     return true;
+  }
+
+  private textoSinPrecio(nombre: string): string {
+    return `«${nombre}» todavía no tiene precio, así que no se puede vender. Se le pone en Productos.`;
   }
 
   private round3(n: number): number {
@@ -561,12 +606,12 @@ export class Pos {
   }
 
   buscar(): void {
-    if (!this.qVar.trim()) return;
+    const q = this.qVar.trim();
+    if (!q) return;
     // Con el almacén de la caja: cada presentación dice cuánto hay AQUÍ.
-    this.inv.buscarVariantes(this.qVar.trim(), this.cajaActual()?.almacen_id).subscribe({
-      next: (vs) =>
-        this.resultados.set(
-          vs
+    this.inv.buscarVariantes(q, this.cajaActual()?.almacen_id).subscribe({
+      next: (vs) => {
+        const encontrados = vs
             .filter((v) => v.activo !== false && (v.activo as unknown) !== 0)
             .map((v) => ({
               id: v.id,
@@ -578,8 +623,15 @@ export class Pos {
               precio: Number(v.precio_oferta ?? v.precio),
               unidad: v.unidad,
               aqui: v.aqui,
-            }))
-        ),
+            }));
+        this.resultados.set(encontrados);
+        // Sin nada que enseñar, se dice; lo escrito se queda seleccionado para
+        // corregirlo o para que el siguiente escaneo lo reemplace.
+        if (encontrados.length === 0) {
+          this.avisoLector.set(`No encontré ningún hilo con «${q}». Revisa cómo se escribió o escanea el paquete.`);
+          this.enfocarLector();
+        }
+      },
       error: (e) => this.error.set(this.msg(e)),
     });
   }
@@ -782,6 +834,8 @@ export class Pos {
    */
   elegirCliente(c: ClienteParaVenta): void {
     this.clienteSel.set(c);
+    this.usarSaldo = false;
+    this.saldoAUsar = null;
     this.resultadosCliente.set([]);
     this.qCliente = '';
     // Sin lista propia se cobra al público, aunque antes se hubiera elegido otra.
@@ -813,6 +867,7 @@ export class Pos {
           limite_credito: c.limite_credito,
           saldo: c.saldo ?? 0,
           credito_disponible: c.credito_disponible ?? 0,
+          saldo_favor: c.saldo_favor ?? 0,
         });
       },
       error: () => {},
@@ -850,7 +905,6 @@ export class Pos {
     this.nuevoCliente = {
       nombre: esTelefono ? '' : q,
       telefono: esTelefono ? q : '',
-      nombre_comercial: '',
     };
     this.resultadosCliente.set([]);
     this.error.set(null);
@@ -874,7 +928,6 @@ export class Pos {
       .crear({
         nombre,
         telefono: this.nuevoCliente.telefono.trim() || null,
-        nombre_comercial: this.nuevoCliente.nombre_comercial.trim() || null,
       })
       .subscribe({
         next: (c) => {
@@ -899,7 +952,7 @@ export class Pos {
           this.apartadoCliente.set(null);
           this.enfocarLector();
           this.mensaje.set(
-            `${c.nombre_comercial || c.nombre} quedó registrado. Todavía sin crédito: ` +
+            `${c.nombre}${c.codigo ? ' (' + c.codigo + ')' : ''} quedó registrado. Todavía sin crédito: ` +
               'el cobro es completo hasta que un administrador le autorice un límite.'
           );
         },
@@ -917,6 +970,8 @@ export class Pos {
    */
   quitarCliente(): void {
     this.clienteSel.set(null);
+    this.usarSaldo = false;
+    this.saldoAUsar = null;
     this.apartadoCliente.set(null);
     // Sin cliente no se fía ni se aparta: se regresa a cobrar.
     this.elegirModo('cobrar');
@@ -960,6 +1015,8 @@ export class Pos {
       this.paraCuando = '';
       this.notasPedido = '';
     }
+    // Lo que deja una nota en espera va con un solo método.
+    if (m === 'espera' && this.metodoSel === 'mixto') this.metodoSel = this.idEfectivo() ?? '';
     this.modo.set(m);
     this.aCredito = null;
     // Sin propuesta de anticipo: lo que deje es decisión del cliente, y poner
@@ -971,9 +1028,43 @@ export class Pos {
   abrirCredito(): void { this.elegirModo('credito'); }
   cerrarCredito(): void { if (this.fiando()) this.elegirModo('cobrar'); }
 
-  /** Lo que se le propone fiar si no teclea nada: todo lo que le alcance. */
+  /** Lo que se le propone fiar si no teclea nada: todo lo que le alcance (después de su saldo a favor). */
   propuestaCredito(): number {
-    return Math.max(0, Math.min(this.total(), this.creditoDisponible()));
+    return Math.max(0, Math.min(this.total() - this.saldoActual(), this.creditoDisponible()));
+  }
+
+  // ---- SALDO A FAVOR (2026-10-13): lo que le quedó de una devolución ----
+  //
+  // "A veces el cliente pide que su saldo a favor se utilice para otras compras
+  // y dejar su crédito como está" (usuario). Se ofrece al cobrar o a crédito,
+  // con un cliente que tenga; el servidor lo valida y lo descuenta de su libro.
+
+  /** ¿Usa su saldo a favor en esta compra? (casilla) */
+  usarSaldo = false;
+  /** Cuánto de su saldo; vacío = todo lo que alcance. */
+  saldoAUsar: number | null = null;
+
+  saldoFavorCliente(): number {
+    return Math.max(0, Number(this.clienteSel()?.saldo_favor ?? 0));
+  }
+
+  /** Se ofrece al cobrar o a crédito, si el cliente tiene saldo a favor. */
+  ofreceSaldo(): boolean {
+    return (this.modo() === 'cobrar' || this.modo() === 'credito') && this.saldoFavorCliente() > 0.004;
+  }
+
+  /** Lo que se le propone usar: todo lo que alcance, sin pasar del total. */
+  propuestaSaldo(): number {
+    return Math.round(Math.min(this.saldoFavorCliente(), this.total()) * 100) / 100;
+  }
+
+  /** Lo que se va a usar de su saldo. Método: lee ngModel. */
+  saldoActual(): number {
+    if (!this.usarSaldo || !this.ofreceSaldo()) return 0;
+    const v = this.saldoAUsar == null || (this.saldoAUsar as unknown) === ''
+      ? this.propuestaSaldo()
+      : Number(this.saldoAUsar);
+    return Math.max(0, Math.round(v * 100) / 100);
   }
 
   /**
@@ -988,9 +1079,9 @@ export class Pos {
       : Number(this.aCredito);
   }
 
-  /** Lo que el cliente tiene que poner hoy: el total menos lo que se le fía. Método: lee ngModel. */
+  /** Lo que el cliente tiene que poner hoy: el total menos lo que se le fía y su saldo a favor. Método: lee ngModel. */
   aPagarHoy(): number {
-    return Math.max(0, Math.round((this.total() - this.fiadoActual()) * 100) / 100);
+    return Math.max(0, Math.round((this.total() - this.fiadoActual() - this.saldoActual()) * 100) / 100);
   }
 
   /** El texto del botón grande: dice exactamente lo que va a pasar. */
@@ -1006,6 +1097,12 @@ export class Pos {
       return this.aPagarHoy() > 0
         ? `Cobrar ${this.dinero(this.aPagarHoy())} y el resto a crédito`
         : 'Dar a crédito';
+    }
+    const saldo = this.saldoActual();
+    if (saldo > 0) {
+      return this.aPagarHoy() > 0
+        ? `Cobrar ${this.dinero(this.aPagarHoy())} y ${this.dinero(saldo)} de su saldo a favor`
+        : `Pagar con su saldo a favor · ${this.dinero(saldo)}`;
     }
     return `Cobrar ${this.dinero(this.total())}`;
   }
@@ -1056,6 +1153,15 @@ export class Pos {
       this.error.set(`Solo le quedan ${this.dinero(this.creditoDisponible())} de crédito.`);
       return;
     }
+    const saldo = this.saldoActual();
+    if (saldo > this.saldoFavorCliente() + 0.001) {
+      this.error.set(`Solo tiene ${this.dinero(this.saldoFavorCliente())} a favor.`);
+      return;
+    }
+    if (saldo + fiado > this.total() + 0.001) {
+      this.error.set(`Su saldo a favor${fiado > 0 ? ' más lo que va a crédito' : ''} pasa del total (${this.dinero(this.total())}).`);
+      return;
+    }
     // Con la venta completa a crédito no hace falta método de pago: no entra
     // dinero. Si paga algo hoy, sí.
     if (this.aPagarHoy() > 0 && !this.metodoSel) {
@@ -1063,16 +1169,37 @@ export class Pos {
       return;
     }
     const aPagar = this.aPagarHoy();
-    // Con tarjeta o transferencia se cobra justo. En efectivo, lo que el cliente
-    // entrega; vacío quiere decir que pagó con el importe exacto.
-    const recibido = this.esEfectivoSel() ? Number(this.montoPago ?? aPagar) : aPagar;
-    if (aPagar > 0 && recibido + 0.001 < aPagar) {
+    // Con transferencia se cobra justo. En efectivo, lo que el cliente entrega;
+    // vacío quiere decir que pagó con el importe exacto. Con 'mixto', la
+    // transferencia y el resto en efectivo (solo el efectivo da cambio).
+    const transf = this.parteTransferencia();
+    if (this.esMixto() && aPagar > 0) {
+      if (!(transf > 0)) {
+        this.error.set('Pon cuánto paga por transferencia.');
+        return;
+      }
+      if (transf > aPagar + 0.001) {
+        this.error.set(`Por transferencia son a lo más ${this.dinero(aPagar)}: la transferencia no da cambio.`);
+        return;
+      }
+    }
+    const enEfectivo = this.aCobrarEnEfectivo();
+    const recibido = this.esEfectivoSel() ? Number(this.montoPago ?? enEfectivo) : enEfectivo;
+    if (enEfectivo > 0 && recibido + 0.001 < enEfectivo) {
       this.error.set(
-        `Faltan ${this.dinero(aPagar - recibido)}: recibió ${this.dinero(recibido)} y son ${this.dinero(aPagar)}.`
+        `Faltan ${this.dinero(enEfectivo - recibido)}: recibió ${this.dinero(recibido)} en efectivo y son ${this.dinero(enEfectivo)}.`
       );
       return;
     }
     this.error.set(null);
+    const pagos = aPagar <= 0
+      ? undefined
+      : this.esMixto()
+        ? [
+            { metodo_pago_id: Number(this.idTransferencia()), monto: transf },
+            ...(recibido > 0 ? [{ metodo_pago_id: Number(this.idEfectivo()), monto: recibido }] : []),
+          ]
+        : [{ metodo_pago_id: Number(this.metodoSel), monto: recibido }];
 
     this.ventas
       .crearPedido({
@@ -1082,6 +1209,7 @@ export class Pos {
         // Si se identificó al cliente, la venta queda en su historial.
         cliente_id: this.clienteSel()?.id,
         a_credito: fiado > 0 ? fiado : undefined,
+        saldo_favor: saldo > 0 ? saldo : undefined,
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
           cantidad: i.cantidad,
@@ -1092,18 +1220,19 @@ export class Pos {
         })),
         // Sin nada que pagar hoy (todo a crédito) no se manda pago alguno. Se
         // manda lo RECIBIDO: el servidor asienta lo cobrado y devuelve el cambio.
-        pagos: aPagar > 0 ? [{ metodo_pago_id: Number(this.metodoSel), monto: recibido }] : undefined,
+        pagos,
       })
       .subscribe({
         next: (pedido) => {
           // El cambio lo calcula el servidor contra el total con que de verdad
           // se cobró; el de la pantalla pudo ser el estimado.
-          const cambio = Number(pedido.cambio ?? Math.max(0, recibido - (Number(pedido.total) - fiado)));
+          const cambio = Number(pedido.cambio ?? Math.max(0, recibido - enEfectivo));
           this.ticket.set({
             pedido,
             cambio,
-            pagadoHoy: Math.round((Number(pedido.total) - fiado) * 100) / 100,
+            pagadoHoy: Math.round((Number(pedido.total) - fiado - saldo) * 100) / 100,
             fiado,
+            saldoUsado: saldo,
           });
           this.limpiarVenta();
         },
@@ -1115,6 +1244,9 @@ export class Pos {
   private limpiarVenta(): void {
     this.carrito.set([]);
     this.montoPago = null;
+    this.montoTransferencia = null;
+    // Parte y parte es de esa venta: la siguiente arranca en efectivo.
+    if (this.metodoSel === 'mixto') this.metodoSel = this.idEfectivo() ?? '';
     this.qVar = '';
     this.resultados.set([]);
     this.mensaje.set(null);
@@ -1122,22 +1254,56 @@ export class Pos {
     this.enfocarLector();
   }
 
-  /** ¿El método elegido es efectivo? Solo el efectivo da cambio. */
+  /** ¿El método elegido lleva efectivo (efectivo, o parte y parte)? Solo el efectivo da cambio. */
   esEfectivoSel(): boolean {
+    if (this.esMixto()) return true;
     const m = this.metodos().find((x) => x.id === Number(this.metodoSel));
     return !!m && m.nombre.toLowerCase().includes('efectivo');
+  }
+
+  private idDe(palabra: string): number | null {
+    return this.metodos().find((x) => x.nombre.toLowerCase().includes(palabra))?.id ?? null;
+  }
+
+  idEfectivo(): number | null {
+    return this.idDe('efectivo');
+  }
+
+  idTransferencia(): number | null {
+    return this.idDe('transferencia');
+  }
+
+  /** Se ofrece "Efectivo y transferencia" si existen los dos métodos (2026-10-14). */
+  permiteMixto(): boolean {
+    return !!this.idEfectivo() && !!this.idTransferencia();
+  }
+
+  esMixto(): boolean {
+    return this.metodoSel === 'mixto';
+  }
+
+  /** Con parte y parte, lo que paga por transferencia. Método: lee ngModel. */
+  parteTransferencia(): number {
+    if (!this.esMixto()) return 0;
+    const v = Number(this.montoTransferencia);
+    return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : 0;
+  }
+
+  /** Lo que se cobra en efectivo hoy: todo, o lo que no cubre la transferencia. */
+  aCobrarEnEfectivo(): number {
+    return Math.max(0, Math.round((this.aPagarHoy() - this.parteTransferencia()) * 100) / 100);
   }
 
   /** El cambio que se va a dar, mientras se teclea. Método: lee ngModel. */
   cambioPrevio(): number {
     if (!this.esEfectivoSel() || this.montoPago == null) return 0;
-    return Math.max(0, Math.round((Number(this.montoPago) - this.aPagarHoy()) * 100) / 100);
+    return Math.max(0, Math.round((Number(this.montoPago) - this.aCobrarEnEfectivo()) * 100) / 100);
   }
 
   /** Lo que falta si lo recibido no alcanza. Método: lee ngModel. */
   faltaPrevio(): number {
     if (!this.esEfectivoSel() || this.montoPago == null) return 0;
-    return Math.max(0, Math.round((this.aPagarHoy() - Number(this.montoPago)) * 100) / 100);
+    return Math.max(0, Math.round((this.aCobrarEnEfectivo() - Number(this.montoPago)) * 100) / 100);
   }
 
   readonly imprimiendo = signal(false);
@@ -1251,6 +1417,19 @@ export class Pos {
    * Cobrarle lo que debe sin salir de la venta: si viene a comprar y debe, es
    * el mejor momento. Se propone el saldo completo; puede abonar menos.
    */
+  cerrarAnticipo(): void {
+    this.recibiendoAnticipo.set(false);
+    this.enfocarLector();
+  }
+
+  /** Dejó dinero a cuenta: su saldo a favor sube y ya lo puede usar en esta venta. */
+  anticipoRegistrado(r: { total: number; saldo_favor: number }): void {
+    const c = this.clienteSel();
+    if (c) this.clienteSel.set({ ...c, saldo_favor: r.saldo_favor });
+    this.mensaje.set(`Anticipo de ${this.dinero(r.total)} registrado. Le quedan ${this.dinero(r.saldo_favor)} a favor.`);
+    this.cerrarAnticipo();
+  }
+
   abrirAbono(): void {
     const c = this.clienteSel();
     if (!c) return;
@@ -1402,4 +1581,14 @@ export class Pos {
   private msg(e: unknown): string {
     return (e as { error?: { error?: ApiError } })?.error?.error?.message ?? 'Ocurrió un error.';
   }
+}
+
+/**
+ * ¿Lo que llegó al lector tiene forma de código de barras? Seis o más letras,
+ * números o guiones, sin espacios, con al menos cuatro números ("00621999",
+ * "TMPVV-PAQ-12"). Un color o un calibre ("rojo", "rojo 2/30") no la tiene y
+ * se busca como texto.
+ */
+export function pareceCodigo(q: string): boolean {
+  return /^[A-Za-z0-9-]{6,}$/.test(q) && (q.match(/\d/g)?.length ?? 0) >= 4;
 }

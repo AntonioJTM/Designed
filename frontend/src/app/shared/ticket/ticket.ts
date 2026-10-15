@@ -9,20 +9,88 @@ import { Pedido, PedidoLinea } from '../../core/models/ventas.models';
  * los convierte en puntitos tenues— y con letra del sistema, que no hay que
  * cargar.
  *
- * El CORTE: la impresora corta donde termina la HOJA que le manda el navegador.
- * Sin decirle cuánto mide, usa el largo de su hoja por defecto y saca papel en
- * blanco antes de cortar. `imprimirTicket` mide el ticket ya dibujado y le pone
- * a la hoja (`@page`) ese largo exacto.
+ * EL PAPEL (2026-10-14, con la impresora de verdad): está instalada como
+ * "POS-58", papel de 58 mm, y su hoja es un ROLLO de 58 × 3276 mm. Chrome NO
+ * usa una hoja de otro tamaño en una impresora física: si el ticket pide una
+ * (`@page { size }`), lo encoge y lo pone A LA MITAD de esa hoja de 3 m (se vio
+ * así en la vista previa). Por eso el ticket NO pide tamaño: usa la hoja de la
+ * impresora, empieza arriba, y el controlador de la térmica imprime hasta lo
+ * último que tiene tinta y corta. Lo que sí pide es `margin: 0`: sin margen,
+ * Chrome no puede poner su encabezado y su pie (la fecha y la dirección de la
+ * página) —el pie iba al FINAL de los 3 m y obligaba a sacar todo ese papel—.
+ * El ancho se elige en Configuración (`ticket_papel_mm`: 58 u 80).
+ *
+ * VA PEGADO A LA IZQUIERDA, NO CENTRADO (2026-10-14, con la SICAR WL88S: "así me
+ * da el ticket; quiero que en cualquier impresora se vea bien"). Su controlador
+ * le dice a Chrome que la hoja es ancha (la vista previa enseñaba el ticket
+ * centrado en una hoja de unos 72 mm) pero la cabeza solo imprime unos 48 mm
+ * desde la orilla izquierda: centrado, el ticket empezaba a ~13 mm y todo lo de
+ * la derecha se cortaba (el logo, la razón social, los importes). Toda térmica
+ * imprime desde la izquierda, así que pegado ahí (1 mm de orilla) cabe en
+ * cualquiera mientras su ancho sea el que de verdad imprime. Para saber cuál
+ * es, Configuración → Ticket imprime una PRUEBA con una regla (`armarPrueba`).
+ *
+ * EL DE 80 MM MIDE 60 MM (2026-10-14): una impresora de rollo de 80 mm imprime
+ * 72 mm… o 64 mm, según el modelo o cómo esté configurada. La WL88S de la
+ * tienda, ya en modo 80, cortó el de 70 y un carácter del de 62; se probó 58 y
+ * 53, y el usuario pidió quedarse en 60 ("¿puedes hacerlo que sea de 60mm?").
+ *
+ * El ENCABEZADO (2026-10-14: "el ticket tiene que llevar la información de la
+ * constancia fiscal y el logo"): el logo en NEGRO (`public/hitex-ticket.png`,
+ * sacado del logo a color) y los datos fiscales —razón social, RFC, régimen y
+ * domicilio— más la leyenda del pie. Viven en Configuración (claves `fiscal_*`
+ * y `ticket_leyenda`), no en el código: el repositorio es público y así el
+ * administrador los corrige sin tocar nada.
  */
 
-export const ANCHO_PAPEL_MM = 80;
-/** Lo que de verdad imprime una térmica de 80 mm. */
-export const ANCHO_IMPRESO_MM = 72;
+/** Medidas por ancho de papel. */
+export interface Papel {
+  mm: 58 | 80;
+  /**
+   * Ancho del ticket. En 58: lo imprimible (48 mm) menos 1 mm por lado. En 80:
+   * 60 mm, el que eligió el usuario para la WL88S de la tienda (ver arriba).
+   */
+  ticketMm: number;
+  logoMm: number;
+  /** Las letras se encogen en el papel angosto, para que quepan los importes. */
+  escala: number;
+}
+
+export const PAPELES: Record<58 | 80, Papel> = {
+  58: { mm: 58, ticketMm: 46, logoMm: 36, escala: 0.84 },
+  80: { mm: 80, ticketMm: 60, logoMm: 44, escala: 0.84 },
+};
+
+/** "80" → el de 80 mm; cualquier otra cosa (o nada) → el de 58, el de la impresora de la tienda. */
+export function papelDe(valor: unknown): Papel {
+  return Number(valor) === 80 ? PAPELES[80] : PAPELES[58];
+}
 
 export interface DatosTienda {
   nombre: string;
   direccion?: string | null;
   telefono?: string | null;
+  /** El logo en negro, con su dirección completa (el ticket se dibuja en un marco aparte). */
+  logo?: string | null;
+  razonSocial?: string | null;
+  rfc?: string | null;
+  regimen?: string | null;
+  /** El domicilio fiscal; sin él, se usa la dirección de la tienda. */
+  domicilio?: string | null;
+  /** Lo que va al pie ("Este ticket no es un comprobante fiscal."). */
+  leyenda?: string | null;
+  /** El ancho del papel en mm (58 u 80). Sin dato, 58. */
+  papelMm?: number | string | null;
+}
+
+/** Proporción del logo del ticket (alto ÷ ancho de `hitex-ticket.png`, 1009 × 588). */
+export const LOGO_ANCHO_PX = 1009;
+export const LOGO_ALTO_PX = 588;
+
+/** "7786542453" → "778 654 2453"; lo demás, tal cual. */
+export function telefonoLegible(t: string): string {
+  const d = t.replace(/\D/g, '');
+  return d.length === 10 && /^[\d\s()-]+$/.test(t) ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : t;
 }
 
 /** Lo que solo se sabe al cobrar y no se guarda: el cambio no es dinero de la tienda. */
@@ -108,6 +176,11 @@ function lineaHtml(d: PedidoLinea): string {
   </div>`;
 }
 
+/** Quita el rótulo con que viene un dato copiado de la constancia ("REGIMEN: …"). */
+function sinRotulo(valor: string | null | undefined, rotulo: RegExp): string {
+  return String(valor ?? '').replace(rotulo, '').trim();
+}
+
 /**
  * El ticket completo, como documento HTML. Puro: no toca la pantalla, así se
  * puede probar y lo usan igual la caja y el detalle de la venta.
@@ -174,45 +247,69 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
     Number(p.costo_envio) > 0 ? renglon('Envío', esc(dineroTicket(p.costo_envio))) : '',
   ].join('');
 
-  const contacto = [tienda.direccion, tienda.telefono ? `Tel. ${tienda.telefono}` : ''].filter(Boolean).map(esc).join('<br>');
+  const papel = papelDe(tienda.papelMm);
+  const px = (n: number) => `${Math.round(n * papel.escala * 10) / 10}px`;
+
+  // Si se copió de la constancia con su rótulo ("REGIMEN: 601…", "RFC: …"), se
+  // quita: el ticket ya pone el suyo y salía "Régimen: REGIMEN: 601…" (2026-10-14).
+  // Solo con los dos puntos: "Régimen Simplificado de Confianza" es el nombre del
+  // régimen, y un RFC puede empezar con las letras R-F-C.
+  const rfc = sinRotulo(tienda.rfc, /^\s*r\.?\s*f\.?\s*c\.?\s*:\s*/i);
+  const regimen = sinRotulo(tienda.regimen, /^\s*r[eé]gimen(\s+fiscal)?\s*:\s*/i);
+  const fiscal = [
+    tienda.razonSocial ? `<p class="razon">${esc(tienda.razonSocial)}</p>` : '',
+    rfc ? `<p>RFC: <b>${esc(rfc)}</b></p>` : '',
+    regimen ? `<p>Régimen: ${esc(regimen)}</p>` : '',
+    tienda.domicilio || tienda.direccion ? `<p>${esc(tienda.domicilio || tienda.direccion)}</p>` : '',
+    tienda.telefono ? `<p>Tel. ${esc(telefonoLegible(tienda.telefono))}</p>` : '',
+  ].join('');
+  // Sin logo (o si no carga: ver imprimirTicket) va el nombre en letras.
+  const nombre = `<h1>${esc(tienda.nombre.toUpperCase())}</h1>`;
+  const encabezado = tienda.logo
+    ? `<img class="logo" src="${esc(tienda.logo)}" width="${LOGO_ANCHO_PX}" height="${LOGO_ALTO_PX}" alt="${esc(tienda.nombre)}">` +
+      `<template id="sin-logo">${nombre}</template>`
+    : nombre;
 
   return `<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><title>${esc(p.numero_pedido)}</title>
 <style>
-  @page { size: ${ANCHO_PAPEL_MM}mm 200mm; margin: 0; }
+  @page { margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; padding: 0; background: #fff; }
-  body { width: ${ANCHO_PAPEL_MM}mm; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 12px; line-height: 1.3;
+  body { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: ${px(12)}; line-height: 1.3;
     font-variant-numeric: tabular-nums; }
-  .t { width: ${ANCHO_IMPRESO_MM}mm; margin: 0 auto; padding: 3mm 0 4mm; }
+  .t { width: ${papel.ticketMm}mm; margin: 0 0 0 1mm; padding: 2mm 0 3mm; }
   .tienda { text-align: center; }
-  .tienda h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: 0.06em; }
-  .tienda p { margin: 2px 0 0; font-size: 11px; }
-  .tipo { margin: 8px 0 6px; padding: 5px 0; background: #000; color: #fff; text-align: center; font-size: 15px; font-weight: 700;
+  .tienda h1 { margin: 0; font-size: ${px(26)}; font-weight: 900; letter-spacing: 0.06em; }
+  .tienda .logo { display: block; width: ${papel.logoMm}mm; height: auto; margin: 0 auto 2mm; }
+  .tienda p { margin: ${px(1)} 0 0; font-size: ${px(10.5)}; line-height: 1.3; }
+  .tienda .razon { font-size: ${px(11.5)}; font-weight: 700; margin-top: 0; }
+  .tipo { margin: ${px(8)} 0 ${px(6)}; padding: ${px(5)} 0; background: #000; color: #fff; text-align: center; font-size: ${px(15)}; font-weight: 700;
     letter-spacing: 0.12em; text-transform: uppercase; }
-  .r { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .r { display: flex; justify-content: space-between; align-items: baseline; gap: ${px(8)}; }
   .r > span:last-child { text-align: right; white-space: nowrap; }
-  .datos .r { font-size: 11px; padding: 1px 0; }
+  .datos .r { font-size: ${px(11)}; padding: ${px(1)} 0; }
   .datos .r > span:first-child { font-weight: 700; }
   .datos .r > span:last-child { white-space: normal; }
   .mono { font-family: 'Courier New', monospace; font-weight: 700; }
-  .corte { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
-  .art { padding: 4px 0; }
+  .corte { border: 0; border-top: 1px dashed #000; margin: ${px(6)} 0; }
+  .art { padding: ${px(4)} 0; }
   .art + .art { border-top: 1px dotted #000; }
-  .art-nombre { font-weight: 700; font-size: 12.5px; }
-  .art-extra { font-size: 10.5px; }
-  .resumen { font-size: 11px; text-align: center; margin: 2px 0; }
+  .art-nombre { font-weight: 700; font-size: ${px(12.5)}; }
+  .art-extra { font-size: ${px(10.5)}; }
+  .resumen { font-size: ${px(11)}; text-align: center; margin: ${px(2)} 0; }
   .total { display: flex; justify-content: space-between; align-items: baseline; border-top: 2px solid #000; border-bottom: 2px solid #000;
-    padding: 5px 0; margin: 4px 0 6px; font-weight: 900; }
-  .total span:first-child { font-size: 16px; letter-spacing: 0.08em; }
-  .total span:last-child { font-size: 22px; }
-  .fuerte { font-weight: 700; font-size: 13px; }
-  .aviso { border: 1.5px solid #000; padding: 5px 6px; margin: 6px 0; font-size: 11.5px; font-weight: 700; text-align: center; }
-  .gracias { text-align: center; margin-top: 10px; font-size: 13px; font-weight: 700; }
-  .pie { text-align: center; font-size: 10px; margin-top: 2px; }
+    padding: ${px(5)} 0; margin: ${px(4)} 0 ${px(6)}; font-weight: 900; }
+  .total span:first-child { font-size: ${px(16)}; letter-spacing: 0.08em; }
+  .total span:last-child { font-size: ${px(22)}; }
+  .fuerte { font-weight: 700; font-size: ${px(13)}; }
+  .aviso { border: 1.5px solid #000; padding: ${px(5)} ${px(6)}; margin: ${px(6)} 0; font-size: ${px(11.5)}; font-weight: 700; text-align: center; }
+  .gracias { text-align: center; margin-top: ${px(10)}; font-size: ${px(13)}; font-weight: 700; }
+  .pie { text-align: center; font-size: ${px(10)}; margin-top: ${px(2)}; }
+  .leyenda { text-align: center; font-size: ${px(10)}; margin-top: ${px(6)}; padding-top: ${px(4)}; border-top: 1px dashed #000; }
 </style></head><body><div class="t" id="ticket">
   <div class="tienda">
-    <h1>${esc(tienda.nombre.toUpperCase())}</h1>
-    ${contacto ? `<p>${contacto}</p>` : ''}
+    ${encabezado}
+    ${fiscal}
   </div>
   <div class="tipo">${esc(tipo)}</div>
   <div class="datos">${datos}</div>
@@ -226,25 +323,84 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
   ${saldo.join('')}
   <div class="gracias">¡Gracias por su compra!</div>
   <div class="pie">${esc(p.numero_pedido)}</div>
+  ${tienda.leyenda ? `<div class="leyenda">${esc(tienda.leyenda)}</div>` : ''}
 </div></body></html>`;
 }
 
-/** Milímetros de un largo en pixeles de pantalla (96 por pulgada). */
-export function pxAMm(px: number): number {
-  return (px * 25.4) / 96;
+/**
+ * LA HOJA DE PRUEBA de Configuración → Ticket (2026-10-14): una REGLA en
+ * milímetros desde la orilla izquierda y un recuadro del ancho del ticket. Así
+ * se ve en CUALQUIER impresora hasta dónde imprime de verdad (su controlador
+ * puede decir otra cosa) y si conviene 58 u 80 mm. Va pegada a la izquierda,
+ * como el ticket.
+ */
+export function armarPrueba(papelMm: unknown): string {
+  const papel = papelDe(papelMm);
+  const marcas: string[] = [];
+  for (let mm = 0; mm <= 80; mm += 5) {
+    const larga = mm % 10 === 0;
+    marcas.push(`<i style="left:${mm}mm;height:${larga ? 5 : 3}mm"></i>`);
+    if (larga && mm > 0) marcas.push(`<b style="left:${mm - 2.5}mm">${mm}</b>`);
+  }
+  return `<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><title>Prueba de impresión</title>
+<style>
+  @page { margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
+  .p { margin: 0 0 0 1mm; padding: 2mm 0 4mm; width: ${papel.ticketMm}mm; font-size: 3.2mm; line-height: 1.35; }
+  h1 { margin: 0 0 2mm; font-size: 4.2mm; font-weight: 900; }
+  .regla { position: relative; height: 10mm; width: 80mm; margin: 2mm 0 3mm -1mm; border-top: 0.4mm solid #000; }
+  .regla i { position: absolute; top: 0; width: 0.4mm; background: #000; }
+  .regla b { position: absolute; top: 5.5mm; width: 5mm; text-align: center; font-size: 2.8mm; }
+  .caja { border: 0.5mm solid #000; padding: 2mm; margin: 3mm 0; text-align: center; font-weight: 700; }
+  ul { margin: 1mm 0 0; padding-left: 4mm; }
+</style></head><body><div class="p">
+  <h1>PRUEBA DE IMPRESIÓN</h1>
+  <div>Ancho elegido: <b>${papel.mm} mm</b></div>
+  <div class="regla">${marcas.join('')}</div>
+  <div>La regla se corta donde tu impresora deja de imprimir: eso es lo que mide. ¿En qué número se corta?</div>
+  <ul>
+    <li>Antes de 60: deja <b>58 mm</b>.</li>
+    <li>En 60 o más: elige <b>80 mm</b>.</li>
+  </ul>
+  <div class="caja">Este recuadro mide lo que el ticket. Si sale completo, con sus dos orillas, el ticket cabe.</div>
+</div></body></html>`;
+}
+
+/** Espera a que carguen las imágenes del ticket (el logo), sin quedarse colgado. */
+function imagenesListas(doc: Document, maxMs = 4000): Promise<void> {
+  const pendientes = Array.from(doc.images).filter((img) => !img.complete);
+  if (!pendientes.length) return Promise.resolve();
+  const cargas = pendientes.map((img) => new Promise<void>((ok) => {
+    img.addEventListener('load', () => ok(), { once: true });
+    img.addEventListener('error', () => ok(), { once: true });
+  }));
+  return Promise.race([Promise.all(cargas).then(() => undefined), new Promise<void>((ok) => setTimeout(ok, maxMs))]);
 }
 
 /**
- * Imprime el ticket en un marco aparte (sale solo el ticket, sin el menú) y le
- * pone a la hoja el LARGO del ticket, para que la impresora corte justo al
- * terminar y no saque papel en blanco.
+ * Deja la hoja lista para imprimir: espera al logo (si no, la impresora lo
+ * recibe en blanco) y, si no cargó, pone el nombre en letras.
  */
-export function imprimirTicket(html: string): void {
+export async function prepararHoja(doc: Document): Promise<void> {
+  await imagenesListas(doc);
+  const logo = doc.querySelector<HTMLImageElement>('img.logo');
+  if (logo && !logo.naturalWidth) {
+    const respaldo = doc.querySelector<HTMLTemplateElement>('#sin-logo');
+    logo.replaceWith(respaldo ? respaldo.content.cloneNode(true) : doc.createTextNode(''));
+  }
+}
+
+/**
+ * Imprime el ticket en un marco aparte: sale solo el ticket, sin el menú. Antes
+ * espera al LOGO (ver `prepararHoja`). El papel lo pone la impresora (ver arriba).
+ */
+export async function imprimirTicket(html: string): Promise<void> {
   const marco = document.createElement('iframe');
   marco.setAttribute('aria-hidden', 'true');
   marco.tabIndex = -1;
-  // Fuera de la vista pero con el ancho del papel, para medir el largo de verdad.
-  marco.style.cssText = `position:fixed;left:-10000px;top:0;width:${ANCHO_PAPEL_MM}mm;height:50mm;border:0`;
+  // Fuera de la vista: lo que se imprime es su documento, no el marco.
+  marco.style.cssText = 'position:fixed;left:-10000px;top:0;width:80mm;height:50mm;border:0';
   document.body.appendChild(marco);
   const doc = marco.contentDocument;
   const ventana = marco.contentWindow;
@@ -256,11 +412,7 @@ export function imprimirTicket(html: string): void {
   doc.write(html);
   doc.close();
 
-  const ticket = doc.getElementById('ticket');
-  const largo = Math.ceil(pxAMm((ticket ?? doc.body).getBoundingClientRect().height)) + 2;
-  const hoja = doc.createElement('style');
-  hoja.textContent = `@page { size: ${ANCHO_PAPEL_MM}mm ${largo}mm; margin: 0; }`;
-  doc.head.appendChild(hoja);
+  await prepararHoja(doc);
 
   ventana.focus();
   ventana.print();

@@ -1,11 +1,12 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
-import { Cliente } from '../../../core/models/clientes.models';
+import { Cliente, ClienteInput, LugarEntrega } from '../../../core/models/clientes.models';
 import { TipoCliente } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { hoyLocal } from '../../../shared/fecha.pipe';
+import { ESTADOS_MX } from './clientes-ui';
 
 /**
  * Alta y edición del cliente, en modal sobre el listado.
@@ -22,6 +23,13 @@ import { hoyLocal } from '../../../shared/fecha.pipe';
  * Al dar de ALTA no se cierra solo: ofrece capturar otro (el usuario va a
  * capturar sus clientes de años uno tras otro, y reabrir el modal cada vez
  * sobra) o ir a su expediente. Al editar, sí se cierra al guardar.
+ *
+ * 2026-10-14 (usuario): sin "Como le dicen" ni "Cumpleaños"; el NÚMERO DE
+ * CLIENTE lo da el sistema al guardar (C-0001) y aquí solo se ve; y el LUGAR DE
+ * ENTREGA (municipio y estado, de una lista que se amplía aquí mismo) para
+ * contar a cuántos clientes se les entrega en cada lugar. Al editar un cliente
+ * de antes, su apodo y su cumpleaños se conservan: no se mandan y el servidor
+ * deja lo que tenía.
  */
 @Component({
   selector: 'app-cliente-form-modal',
@@ -36,6 +44,16 @@ import { hoyLocal } from '../../../shared/fecha.pipe';
     .moneda > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--tinta-3); font-weight: 600; }
     .moneda > input { padding-left: 26px; }
     .field .error-campo { font-size: 0.75rem; font-weight: 400; color: var(--peligro-t); }
+    .intro { margin: 0 0 16px; }
+    .sin-margen { margin: 0; }
+    .sin-margen-arriba { margin-top: 0; }
+    .numero { background: var(--fondo); color: var(--tinta); cursor: default; }
+    .elige-lugar { display: flex; gap: 8px; align-items: center; }
+    .elige-lugar > select { flex: 1 1 auto; min-width: 0; }
+    .elige-lugar > .btn { flex: 0 0 auto; }
+    .nuevo-lugar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .nuevo-lugar > input { flex: 1 1 180px; min-width: 0; }
+    .nuevo-lugar > .botones { display: flex; gap: 8px; }
   `,
 })
 export class ClienteFormModal implements OnInit {
@@ -60,6 +78,18 @@ export class ClienteFormModal implements OnInit {
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   readonly tipos = signal<TipoCliente[]>([]);
+  /** Los lugares de entrega, para elegir uno. */
+  readonly lugares = signal<LugarEntrega[]>([]);
+
+  // --- Alta de un lugar sin salir del cliente ---
+  readonly agregandoLugar = signal(false);
+  readonly guardandoLugar = signal(false);
+  readonly errorLugar = signal<string | null>(null);
+  readonly lugarNombre = new FormControl('', { nonNullable: true });
+  readonly lugarEstado = new FormControl('', { nonNullable: true });
+
+  /** Los 32 estados, de sugerencia: así "Hidalgo" se escribe igual en todos los lugares. */
+  readonly ESTADOS = ESTADOS_MX;
 
   /** Cómo llegó. Son las respuestas de siempre; el campo admite otra cosa. */
   readonly origenes = ['Recomendación', 'Ya era cliente', 'Pasó por la tienda',
@@ -67,8 +97,6 @@ export class ClienteFormModal implements OnInit {
 
   readonly form = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.minLength(1)]],
-    nombre_comercial: [''],
-    codigo: [''],
     telefono: [''],
     telefono_alt: [''],
     correo: [''],
@@ -77,8 +105,8 @@ export class ClienteFormModal implements OnInit {
     direccion: [''],
     ciudad: [''],
     estado: [''],
+    lugar_entrega_id: [null as number | null],
     como_llego: [''],
-    fecha_nacimiento: [''],
     cliente_desde: [''],
     limite_credito: [0],
     notas: [''],
@@ -95,8 +123,6 @@ export class ClienteFormModal implements OnInit {
     if (c) {
       this.form.reset({
         nombre: c.nombre,
-        nombre_comercial: c.nombre_comercial ?? '',
-        codigo: c.codigo ?? '',
         telefono: c.telefono ?? '',
         telefono_alt: c.telefono_alt ?? '',
         correo: c.correo ?? '',
@@ -105,8 +131,8 @@ export class ClienteFormModal implements OnInit {
         direccion: c.direccion ?? '',
         ciudad: c.ciudad ?? '',
         estado: c.estado ?? '',
+        lugar_entrega_id: c.lugar_entrega_id ? Number(c.lugar_entrega_id) : null,
         como_llego: c.como_llego ?? '',
-        fecha_nacimiento: c.fecha_nacimiento ?? '',
         cliente_desde: c.cliente_desde ?? '',
         limite_credito: Number(c.limite_credito ?? 0),
         notas: c.notas ?? '',
@@ -131,6 +157,66 @@ export class ClienteFormModal implements OnInit {
         this.cargando.set(false);
       },
     });
+    // Sin la lista de lugares el cliente se guarda igual, sin lugar.
+    this.clientes.lugaresEntrega().subscribe({
+      next: (r) => this.lugares.set(r.lugares),
+      error: () => this.lugares.set([]),
+    });
+  }
+
+  // ------------------------------------------------------------ lugar de entrega
+
+  abrirLugar(): void {
+    // Propone el estado del lugar elegido o, si no hay, el que más lugares
+    // tiene: los clientes de la tienda suelen ser de la misma región.
+    const elegido = this.lugares().find((l) => l.id === this.form.getRawValue().lugar_entrega_id);
+    this.lugarNombre.setValue('');
+    this.lugarEstado.setValue(elegido?.estado ?? this.estadoMasComun());
+    this.errorLugar.set(null);
+    this.agregandoLugar.set(true);
+  }
+
+  private estadoMasComun(): string {
+    const cuenta = new Map<string, number>();
+    for (const l of this.lugares()) cuenta.set(l.estado, (cuenta.get(l.estado) ?? 0) + 1);
+    return [...cuenta.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+  }
+
+  cancelarLugar(): void {
+    this.agregandoLugar.set(false);
+    this.errorLugar.set(null);
+  }
+
+  guardarLugar(): void {
+    const nombre = this.lugarNombre.value.trim();
+    const estado = this.lugarEstado.value.trim();
+    if (!nombre || !estado) {
+      this.errorLugar.set(!nombre ? 'Pon el municipio o el lugar.' : 'Pon el estado.');
+      return;
+    }
+    this.guardandoLugar.set(true);
+    this.errorLugar.set(null);
+    this.clientes.crearLugar({ nombre, estado }).subscribe({
+      next: (l) => {
+        this.guardandoLugar.set(false);
+        this.lugares.set([...this.lugares(), l].sort((a, b) =>
+          a.estado.localeCompare(b.estado, 'es') || a.nombre.localeCompare(b.nombre, 'es')));
+        this.form.patchValue({ lugar_entrega_id: l.id });
+        this.agregandoLugar.set(false);
+      },
+      error: (e) => {
+        this.guardandoLugar.set(false);
+        const api = (e as { error?: { error?: ApiError & { detalles?: { id?: number } } } })?.error?.error;
+        // Ya estaba en la lista: se elige ese, no hace falta otro.
+        const ya = api?.code === 'LUGAR_REPETIDO' ? this.lugares().find((l) => l.id === api.detalles?.id) : null;
+        if (ya) {
+          this.form.patchValue({ lugar_entrega_id: ya.id });
+          this.agregandoLugar.set(false);
+          return;
+        }
+        this.errorLugar.set(api?.message ?? 'No se pudo guardar el lugar.');
+      },
+    });
   }
 
   guardar(): void {
@@ -142,13 +228,12 @@ export class ClienteFormModal implements OnInit {
     this.error.set(null);
 
     const v = this.form.getRawValue();
-    // Los opcionales vacíos van como null y no como cadena vacía: un `codigo`
-    // en '' choca con el UNIQUE en cuanto hay dos clientes sin código.
+    // Los opcionales vacíos van como null y no como cadena vacía: un `correo`
+    // en '' choca con el UNIQUE en cuanto hay dos clientes sin correo. El número
+    // de cliente no va: lo da el sistema.
     const limpio = (x: string) => (x.trim() === '' ? null : x.trim());
-    const body = {
+    const body: ClienteInput = {
       nombre: v.nombre.trim(),
-      nombre_comercial: limpio(v.nombre_comercial),
-      codigo: limpio(v.codigo),
       telefono: limpio(v.telefono),
       telefono_alt: limpio(v.telefono_alt),
       correo: limpio(v.correo),
@@ -157,8 +242,8 @@ export class ClienteFormModal implements OnInit {
       direccion: limpio(v.direccion),
       ciudad: limpio(v.ciudad),
       estado: limpio(v.estado),
+      lugar_entrega_id: v.lugar_entrega_id || null,
       como_llego: limpio(v.como_llego),
-      fecha_nacimiento: limpio(v.fecha_nacimiento),
       cliente_desde: limpio(v.cliente_desde),
       limite_credito: Number(v.limite_credito) || 0,
       notas: limpio(v.notas),
@@ -188,11 +273,12 @@ export class ClienteFormModal implements OnInit {
   otro(): void {
     this.creado.set(null);
     this.error.set(null);
-    // Se conserva la lista de precios y el "cómo llegó": al capturar de corrido
-    // suelen repetirse. Lo demás arranca vacío, y "cliente desde" en hoy.
-    const { tipo_cliente_id, como_llego } = this.form.getRawValue();
+    // Se conservan la lista de precios, el lugar de entrega y el "cómo llegó":
+    // al capturar de corrido suelen repetirse (los de un mismo pueblo van
+    // juntos). Lo demás arranca vacío, y "cliente desde" en hoy.
+    const { tipo_cliente_id, lugar_entrega_id, como_llego } = this.form.getRawValue();
     this.form.reset();
-    this.form.patchValue({ tipo_cliente_id, como_llego, cliente_desde: hoyLocal() });
+    this.form.patchValue({ tipo_cliente_id, lugar_entrega_id, como_llego, cliente_desde: hoyLocal() });
   }
 
   cerrar(): void {

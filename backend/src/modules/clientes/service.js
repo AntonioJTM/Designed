@@ -2,6 +2,7 @@
 
 const model = require('./model');
 const saldoFavor = require('./saldo-favor');
+const lugares = require('./lugares');
 const { hoyLocal } = require('../../utils/fechas');
 const { withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
@@ -66,8 +67,9 @@ const { paginado } = require('../../utils/query');
 
 /**
  * Normaliza lo que llega del formulario. Los opcionales vacíos se guardan como
- * NULL y no como cadena vacía: un `codigo` en '' choca con el UNIQUE en cuanto
- * hay dos clientes sin código, mientras que varios NULL conviven.
+ * NULL y no como cadena vacía: un `correo` en '' choca con el UNIQUE en cuanto
+ * hay dos clientes sin correo, mientras que varios NULL conviven. El número de
+ * cliente (`codigo`) no viene: lo da el sistema al darlo de alta.
  */
 function _normalizar(datos, actual = {}) {
   const tomar = (campo, respaldo = null) => {
@@ -77,7 +79,6 @@ function _normalizar(datos, actual = {}) {
     return typeof v === 'string' ? v.trim() : v;
   };
   return {
-    codigo: tomar('codigo'),
     nombre: tomar('nombre'),
     nombre_comercial: tomar('nombre_comercial'),
     rfc: tomar('rfc'),
@@ -91,6 +92,7 @@ function _normalizar(datos, actual = {}) {
     direccion: tomar('direccion'),
     ciudad: tomar('ciudad'),
     estado: tomar('estado'),
+    lugar_entrega_id: tomar('lugar_entrega_id'),
     como_llego: tomar('como_llego'),
     fecha_nacimiento: tomar('fecha_nacimiento'),
     // Un cliente de años es cliente desde antes de capturarlo. Si no se dice,
@@ -182,16 +184,15 @@ async function buscarParaVenta(q) {
 }
 
 async function _exigirSinDuplicado(datos, exceptoId) {
-  if (!datos.codigo && !datos.correo) return;
-  const dup = await model.duplicado({
-    codigo: datos.codigo,
-    correo: datos.correo,
-    exceptoId,
-  });
-  if (!dup) return;
-  const cual = dup.codigo && dup.codigo === datos.codigo ? 'código' : 'correo';
-  throw new AppError(409, 'CLIENTE_DUPLICADO',
-    `Ya hay otro cliente con ese ${cual}.`);
+  const dup = await model.duplicado({ correo: datos.correo, exceptoId });
+  if (dup) throw new AppError(409, 'CLIENTE_DUPLICADO', 'Ya hay otro cliente con ese correo.');
+}
+
+/** El lugar de entrega tiene que ser uno de la lista. */
+async function _exigirLugar(datos) {
+  if (datos.lugar_entrega_id && !(await lugares.existe(datos.lugar_entrega_id))) {
+    throw new AppError(422, 'LUGAR_INVALIDO', 'Ese lugar de entrega no está en la lista.');
+  }
 }
 
 async function crearDesdeStaff(datos) {
@@ -200,6 +201,7 @@ async function crearDesdeStaff(datos) {
     throw new AppError(422, 'FALTA_NOMBRE', 'El cliente necesita al menos un nombre');
   }
   await _exigirSinDuplicado(limpio, null);
+  await _exigirLugar(limpio);
   return model.crearDesdeStaff(limpio);
 }
 
@@ -212,6 +214,7 @@ async function actualizarCliente(id, datos) {
     throw new AppError(422, 'FALTA_NOMBRE', 'El cliente necesita al menos un nombre');
   }
   await _exigirSinDuplicado(limpio, id);
+  await _exigirLugar(limpio);
   return model.actualizar(id, limpio);
 }
 
@@ -300,8 +303,23 @@ async function ajustarCredito(id, datos, usuarioId) {
   return estadoDeCuenta(id);
 }
 
+/** Un anticipo: dinero a cuenta, sin nota; le queda a favor (saldo-favor.js). */
+async function recibirAnticipo(id, datos, usuarioId) {
+  const r = await withTransaction((conn) => saldoFavor.recibirAnticipo(conn, {
+    clienteId: id,
+    efectivo: datos.efectivo ?? 0,
+    transferencia: datos.transferencia ?? 0,
+    sesionCajaId: datos.sesion_caja_id ?? null,
+    referencia: datos.referencia ?? null,
+    notas: datos.notas ?? null,
+    usuarioId,
+  }));
+  return { ...r, saldo_favor: await saldoFavor.saldoFavor(id) };
+}
+
 module.exports = {
   aplicarSaldoFavor,
+  recibirAnticipo,
   registrar,
   iniciarSesion,
   perfil,

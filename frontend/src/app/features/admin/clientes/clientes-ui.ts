@@ -14,6 +14,19 @@ export const PERIODOS: { dias: PeriodoClientes; etiqueta: string }[] = [
   { dias: 3650, etiqueta: 'Desde siempre' },
 ];
 
+/**
+ * Los 32 estados de México, de sugerencia al capturar un lugar de entrega o la
+ * dirección: así "Hidalgo" se escribe igual en todas partes y la cuenta por
+ * estado no sale partida.
+ */
+export const ESTADOS_MX = [
+  'Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche', 'Chiapas', 'Chihuahua',
+  'Ciudad de México', 'Coahuila', 'Colima', 'Durango', 'Estado de México', 'Guanajuato', 'Guerrero',
+  'Hidalgo', 'Jalisco', 'Michoacán', 'Morelos', 'Nayarit', 'Nuevo León', 'Oaxaca', 'Puebla',
+  'Querétaro', 'Quintana Roo', 'San Luis Potosí', 'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas',
+  'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas',
+] as const;
+
 export function esPeriodo(n: number): n is PeriodoClientes {
   return PERIODOS.some((p) => p.dias === n);
 }

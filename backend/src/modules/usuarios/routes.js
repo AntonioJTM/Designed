@@ -15,13 +15,16 @@ const loginSchema = z
   })
   .strict();
 
+// Correo y contraseña son obligatorios para quien ENTRA al sistema y no se
+// mandan para un puesto que no entra (el cargador): eso lo revisa el servicio,
+// que es el que sabe de qué puesto se trata.
 const crearSchema = z
   .object({
     rol_id: z.coerce.number().int().positive(),
     nombre: z.string().trim().min(2).max(120),
-    correo: z.string().trim().toLowerCase().email().max(160),
+    correo: z.string().trim().toLowerCase().email().max(160).optional(),
     telefono: z.string().trim().max(20).optional(),
-    contrasena: z.string().min(8).max(72),
+    contrasena: z.string().min(8).max(72).optional(),
     // Sus DEMÁS puestos (el principal es rol_id). Puede lo de todos.
     otros_roles: z.array(z.coerce.number().int().positive()).max(30).optional(),
   })
@@ -33,6 +36,9 @@ const actualizarSchema = z
     nombre: z.string().trim().min(2).max(120).optional(),
     telefono: z.string().trim().max(20).nullable().optional(),
     activo: z.coerce.boolean().optional(),
+    // Solo para quien NO entraba (un cargador) y pasa a un puesto que sí entra:
+    // el correo de quien ya entra no se cambia.
+    correo: z.string().trim().toLowerCase().email().max(160).optional(),
     contrasena: z.string().min(8).max(72).optional(),
     otros_roles: z.array(z.coerce.number().int().positive()).max(30).optional(),
   })

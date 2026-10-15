@@ -1,0 +1,224 @@
+<!-- No cierra al hacer clic en el fondo: se sale con la ✕, "Cancelar" o Escape. -->
+<div class="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-devolucion-titulo">
+    <div class="modal-head">
+      <h2 id="modal-devolucion-titulo">
+        Devolución · <span [title]="previa()?.numero_pedido || numero()">{{ previa()?.numero_pedido || numero() | folio }}</span>
+      </h2>
+      <button type="button" class="modal-cerrar" (click)="cerrar()" [disabled]="guardando()" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="modal-body">
+      @if (cargando() && !previa()) {
+        <p class="muted">Cargando lo que se llevó…</p>
+      } @else if (previa(); as p) {
+        <p class="explica">
+          Lo que regresa entra al inventario de <b>{{ p.almacen || 'la tienda' }}</b>
+          @if (debeEsta() > 0) {
+            y vale lo que se cobró por él.
+          } @else {
+            y queda <b>a favor</b> del cliente, al precio con que se vendió.
+          }
+          <b>No sale dinero de la caja.</b>
+        </p>
+
+        @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+
+        <!-- A quién se le pone el saldo. -->
+        @if (p.cliente_id) {
+          <p class="quien">A favor de <b>{{ p.cliente }}</b>
+            @if (p.saldo_favor > 0) { <span class="muted"> · ya tiene {{ p.saldo_favor | dinero }} a favor</span> }
+          </p>
+        } @else if (clienteElegido(); as c) {
+          <p class="quien">A favor de <b>{{ c.nombre_comercial || c.nombre }}</b>
+            @if (p.saldo_favor > 0) { <span class="muted"> · ya tiene {{ p.saldo_favor | dinero }} a favor</span> }
+            <button type="button" class="btn btn-ghost btn-sm" (click)="cambiarCliente()">Cambiar</button>
+          </p>
+        } @else {
+          <div class="sin-cliente">
+            <label class="field">
+              La venta no tenía cliente: ¿a quién se le pone el saldo a favor?
+              <input type="search" [(ngModel)]="busqueda" (ngModelChange)="alBuscar()" autocomplete="off"
+                     placeholder="Nombre, apodo o teléfono" />
+            </label>
+            @if (resultados().length) {
+              <ul class="resultados" aria-label="Clientes encontrados">
+                @for (c of resultados(); track c.id) {
+                  <li>
+                    <button type="button" (click)="elegir(c)">
+                      <b>{{ c.nombre_comercial || c.nombre }}</b>
+                      <span class="muted">{{ c.nombre_comercial ? c.nombre : '' }}{{ c.telefono ? ' · ' + c.telefono : '' }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            } @else if (busqueda.trim().length >= 2 && !buscando()) {
+              <p class="muted ayuda">Nadie con ese nombre. Si es cliente nuevo, dalo de alta en Clientes.</p>
+            }
+          </div>
+        }
+
+        @if (debeEsta() > 0) {
+          <!-- Esta venta todavía se debe: lo que regresa se descuenta de ella (2026-10-14). -->
+          <p class="debe-esta">
+            Esta nota {{ previa()!.debe_esta_tipo === 'nota' ? 'pendiente de pago' : 'a crédito' }} todavía debe
+            <b>{{ debeEsta() | dinero }}</b>: lo que regresa <b>se descuenta de ella</b>.
+          </p>
+        }
+
+        <!-- El lector: los paquetes cerrados que regresan. -->
+        @if (p.lineas.some(lineaConPaquetes)) {
+          <label class="field lector-campo">
+            Paquetes cerrados que regresan
+            <span class="escaneo">
+              <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
+                     (keydown.enter)="$event.preventDefault(); leer()"
+                     placeholder="Escanea la etiqueta del paquete" />
+              <button type="button" class="btn btn-ghost" (click)="leer()">Agregar</button>
+            </span>
+          </label>
+          @if (ultimo()) { <p class="ultimo" role="status">✓ {{ ultimo() }}</p> }
+        }
+
+        <!-- Línea por línea: lo que se llevó y lo que regresa. -->
+        <div class="dev-lineas">
+          @for (l of p.lineas; track l.detalle_id) {
+            <section class="dev-linea" [class.excede]="excede(l)">
+              <div class="dev-linea-top">
+                <div>
+                  <b>{{ l.hilo }}</b>
+                  <div class="muted sub">
+                    Se llevó {{ l.cantidad | cantidad: 'kg' }}
+                    @if (l.bultos.length) { · {{ l.bultos.length }} {{ l.bultos.length === 1 ? 'paquete' : 'paquetes' }} }
+                    @if (l.piezas) { · {{ l.piezas }} conos }
+                    · {{ l.precio_kg | dinero }} / kg
+                    @if (l.devuelto > 0) { · <span class="ya">ya regresó {{ l.devuelto | cantidad: 'kg' }}</span> }
+                  </div>
+                </div>
+                <div class="num">
+                  <b>{{ importe(l) | dinero }}</b>
+                  <div class="muted sub">{{ kgLinea(l) | cantidad: 'kg' }} de {{ l.disponible | cantidad: 'kg' }}</div>
+                </div>
+              </div>
+
+              @if (l.disponible <= 0.0005) {
+                <p class="muted sub">Ya regresó todo lo de esta línea.</p>
+              } @else {
+                @if (codigos[l.detalle_id].length) {
+                  <ul class="fichas-paquete" [attr.aria-label]="'Paquetes de ' + l.hilo + ' que regresan cerrados'">
+                    @for (c of codigos[l.detalle_id]; track c) {
+                      <li class="ficha-paquete">
+                        <span class="ficha-texto"><span class="mono">{{ c }}</span><b>{{ pesoDe(l, c) | cantidad: 'kg' }}</b></span>
+                        <button type="button" class="ficha-quitar" (click)="quitar(l, c)" [attr.aria-label]="'Quitar el paquete ' + c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+                      </li>
+                    }
+                  </ul>
+                } @else if (porEscanear(l) > 0) {
+                  <p class="muted sub">
+                    {{ porEscanear(l) === 1 ? 'Su paquete puede' : 'Sus ' + porEscanear(l) + ' paquetes pueden' }} regresar
+                    cerrado{{ porEscanear(l) === 1 ? '' : 's' }}: escanéalo{{ porEscanear(l) === 1 ? '' : 's' }} arriba.
+                  </p>
+                }
+
+                <div class="sueltos">
+                  <label class="field">
+                    {{ l.sueltos_como === 'conos' ? 'Conos sueltos: lo que marque la báscula' : 'Suelto: lo que marque la báscula' }}
+                    <span class="con-unidad">
+                      <input type="number" step="0.001" min="0" inputmode="decimal" [(ngModel)]="kgSueltos[l.detalle_id]"
+                             (ngModelChange)="cambio()"
+                             [name]="'kg-' + l.detalle_id" [attr.aria-invalid]="excede(l)" [class.invalido]="excede(l)" />
+                      <span class="muted">kg</span>
+                    </span>
+                  </label>
+                  @if (l.sueltos_como === 'conos') {
+                    <label class="field conos">
+                      ¿Cuántos conos?
+                      <input type="number" step="1" min="0" inputmode="numeric" [(ngModel)]="conos[l.detalle_id]"
+                             [name]="'conos-' + l.detalle_id" />
+                    </label>
+                  }
+                </div>
+                @if (excede(l)) {
+                  <p class="aviso-txt sub" role="alert">De esta línea a lo más regresan {{ l.disponible | cantidad: 'kg' }}.</p>
+                }
+              }
+            </section>
+          }
+        </div>
+
+        <!-- Si debe algo más: descontar lo que sobre o dejarlo a favor (lo elige el cliente). -->
+        @if (preguntaDestino()) {
+          <fieldset class="destino">
+            <legend>
+              @if (debeEsta() > 0) {
+                Además debe {{ otrasDeudas() | dinero }} de otras notas o de su cuenta. ¿Qué se hace con lo que sobre
+                después de esta nota?
+              } @else {
+                Debe {{ p.deuda.total | dinero }}
+                <span class="muted">
+                  ({{ p.deuda.notas > 0 ? 'notas pendientes ' + (p.deuda.notas | dinero) : '' }}{{ p.deuda.notas > 0 && p.deuda.credito > 0 ? ' y ' : '' }}{{ p.deuda.credito > 0 ? 'crédito ' + (p.deuda.credito | dinero) : '' }})</span>.
+                ¿Qué se hace con lo que regresa?
+              }
+            </legend>
+            <div class="seg">
+              <label [class.on]="destino === 'favor'">
+                <input type="radio" name="destino" value="favor" [(ngModel)]="destino" (ngModelChange)="cambio()" />
+                Dejarlo a favor para sus compras
+              </label>
+              <label [class.on]="destino === 'deuda'">
+                <input type="radio" name="destino" value="deuda" [(ngModel)]="destino" (ngModelChange)="cambio()" />
+                Descontarlo de lo que debe
+              </label>
+            </div>
+          </fieldset>
+        }
+
+        <label class="field notas">
+          Notas (opcional)
+          <input type="text" [(ngModel)]="notas" maxlength="255" placeholder="Por qué regresa, en qué estado venía…" />
+        </label>
+
+        <!-- Para el lector de pantalla: el resumen en una frase, cuando se deja de teclear. -->
+        <p class="oculto" role="status">{{ anuncio() }}</p>
+        <div class="resumen">
+          <div>
+            <span>Regresan</span>
+            <b>{{ kgTotal() | cantidad: 'kg' }}</b>
+          </div>
+          <div>
+            <span>Lo que regresa vale</span>
+            <b>{{ total() | dinero }}</b>
+          </div>
+          @if (descuentaDeEsta() > 0) {
+            <div>
+              <span>Se descuenta de esta nota</span>
+              <b>{{ descuentaDeEsta() | dinero }}</b>
+            </div>
+          }
+          @if (descuentaDeOtras() > 0) {
+            <div>
+              <span>Se descuenta de lo demás que debe</span>
+              <b>{{ descuentaDeOtras() | dinero }}</b>
+            </div>
+          }
+          @if (hayCliente()) {
+            <div>
+              <span>Le queda a favor</span>
+              <b class="queda">{{ quedaAFavor() | dinero }}</b>
+            </div>
+          }
+        </div>
+      } @else if (error()) {
+        <p class="alert" role="alert">{{ error() }}</p>
+      }
+    </div>
+
+    <div class="modal-foot">
+      @if (previa() && motivoNoListo(); as motivo) { <span class="nota">{{ motivo }}</span> }
+      <button type="button" class="btn btn-ghost" (click)="cerrar()" [disabled]="guardando()">Cancelar</button>
+      <button type="button" class="btn btn-primary" (click)="registrar()" [disabled]="guardando() || !!motivoNoListo()">
+        {{ guardando() ? 'Registrando…' : 'Registrar devolución' }}
+      </button>
+    </div>
+  </div>
+</div>

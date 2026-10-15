@@ -1,0 +1,122 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+<div class="filtros-barra">
+  <label class="crece">
+    <span class="oculto">Buscar cliente</span>
+    <span class="buscador">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
+      </svg>
+      <input type="search" [(ngModel)]="q" name="q" (ngModelChange)="alTeclear()"
+             placeholder="Nombre, número o teléfono" autocomplete="off" />
+    </span>
+  </label>
+  <label class="field">
+    Lugar de entrega
+    <select [(ngModel)]="lugar" name="lugar" (ngModelChange)="buscar()">
+      <option [ngValue]="null">Todos los lugares</option>
+      @for (l of lugares().lugares; track l.id) {
+        <option [ngValue]="l.id">{{ l.nombre }}, {{ l.estado }}</option>
+      }
+      <option ngValue="sin">Sin lugar de entrega</option>
+    </select>
+  </label>
+  <label class="field">
+    Mostrar
+    <select [(ngModel)]="mostrar" name="mostrar" (ngModelChange)="buscar()">
+      <option value="activos">Activos</option>
+      <option value="baja">Dados de baja</option>
+      <option value="todos">Todos</option>
+    </select>
+  </label>
+  <label class="field">
+    Ordenar
+    <select [(ngModel)]="orden" name="orden" (ngModelChange)="buscar()">
+      @for (o of ORDENES; track o.valor) { <option [value]="o.valor">{{ o.texto }}</option> }
+    </select>
+  </label>
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Tus clientes</h2>
+      <p class="cuenta" role="status">{{ cargando() ? 'Buscando…' : cuenta() }}</p>
+    </div>
+  </div>
+
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+
+  @if (!cargando() && lista().length === 0) {
+    <p class="vacio">
+      @if (q.trim() || lugar || mostrar !== 'activos') {
+        Nadie con esos filtros.
+      } @else {
+        Todavía no hay clientes. Se dan de alta con «Nuevo cliente», arriba a la derecha.
+      }
+    </p>
+  } @else if (lista().length > 0) {
+    <div class="tabla-scroll">
+      <table class="grid todos">
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Cliente</th>
+            <th>Teléfono</th>
+            <th>Lugar de entrega</th>
+            <th>Lista</th>
+            <th class="num">Debe</th>
+            <th class="num">Ha comprado</th>
+            <th>Última compra</th>
+            <th><span class="oculto">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of lista(); track c.id) {
+            <tr>
+              <td class="numero mono">{{ c.codigo || '—' }}</td>
+              <td>
+                <b>{{ c.nombre }}</b>
+                @if (c.nombre_comercial) { <div class="muted chico">le dicen {{ c.nombre_comercial }}</div> }
+                @if (!c.activo) { <div><span class="pill gris">Dado de baja</span></div> }
+              </td>
+              <td class="tel">{{ c.telefono || '—' }}</td>
+              <td>{{ lugarDe(c) || '—' }}</td>
+              <td>{{ c.tipo_cliente || 'Público' }}</td>
+              <td class="num">
+                @if (num(c.saldo) > 0) { <span class="debe">{{ c.saldo | dinero }}</span> } @else { <span class="muted">—</span> }
+              </td>
+              <td class="num">
+                @if (num(c.num_pedidos) > 0) {
+                  {{ c.total_comprado | dinero }}
+                  <div class="muted chico">{{ plural(num(c.num_pedidos), 'compra', 'compras') }}</div>
+                } @else { <span class="muted">Todavía nada</span> }
+              </td>
+              <td>{{ c.ultima_compra ? fechaCorta(c.ultima_compra) : '—' }}</td>
+              <!-- "Venderle" está en su expediente: aquí la fila no cabía en la pantalla. -->
+              <td class="acciones">
+                <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.id]" [attr.aria-label]="'Ver a ' + c.nombre">Ver</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (lista().length < total()) {
+      <div class="mas">
+        <button type="button" class="btn btn-ghost" (click)="verMas()" [disabled]="cargandoMas()">
+          {{ cargandoMas() ? 'Cargando…' : 'Ver más (' + (total() - lista().length) + ' más)' }}
+        </button>
+      </div>
+    }
+  }
+</section>

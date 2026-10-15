@@ -14,22 +14,22 @@
 
   <div class="kpis">
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--punto-aviso)"></span>Por cobrar</span>
+      <span class="kpi-label"><span class="punto tono-aviso"></span>Por cobrar</span>
       <span class="kpi-valor">{{ datos()?.por_cobrar ?? 0 | dinero }}</span>
       <span class="kpi-pie">lo que falta de las notas que se ven</span>
     </div>
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--acento)"></span>Notas</span>
+      <span class="kpi-label"><span class="punto"></span>Notas</span>
       <span class="kpi-valor">{{ datos()?.num_notas ?? 0 }}</span>
       <span class="kpi-pie">sin pagar completas</span>
     </div>
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--viz-series-3)"></span>Clientes</span>
+      <span class="kpi-label"><span class="punto tono-serie-3"></span>Clientes</span>
       <span class="kpi-valor">{{ datos()?.num_clientes ?? 0 }}</span>
       <span class="kpi-pie">que deben alguna nota</span>
     </div>
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--punto-alerta)"></span>La más vieja</span>
+      <span class="kpi-label"><span class="punto tono-alerta"></span>La más vieja</span>
       <span class="kpi-valor">{{ hace(datos()?.mas_antigua_dias ?? 0) }}</span>
       <span class="kpi-pie">desde que se la llevaron</span>
     </div>

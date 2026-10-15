@@ -300,6 +300,50 @@ describe('PedidoDetalle', () => {
     expect(c.puedeDevolverEste(p)).toBe(false);
   });
 
+  it('"devuelto" ya no se ofrece: lo que regresa queda a favor con «Devolución» (2026-10-13)', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1 };
+    const c = (await montar()).componentInstance;
+    const p = c.pedido()!;
+
+    expect(c.opcionesEstado()).not.toContain('devuelto');
+    expect(c.opcionesEstado()).toContain('cancelado');
+    expect(c.puedeDevolverEste(p)).toBe(true);
+    c.devolviendo.set(true);
+    expect(c.devolviendo()).toBe(true);
+  });
+
+  it('una venta con devoluciones ya no se cancela completa, y dice lo que regresó', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, devuelto_total: 8140,
+      devoluciones: [{
+        id: 1, folio: 'DEV-1-AB12', total: 8140, aplicado_a_deuda: 0, creado_en: '2026-10-13 18:00:00',
+        cliente_id: 20, cliente: 'Doña Chela',
+        lineas: [{ detalle_id: 11, hilo: 'BLANCO 2/30', como: 'paquete', kg: 37.5, importe: 7500, codigos: ['B-1', 'B-2'] }],
+      }],
+    } as Pedido;
+    const c = (await montar()).componentInstance;
+    const p = c.pedido()!;
+
+    expect(c.puedeCancelarEste(p)).toBe(false);
+    expect(c.opcionesEstado()).not.toContain('cancelado');
+    // Se puede seguir devolviendo lo que falta.
+    expect(c.puedeDevolverEste(p)).toBe(true);
+    expect(c.cifrasConDevolucion().at(-1)).toEqual(jasmine.objectContaining({ etiqueta: 'Regresó', valor: 8140 }));
+    expect(c.historia().some((h) => h.que.includes('DEV-1-AB12') && h.que.includes('a favor'))).toBe(true);
+  });
+
+  it('al terminar la devolución dice cuánto le quedó a favor', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1 };
+    const c = (await montar()).componentInstance;
+    c.devolviendo.set(true);
+    c.alDevolver({
+      devolucion_id: 1, folio: 'DEV-1', pedido_id: 5, numero_pedido: 'WEB-1', cliente_id: 20, cliente: 'Doña Chela',
+      total: 800, kg: 4, aplicado_a_deuda: 800, descontado_de_esta: 800, aplicaciones: [], saldo_favor: 0,
+    });
+    expect(c.devolviendo()).toBe(false);
+    expect(c.mensaje()).toContain('Se descontaron $800.00 de esta nota');
+  });
+
   it('el botón de cancelar abre la confirmación, no cancela de un golpe', async () => {
     actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1 };
     const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();

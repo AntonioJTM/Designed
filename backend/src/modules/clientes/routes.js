@@ -52,9 +52,10 @@ const soloStaff = [authRequired, requireTipo('usuario')];
 // Corregir una deuda es dinero: lo decide Permisos («Corregir la deuda de un
 // cliente»). Un cajero puede COBRAR un abono, pero de inicio no perdonar una deuda.
 
+// Sin `codigo`: el número de cliente lo da el sistema y no se modifica
+// (2026-10-14); mandarlo es 422.
 const expedienteSchema = z
   .object({
-    codigo: z.string().trim().max(20).nullable().optional(),
     nombre: z.string().trim().min(1).max(120),
     // Como le dicen de verdad. Es con lo que la tienda lo busca.
     nombre_comercial: z.string().trim().max(120).nullable().optional(),
@@ -66,6 +67,8 @@ const expedienteSchema = z
     direccion: z.string().trim().max(255).nullable().optional(),
     ciudad: z.string().trim().max(100).nullable().optional(),
     estado: z.string().trim().max(100).nullable().optional(),
+    // A dónde se le entrega: uno de la lista de lugares de entrega.
+    lugar_entrega_id: z.coerce.number().int().positive().nullable().optional(),
     como_llego: z.string().trim().max(60).nullable().optional(),
     fecha_nacimiento: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     // Desde cuándo compra DE VERDAD, no desde cuándo está capturado.
@@ -100,6 +103,19 @@ const ajusteSchema = z
 
 // Búsqueda rápida para el POS: literal antes de '/:id'.
 router.get('/buscar', ...soloStaff, controller.buscar);
+
+// LUGARES DE ENTREGA (2026-10-14): el municipio y el estado a donde se le entrega,
+// de una lista, para contar a cuántos clientes se les entrega en cada lugar.
+// Literales antes de '/:id'.
+const lugarSchema = z
+  .object({
+    nombre: z.string().trim().min(1, 'Pon el nombre del lugar').max(100),
+    estado: z.string().trim().min(1, 'Pon el estado').max(100),
+  })
+  .strict();
+router.get('/lugares-entrega', ...soloStaff, controller.lugaresListar);
+router.post('/lugares-entrega', ...soloStaff, validate(lugarSchema), controller.lugaresCrear);
+router.put('/lugares-entrega/:id', ...soloStaff, validate(lugarSchema), controller.lugaresActualizar);
 // Las cinco pestañas de Clientes: frecuencia, deuda, que-compra, cuando, gasto.
 router.get('/analisis/:vista', ...soloStaff, requirePermiso('ver:clientes'), controller.analisis);
 
@@ -119,5 +135,18 @@ const aplicarSaldoSchema = z
   .object({ monto: z.coerce.number().positive().max(99999999).optional() })
   .strict();
 router.post('/:id/saldo-favor/aplicar', ...soloStaff, validate(aplicarSaldoSchema), controller.aplicarSaldoFavor);
+
+// ANTICIPO (2026-10-14): dinero a cuenta, sin nota, en efectivo y/o por
+// transferencia; le queda a favor. El efectivo exige el turno que lo recibe.
+const anticipoSchema = z
+  .object({
+    efectivo: z.coerce.number().nonnegative().max(99999999).optional(),
+    transferencia: z.coerce.number().nonnegative().max(99999999).optional(),
+    sesion_caja_id: z.coerce.number().int().positive().optional(),
+    referencia: z.string().trim().max(120).optional(),
+    notas: z.string().trim().max(255).optional(),
+  })
+  .strict();
+router.post('/:id/anticipos', ...soloStaff, validate(anticipoSchema), controller.recibirAnticipo);
 
 module.exports = router;

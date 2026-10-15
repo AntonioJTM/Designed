@@ -27,6 +27,8 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
   templateUrl: './pago-nota-modal.html',
   host: { '(document:keydown.escape)': 'cerrar()' },
   styles: `
+    .pago-nota { gap: 16px; }
+    .pago-nota > .muted b { color: var(--tinta); }
     .moneda { position: relative; display: block; }
     .moneda > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--tinta-3); font-weight: 600; }
     .moneda > input { padding-left: 26px; }

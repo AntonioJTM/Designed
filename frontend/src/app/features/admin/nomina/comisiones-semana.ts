@@ -9,15 +9,19 @@ import { diaCorto } from './semana';
 
 const NOMBRE_TIPO: Record<TipoVentaComision, string> = {
   contado: 'Contado',
-  credito: 'Fiada',
+  credito: 'A crédito',
   apartado: 'Apartado',
-  pedido: 'Pedido',
+  pedido: 'Nota en espera',
+  nota: 'Nota pendiente',
+  devolucion: 'Devolución',
 };
 const TONO_TIPO: Record<TipoVentaComision, string> = {
   contado: 'gris',
   credito: 'ambar',
   apartado: 'azul',
   pedido: 'verde',
+  nota: 'ambar',
+  devolucion: 'rojo',
 };
 
 /**
@@ -100,9 +104,30 @@ export class ComisionesSemanaComponent {
     return fecha ? diaCorto(fecha.slice(0, 10)) : '';
   }
 
-  /** Lo que no cuenta de la venta (IVA y envío): total − venta neta. */
+  /** Lo que no cuenta de la venta (IVA y envío): total − venta neta − lo que regresó. */
   noCuenta(v: VentaComision): number {
-    return Math.round((v.total - v.venta_neta) * 100) / 100;
+    if (v.tipo === 'devolucion') return 0;
+    return Math.round((v.total - v.venta_neta - Number(v.devuelto ?? 0)) * 100) / 100;
+  }
+
+  /**
+   * Lo que entra en la próxima nómina, en una frase: "1 venta ya pagada entra y
+   * 1 devolución de una venta ya pagada se descuenta en la próxima nómina que se
+   * calcule". Vacío si no hay nada.
+   */
+  textoProxima(v: ComisionesVendedor): string {
+    const n = v.proxima_nomina.ventas;
+    const d = v.proxima_nomina.devoluciones ?? 0;
+    const partes = [
+      n > 0 ? `${n} ${n === 1 ? 'venta ya pagada entra' : 'ventas ya pagadas entran'}` : '',
+      d > 0 ? `${d} ${d === 1 ? 'devolución de una venta ya pagada se descuenta' : 'devoluciones de ventas ya pagadas se descuentan'}` : '',
+    ].filter(Boolean);
+    return partes.length ? `${partes.join(' y ')} en la próxima nómina que se calcule` : '';
+  }
+
+  /** Las ventas de verdad (sin los descuentos por devolución), para contarlas. */
+  ventasDe(lista: VentaComision[]): number {
+    return lista.filter((x) => x.tipo !== 'devolucion').length;
   }
 
   suma(lista: VentaComision[], k: 'total' | 'venta_neta' | 'comision'): number {

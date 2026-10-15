@@ -59,7 +59,7 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
     .texto h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
     .texto p { margin: 0; font-size: 0.875rem; color: var(--tinta-3); line-height: 1.5; white-space: pre-line; }
     .btn-rojo { background: var(--peligro-t); color: #fff; }
-    .btn-rojo:hover { background: #861D14; color: #fff; }
+    .btn-rojo:hover { background: var(--peligro-oscuro); color: #fff; }
   `,
 })
 export class ConfirmacionComponent {

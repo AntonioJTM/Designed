@@ -6,11 +6,15 @@ import { ApiResponse } from '../models/auth.models';
 import { Paginado } from '../models/catalogo.models';
 import {
   AbonoInput,
+  AnticipoInput,
+  AplicacionSaldoFavor,
   Cliente,
   ClienteInput,
   ClienteParaVenta,
   EstadoDeCuenta,
   Expediente,
+  LugarEntrega,
+  LugaresEntrega,
 } from '../models/clientes.models';
 
 function data<T>(r: ApiResponse<T>): T {
@@ -19,13 +23,17 @@ function data<T>(r: ApiResponse<T>): T {
 }
 
 /** Cómo se ordena el listado de clientes. */
-export type OrdenClientes = 'nombre' | 'saldo' | 'compras' | 'reciente' | 'nuevo';
+export type OrdenClientes = 'nombre' | 'saldo' | 'compras' | 'reciente' | 'nuevo' | 'numero';
 
 export interface FiltrosClientes {
   q?: string;
   /** Solo los que deben. */
   con_saldo?: boolean;
   activo?: boolean;
+  /** Los de un lugar de entrega. */
+  lugar_entrega_id?: number;
+  /** Los que no tienen lugar de entrega. */
+  sin_lugar?: boolean;
   orden?: OrdenClientes;
   page?: number;
   limit?: number;
@@ -42,6 +50,8 @@ export class ClientesService {
     if (f.q) p = p.set('q', f.q);
     if (f.con_saldo) p = p.set('con_saldo', 'true');
     if (f.activo !== undefined) p = p.set('activo', String(f.activo));
+    if (f.lugar_entrega_id) p = p.set('lugar_entrega_id', f.lugar_entrega_id);
+    if (f.sin_lugar) p = p.set('sin_lugar', 'true');
     if (f.orden) p = p.set('orden', f.orden);
     p = p.set('page', f.page ?? 1).set('limit', f.limit ?? 50);
     return this.http.get<ApiResponse<Paginado<Cliente>>>(this.base, { params: p }).pipe(map(data));
@@ -76,6 +86,23 @@ export class ClientesService {
     return this.http.put<ApiResponse<Cliente>>(`${this.base}/${id}`, body).pipe(map(data));
   }
 
+  // ---- Lugares de entrega (2026-10-14) ----
+
+  /** La lista de lugares, con cuántos clientes tiene cada uno y cuántos no tienen. */
+  lugaresEntrega(): Observable<LugaresEntrega> {
+    return this.http.get<ApiResponse<LugaresEntrega>>(`${this.base}/lugares-entrega`).pipe(map(data));
+  }
+
+  /** Alta de un lugar (municipio y estado). 409 LUGAR_REPETIDO si ya está. */
+  crearLugar(body: { nombre: string; estado: string }): Observable<LugarEntrega> {
+    return this.http.post<ApiResponse<LugarEntrega>>(`${this.base}/lugares-entrega`, body).pipe(map(data));
+  }
+
+  /** Corregir cómo se escribió un lugar; sus clientes lo siguen. */
+  corregirLugar(id: number, body: { nombre: string; estado: string }): Observable<LugarEntrega> {
+    return this.http.put<ApiResponse<LugarEntrega>>(`${this.base}/lugares-entrega/${id}`, body).pipe(map(data));
+  }
+
   // ---- Crédito ----
 
   /**
@@ -88,6 +115,27 @@ export class ClientesService {
         `${this.base}/${id}/abonos`,
         body
       )
+      .pipe(map(data));
+  }
+
+  /**
+   * Descuenta su SALDO A FAVOR de lo que debe: primero sus notas pendientes de
+   * pago (de la más vieja) y luego su cuenta de crédito. Sin `monto`, todo lo
+   * que alcance.
+   */
+  aplicarSaldoFavor(id: number, monto?: number): Observable<AplicacionSaldoFavor> {
+    return this.http
+      .post<ApiResponse<AplicacionSaldoFavor>>(`${this.base}/${id}/saldo-favor/aplicar`, monto ? { monto } : {})
+      .pipe(map(data));
+  }
+
+  /**
+   * Un ANTICIPO: el cliente deja dinero a cuenta, sin nota (efectivo, transferencia
+   * o las dos) y le queda a favor. El efectivo necesita `sesion_caja_id`.
+   */
+  recibirAnticipo(id: number, body: AnticipoInput): Observable<{ total: number; saldo_favor: number; efectivo: number; transferencia: number }> {
+    return this.http
+      .post<ApiResponse<{ total: number; saldo_favor: number; efectivo: number; transferencia: number }>>(`${this.base}/${id}/anticipos`, body)
       .pipe(map(data));
   }
 

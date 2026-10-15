@@ -51,7 +51,7 @@
               <tr [class.fila-inactiva]="!u.activo">
                 <td>
                   <div style="font-weight: 500">{{ u.nombre }}</div>
-                  <div class="muted" style="font-size: 0.8125rem">{{ u.correo }}</div>
+                  <div class="muted" style="font-size: 0.8125rem">{{ entra(u) ? u.correo : 'No entra al sistema' }}</div>
                 </td>
                 <td>
                   <!-- El principal primero (el de nómina); después los demás. -->
@@ -66,10 +66,11 @@
                   @if (u.activo) {
                     <span class="pill verde">Activo</span>
                   } @else {
-                    <span class="pill gris">Sin acceso</span>
+                    <!-- El cargador nunca tuvo acceso: inactivo es que ya no trabaja aquí. -->
+                    <span class="pill gris">{{ entra(u) ? 'Sin acceso' : 'De baja' }}</span>
                   }
                 </td>
-                <td style="color: var(--tinta-2); font-variant-numeric: tabular-nums; white-space: nowrap">{{ acceso(u) }}</td>
+                <td style="color: var(--tinta-2); font-variant-numeric: tabular-nums; white-space: nowrap">{{ entra(u) ? acceso(u) : '—' }}</td>
                 <td class="acciones">
                   @if (puedeEditar(u)) {
                     <button type="button" class="btn btn-ghost btn-sm" (click)="abrirEdicion(u)">Editar</button>

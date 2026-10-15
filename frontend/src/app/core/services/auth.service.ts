@@ -145,7 +145,8 @@ export class AuthService {
     const sesion: SesionActual = {
       tipo: 'usuario',
       nombre: usuario.nombre,
-      correo: usuario.correo,
+      // Quien entra siempre tiene correo; solo el cargador va sin él, y no entra.
+      correo: usuario.correo ?? '',
       rol: usuario.rol,
       puestos: [usuario.rol, ...(usuario.otros_roles ?? []).map((r) => r.nombre)],
       permisos: usuario.permisos ?? [],

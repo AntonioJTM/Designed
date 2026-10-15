@@ -12,9 +12,10 @@ function data<T>(r: ApiResponse<T>): T {
 export interface CrearUsuarioInput {
   rol_id: number;
   nombre: string;
-  correo: string;
+  /** Sin correo ni contraseña para un puesto que no entra al sistema (el cargador). */
+  correo?: string;
   telefono?: string;
-  contrasena: string;
+  contrasena?: string;
   /** Sus DEMÁS puestos (el principal es `rol_id`). */
   otros_roles?: number[];
 }
@@ -24,6 +25,8 @@ export interface ActualizarUsuarioInput {
   nombre?: string;
   telefono?: string | null;
   activo?: boolean;
+  /** Solo cuando un cargador pasa a un puesto que sí entra al sistema. */
+  correo?: string;
   contrasena?: string;
   otros_roles?: number[];
 }

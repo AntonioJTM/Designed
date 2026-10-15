@@ -10,7 +10,8 @@
       } @else {
         Cada venta paga su comisión <b>una vez, completa</b>, en la nómina de la semana en que quedó pagada: la de
         contado el día que se vende; la fiada, el apartado y el pedido cuando se terminan de pagar. Lo que se liquida
-        en una semana ya cerrada entra en la siguiente. Sobre la venta neta: sin IVA ni envío.
+        en una semana ya cerrada entra en la siguiente. Sobre la venta neta: sin IVA ni envío, y sin lo que el
+        cliente regresó (si regresa después de pagada la comisión, se descuenta en la siguiente).
       }
     </p>
   }
@@ -25,7 +26,7 @@
         }
         <span class="cifras">
           @if (v.porcentaje > 0) { {{ v.porcentaje }}% · } @else { sin comisión · }
-          {{ v.ventas.length }} {{ v.ventas.length === 1 ? 'venta pagada' : 'ventas pagadas' }} ·
+          {{ ventasDe(v.ventas) }} {{ ventasDe(v.ventas) === 1 ? 'venta pagada' : 'ventas pagadas' }} ·
           {{ v.ventas_netas | dinero }} · comisión <b>{{ v.comision | dinero }}</b>
         </span>
       </div>
@@ -61,12 +62,19 @@
                     <div class="sub3">vendida {{ dia(x.vendida_en) }}</div>
                   </td>
                   <td>
-                    @if (x.liquidada_en) { {{ dia(x.liquidada_en) }} } @else { <span class="sub3">al venderla (regla anterior)</span> }
+                    @if (x.tipo === 'devolucion') {
+                      {{ dia(x.liquidada_en) }} <div class="sub3">regresó mercancía</div>
+                    } @else if (x.liquidada_en) { {{ dia(x.liquidada_en) }} } @else { <span class="sub3">al venderla (regla anterior)</span> }
                   </td>
-                  <td class="num">{{ x.total | dinero }}</td>
+                  <td class="num">{{ x.tipo === 'devolucion' ? '' : (x.total | dinero) }}</td>
                   <td class="num">
                     {{ x.venta_neta | dinero }}
-                    @if (noCuenta(x) > 0) { <div class="sub3">sin {{ noCuenta(x) | dinero }} de envío o IVA</div> }
+                    @if (x.tipo === 'devolucion') {
+                      <div class="sub3">ya había pagado comisión: se descuenta</div>
+                    } @else {
+                      @if (+(x.devuelto ?? 0) > 0) { <div class="sub3">regresaron {{ x.devuelto | dinero }}</div> }
+                      @if (noCuenta(x) > 0) { <div class="sub3">sin {{ noCuenta(x) | dinero }} de envío o IVA</div> }
+                    }
                   </td>
                   <td class="num"><b>{{ x.comision | dinero }}</b></td>
                 </tr>
@@ -117,11 +125,8 @@
           </table>
         </div>
       }
-      @if (v.proxima_nomina.ventas > 0) {
-        <p class="nota-chica">
-          {{ v.proxima_nomina.ventas }} {{ v.proxima_nomina.ventas === 1 ? 'venta ya pagada entra' : 'ventas ya pagadas entran' }}
-          en la próxima nómina que se calcule ({{ v.proxima_nomina.comision | dinero }} de comisión).
-        </p>
+      @if (textoProxima(v); as t) {
+        <p class="nota-chica">{{ t }} ({{ v.proxima_nomina.comision | dinero }} de comisión).</p>
       }
     </div>
   } @empty {

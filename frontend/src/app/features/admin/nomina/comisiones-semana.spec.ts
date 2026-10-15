@@ -41,7 +41,7 @@ const datos: ComisionesSemana = {
 describe('ComisionesSemanaComponent', () => {
   let pedidos: { periodo: number; usuario?: number }[] = [];
 
-  async function montar(usuarioId: number | null = null) {
+  async function montar(usuarioId: number | null = null, respuesta: ComisionesSemana = datos) {
     pedidos = [];
     await TestBed.configureTestingModule({
       imports: [ComisionesSemanaComponent],
@@ -52,7 +52,7 @@ describe('ComisionesSemanaComponent', () => {
           useValue: {
             comisiones: (periodo: number, usuario?: number) => {
               pedidos.push({ periodo, usuario });
-              return of(usuarioId ? { ...datos, vendedores: [datos.vendedores[0]] } : datos);
+              return of(usuarioId ? { ...respuesta, vendedores: [respuesta.vendedores[0]] } : respuesta);
             },
           },
         },
@@ -75,12 +75,36 @@ describe('ComisionesSemanaComponent', () => {
     expect(pedidos).toEqual([{ periodo: 5, usuario: undefined }]);
     expect(texto).toContain('Rosa Hernández');
     expect(texto).toContain('2 ventas pagadas');
-    expect(texto).toContain('Fiada');
+    expect(texto).toContain('A crédito');
     expect(texto).toContain('sin $120.00 de envío o IVA');
     expect(texto).toContain('Por liquidar al día de hoy');
     expect(texto).toContain('1 venta ya pagada entra en la próxima nómina');
     expect(texto).toContain('Sin comisión ni ventas esta semana: Carlos.');
     expect(texto).toContain('una vez, completa');
+  });
+
+  it('lo que regresó: la venta dice cuánto, y el descuento de una ya pagada va en negativo (2026-10-14)', async () => {
+    const conDevolucion: ComisionesSemana = {
+      ...datos,
+      vendedores: [{
+        ...datos.vendedores[0],
+        ventas: [
+          { pedido_id: 8, numero_pedido: 'POS-1-DDDD', cliente: 'Doña Chela', tipo: 'contado', vendida_en: '2026-10-12 10:00:00',
+            liquidada_en: '2026-10-12 10:00:00', total: 1000, venta_neta: 600, devuelto: 400, comision: 18 },
+          { pedido_id: 9, numero_pedido: 'POS-1-EEEE', cliente: 'Doña Chela', tipo: 'devolucion', vendida_en: '2026-10-05 10:00:00',
+            liquidada_en: '2026-10-13 11:00:00', total: 0, venta_neta: -250, devuelto: 250, comision: -7.5 },
+        ],
+        proxima_nomina: { ventas: 0, devoluciones: 1, venta_neta: -100, comision: -3 },
+      }],
+    };
+    const f = await montar(null, conDevolucion);
+    const texto = (f.nativeElement as HTMLElement).textContent ?? '';
+    expect(texto).toContain('1 venta pagada');
+    expect(texto).toContain('regresaron $400.00');
+    expect(texto).not.toContain('de envío o IVA');
+    expect(texto).toContain('Devolución');
+    expect(texto).toContain('se descuenta');
+    expect(texto).toContain('1 devolución de una venta ya pagada se descuenta en la próxima nómina');
   });
 
   it('en el recibo: solo esa persona, sin la explicación de arriba', async () => {

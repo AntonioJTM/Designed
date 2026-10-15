@@ -30,7 +30,9 @@ const VER_COSTOS = 'hacer:ver_costos';
 async function puestosDe(auth) {
   if (!auth || auth.tipo !== 'usuario' || !auth.sub) return [];
   const { activo, puestos } = await model.puestosDeUsuario(auth.sub);
-  return activo ? puestos : [];
+  // Un puesto que no entra al sistema (el cargador) no da nada, aunque alguien
+  // le hubiera marcado permisos: a quien pasa a cargador se le acaba en el acto.
+  return activo ? puestos.filter((p) => p.entra_al_sistema) : [];
 }
 
 /** True si alguno de sus puestos es el de administrador: entonces lo puede todo. */
@@ -70,7 +72,8 @@ async function matriz() {
   const visible = (c) => SE_LLEVA_COSTO || c !== VER_COSTOS;
   return {
     catalogo: CATALOGO.filter((p) => visible(p.clave)),
-    roles: roles.map((r) => ({
+    // El puesto que no entra al sistema (el cargador) no tiene nada que decidir aquí.
+    roles: roles.filter((r) => Number(r.entra_al_sistema)).map(({ entra_al_sistema, ...r }) => ({
       ...r,
       personas: Number(r.personas),
       es_admin: r.nombre === ADMIN,
@@ -87,6 +90,10 @@ async function guardar(rolId, claves) {
   if (rol.nombre === ADMIN) {
     throw new AppError(422, 'ADMIN_FIJO',
       'El administrador siempre lo puede todo: su columna no se cambia.');
+  }
+  if (!rol.entra_al_sistema) {
+    throw new AppError(422, 'PUESTO_SIN_ACCESO',
+      `El puesto ${rol.nombre} no entra al sistema: no lleva permisos.`);
   }
   const desconocidas = claves.filter((c) => !CLAVES.has(c));
   if (desconocidas.length) {

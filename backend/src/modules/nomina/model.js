@@ -501,11 +501,15 @@ async function _calcular(conn, periodoId) {
     const ventasNetas = alLiquidar
       ? round2(pagadas.reduce((s, v) => s + v.venta_neta, 0))
       : venta ? round2(venta.ventas_netas) : 0;
-    const numPedidos = alLiquidar ? pagadas.length : venta ? Number(venta.num_pedidos) : 0;
-    // Con la regla nueva, la suma de la comisión de cada venta: así el recibo
-    // cuadra centavo a centavo con el reporte de comisiones.
+    // Los renglones de devolución (lo que regresó de una venta ya pagada) no son ventas.
+    const numPedidos = alLiquidar
+      ? pagadas.filter((v) => v.tipo !== 'devolucion').length
+      : venta ? Number(venta.num_pedidos) : 0;
+    // Con la regla nueva, la suma de la comisión de cada venta (y de cada
+    // descuento por devolución): así el recibo cuadra centavo a centavo con el
+    // reporte de comisiones.
     const comision = alLiquidar
-      ? round2(pagadas.reduce((s, v) => s + comisiones.comisionDe(v.venta_neta, pct), 0))
+      ? round2(pagadas.reduce((s, v) => s + comisiones.comisionDeLinea(v, pct), 0))
       : round2((ventasNetas * pct) / 100);
     const sueldo = Number(emp.sueldo_base_semanal);
 
