@@ -22,6 +22,9 @@ const CAMPOS_PUBLICOS = `
 const CAMPOS_EXPEDIENTE = `
   c.id, c.codigo, c.nombre, c.nombre_comercial, c.rfc, c.tipo_cliente_id,
   c.correo, c.telefono, c.telefono_alt, c.direccion, c.ciudad, c.estado,
+  c.lugar_entrega_id,
+  (SELECT le.nombre FROM lugares_entrega le WHERE le.id = c.lugar_entrega_id) AS lugar_entrega,
+  (SELECT le.estado FROM lugares_entrega le WHERE le.id = c.lugar_entrega_id) AS lugar_entrega_estado,
   c.como_llego, DATE_FORMAT(c.fecha_nacimiento, '%Y-%m-%d') AS fecha_nacimiento,
   DATE_FORMAT(c.cliente_desde, '%Y-%m-%d') AS cliente_desde,
   c.limite_credito, c.notas, c.activo, c.creado_en, c.actualizado_en,
@@ -67,7 +70,22 @@ async function crear({ nombre, correo, telefono, contrasena_hash, acepta_marketi
       acepta_marketing: acepta_marketing ? 1 : 0,
     }
   );
+  await asignarCodigo(pool, result.insertId);
   return buscarPorId(result.insertId);
+}
+
+/**
+ * EL NÚMERO DE CLIENTE LO DA EL SISTEMA (2026-10-14: "el número de cliente
+ * quiero que tú me lo des y que no se pueda modificar"): C-0001, C-0002…, sacado
+ * del id, así dos altas al mismo tiempo nunca toman el mismo. Del 10,000 en
+ * adelante va sin ceros (C-10000): LPAD cortaría el número.
+ */
+async function asignarCodigo(ejecutor, id) {
+  await ejecutor.query(
+    `UPDATE clientes SET codigo = CONCAT('C-', IF(id < 10000, LPAD(id, 4, '0'), id))
+      WHERE id = :id AND codigo IS NULL`,
+    { id }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +99,7 @@ async function crear({ nombre, correo, telefono, contrasena_hash, acepta_marketi
  * `q` busca en nombre, apodo, código y los dos teléfonos. Un cliente se busca
  * por como le dicen o por su número, casi nunca por su nombre completo.
  */
-async function listar({ q, con_saldo, activo, orden, limit, offset } = {}) {
+async function listar({ q, con_saldo, activo, lugar_entrega_id, sin_lugar, orden, limit, offset } = {}) {
   const where = [];
   const params = { limit, offset };
 
@@ -93,6 +111,13 @@ async function listar({ q, con_saldo, activo, orden, limit, offset } = {}) {
   if (activo !== undefined) {
     where.push('c.activo = :activo');
     params.activo = activo ? 1 : 0;
+  }
+  // Los de un lugar de entrega, o los que no tienen ninguno (Clientes → Dónde entrego).
+  if (lugar_entrega_id) {
+    where.push('c.lugar_entrega_id = :lugar');
+    params.lugar = lugar_entrega_id;
+  } else if (sin_lugar) {
+    where.push('c.lugar_entrega_id IS NULL');
   }
   // Solo los que deben. Va en el WHERE y NO en un HAVING: `s.saldo` viene del
   // LEFT JOIN a la vista, así que ya es un valor —no un agregado de ESTA
@@ -108,8 +133,12 @@ async function listar({ q, con_saldo, activo, orden, limit, offset } = {}) {
     // Quién no ha vuelto. NULL primero sería ruido: van al final.
     reciente: 'ultima_compra IS NULL, ultima_compra DESC',
     nuevo: 'c.id DESC',
+    // Por número de cliente (C-0001, C-0002…): es el orden en que se dieron de alta.
+    numero: 'c.id',
   };
-  const orderBy = ORDENES[orden] || ORDENES.nombre;
+  // El id desempata: sin él, dos que deben lo mismo podían salir en las dos
+  // páginas o en ninguna al pedir "Ver más".
+  const orderBy = `${ORDENES[orden] || ORDENES.nombre}, c.id`;
 
   const sql = `
     SELECT ${CAMPOS_EXPEDIENTE},
@@ -202,29 +231,35 @@ async function buscarParaVenta(q, limite = 10) {
   return rows;
 }
 
-/** Alta desde el panel o el mostrador: sin cuenta, sin contraseña. */
+/** Alta desde el panel o el mostrador: sin cuenta, sin contraseña. El número lo da el sistema. */
 async function crearDesdeStaff(datos) {
-  const [r] = await pool.query(
-    `INSERT INTO clientes
-       (codigo, nombre, nombre_comercial, rfc, tipo_cliente_id, correo, telefono,
-        telefono_alt, direccion, ciudad, estado, como_llego, fecha_nacimiento,
-        cliente_desde, limite_credito, notas, activo)
-     VALUES
-       (:codigo, :nombre, :nombre_comercial, :rfc, :tipo_cliente_id, :correo, :telefono,
-        :telefono_alt, :direccion, :ciudad, :estado, :como_llego, :fecha_nacimiento,
-        :cliente_desde, :limite_credito, :notas, :activo)`,
-    datos
-  );
-  return obtener(r.insertId);
+  const id = await withTransaction(async (conn) => {
+    const [r] = await conn.query(
+      `INSERT INTO clientes
+         (nombre, nombre_comercial, rfc, tipo_cliente_id, correo, telefono,
+          telefono_alt, direccion, ciudad, estado, lugar_entrega_id, como_llego, fecha_nacimiento,
+          cliente_desde, limite_credito, notas, activo)
+       VALUES
+         (:nombre, :nombre_comercial, :rfc, :tipo_cliente_id, :correo, :telefono,
+          :telefono_alt, :direccion, :ciudad, :estado, :lugar_entrega_id, :como_llego, :fecha_nacimiento,
+          :cliente_desde, :limite_credito, :notas, :activo)`,
+      datos
+    );
+    await asignarCodigo(conn, r.insertId);
+    return r.insertId;
+  });
+  return obtener(id);
 }
 
 async function actualizar(id, datos) {
   await pool.query(
+    // El número de cliente (`codigo`) NO se toca: lo dio el sistema y no se modifica.
     `UPDATE clientes SET
-        codigo = :codigo, nombre = :nombre, nombre_comercial = :nombre_comercial,
+        nombre = :nombre, nombre_comercial = :nombre_comercial,
         rfc = :rfc, tipo_cliente_id = :tipo_cliente_id, correo = :correo,
         telefono = :telefono, telefono_alt = :telefono_alt, direccion = :direccion,
-        ciudad = :ciudad, estado = :estado, como_llego = :como_llego,
+        ciudad = :ciudad, estado = :estado, lugar_entrega_id = :lugar_entrega_id,
+        como_llego = :como_llego,
         fecha_nacimiento = :fecha_nacimiento, cliente_desde = :cliente_desde,
         limite_credito = :limite_credito, notas = :notas, activo = :activo
       WHERE id = :id`,
@@ -233,15 +268,12 @@ async function actualizar(id, datos) {
   return obtener(id);
 }
 
-/** ¿Ya está usado ese código o ese correo por OTRO cliente? */
-async function duplicado({ codigo, correo, exceptoId }) {
+/** ¿Ya está usado ese correo por OTRO cliente? (El número lo da el sistema: no se repite.) */
+async function duplicado({ correo, exceptoId }) {
+  if (!correo) return null;
   const [rows] = await pool.query(
-    `SELECT id, codigo, correo FROM clientes
-      WHERE id <> :excepto
-        AND ((:codigo IS NOT NULL AND codigo = :codigo)
-          OR (:correo IS NOT NULL AND correo = :correo))
-      LIMIT 1`,
-    { codigo: codigo || null, correo: correo || null, excepto: exceptoId ?? 0 }
+    `SELECT id, correo FROM clientes WHERE id <> :excepto AND correo = :correo LIMIT 1`,
+    { correo, excepto: exceptoId ?? 0 }
   );
   return rows[0] || null;
 }

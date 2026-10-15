@@ -483,7 +483,7 @@
         </p>
         @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
         <label class="field">
-          ¿Por qué se cancela? <span class="muted">(opcional)</span>
+          <span>¿Por qué se cancela? <span class="muted">(opcional)</span></span>
           <input type="text" [(ngModel)]="motivoCancelacion" (keydown.enter)="confirmarCancelacion()"
                  placeholder="Ej. La sucursal ya no lo necesita" />
         </label>

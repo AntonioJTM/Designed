@@ -20,6 +20,9 @@ CREATE TABLE `roles` (
   `id` smallint(5) unsigned NOT NULL AUTO_INCREMENT,
   `nombre` varchar(50) NOT NULL,
   `descripcion` varchar(255) DEFAULT NULL,
+  -- 0 = el puesto NO entra al sistema (el cargador, 2026-10-14): sin correo ni
+  -- contraseña, sin otros puestos y fuera de Permisos. Sí sale en Nómina.
+  `entra_al_sistema` tinyint(1) NOT NULL DEFAULT 1,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `nombre` (`nombre`)
@@ -52,9 +55,11 @@ CREATE TABLE `usuarios` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `rol_id` smallint(5) unsigned NOT NULL,
   `nombre` varchar(120) NOT NULL,
-  `correo` varchar(160) NOT NULL,
+  -- Correo y contraseña en NULL = no entra al sistema (puesto con
+  -- `roles.entra_al_sistema = 0`, migración 2026-10_puesto_cargador.sql).
+  `correo` varchar(160) DEFAULT NULL,
   `telefono` varchar(20) DEFAULT NULL,
-  `contrasena_hash` varchar(255) NOT NULL,
+  `contrasena_hash` varchar(255) DEFAULT NULL,
   `activo` tinyint(1) NOT NULL DEFAULT 1,
   `ultimo_acceso` datetime DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
@@ -572,7 +577,20 @@ CREATE TABLE `tipos_cliente` (
   UNIQUE KEY `nombre` (`nombre`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ---------- Tabla: lugares_entrega ----------
+-- A dónde se le entrega a un cliente: municipio y estado (2026-10-14).
+DROP TABLE IF EXISTS `lugares_entrega`;
+CREATE TABLE `lugares_entrega` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) NOT NULL,
+  `estado` varchar(100) NOT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_lugares_entrega` (`nombre`,`estado`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------- Tabla: clientes ----------
+-- `codigo` = el número de cliente: lo da el sistema (C-0001) y no se modifica.
 DROP TABLE IF EXISTS `clientes`;
 CREATE TABLE `clientes` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -587,6 +605,7 @@ CREATE TABLE `clientes` (
   `direccion` varchar(255) DEFAULT NULL,
   `ciudad` varchar(100) DEFAULT NULL,
   `estado` varchar(100) DEFAULT NULL,
+  `lugar_entrega_id` int(10) unsigned DEFAULT NULL,
   `como_llego` varchar(60) DEFAULT NULL,
   `fecha_nacimiento` date DEFAULT NULL,
   `cliente_desde` date DEFAULT NULL,
@@ -603,6 +622,8 @@ CREATE TABLE `clientes` (
   KEY `fk_clientes_tipo_cliente` (`tipo_cliente_id`),
   KEY `idx_clientes_telefono` (`telefono`),
   KEY `idx_clientes_nombre` (`nombre`),
+  KEY `fk_clientes_lugar_entrega` (`lugar_entrega_id`),
+  CONSTRAINT `fk_clientes_lugar_entrega` FOREIGN KEY (`lugar_entrega_id`) REFERENCES `lugares_entrega` (`id`),
   CONSTRAINT `fk_clientes_tipo_cliente` FOREIGN KEY (`tipo_cliente_id`) REFERENCES `tipos_cliente` (`id`),
   CONSTRAINT `chk_clientes_limite_credito` CHECK (`limite_credito` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1010,6 +1031,9 @@ CREATE TABLE `saldo_favor_movimientos` (
   `monto` decimal(12,2) NOT NULL,
   `pedido_id` bigint(20) unsigned DEFAULT NULL,
   `devolucion_id` bigint(20) unsigned DEFAULT NULL,
+  `metodo_pago_id` smallint(5) unsigned DEFAULT NULL,
+  `sesion_caja_id` bigint(20) unsigned DEFAULT NULL,
+  `referencia` varchar(120) DEFAULT NULL,
   `usuario_id` bigint(20) unsigned DEFAULT NULL,
   `notas` varchar(255) DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
@@ -1018,12 +1042,16 @@ CREATE TABLE `saldo_favor_movimientos` (
   KEY `idx_sfm_pedido` (`pedido_id`),
   KEY `fk_sfm_devolucion` (`devolucion_id`),
   KEY `fk_sfm_usuario` (`usuario_id`),
+  KEY `fk_sfm_metodo` (`metodo_pago_id`),
+  KEY `fk_sfm_sesion` (`sesion_caja_id`),
   CONSTRAINT `fk_sfm_cliente` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_sfm_devolucion` FOREIGN KEY (`devolucion_id`) REFERENCES `devoluciones` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_sfm_metodo` FOREIGN KEY (`metodo_pago_id`) REFERENCES `metodos_pago` (`id`),
   CONSTRAINT `fk_sfm_pedido` FOREIGN KEY (`pedido_id`) REFERENCES `pedidos` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_sfm_sesion` FOREIGN KEY (`sesion_caja_id`) REFERENCES `sesiones_caja` (`id`),
   CONSTRAINT `fk_sfm_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
-  CONSTRAINT `chk_sfm_tipo` CHECK (`tipo` in ('devolucion','uso','aplicado','reintegro','ajuste')),
-  CONSTRAINT `chk_sfm_monto` CHECK (`monto` <> 0 and (`monto` > 0 or `tipo` = 'ajuste'))
+  CONSTRAINT `chk_sfm_monto` CHECK (`monto` <> 0 and (`monto` > 0 or `tipo` = 'ajuste')),
+  CONSTRAINT `chk_sfm_tipo` CHECK (`tipo` in ('devolucion','anticipo','uso','aplicado','reintegro','ajuste'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: envios ----------
@@ -1170,6 +1198,7 @@ CREATE TABLE `nomina_comisiones` (
   `liquidada_en` datetime DEFAULT NULL,
   `total` decimal(12,2) NOT NULL,
   `venta_neta` decimal(12,2) NOT NULL,
+  `devuelto` decimal(12,2) NOT NULL DEFAULT 0.00,
   `porcentaje` decimal(5,2) NOT NULL DEFAULT 0.00,
   `comision` decimal(12,2) NOT NULL DEFAULT 0.00,
   PRIMARY KEY (`id`),
@@ -1177,7 +1206,7 @@ CREATE TABLE `nomina_comisiones` (
   KEY `idx_nomcom_pedido` (`pedido_id`),
   CONSTRAINT `fk_nomcom_recibo` FOREIGN KEY (`recibo_id`) REFERENCES `nomina_recibos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_nomcom_pedido` FOREIGN KEY (`pedido_id`) REFERENCES `pedidos` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `chk_nomcom_tipo` CHECK (`tipo` in ('contado','credito','apartado','pedido'))
+  CONSTRAINT `chk_nomcom_tipo` CHECK (`tipo` in ('contado','credito','apartado','pedido','nota','devolucion'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: nomina_recibo_conceptos ----------
@@ -1245,7 +1274,7 @@ CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_apartados` AS
 CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_clientes_saldo` AS select `c`.`id` AS `cliente_id`,`c`.`nombre` AS `nombre`,`c`.`limite_credito` AS `limite_credito`,coalesce(sum(case when `m`.`tipo` = 'abono' then 0 else `m`.`monto` end),0) AS `cargos`,coalesce(sum(case when `m`.`tipo` = 'abono' then `m`.`monto` else 0 end),0) AS `abonos`,coalesce(sum(case when `m`.`tipo` = 'abono' then -`m`.`monto` else `m`.`monto` end),0) AS `saldo`,greatest(`c`.`limite_credito` - coalesce(sum(case when `m`.`tipo` = 'abono' then -`m`.`monto` else `m`.`monto` end),0),0) AS `disponible`,max(case when `m`.`tipo` = 'abono' then `m`.`creado_en` end) AS `ultimo_abono` from (`clientes` `c` left join `credito_movimientos` `m` on(`m`.`cliente_id` = `c`.`id`)) group by `c`.`id`,`c`.`nombre`,`c`.`limite_credito`;
 
 -- ---------- Vista: v_mas_vendidos ----------
-CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_mas_vendidos` AS select `pv`.`id` AS `variante_id`,`pv`.`sku` AS `sku`,`p`.`nombre` AS `producto`,sum(`pd`.`cantidad`) AS `unidades_vendidas`,sum(`pd`.`subtotal`) AS `ingresos` from (((`pedido_detalle` `pd` join `producto_variantes` `pv` on(`pv`.`id` = `pd`.`variante_id`)) join `productos` `p` on(`p`.`id` = `pv`.`producto_id`)) join `pedidos` `ped` on(`ped`.`id` = `pd`.`pedido_id`)) where `ped`.`estado` not in ('cancelado','devuelto') group by `pv`.`id`,`pv`.`sku`,`p`.`nombre`;
+CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_mas_vendidos` AS select `pv`.`id` AS `variante_id`,`pv`.`sku` AS `sku`,`p`.`nombre` AS `producto`,sum(`pd`.`cantidad` - coalesce(`dev`.`kg`,0)) AS `unidades_vendidas`,sum(`pd`.`subtotal` - coalesce(`dev`.`kg` * `pd`.`subtotal` / nullif(`pd`.`cantidad`,0),0)) AS `ingresos` from ((((`pedido_detalle` `pd` join `producto_variantes` `pv` on(`pv`.`id` = `pd`.`variante_id`)) join `productos` `p` on(`p`.`id` = `pv`.`producto_id`)) join `pedidos` `ped` on(`ped`.`id` = `pd`.`pedido_id`)) left join (select `devolucion_detalle`.`detalle_id` AS `detalle_id`,sum(`devolucion_detalle`.`cantidad`) AS `kg` from `devolucion_detalle` group by `devolucion_detalle`.`detalle_id`) `dev` on(`dev`.`detalle_id` = `pd`.`id`)) where `ped`.`estado` not in ('cancelado','devuelto') group by `pv`.`id`,`pv`.`sku`,`p`.`nombre`;
 
 -- ---------- Vista: v_movimiento_hilo ----------
 CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_movimiento_hilo` AS select `pv`.`id` AS `variante_id`,`pv`.`producto_id` AS `producto_id`,max(case when `m`.`referencia_tipo` = 'pedido' and `m`.`cantidad` < 0 then `m`.`creado_en` end) AS `ultima_salida`,max(case when `m`.`referencia_tipo` = 'remesa' then `m`.`creado_en` end) AS `ultima_entrada`,coalesce(sum(case when `m`.`referencia_tipo` = 'pedido' and `m`.`cantidad` < 0 then -`m`.`cantidad` else 0 end),0) AS `kg_vendidos_historico` from (`producto_variantes` `pv` left join `movimientos_inventario` `m` on(`m`.`variante_id` = `pv`.`id`)) group by `pv`.`id`,`pv`.`producto_id`;

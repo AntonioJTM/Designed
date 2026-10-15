@@ -5,6 +5,7 @@
  * hilo y regresa una parte o todo: no le quiero regresar dinero, lo que se le
  * tiene que agregar es como un saldo a favor de lo que regresó" (usuario).
  *
+ * Nace de las devoluciones y de los ANTICIPOS (dinero a cuenta, sin nota).
  * Es un LIBRO de movimientos, como el de crédito: el saldo es su suma y no hay
  * campo de saldo en `clientes` (un valor guardado aparte se descuadra en cuanto
  * algo falla a medias). Va APARTE de la deuda de crédito: "a veces el cliente
@@ -23,7 +24,7 @@ const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const clientesModel = require('./model');
 
-const SIGNO = { devolucion: 1, uso: -1, aplicado: -1, reintegro: 1, ajuste: 1 };
+const SIGNO = { devolucion: 1, anticipo: 1, uso: -1, aplicado: -1, reintegro: 1, ajuste: 1 };
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 /** El saldo a favor. Con `bloquear`, bloquea la fila del cliente (dos cajas a la vez). */
@@ -41,12 +42,13 @@ async function saldoFavor(clienteId, ejecutor = pool, bloquear = false) {
 /** Los movimientos del saldo a favor, del más nuevo al más viejo. */
 async function movimientos(clienteId, { limit = 50 } = {}) {
   const [rows] = await pool.query(
-    `SELECT m.id, m.tipo, m.monto, m.notas, m.creado_en,
+    `SELECT m.id, m.tipo, m.monto, m.notas, m.creado_en, m.referencia,
             m.pedido_id, p.numero_pedido, m.devolucion_id, d.folio AS devolucion_folio,
-            u.nombre AS registro
+            mp.nombre AS metodo, u.nombre AS registro
        FROM saldo_favor_movimientos m
        LEFT JOIN pedidos p      ON p.id = m.pedido_id
        LEFT JOIN devoluciones d ON d.id = m.devolucion_id
+       LEFT JOIN metodos_pago mp ON mp.id = m.metodo_pago_id
        LEFT JOIN usuarios u     ON u.id = m.usuario_id
       WHERE m.cliente_id = :id
       ORDER BY m.creado_en DESC, m.id DESC
@@ -56,12 +58,83 @@ async function movimientos(clienteId, { limit = 50 } = {}) {
   return rows;
 }
 
-async function agregar(conn, { clienteId, tipo, monto, pedidoId = null, devolucionId = null, usuarioId = null, notas = null }) {
-  await conn.query(
-    `INSERT INTO saldo_favor_movimientos (cliente_id, tipo, monto, pedido_id, devolucion_id, usuario_id, notas)
-     VALUES (:cliente, :tipo, :monto, :pedido, :devolucion, :usuario, :notas)`,
-    { cliente: clienteId, tipo, monto: round2(monto), pedido: pedidoId, devolucion: devolucionId, usuario: usuarioId, notas }
+async function agregar(conn, {
+  clienteId, tipo, monto, pedidoId = null, devolucionId = null, usuarioId = null, notas = null,
+  metodoPagoId = null, sesionCajaId = null, referencia = null,
+}) {
+  const [r] = await conn.query(
+    `INSERT INTO saldo_favor_movimientos
+       (cliente_id, tipo, monto, pedido_id, devolucion_id, metodo_pago_id, sesion_caja_id, referencia, usuario_id, notas)
+     VALUES (:cliente, :tipo, :monto, :pedido, :devolucion, :metodo, :sesion, :referencia, :usuario, :notas)`,
+    {
+      cliente: clienteId, tipo, monto: round2(monto), pedido: pedidoId, devolucion: devolucionId,
+      metodo: metodoPagoId, sesion: sesionCajaId, referencia, usuario: usuarioId, notas,
+    }
   );
+  return r.insertId;
+}
+
+/**
+ * Un ANTICIPO: dinero a cuenta, sin nota (2026-10-14: "se dan anticipos en
+ * efectivo y transferencia"). El cliente deja dinero antes de comprar y le
+ * queda como saldo a favor. Puede dejar parte en efectivo y parte por
+ * transferencia: un movimiento por cada una, con su método.
+ *   · El EFECTIVO entra al turno de caja que lo recibe como 'ingreso' (al corte
+ *     de ese día, como un abono): sin turno abierto se rechaza ANTES de asentar
+ *     nada, o habría dinero en el cajón que nada explica.
+ *   · La transferencia no toca la caja; lleva su referencia (el folio).
+ * Va dentro de la transacción de quien llama.
+ */
+async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 0, sesionCajaId = null, referencia = null, notas = null, usuarioId = null }) {
+  const ef = round2(efectivo);
+  const tr = round2(transferencia);
+  if (!(ef > 0) && !(tr > 0)) {
+    throw new AppError(422, 'ANTICIPO_VACIO', 'Pon cuánto deja: en efectivo, por transferencia o las dos.');
+  }
+  const [[cli]] = await conn.query('SELECT id, nombre, activo FROM clientes WHERE id = :id FOR UPDATE', { id: clienteId });
+  if (!cli) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
+  if (!cli.activo) throw new AppError(422, 'CLIENTE_INACTIVO', `${cli.nombre} está dado de baja.`);
+
+  const [metodos] = await conn.query('SELECT id, nombre FROM metodos_pago WHERE activo = 1 AND interno = 0');
+  const metodoDe = (palabra) => metodos.find((m) => String(m.nombre).toLowerCase().includes(palabra))?.id ?? null;
+  const idEfectivo = metodoDe('efectivo');
+  const idTransferencia = metodoDe('transferencia');
+  if ((ef > 0 && !idEfectivo) || (tr > 0 && !idTransferencia)) {
+    throw new AppError(422, 'METODO_PAGO_INVALIDO', 'Falta el método de pago "Efectivo" o "Transferencia" activo.');
+  }
+
+  if (ef > 0) {
+    if (!sesionCajaId) {
+      throw new AppError(409, 'FALTA_SESION_CAJA',
+        'El efectivo del anticipo tiene que entrar en un turno de caja abierto, o el corte no va a cuadrar. ' +
+        'Abre el turno o recíbelo por transferencia.');
+    }
+    const [[ses]] = await conn.query('SELECT id, estado FROM sesiones_caja WHERE id = :id FOR UPDATE', { id: sesionCajaId });
+    if (!ses) throw new AppError(404, 'SESION_NO_ENCONTRADA', 'Turno de caja no encontrado');
+    if (ses.estado !== 'abierta') throw new AppError(409, 'CAJA_CERRADA', 'Ese turno de caja ya está cerrado.');
+  }
+
+  const nota = notas ? String(notas).trim().slice(0, 255) || null : null;
+  if (ef > 0) {
+    const movId = await agregar(conn, {
+      clienteId, tipo: 'anticipo', monto: ef, metodoPagoId: idEfectivo, sesionCajaId, usuarioId,
+      notas: nota ?? 'Anticipo en efectivo',
+    });
+    await conn.query(
+      `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
+       VALUES (:sesion, 'ingreso', :monto, :ref, :motivo)`,
+      // `referencia_id` apunta al movimiento del saldo a favor, como el del abono al de crédito.
+      { sesion: sesionCajaId, monto: ef, ref: movId, motivo: `Anticipo de ${cli.nombre}` }
+    );
+  }
+  if (tr > 0) {
+    await agregar(conn, {
+      clienteId, tipo: 'anticipo', monto: tr, metodoPagoId: idTransferencia, usuarioId,
+      referencia: referencia ? String(referencia).trim().slice(0, 120) || null : null,
+      notas: nota ?? 'Anticipo por transferencia',
+    });
+  }
+  return { cliente: cli.nombre, efectivo: ef, transferencia: tr, total: round2(ef + tr) };
 }
 
 /** El método de pago interno con que se asienta lo que paga el saldo a favor. */
@@ -117,18 +190,32 @@ async function reintegrarDeVenta(conn, { pedidoId, numeroPedido, usuarioId }) {
   return neto;
 }
 
+/** Asienta un pago "Saldo a favor" a una nota pendiente de pago; con el último queda pagada. */
+async function _pagarNota(conn, { clienteId, nota, usa, metodo, usuarioId, origen, notas }) {
+  const falta = round2(Number(nota.total) - Number(nota.pagado));
+  await conn.query(
+    `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
+     VALUES (:p, :m, :monto, 'completado', :ref)`,
+    { p: nota.id, m: metodo, monto: usa, ref: origen ? `Saldo a favor (${origen})` : 'Saldo a favor' }
+  );
+  const pagada = usa + 0.004 >= falta;
+  if (pagada) await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id", { id: nota.id });
+  await agregar(conn, { clienteId, tipo: 'aplicado', monto: usa, pedidoId: nota.id, usuarioId, notas });
+  return { a: 'nota', pedido_id: Number(nota.id), numero_pedido: nota.numero_pedido, monto: usa, pagada };
+}
+
 /**
  * DESCUENTA saldo a favor de lo que el cliente debe, hasta `monto` (o todo lo
- * que alcance). Primero lo de la nota `preferirPedidoId` (la de la devolución),
- * luego sus notas pendientes de pago de la más vieja a la más nueva, y luego su
- * cuenta de crédito; si la nota preferida es a crédito, la cuenta va primero.
+ * que alcance): sus notas pendientes de pago de la más vieja a la más nueva, y
+ * luego su cuenta de crédito.
  *   · a una nota pendiente le asienta un PAGO "Saldo a favor" (con el último
  *     queda pagada);
  *   · a la cuenta de crédito, un ABONO con ese método (se liquidan solas las
  *     ventas que cubre, de la más vieja a la más nueva).
- * Devuelve cuánto aplicó y a qué.
+ * Devuelve cuánto aplicó y a qué. (Lo que regresa de una venta que todavía se
+ * debe va primero a ESA venta: `descontarDeVenta`.)
  */
-async function aplicarADeuda(conn, { clienteId, monto = null, preferirPedidoId = null, usuarioId = null, origen = '' }) {
+async function aplicarADeuda(conn, { clienteId, monto = null, usuarioId = null, origen = '' }) {
   const disponible = await saldoFavor(clienteId, conn, true);
   let resta = round2(monto == null ? disponible : Math.min(monto, disponible));
   if (resta <= 0.004) return { aplicado: 0, detalle: [] };
@@ -141,68 +228,108 @@ async function aplicarADeuda(conn, { clienteId, monto = null, preferirPedidoId =
        FROM pedidos p
       WHERE p.cliente_id = :cli AND p.nota_pendiente = 1 AND p.estado = 'pendiente'
         AND NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')
-      ORDER BY (p.id = :pref) DESC, p.creado_en, p.id
+      ORDER BY p.creado_en, p.id
       FOR UPDATE`,
-    { cli: clienteId, pref: preferirPedidoId ?? 0 }
+    { cli: clienteId }
   );
-  let preferidaACredito = false;
-  if (preferirPedidoId) {
-    const [[c]] = await conn.query(
-      "SELECT 1 AS si FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo' LIMIT 1",
-      { id: preferirPedidoId }
-    );
-    preferidaACredito = !!c;
+  for (const n of notas) {
+    if (resta <= 0.004) break;
+    const usa = round2(Math.min(round2(Number(n.total) - Number(n.pagado)), resta));
+    if (usa <= 0.004) continue;
+    detalle.push(await _pagarNota(conn, {
+      clienteId, nota: n, usa, metodo, usuarioId, origen,
+      notas: `Pagó la nota ${n.numero_pedido}${origen ? ' (' + origen + ')' : ''}`,
+    }));
+    resta = round2(resta - usa);
   }
 
-  const aCredito = async () => {
-    if (resta <= 0.004) return;
+  if (resta > 0.004) {
     const deuda = await clientesModel.saldo(clienteId, conn, true);
     const usa = round2(Math.min(deuda, resta));
-    if (usa <= 0.004) return;
-    await clientesModel.agregarMovimiento({
-      cliente_id: clienteId, tipo: 'abono', monto: usa, metodo_pago_id: metodo, usuario_id: usuarioId,
-      notas: `Con su saldo a favor${origen ? ' (' + origen + ')' : ''}`,
-    }, conn);
-    await clientesModel.liquidarVentasACredito(conn, clienteId);
-    await agregar(conn, {
-      clienteId, tipo: 'aplicado', monto: usa, usuarioId,
-      notas: `A su cuenta de crédito${origen ? ' (' + origen + ')' : ''}`,
-    });
-    detalle.push({ a: 'credito', monto: usa });
-    resta = round2(resta - usa);
-  };
-  const aNotas = async () => {
-    for (const n of notas) {
-      if (resta <= 0.004) break;
-      const falta = round2(Number(n.total) - Number(n.pagado));
-      const usa = round2(Math.min(falta, resta));
-      if (usa <= 0.004) continue;
-      await conn.query(
-        `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
-         VALUES (:p, :m, :monto, 'completado', :ref)`,
-        { p: n.id, m: metodo, monto: usa, ref: origen ? `Saldo a favor (${origen})` : 'Saldo a favor' }
-      );
-      if (usa + 0.004 >= falta) {
-        await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id", { id: n.id });
-      }
+    if (usa > 0.004) {
+      await clientesModel.agregarMovimiento({
+        cliente_id: clienteId, tipo: 'abono', monto: usa, metodo_pago_id: metodo, usuario_id: usuarioId,
+        notas: `Con su saldo a favor${origen ? ' (' + origen + ')' : ''}`,
+      }, conn);
+      await clientesModel.liquidarVentasACredito(conn, clienteId);
       await agregar(conn, {
-        clienteId, tipo: 'aplicado', monto: usa, pedidoId: n.id, usuarioId,
-        notas: `Pagó la nota ${n.numero_pedido}${origen ? ' (' + origen + ')' : ''}`,
+        clienteId, tipo: 'aplicado', monto: usa, usuarioId,
+        notas: `A su cuenta de crédito${origen ? ' (' + origen + ')' : ''}`,
       });
-      detalle.push({ a: 'nota', pedido_id: n.id, numero_pedido: n.numero_pedido, monto: usa, pagada: usa + 0.004 >= falta });
-      resta = round2(resta - usa);
+      detalle.push({ a: 'credito', monto: usa });
     }
-  };
-
-  if (preferidaACredito) {
-    await aCredito();
-    await aNotas();
-  } else {
-    await aNotas();
-    await aCredito();
   }
   const aplicado = round2(detalle.reduce((s, d) => s + d.monto, 0));
   return { aplicado, detalle };
+}
+
+/**
+ * Lo que todavía debe UNA venta: la fiada, lo que le falta de su cargo (con el
+ * reparto de los abonos de la cuenta, de lo más viejo a lo más nuevo); la nota
+ * pendiente de pago, lo que le falta de sus pagos. `tipo` null y 0 si ya está
+ * pagada o nunca se debió.
+ */
+async function debeDeVenta(ejecutor, pedidoId) {
+  const [[p]] = await ejecutor.query(
+    `SELECT p.id, p.numero_pedido, p.cliente_id, p.total, p.estado, p.nota_pendiente,
+            EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo') AS fiada,
+            COALESCE((SELECT SUM(pg.monto) FROM pagos pg WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS pagado
+       FROM pedidos p WHERE p.id = :id`,
+    { id: pedidoId }
+  );
+  const nada = { tipo: null, debe: 0, venta: p ?? null };
+  if (!p || !p.cliente_id || ['cancelado', 'devuelto'].includes(p.estado)) return nada;
+  if (Number(p.fiada)) {
+    const d = (await clientesModel.aplicarAbonos(ejecutor, p.cliente_id)).find((x) => x.pedidoId === Number(p.id));
+    const debe = round2(d?.porPagar ?? 0);
+    return debe > 0.004 ? { tipo: 'credito', debe, venta: p } : nada;
+  }
+  if (Number(p.nota_pendiente) && p.estado === 'pendiente') {
+    const debe = round2(Math.max(0, Number(p.total) - Number(p.pagado)));
+    return debe > 0.004 ? { tipo: 'nota', debe, venta: p } : nada;
+  }
+  return nada;
+}
+
+/**
+ * Lo que REGRESA de una venta que todavía se debe se descuenta de ESA venta
+ * (2026-10-14: "una nota a crédito y el cliente regresa hilo: cuando es un
+ * crédito que aún no está pagado, esa devolución se le descuenta a la nota"),
+ * hasta lo que debe:
+ *   · la fiada, con un AJUSTE negativo ligado a la venta en su cuenta: baja lo
+ *     que debe ESA venta, no lo más viejo (un abono se iría a lo más viejo);
+ *   · la nota pendiente de pago, con un pago "Saldo a favor".
+ * El saldo a favor que dejó la devolución se gasta en eso ('aplicado'). Devuelve
+ * cuánto se descontó; lo que sobre sigue a favor.
+ */
+async function descontarDeVenta(conn, { clienteId, pedidoId, monto, usuarioId = null, origen = '' }) {
+  const { tipo, debe, venta } = await debeDeVenta(conn, pedidoId);
+  const usa = round2(Math.min(Number(monto), debe));
+  if (!tipo || usa <= 0.004) return { aplicado: 0, detalle: [] };
+  if (tipo === 'nota') {
+    const r = await _pagarNota(conn, {
+      clienteId, nota: venta, usa, metodo: await metodoSaldoFavor(conn), usuarioId, origen,
+      notas: `Se descontó de ${venta.numero_pedido}, de donde regresó${origen ? ' (' + origen + ')' : ''}`,
+    });
+    return { aplicado: usa, detalle: [{ ...r, de_esta: true }] };
+  }
+  await clientesModel.agregarMovimiento({
+    cliente_id: clienteId, tipo: 'ajuste', monto: -usa, pedido_id: pedidoId, usuario_id: usuarioId,
+    notas: `Regresó mercancía${origen ? ' (' + origen + ')' : ''}: se descuenta de ${venta.numero_pedido}`,
+  }, conn);
+  await clientesModel.liquidarVentasACredito(conn, clienteId);
+  // Si lo que regresó cubre todo lo que se debía, la venta queda pagada (la
+  // liquidación de arriba no toca una venta cuya deuda quedó en $0).
+  const pagada = usa + 0.004 >= debe;
+  if (pagada) await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id AND estado = 'pendiente'", { id: pedidoId });
+  await agregar(conn, {
+    clienteId, tipo: 'aplicado', monto: usa, pedidoId, usuarioId,
+    notas: `Se descontó de ${venta.numero_pedido}, de donde regresó${origen ? ' (' + origen + ')' : ''}`,
+  });
+  return {
+    aplicado: usa,
+    detalle: [{ a: 'credito', pedido_id: Number(pedidoId), numero_pedido: venta.numero_pedido, monto: usa, pagada, de_esta: true }],
+  };
 }
 
 /** Cuánto debe en total: su cuenta de crédito y sus notas pendientes de pago. */
@@ -222,4 +349,5 @@ async function deudaTotal(clienteId, ejecutor = pool) {
 
 module.exports = {
   saldoFavor, movimientos, agregar, metodoSaldoFavor, usarEnVenta, reintegrarDeVenta, aplicarADeuda, deudaTotal,
+  debeDeVenta, descontarDeVenta, recibirAnticipo,
 };

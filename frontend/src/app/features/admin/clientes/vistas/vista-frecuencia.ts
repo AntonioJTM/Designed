@@ -25,7 +25,7 @@ type Mostrar = 'toca' | 'todos' | 'frio' | 'perdido';
     .ritmo-leyenda { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.8125rem; color: var(--tinta-2); }
     .ritmo-leyenda > span { display: inline-flex; align-items: center; gap: 8px; }
     .ritmo-leyenda .marca-ej { width: 2px; height: 16px; background: var(--tinta-2); }
-    .ritmo-leyenda .punto-ej { width: 12px; height: 12px; border-radius: 50%; background: #C2410C; }
+    .ritmo-leyenda .punto-ej { width: 12px; height: 12px; border-radius: 50%; background: var(--punto-alerta); }
     .ritmo-fila {
       display: grid; grid-template-columns: 220px minmax(0, 1fr) 190px; align-items: center;
       gap: 18px; min-height: 54px; border-bottom: 1px solid var(--borde-suave);
@@ -37,7 +37,7 @@ type Mostrar = 'toca' | 'todos' | 'frio' | 'perdido';
     .ritmo-fila .quien span { font-size: 0.8125rem; color: var(--tinta-3); }
     .ritmo-fila .cola { display: flex; align-items: center; justify-content: flex-end; gap: 10px; font-size: 0.875rem; }
     .pista { position: relative; height: 24px; }
-    .pista .base { position: absolute; left: 0; right: 0; top: 11px; height: 2px; background: #E6E8EC; border-radius: 1px; }
+    .pista .base { position: absolute; left: 0; right: 0; top: 11px; height: 2px; background: var(--borde); border-radius: 1px; }
     .pista .tramo { position: absolute; top: 10px; height: 4px; border-radius: 2px; }
     .pista .marca { position: absolute; top: 3px; width: 2px; height: 18px; margin-left: -1px; background: var(--tinta-2); }
     .pista .punto { position: absolute; top: 5px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; }

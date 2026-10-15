@@ -1,0 +1,160 @@
+<div class="kpis">
+  @for (k of kpis(); track k.etiqueta) {
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+      <span class="kpi-valor">{{ k.valor }}</span>
+      <span class="kpi-pie">{{ k.pie }}</span>
+    </div>
+  }
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>A cuántos les entregas en cada lugar</h2>
+      <p>
+        Por estado y por municipio. La barra es la parte de todos tus clientes activos
+        ({{ datos().clientes_activos }}). Toca un lugar para ver quiénes son.
+      </p>
+    </div>
+  </div>
+
+  @if (porEstado().length === 0) {
+    <p class="vacio">
+      Todavía no hay lugares de entrega. Se dan de alta al capturar o editar un cliente:
+      en "A dónde se le entrega", el botón «Nuevo lugar».
+    </p>
+  } @else {
+    @for (e of porEstado(); track e.estado) {
+      <div class="estado">
+        <div class="estado-cabeza">
+          <h3>{{ e.estado }}</h3>
+          <span>
+            {{ plural(e.total, 'cliente', 'clientes') }} · {{ e.pct }}% ·
+            {{ plural(e.lugares.length, 'lugar', 'lugares') }}
+          </span>
+        </div>
+        <div class="barras">
+          @for (f of e.lugares; track f.l.id) {
+            <div class="barra-fila">
+              <span class="barra-etiqueta">
+                <button type="button" class="lugar-boton" [class.on]="esElegido(f.l)" (click)="verLugar(f.l)"
+                        [attr.aria-pressed]="esElegido(f.l)" [title]="'Ver los clientes de ' + f.l.nombre">
+                  {{ f.l.nombre }}
+                </button>
+              </span>
+              <span class="barra-valor">
+                <span class="relleno" [style.width.%]="f.ancho"></span>
+                <b>{{ f.l.num_clientes ?? 0 }} · {{ f.pct }}%</b>
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  @if (datos().sin_lugar > 0) {
+    <p class="sin-lugar">
+      <b>{{ plural(datos().sin_lugar, 'cliente activo', 'clientes activos') }}</b> todavía sin lugar de entrega.
+      <button type="button" class="btn btn-ghost btn-sm" (click)="verSinLugar()">Ver quiénes</button>
+    </p>
+  }
+</section>
+
+@if (seleccion(); as s) {
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>{{ tituloLista() }}</h2>
+        <p>
+          @if (s.tipo === 'sin') {
+            Para ponerles su lugar: Ver → Editar → "A dónde se le entrega".
+          } @else {
+            {{ plural(totalLista(), 'cliente activo', 'clientes activos') }}.
+          }
+        </p>
+      </div>
+      @if (s.tipo === 'lugar') {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="abrirCorregir(s.lugar)">Corregir el nombre</button>
+      }
+    </div>
+
+    @if (cargandoLista()) {
+      <p class="muted">Cargando…</p>
+    } @else if ((lista() ?? []).length === 0) {
+      <p class="vacio">Nadie aquí.</p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid de-lugar">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Teléfono</th>
+              <th>Lista de precios</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of lista(); track c.id) {
+              <tr>
+                <td>
+                  <b>{{ c.nombre }}</b>
+                  @if (c.codigo) { <div class="muted chico mono">{{ c.codigo }}</div> }
+                </td>
+                <td class="tel">{{ c.telefono || '—' }}</td>
+                <td>{{ c.tipo_cliente || 'Público' }}</td>
+                <td class="acciones">
+                  <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.id]">Ver</a>
+                  @if (vePos()) {
+                    <a class="btn btn-ghost btn-sm" routerLink="/admin/pos" [queryParams]="{ cliente: c.id }">Venderle</a>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (totalLista() > (lista() ?? []).length) {
+        <p class="muted nota-medida">Se ven los primeros {{ (lista() ?? []).length }} de {{ totalLista() }}.</p>
+      }
+    }
+  </section>
+}
+
+<!-- Corregir cómo se escribió un lugar. No se cierra al tocar el fondo: sale con la ✕, "Cancelar" o Escape. -->
+@if (corrigiendo(); as l) {
+  <div class="modal-overlay" (keydown.escape)="cerrarCorregir()">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="corregir-lugar-titulo">
+      <div class="modal-head">
+        <h2 id="corregir-lugar-titulo">Corregir el lugar</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarCorregir()" aria-label="Cerrar">✕</button>
+      </div>
+      <form (ngSubmit)="guardarCorreccion()">
+        <div class="modal-body columna">
+          <p class="muted">
+            Sus {{ plural(l.num_clientes ?? 0, 'cliente sigue', 'clientes siguen') }} en este lugar con el nombre nuevo.
+          </p>
+          @if (errorCorregir()) { <p class="alert" role="alert">{{ errorCorregir() }}</p> }
+          <label class="field">
+            Municipio o lugar
+            <input type="text" [(ngModel)]="nombreLugar" name="nombre" maxlength="100" />
+          </label>
+          <label class="field">
+            Estado
+            <input type="text" [(ngModel)]="estadoLugar" name="estado" maxlength="100" list="estados-mx-lugar" />
+            <datalist id="estados-mx-lugar">
+              @for (e of ESTADOS; track e) { <option [value]="e"></option> }
+            </datalist>
+          </label>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="cerrarCorregir()" [disabled]="guardando()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="guardando()">
+            {{ guardando() ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

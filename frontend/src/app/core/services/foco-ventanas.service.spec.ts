@@ -71,6 +71,26 @@ describe('FocoVentanas', () => {
     expect(document.activeElement).toBe(abrir);
   });
 
+  it('si la ventana todavía cargaba, el foco espera en la ✕ y entra al campo cuando aparece (2026-10-14)', async () => {
+    const v = ventana('<button class="cerrar" aria-label="Cerrar">✕</button><div class="modal-body"><p>Cargando…</p></div>');
+    await esperar();
+    expect(document.activeElement).toBe(v.querySelector('.cerrar'));
+    // Llegan los datos: aparece el lector.
+    v.querySelector('.modal-body')!.innerHTML = '<input id="lector" />';
+    await esperar(10);
+    expect(document.activeElement).toBe(v.querySelector('#lector'));
+  });
+
+  it('si la persona ya movió el foco mientras cargaba, no se lo quita', async () => {
+    const v = ventana('<button class="cerrar">✕</button><div class="modal-body"></div><div class="modal-foot"><button id="otro">Otro</button></div>');
+    await esperar();
+    expect(document.activeElement).toBe(v.querySelector('.cerrar'));
+    (v.querySelector('#otro') as HTMLElement).focus();
+    v.querySelector('.modal-body')!.insertAdjacentHTML('beforeend', '<input id="lector" />');
+    await esperar(10);
+    expect(document.activeElement).toBe(v.querySelector('#otro'));
+  });
+
   it('una ventana sin nada que enfocar recibe el foco ella misma', async () => {
     const v = ventana('<p>Solo texto</p>');
     await esperar();

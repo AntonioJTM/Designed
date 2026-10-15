@@ -85,6 +85,7 @@ const ck = (n, ok, d) => {
     const [[kg]] = await db.query("SELECT id FROM unidades_medida WHERE abreviatura = 'kg' LIMIT 1");
     const [[efectivo]] = await db.query("SELECT id FROM metodos_pago WHERE nombre LIKE 'Efectivo%' ORDER BY id LIMIT 1");
     const [[metSaldo]] = await db.query("SELECT id FROM metodos_pago WHERE nombre = 'Saldo a favor' AND interno = 1");
+    const [[transferencia]] = await db.query("SELECT id FROM metodos_pago WHERE nombre LIKE 'Transferencia%' ORDER BY id LIMIT 1");
 
     let r = await api('POST', '/productos', {
       categoria_id: cat.id, unidad_medida_id: kg.id, nombre: 'TMPDV ROJO ' + SUF, precio_kg: 200, multipresentacion: true,
@@ -166,6 +167,14 @@ const ck = (n, ok, d) => {
     ck('el kardex lo dice "Devolución del cliente"', r.data?.items?.[0]?.concepto === 'Devolución del cliente', r.data?.items?.[0]?.concepto);
     ck('NO sale dinero de la caja', JSON.stringify(await caja(sesion.id)) === JSON.stringify(cajaAntes), await caja(sesion.id));
     ck('la venta sigue pagada', (await estado(vA.id)) === 'pagado', await estado(vA.id));
+    // Lo que regresó ya no cuenta como vendido (2026-10-14): 56.3 − 40.7 = 15.6 kg, $3,120.
+    r = await api('GET', `/reportes/venta-por-color?desde=2026-01-01&hasta=2099-12-31&q=${encodeURIComponent('TMPDV ROJO ' + SUF)}`);
+    const hiloRep = r.data?.hilos?.[0];
+    ck('"Venta por color" cuenta 15.6 kg vendidos ($3,120), no 56.3', hiloRep?.kg_vendidos === 15.6 && hiloRep?.importe === 3120 &&
+      hiloRep?.vendido_total === 15.6, r.error ?? hiloRep);
+    r = await api('GET', '/reportes/mas-vendidos?limite=1000');
+    const mv = r.data?.find?.((x) => Number(x.variante_id) === Number(paquete.id));
+    ck('"Más vendidos" también: 15.6 kg del paquete', r3(mv?.unidades_vendidas) === 15.6 && r2(mv?.ingresos) === 3120, r.error ?? mv);
     r = await api('GET', `/pedidos/${vA.id}`);
     ck('el detalle de la venta trae la devolución (paquetes y conos)', r.data?.devuelto_total === 8140 &&
       r.data?.devoluciones?.[0]?.lineas?.length === 2 && r.data.devoluciones[0].lineas[0].codigos.length === 2 &&
@@ -276,6 +285,87 @@ const ck = (n, ok, d) => {
     const eH = r.data;
     r = await api('POST', `/pedidos/${eH.id}/devoluciones`, { destino: 'favor', lineas: [{ detalle_id: eH.detalle[0].id, kg_sueltos: 1 }] });
     ck('409 NO_SE_HA_ENTREGADO', r.status === 409 && r.error?.code === 'NO_SE_HA_ENTREGADO', r.error?.code);
+
+    console.log('\n=== 10. Una venta A CRÉDITO sin pagar: lo que regresa se descuenta de ESA nota (2026-10-14) ===');
+    const jc = (await api('POST', '/clientes', { nombre: 'TMPDV Tejidos JC ' + SUF, telefono: '4450000013', limite_credito: 10000 })).data;
+    const posJ = { ...pos, cliente_id: jc.id };
+    r = await api('POST', '/pedidos', { ...posJ, a_credito: 1000, items: [{ variante_id: paquete.id, cantidad: 5 }] });
+    const vieja = r.data;
+    r = await api('POST', '/pedidos', { ...posJ, a_credito: 2000, items: item10 });
+    const nueva = r.data;
+    ck('dos ventas a crédito: una más vieja de $1,000 y esta de $2,000', vieja?.estado === 'pendiente' && nueva?.estado === 'pendiente',
+      [vieja?.estado, nueva?.estado, r.error]);
+    r = await api('GET', `/pedidos/${nueva.id}/devolucion`);
+    ck('la vista previa dice que esta nota debe $2,000 (a crédito)', r.data?.debe_esta === 2000 && r.data?.debe_esta_tipo === 'credito',
+      [r.data?.debe_esta, r.data?.debe_esta_tipo]);
+    r = await api('POST', `/pedidos/${nueva.id}/devoluciones`, {
+      destino: 'favor', lineas: [{ detalle_id: nueva.detalle[0].id, kg_sueltos: 4, conos: 3 }],
+    });
+    ck('regresa 4 kg ($800): se descuentan de ESTA nota, sin elegirlo', r.status === 201 && r.data?.descontado_de_esta === 800 &&
+      r.data?.aplicado_a_deuda === 800, r.error ?? r.data);
+    const debeVenta = async (id) => (await api('GET', `/pedidos/${id}`)).data?.credito_por_pagar;
+    ck('esta nota debe $1,200 y la más vieja sigue debiendo $1,000 (no se fue a lo más viejo)',
+      (await debeVenta(nueva.id)) === 1200 && (await debeVenta(vieja.id)) === 1000, [await debeVenta(nueva.id), await debeVenta(vieja.id)]);
+    ck('no le quedó saldo a favor: todo se descontó', (await favor(jc.id)) === 0, await favor(jc.id));
+    r = await api('GET', `/clientes/${jc.id}`);
+    ck('su cuenta: debe $2,200 ($1,000 + $1,200)', r.data?.deuda_total?.credito === 2200, r.data?.deuda_total);
+    r = await api('POST', `/pedidos/${nueva.id}/devoluciones`, {
+      destino: 'favor', lineas: [{ detalle_id: nueva.detalle[0].id, kg_sueltos: 6 }],
+    });
+    ck('regresa lo demás ($1,200): esta nota queda PAGADA', r.status === 201 && r.data?.descontado_de_esta === 1200 &&
+      (await estado(nueva.id)) === 'pagado', r.error ?? [r.data?.descontado_de_esta, await estado(nueva.id)]);
+    ck('y la más vieja sigue debiendo sus $1,000', (await debeVenta(vieja.id)) === 1000 && (await estado(vieja.id)) === 'pendiente',
+      [await debeVenta(vieja.id), await estado(vieja.id)]);
+
+    console.log('\n=== 11. Regresa MÁS de lo que debe la nota: lo que sobra queda a favor ===');
+    r = await api('POST', '/pedidos', { ...posJ, pendiente_pago: true, items: [{ variante_id: paquete.id, cantidad: 5 }] });
+    const notaJ = r.data;
+    await api('POST', `/pedidos/${notaJ.id}/abonos`, { monto: 600, metodo_pago_id: transferencia.id });
+    r = await api('GET', `/pedidos/${notaJ.id}/devolucion`);
+    ck('una nota pendiente de $1,000 que ya pagó $600: debe $400', r.data?.debe_esta === 400 && r.data?.debe_esta_tipo === 'nota',
+      [r.data?.debe_esta, r.data?.debe_esta_tipo]);
+    r = await api('POST', `/pedidos/${notaJ.id}/devoluciones`, { destino: 'favor', lineas: [{ detalle_id: notaJ.detalle[0].id, kg_sueltos: 5 }] });
+    ck('regresa todo ($1,000): se descuentan los $400 y quedan $600 a favor', r.status === 201 && r.data?.descontado_de_esta === 400 &&
+      r.data?.saldo_favor === 600 && (await estado(notaJ.id)) === 'pagado', r.error ?? [r.data, await estado(notaJ.id)]);
+
+    console.log('\n=== 12. ANTICIPO: dinero a cuenta, sin nota, en efectivo y transferencia (2026-10-14) ===');
+    const antes12 = await favor(otro.id);
+    r = await api('POST', `/clientes/${otro.id}/anticipos`, {});
+    ck('sin decir cuánto: 422 ANTICIPO_VACIO', r.status === 422 && r.error?.code === 'ANTICIPO_VACIO', r.error?.code);
+    r = await api('POST', `/clientes/${otro.id}/anticipos`, { efectivo: 600 });
+    ck('efectivo sin turno de caja: 409 FALTA_SESION_CAJA', r.status === 409 && r.error?.code === 'FALTA_SESION_CAJA', r.error?.code);
+    const cajaA = await caja(sesion.id);
+    r = await api('POST', `/clientes/${otro.id}/anticipos`, {
+      efectivo: 600, transferencia: 400, sesion_caja_id: sesion.id, referencia: 'TMPDV folio 123',
+    });
+    ck('deja $600 en efectivo y $400 por transferencia: $1,000 más a favor', r.status === 201 && r.data?.total === 1000 &&
+      r.data?.saldo_favor === r2(antes12 + 1000), r.error ?? r.data);
+    ck('al turno entran solo los $600 del efectivo, como ingreso', JSON.stringify((await caja(sesion.id)).slice(cajaA.length)) === JSON.stringify(['ingreso:600']),
+      (await caja(sesion.id)).slice(cajaA.length));
+    r = await api('GET', `/clientes/${otro.id}`);
+    const ants = (r.data?.saldo_favor_movimientos ?? []).filter((m) => m.tipo === 'anticipo');
+    ck('su expediente dice cada parte con su forma de pago', ants.length === 2 && ants.some((m) => m.metodo?.startsWith('Efectivo') && Number(m.monto) === 600) &&
+      ants.some((m) => m.metodo?.startsWith('Transferencia') && m.referencia === 'TMPDV folio 123'), ants);
+    r = await api('POST', '/pedidos', { ...pos, cliente_id: otro.id, items: [{ variante_id: paquete.id, cantidad: 5 }], saldo_favor: 1000 });
+    ck('con su anticipo se lleva $1,000 de hilo: pagado, sin dinero en la caja', r.status === 201 && r.data?.estado === 'pagado' &&
+      (await favor(otro.id)) === r2(antes12), r.error ?? [r.data?.estado, await favor(otro.id)]);
+
+    console.log('\n=== 13. Cobrar con efectivo Y transferencia (2026-10-14) ===');
+    const cajaM = await caja(sesion.id);
+    r = await api('POST', '/pedidos', {
+      ...pos, items: item10,
+      pagos: [{ metodo_pago_id: transferencia.id, monto: 500 }, { metodo_pago_id: efectivo.id, monto: 2000 }],
+    });
+    const vM = r.data;
+    ck('venta de $2,000: $500 por transferencia y le dan $2,000 en efectivo → $500 de cambio', r.status === 201 && vM?.estado === 'pagado' &&
+      Number(vM?.cambio) === 500, r.error ?? [vM?.estado, vM?.cambio]);
+    ck('quedan dos pagos: $500 de transferencia y $1,500 de efectivo', vM?.pagos?.length === 2 &&
+      vM.pagos.some((p) => p.metodo.startsWith('Transferencia') && Number(p.monto) === 500) &&
+      vM.pagos.some((p) => p.metodo.startsWith('Efectivo') && Number(p.monto) === 1500), vM?.pagos);
+    ck('al cajón entran solo los $1,500 del efectivo', JSON.stringify((await caja(sesion.id)).slice(cajaM.length)) === JSON.stringify(['venta:1500']),
+      (await caja(sesion.id)).slice(cajaM.length));
+    r = await api('POST', '/pedidos', { ...pos, items: item10, pagos: [{ metodo_pago_id: transferencia.id, monto: 2500 }] });
+    ck('la transferencia no da cambio: $2,500 para $2,000 → 422 PAGO_EXCEDE_TOTAL', r.status === 422 && r.error?.code === 'PAGO_EXCEDE_TOTAL', r.error?.code);
   } catch (e) {
     console.error(e);
     f++;

@@ -109,8 +109,8 @@ async function pasarACredito(id, usuarioId) {
 }
 
 /** Lo que se puede devolver de una nota (solo lee). */
-async function previaDevolucion(id) {
-  return devoluciones.previa(id);
+async function previaDevolucion(id, clienteId = null) {
+  return devoluciones.previa(id, clienteId);
 }
 
 /** El cliente regresa mercancía de la nota: entra al inventario y le queda a favor. */

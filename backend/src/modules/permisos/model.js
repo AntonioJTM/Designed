@@ -43,18 +43,19 @@ async function clavesDeRol(rolId) {
 const puestosCache = new Map();
 
 /**
- * `{ activo, puestos: [{ id, nombre }] }` de una persona, el principal primero.
- * Sin la persona (o sin la fila), `activo: false` y sin puestos: no puede nada.
+ * `{ activo, puestos: [{ id, nombre, entra_al_sistema }] }` de una persona, el
+ * principal primero. Sin la persona (o sin la fila), `activo: false` y sin
+ * puestos: no puede nada.
  */
 async function puestosDeUsuario(usuarioId) {
   const id = Number(usuarioId);
   if (puestosCache.has(id)) return puestosCache.get(id);
   const [rows] = await pool.query(
-    `SELECT r.id, r.nombre, u.activo, 0 AS orden
+    `SELECT r.id, r.nombre, r.entra_al_sistema, u.activo, 0 AS orden
        FROM usuarios u JOIN roles r ON r.id = u.rol_id
       WHERE u.id = :id
      UNION ALL
-     SELECT r.id, r.nombre, u.activo, 1 AS orden
+     SELECT r.id, r.nombre, r.entra_al_sistema, u.activo, 1 AS orden
        FROM usuario_roles ur
        JOIN usuarios u ON u.id = ur.usuario_id
        JOIN roles r    ON r.id = ur.rol_id
@@ -64,7 +65,7 @@ async function puestosDeUsuario(usuarioId) {
   );
   const res = {
     activo: rows.length > 0 && !!Number(rows[0].activo),
-    puestos: rows.map((r) => ({ id: Number(r.id), nombre: r.nombre })),
+    puestos: rows.map((r) => ({ id: Number(r.id), nombre: r.nombre, entra_al_sistema: !!Number(r.entra_al_sistema) })),
   };
   puestosCache.set(id, res);
   return res;
@@ -77,7 +78,7 @@ function invalidar() {
 
 async function roles() {
   const [rows] = await pool.query(
-    `SELECT r.id, r.nombre, r.descripcion,
+    `SELECT r.id, r.nombre, r.descripcion, r.entra_al_sistema,
             -- Cuenta a quien lo tiene de principal Y a quien lo tiene además de otro.
             (SELECT COUNT(*) FROM usuarios u
               WHERE u.activo = 1
@@ -123,8 +124,9 @@ async function crearRol(nombre, descripcion) {
 }
 
 async function obtenerRol(id) {
-  const [rows] = await pool.query('SELECT id, nombre FROM roles WHERE id = :id', { id });
-  return rows[0] ?? null;
+  const [rows] = await pool.query('SELECT id, nombre, entra_al_sistema FROM roles WHERE id = :id', { id });
+  const r = rows[0];
+  return r ? { id: r.id, nombre: r.nombre, entra_al_sistema: !!Number(r.entra_al_sistema) } : null;
 }
 
 async function porNombre(nombre) {

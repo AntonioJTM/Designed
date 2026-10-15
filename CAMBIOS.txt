@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-13
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-14
 ===============================================================================
 
 ⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
@@ -25,7 +25,91 @@
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
-  EL TICKET PARA LA TÉRMICA KINWODON DE 80 MM (2026-10-13, entrada 39,
+  CUARTA AUDITORÍA Y SUS ARREGLOS (2026-10-15, entrada 54, DESPLEGADO en
+  20261015-001405, sin cambios en la base): 16/20; las tablas anchas se mueven con
+  el teclado, la nota del pie de las ventanas sube arriba de los botones en el
+  celular, los colores sueltos pasaron a la paleta, "(opcional)" ya no desalinea,
+  logos a su tamaño y "Subir captura" centrado.
+  Antes:
+  PERSONAL: EL PUESTO "CARGADOR" (2026-10-14, entrada 53, DESPLEGADO en
+  20261014-234012; migración 2026-10_puesto_cargador en las dos bases, respaldo
+  /root/respaldos/hitex_antes_puesto_cargador_20261014-234001.sql.gz): trabaja en la tienda pero no entra al sistema: se da de alta sin
+  correo ni contraseña, sin otros puestos, y sale en Nómina para pagarle.
+  Antes:
+  EL TICKET YA NO SE CORTA A LA DERECHA (2026-10-14, entrada 52, DESPLEGADO en
+  20261014-222258, sin cambios en la base): va pegado a la izquierda y Configuración → Ticket imprime una hoja
+  de prueba con regla para elegir 58 u 80 mm en cualquier impresora.
+  Antes:
+  CAJA: UN CÓDIGO QUE NO EXISTE SE AVISA Y NO ESTORBA (2026-10-14, entrada 51,
+  DESPLEGADO en 20261014-215548, sin cambios en la base): aviso junto al lector y el campo vacío para seguir
+  escaneando.
+  Antes:
+  CONFIGURACIÓN: LA DIRECCIÓN YA NO SE PIDE DOS VECES (2026-10-14, entrada 50,
+  DESPLEGADO en 20261014-203719, sin cambios en la base): queda el domicilio fiscal, que es el que imprime el
+  ticket; y el ticket no repite "Régimen: REGIMEN:".
+  Antes:
+  CLIENTES → "TODOS LOS CLIENTES" (2026-10-14, entrada 49, DESPLEGADO en
+  20261014-202130, sin cambios en la base): la lista completa con cuántos son, filtros y orden; Clientes abre ahí.
+  Antes:
+  NUEVO CLIENTE: NÚMERO AUTOMÁTICO Y LUGAR DE ENTREGA (2026-10-14, entrada 48,
+  DESPLEGADO en 20261014-195545; migración 2026-10_clientes_lugar_entrega en
+  las dos bases, respaldo hitex_antes_lugar_entrega_20261014-195501): sin "Como le
+  dicen" ni "Cumpleaños"; el número lo da el sistema (C-0001) y no se cambia;
+  cada cliente lleva su lugar de entrega (municipio y estado, de una lista) y
+  Clientes → Dónde entrego cuenta a cuántos se les entrega en cada lugar.
+  Antes:
+  "hitex" QUEDÓ EN BLANCO PARA LAS PRUEBAS REALES (2026-10-14, entrada 47): solo
+  el administrador y lo que el sistema necesita para arrancar, como nació el
+  2026-10-05. Todo lo demás (hilos, paquetes, ventas, clientes, nómina,
+  personal, almacenes, caja, materiales, listas de precio, proveedores, cuentas
+  de banco y datos fiscales) se captura otra vez desde el panel. Respaldo:
+  /root/respaldos/hitex_antes_limpieza_total_20261014-132558.sql.gz.
+  Antes:
+  ANTICIPOS Y COBRO PARTE Y PARTE (2026-10-14, entrada 46, DESPLEGADO en
+  20261014-131717; migración 2026-10_anticipos en las dos bases, respaldo
+  /root/respaldos/hitex_antes_anticipos_20261014-131644.sql.gz): el cliente deja dinero a cuenta, sin
+  nota, en efectivo y/o por transferencia, y le queda a favor (el efectivo
+  entra al corte de la caja); y al cobrar se puede pagar parte por
+  transferencia y el resto en efectivo.
+  Antes:
+  LA DEVOLUCIÓN DE UNA NOTA QUE SE DEBE SE DESCUENTA DE ESA NOTA (2026-10-14,
+  entrada 45, DESPLEGADO en 20261014-092712, sin cambios en la base): a crédito o pendiente de pago, lo que
+  regresa baja lo que debe ESA nota (antes se iba a la deuda más vieja); lo que
+  sobre queda a favor o va a lo demás que debe. La comisión de una fiada así se
+  paga al terminar de pagar lo que quedaba.
+  Antes:
+  TERCERA AUDITORÍA DE DISEÑO (2026-10-14, entrada 44, DESPLEGADO en
+  20261014-003920; 16/20, solo pantalla):
+  la Devolución abre con el cursor en el lector (antes en la ✕: el Enter de la
+  pistola la cerraba), su resumen se anuncia una vez, ✕ de 44 px con el dedo,
+  una sola ficha de paquete con su ✕ (caja y devolución) y limpieza de
+  estilos a mano y colores sueltos.
+  Antes:
+  EL TICKET EN LA IMPRESORA DE VERDAD (2026-10-14, entrada 43, DESPLEGADO en
+  20261014-002159): la impresora es POS-58 (rollo de 58 mm): el ticket ya no
+  pide tamaño de hoja (Chrome lo encogía a la mitad de 3 m de rollo), se ajusta
+  a 58 u 80 mm (Configuración → Ticket) y empieza arriba.
+  Antes:
+  EL LOGO DE HITEX Y LOS DATOS FISCALES EN EL TICKET (2026-10-14, entrada 42,
+  DESPLEGADO en 20261014-001437 junto con la entrada 41):
+  ícono en el menú, en entrar y en el favicon; el ticket lleva el logo en negro,
+  razón social, RFC, régimen y domicilio fiscal (en Configuración → Datos
+  fiscales) y la leyenda al pie. Migración en las dos bases.
+  Antes: LO QUE REGRESA NO PAGA COMISIÓN NI CUENTA COMO VENDIDO (2026-10-14,
+  entrada 41, DESPLEGADO 20261014-001437 junto con la 42; migración
+  2026-10_comision_devoluciones en las dos bases): la
+  comisión es sobre lo que se quedó el cliente (si regresa después de pagada,
+  se descuenta en la siguiente nómina) y "Venta por color", "Más vendidos" y
+  los kilos por día restan lo que regresó. Se corrigió además el tipo "nota"
+  que faltaba en la tabla de comisiones.
+  Antes:
+  DEVOLUCIONES CON SALDO A FAVOR (2026-10-13, entrada 40, parte 2 de 2;
+  migración 2026-10_saldo_a_favor en las dos bases): desde la venta, botón
+  «Devolución»: los paquetes cerrados se escanean y vuelven como paquetes, lo
+  suelto se pesa y vuelve como conos; lo que regresa queda A FAVOR del cliente
+  (no sale dinero). Se usa al cobrar ("Usar su saldo a favor") o se descuenta
+  de lo que debe (al devolver o desde su expediente).
+  Antes: EL TICKET PARA LA TÉRMICA KINWODON DE 80 MM (2026-10-13, entrada 39,
   DESPLEGADO: subió con las notas pendientes de la otra sesión en
   20261013-230540 y un ajuste en 20261013-230831). Corta al terminar el
   ticket y se rediseñó; se imprime desde la caja al cobrar y desde el detalle
@@ -35,7 +119,6 @@ LO ÚLTIMO QUE SE TERMINÓ
   de venta cobra, da a crédito, guarda notas en espera (sin chofer) o da notas
   pendientes de pago, que se cobran en abonos en su pantalla o se pasan a
   crédito. Se quitaron Apartar, Fiar, la pantalla Apartados y la tarjeta.
-  FALTA la parte 2: devoluciones con saldo a favor (ver la entrada 38).
   Antes: SEGUNDA AUDITORÍA DE DISEÑO (2026-10-13, entrada 37, DESPLEGADO; solo pantalla):
   el lector del punto de venta siempre tiene el cursor (P1), cada pantalla con su
   título de pestaña, "Saltar al contenido", aviso al cambiar de pantalla, las
@@ -484,6 +567,805 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-15 (54) · Cuarta auditoría (16/20) y sus arreglos (DESPLEGADO 20261015-001405)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "/impeccable audit" y, con el resultado, "vamos a solucionarlo": las seis
+  recomendaciones (harden, adapt, colorize, layout, optimize y polish).
+
+LA AUDITORÍA (16/20, "Bueno": accesibilidad 3, rapidez 4, colores 3, celular 3,
+orden del código 3)
+  · El detector: 7 avisos, los 7 falsos (5 imágenes con su dirección puesta por
+    Angular y la letra Arial del ticket térmico, que va a propósito).
+  · Chrome sin ventana contra la base de pruebas, 27 pantallas a 1280 y 390 px
+    (5 también con la letra al 200%), con axe-core (WCAG 2.2 A/AA): 52 de 55
+    revisiones sin falla; ninguna pantalla se ensancha; sin errores de consola.
+  · Lo que se encontró: [P1] las tablas que se desplazan de lado no se movían con
+    el teclado (axe: scrollable-region-focusable en Surtir sucursal, Cómo va el
+    negocio y Reportes a 390 px); [P2] "Subir captura" con el texto pegado arriba;
+    [P2] la nota del pie de las ventanas partida en una columnita en el celular;
+    [P2] ~20 colores escritos a mano; [P3] "(opcional)" desalineando campos;
+    [P3] imágenes de más.
+
+LO QUE SE CAMBIÓ (solo pantalla)
+  · TABLAS: core/services/tablas-desplazables.service.ts (+spec, 6 pruebas),
+    arrancado en app.ts. Mientras una .tabla-scroll desborda: tabindex="0",
+    role="region", "Tabla: <título de su tarjeta>" y la orilla con más columnas
+    se desvanece (hay-mas-der / hay-mas-izq, mask-image). Al caber se lo quita.
+  · PIE DE LAS VENTANAS: .modal-foot hace wrap y .modal-foot .nota es
+    flex 1 1 14rem: en el celular la nota toma su renglón arriba de los botones
+    (la Devolución: pie de ~150 px a 117 px, la nota en dos renglones).
+  · COLORES: tokens nuevos en styles.scss (--ok-suave, --ok-borde, --ok-oscuro,
+    --peligro-borde, --peligro-oscuro, --acento-tenue, --sobre-acento, --velo,
+    --velo-claro, --desplazamiento, --viz-calor-1/2/-tinta) y se usan en la hoja
+    general, Clientes → Cuándo compra y Frecuencia, Permisos, la ventana de
+    confirmar y Nómina (el punto de "Total a pagar" ahora es .punto.tono-tinta).
+    La ficha usa la pareja neutra y la pestaña sin elegir tinta-2 (difieren por un
+    tono que no se nota). DESIGN.md y .impeccable/design.json registran los tokens.
+  · "(opcional)": en Nuevo/Editar empleado, Sacar o meter efectivo y Cancelar un
+    envío, la etiqueta va envuelta en un <span> como en las otras 24.
+  · IMÁGENES: Hitex.jpeg e icono-512.png salieron de public/ a frontend/marca/
+    (no se publica), con los originales de la marca y el logo. hitex-marca.png
+    pasó de 338 × 497 (29 KB) a 65 × 96 (1.9 KB) y hitex-logo.png de 1009 × 588
+    (61 KB) a 720 × 420 (16.6 KB), con Lanczos y paleta de 64 colores; se ven igual.
+  · "SUBIR CAPTURA": se quitó el display: inline-block de .comprobante label.btn,
+    que le quitaba el centrado de .btn.
+
+LA VERIFICACIÓN
+  · 420 pruebas de pantallas (6 nuevas).
+  · Chrome sin ventana, a 1280 y 390 px, con axe: 0 fallas en las 11 pantallas
+    tocadas (también Surtir sucursal, Cómo va el negocio y Reportes). Con teclas
+    reales: Tab llega a la tabla de Surtir sucursal ("Tabla: Traspasos cerrados")
+    y tres flechas la mueven 120 px. "Subir captura" con 9/10 px arriba/abajo (13/14
+    en el celular); Teléfono a la misma altura que Puesto principal; los logos y
+    el mapa de "Cuándo compra" se ven igual.
+  · El detector, sobre los archivos tocados: sin avisos.
+  · NO se probó con un lector de pantalla real ni en un celular físico.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (53) · Personal: el puesto "Cargador", que no entra al sistema (DESPLEGADO 20261014-234012)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  (Con captura de "Nuevo empleado") "Falta agregar el tipo cargador: este no
+  tiene acceso a nada del sistema, es una persona que solo carga los paquetes
+  que el personal que tiene acceso al sistema ya escaneó."
+
+LA DECISIÓN
+  · El cargador es un EMPLEADO (sale en Nómina, que es para lo que hace falta
+    darlo de alta) pero no una CUENTA: no lleva correo ni contraseña, así que
+    no hay con qué entrar. Mejor que un puesto con cero permisos, que de todos
+    modos pediría correo y contraseña y dejaría entrar a una pantalla vacía.
+  · Se marca en el PUESTO (`roles.entra_al_sistema`), no por el nombre en el
+    código: así otro puesto sin acceso es una fila, no un cambio de programa.
+  · Va SOLO: cualquier otro puesto le daría entrada y entonces no sería cargador.
+
+LO QUE SE CAMBIÓ
+  BASE · db/migrations/2026-10_puesto_cargador.sql (se puede correr dos veces)
+    · roles.entra_al_sistema TINYINT NOT NULL DEFAULT 1; el puesto "cargador"
+      con 0 ("Carga los paquetes que ya escaneó el personal. No entra al sistema.").
+    · usuarios.correo y usuarios.contrasena_hash aceptan NULL (el UNIQUE del
+      correo admite varios NULL). Esquema y estado-migraciones.js al día.
+  SERVIDOR
+    · usuarios: el alta acepta sin correo ni contraseña SOLO para un puesto que
+      no entra; mandarlos, darle otros puestos o darlo "además" es 422
+      PUESTO_SIN_ACCESO. A quien entra: 422 FALTA_CORREO / FALTA_CONTRASENA.
+      Al editar, pasar a cargador le pone correo y contraseña en NULL y le
+      quita los otros puestos; un cargador que pasa a un puesto que entra
+      necesita correo (libre: 409 CORREO_EN_USO) y contraseña; el correo de
+      quien ya entra no se cambia (422 CORREO_NO_SE_CAMBIA). El login rechaza
+      a quien no tiene contraseña. La lista y los puestos traen entra_al_sistema.
+    · permisos: `puestosDe` ignora los puestos que no entran (aunque alguien
+      tuviera un token vivo, no puede nada; a quien pasa a cargador se le acaba
+      en el acto); Permisos no enseña al cargador y su columna no se guarda
+      (422 PUESTO_SIN_ACCESO).
+  PANTALLA
+    · Personal → Nuevo/Editar empleado: con "Cargador" elegido se esconden el
+      correo, la contraseña y "También trabaja como", y dice "Cargador: no entra
+      al sistema. No lleva correo ni contraseña. Su sueldo se pone en Nómina".
+      Si se pasa a cargador a alguien que entraba, avisa que ya no podrá entrar.
+      Si un cargador pasa a otro puesto, pide correo y contraseña. El cargador
+      no se ofrece como otro puesto. "Activo" dice "sigue trabajando en la tienda".
+    · La lista: "No entra al sistema" en lugar del correo, "—" en último acceso
+      y "De baja" si se desactiva; al guardarlo recuerda poner su sueldo en Nómina.
+
+LA VERIFICACIÓN
+  · scripts/e2e-cargador.js (nueva): 30 comprobaciones contra la base de
+    pruebas, la base quedó como estaba. e2e-varios-puestos (28) y e2e-permisos
+    siguen en verde.
+  · 414 pruebas de pantallas (4 nuevas del cargador).
+  · NO se miró la ventana en el navegador: solo con las pruebas.
+
+PENDIENTE
+  · Dar de alta a los cargadores en Personal y ponerles sueldo en Nómina.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (52) · El ticket ya no se corta a la derecha: pegado a la izquierda y hoja de prueba (DESPLEGADO 20261014-222258)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  (Con foto del ticket impreso en una SICAR WL88S —cortado a la derecha: el
+  logo, la razón social, los importes— y la vista previa de Chrome, donde se
+  veía bien) "Así me da el ticket, es una de SICAR; quiero que en cualquier
+  impresora se vea bien, y antes de imprimir."
+
+POR QUÉ SE CORTABA
+  · El ticket (46 mm, papel de 58 en Configuración) iba CENTRADO en la hoja
+    que la impresora le da a Chrome. El controlador de la WL88S dice que la
+    hoja es de ~72 mm (la vista previa lo enseñaba centrado en una hoja así),
+    pero la cabeza imprime unos 48 mm desde la orilla izquierda: centrado, el
+    ticket empezaba a ~13 mm y lo que pasaba de ~48 mm se perdía.
+
+LO QUE SE CAMBIÓ (solo pantalla)
+  · shared/ticket/ticket.ts: `.t` con `margin: 0 0 0 1mm` en vez de
+    `0 auto`. Toda térmica imprime desde la izquierda; con el ancho que de
+    verdad imprime (58 → 46 mm, 80 → 70 mm), cabe en cualquiera. La vista
+    previa ahora enseña lo mismo que sale.
+  · armarPrueba: hoja de PRUEBA con una regla de 0 a 80 mm desde la orilla,
+    "¿Hasta qué número se ve la regla? Hasta 40 o 50: 58 mm; hasta 70 u 80:
+    80 mm" y un recuadro del ancho del ticket que debe verse completo.
+  · Configuración → Ticket: botón "Imprimir una prueba" (con el ancho elegido
+    aunque no se haya guardado) y las opciones dicen cuánto imprime cada una
+    ("58 mm (imprime unos 48 mm)").
+
+LA VERIFICACIÓN
+  · 410 pruebas de pantallas (2 nuevas: el ticket pegado a la izquierda y la
+    hoja de prueba).
+  · El ticket y la hoja de prueba dibujados con el código del proyecto en
+    Chrome a 48 y 72 mm de ancho: a 48 mm el ticket sale completo.
+  · FALTA verlo en la WL88S de verdad: imprimir la prueba y un ticket.
+  · DESPUÉS (mismo día, con foto de las dos pruebas): la WL88S imprime unos
+    50 mm desde la orilla aunque el rollo es de 80 (está trabajando como de
+    58). Con 58 mm el recuadro sale completo (el ticket cabe); con 80, no. El
+    usuario leyó "se sigue cortando" por la regla, que se corta a propósito: la
+    hoja ahora lo dice ("La regla se corta donde tu impresora deja de imprimir:
+    eso es lo que mide… Este recuadro mide lo que el ticket"). Para usar los
+    80 mm hay que cambiar el ancho en la impresora (su controlador o sus
+    interruptores), no en el sistema. Texto nuevo DESPLEGADO en 20261014-222843.
+  · RESUELTO (mismo día): la autoprueba de la WL88S decía "Characters per
+    line: 32-fontA/42-fontB" (modo 58 mm; en 80 dice 48/64). El usuario la
+    pasó a 80 mm, en Windows quedó la hoja de 72 mm y en Configuración → Ticket
+    80 mm (guardado 22:31). Prueba y ticket de venta salen COMPLETOS: la regla
+    llega a 70 y el recuadro de 70 mm se ve con sus dos orillas.
+  · DESPUÉS (otra foto, mismo día): el ticket de 80 volvió a cortarse a la
+    derecha. Medido en la foto: la WL88S imprimía de los ~7 a los ~71 mm del
+    papel, unos 64 mm (hay impresoras de 80 que imprimen 72 mm y otras 64). El
+    ticket "de 80" medía 70 mm. AHORA MIDE 62 MM (logo 46 mm, letra al 92%):
+    cabe en las que imprimen 64 y en las de 72. La hoja de prueba dice "Antes
+    de 60: deja 58 mm; en 60 o más: elige 80 mm" y la opción, "80 mm (imprime
+    de 64 a 72 mm)". Dibujado a 64 mm: completo. 410 pruebas de pantallas. DESPLEGADO en 20261014-225037.
+  · Y OTRA FOTO: con 62 mm faltaba como un carácter a la derecha ("$2,726.0",
+    "…-468"). Medido: imprime de los ~6 a los ~70 mm del papel. EL DE 80 MIDE
+    AHORA 58 MM (logo 44 mm, letra al 86%): ~5 mm de sobra en una de 64. DESPLEGADO en
+    20261014-230409.
+  · "SIGUE MORDIENDO LETRAS, DALE MÁS ESPACIO" (y a otra sesión, "otros 5 mm"):
+    EL DE 80 MIDE AHORA 53 MM (logo 40 mm, letra al 80%). Dibujado a 58 y 64 mm
+    de ancho: completo y con margen. (El cambio lo dejó escrito otra sesión,
+    designed-dc, que se detuvo antes de probarlo; se terminó aquí.) DESPLEGADO en
+    20261014-231158.
+  · "¿Puedes hacerlo que sea de 60 mm?": EL DE 80 MIDE 60 MM (logo 44 mm, letra
+    al 84%). Queda cerca del límite de la WL88S (con 62 se mordía un carácter):
+    si vuelve a morder, bajar a 56-58. DESPLEGADO en 20261014-232007.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (51) · Caja: un código que no existe se avisa junto al lector (DESPLEGADO 20261014-215548)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  (Con captura de la caja: el número 1234567812345678 seleccionado en el
+  lector) "Necesito una validación cuando escaneo un código que no existe en el
+  punto de venta: escaneé uno que no existe y me hace eso; no quiero que me lo
+  deje así, ya que retrasa el escaneo."
+
+LO QUE PASABA
+  · El servidor contestaba "no es un código" (404) y la caja lo buscaba como
+    si fuera un color: no salía nada, no decía nada y el número se quedaba en
+    el campo; el siguiente escaneo se pegaba detrás. Y los avisos del lector
+    (vendido, de otra tienda, repetido) salían hasta arriba de la pantalla,
+    lejos de donde se mira al escanear.
+
+LO QUE SE CAMBIÓ (solo pantalla)
+  · pos.ts → pareceCodigo: 6 o más letras, números o guiones, sin espacios y
+    con al menos 4 números. Con esa forma y 404: "El código X no está
+    registrado. Revisa la etiqueta o escanea otro." Si el servidor no contesta:
+    "No se pudo revisar el código X. Vuelve a escanearlo." (no dice que no
+    existe).
+  · avisoLector / avisarLector: el aviso va DEBAJO del lector, el campo queda
+    vacío y con el cursor. Lo usan también el paquete vendido o apartado, el de
+    otra tienda o en camino, el hilo sin precio y el paquete ya en el ticket.
+  · Un texto ("rojo 2/30") se sigue buscando; sin resultados dice "No encontré
+    ningún hilo con «…»" y deja lo escrito seleccionado para corregirlo.
+  · El aviso se quita con el siguiente escaneo.
+
+LA VERIFICACIÓN
+  · 408 pruebas de pantallas (2 nuevas: código inexistente, texto sin
+    resultados, servidor sin contestar, y qué cuenta como código).
+  · Visto en Chrome a 1280 y 390 px con datos TMPVV (ya borrados): el aviso
+    sale debajo del lector, el campo vacío y el cursor en él.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (50) · Configuración: la dirección de la tienda ya no se pide dos veces (DESPLEGADO 20261014-203719)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  (Con captura de Configuración, la tienda y los datos fiscales) "En este
+  apartado me pones que ponga la dirección de la tienda 2 veces, ¿por qué?"
+
+POR QUÉ ESTABAN LAS DOS
+  · "Dirección" (La tienda, `tienda_direccion`) era de la tienda en línea: el
+    checkout dice dónde se recoge. Con la tienda en línea apagada no salía en
+    ningún lado.
+  · "Domicilio fiscal" (Datos fiscales) es el que imprime el ticket desde la
+    entrada 42; la dirección solo entraba si el fiscal estaba vacío.
+
+LO QUE SE CAMBIÓ (sin cambios en la base)
+  · Configuración ya no enseña "Dirección": 'tienda_direccion' va en OCULTAS
+    (y las tarjetas también respetan OCULTAS, antes solo "Otros"). "La tienda"
+    queda con el Teléfono y dice que sale en cada ticket. La clave sigue en la
+    base con lo que tenía.
+  · El checkout (apagado) usa el domicilio fiscal si no hay dirección.
+  · El ticket quita el rótulo si el RFC o el régimen se copiaron con él: en
+    producción el régimen dice "REGIMEN: 601 GENERAL…" y salía "Régimen:
+    REGIMEN: 601…". Solo con los dos puntos: "Régimen Simplificado de
+    Confianza" es un nombre y un RFC puede empezar con R-F-C (sinRotulo).
+
+PARA EL USUARIO
+  · El RFC capturado en producción trae dos letras y siete números: el de una
+    empresa son 3 letras, 6 números de la fecha y 3 de la homoclave. Se le
+    dijo que lo coteje con la constancia (la tercera parece una letra, no un
+    número). Los datos reales NO se escriben aquí: el repositorio es público.
+
+LA VERIFICACIÓN
+  · 406 pruebas de pantallas (2 nuevas: Configuración sin "Dirección" y con
+    "Teléfono"; el ticket sin rótulo repetido y sin tocar "Régimen
+    Simplificado de Confianza"). Visto en Chrome a 1280 px.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (49) · Clientes → "Todos los clientes": la lista completa (DESPLEGADO 20261014-202130)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "En clientes tengo varias cosas pero no sé cuántos clientes tengo y qué
+  clientes tengo, como una lista o algo así, porque no tengo un lugar como
+  lista donde ver todos los clientes."
+
+LO QUE SE CAMBIÓ (sin cambios en la base)
+  · Pestaña nueva "Todos los clientes", la PRIMERA: Clientes abre ahí
+    (/admin/clientes → /admin/clientes/todos). vistas/vista-todos.ts.
+  · Arriba, las cifras: clientes activos, con lugar de entrega ("8 de 48") y
+    dados de baja.
+  · Filtros: buscar por nombre, número o teléfono; lugar de entrega (uno,
+    todos o "Sin lugar de entrega"); mostrar activos / dados de baja / todos;
+    ordenar por número (C-0001…, el de siempre), nombre, los más nuevos, quién
+    debe más, quién compra más o quién vino más reciente. "48 clientes
+    activos" / "4 clientes activos en Tulancingo" dice cuántos salen.
+  · La tabla: número, cliente (y "le dicen" de los de antes), teléfono, lugar
+    de entrega, lista de precios, lo que debe (en rojo), lo que ha comprado y
+    cuántas compras, la última compra y "Ver". De 100 en 100 con "Ver más".
+  · Servidor: GET /clientes acepta orden=numero, y todo orden desempata por el
+    id (sin eso "Ver más" podía repetir o saltarse a dos que deben lo mismo).
+  · En esa pestaña se esconde el buscador de la cabecera (eran dos iguales) y
+    la lista no lleva "Venderle" (está en el expediente; la fila no cabía).
+  · Al dar de alta un cliente desde ahí, la lista se vuelve a pedir y el aviso
+    dice su número.
+
+LA VERIFICACIÓN
+  · e2e-clientes-credito.js: 71 (1 nueva: la lista por número y su cuenta).
+    405 pruebas de pantallas (1 nueva: cifras, filtros que van al servidor,
+    "Ver más" y la frase de cuántos salen).
+  · Visto en Chrome (1280 y 390 px) con la muestra de pruebas y datos TMPVV, ya
+    borrados: a 1280 la tabla cabe completa; en el celular se desliza de lado
+    como las demás tablas. Sin desbordes de página.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (48) · Nuevo cliente: número automático y lugar de entrega (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "En el modal de nuevo cliente vamos a quitar el como le dicen, el número de
+  cliente quiero que tú me lo des y que no se pueda modificar, quitar el
+  cumpleaños igual y habilitar un lugar de entrega." Al preguntarle: el lugar
+  de entrega son "los que entrego en Tulancingo, Tenango… necesito etiquetar
+  esos clientes para sacar a cuántos les entrego en los municipios o estados";
+  el número, "con letra: C-0001"; y quitar "como le dicen" también en la caja.
+
+LO QUE SE CAMBIÓ
+  · Migración 2026-10_clientes_lugar_entrega.sql (LAS DOS bases): tabla
+    lugares_entrega (municipio + estado, sin repetir el mismo en el mismo
+    estado), clientes.lugar_entrega_id, y a todos los clientes su número
+    C-0001… (en "desarrollo" reemplazó los que se pusieron a mano).
+  · El número lo pone el servidor al dar de alta (clientes/model.js →
+    asignarCodigo, en la misma transacción): C- y el id con 4 ceros. Ya no se
+    acepta al crear ni al editar (422) y el UPDATE no lo toca.
+  · Lugares: clientes/lugares.js; GET/POST /clientes/lugares-entrega y PUT
+    /clientes/lugares-entrega/:id (corregir); GET /clientes?lugar_entrega_id=
+    y ?sin_lugar=1. El cliente valida que el lugar exista (LUGAR_INVALIDO).
+  · Nuevo/Editar cliente: sin "Como le dicen" ni "Cumpleaños"; "Número de
+    cliente" de solo lectura ("Se le asigna al guardar"; al guardar: "con el
+    número C-0001"); "A dónde se le entrega" con la lista y «Nuevo lugar» ahí
+    mismo (municipio + estado; los 32 estados de sugerencia; propone el estado
+    que más lugares tiene; si ya existía, lo elige). "Capturar otro" conserva
+    el lugar. Sin estilos escritos a mano.
+  · Caja: el alta rápida pide solo nombre y teléfono; el cliente elegido y la
+    búsqueda enseñan su número. Los buscadores dicen "Nombre, número o
+    teléfono".
+  · Expediente: "número C-0001 · se le entrega en Tulancingo, Hidalgo" y el
+    renglón "Lugar de entrega"; ya no enseña el cumpleaños.
+  · Clientes → pestaña nueva "Dónde entrego": cifras, por estado y por lugar
+    (barra = parte de todos los clientes activos), la lista de un lugar con
+    "Corregir el nombre" y "Ver quiénes" para los que no tienen lugar.
+  · Los clientes de antes conservan su apodo y su cumpleaños en la base (al
+    editar no se mandan); las pantallas dicen "le dicen…" solo si lo hay.
+
+EJEMPLO
+  Se dan de alta "Mercería Lupita" y "Estambres Rosy" con lugar Tulancingo,
+  Hidalgo, y "Novedades Ana" en Huauchinango, Puebla. Quedan C-0001, C-0002 y
+  C-0003, y Dónde entrego dice: Hidalgo 2 clientes (Tulancingo 2), Puebla 1
+  (Huauchinango 1).
+
+LA VERIFICACIÓN
+  · e2e-clientes-credito.js: 70 comprobaciones (12 nuevas: lugar repetido o
+    sin estado, el número C-…, no se pone ni se cambia a mano, lugar inválido,
+    editar conserva número y lugar, la cuenta por lugar, la lista, corregir el
+    nombre y buscar por número). Siguen: notas-pendientes (40), devoluciones
+    (73), permisos (39). 404 pruebas de pantallas (4 nuevas) y 20 del servidor.
+  · Visto en Chrome (1280 y 390 px) con datos TMPVV, ya borrados: sin
+    desbordes ni fallas de contraste; en el celular el nombre del lugar y "Ver
+    quiénes" miden 44 px.
+  · En "hitex" ya había UN cliente capturado tras la limpieza (sin número):
+    quedó C-0001. Desplegado en 20261014-195545; en el servidor contestan
+    /clientes/lugares-entrega, el expediente y la búsqueda por "C-0001".
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (47) · Limpieza TOTAL de la base de producción "hitex"
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Vamos a limpiar toda la base de datos de hitex, ahora sí ya van a hacer
+  pruebas reales: solo deja el usuario admin y todo lo demás lo puedes eliminar
+  sin problema."
+
+LO QUE SE HIZO
+  · Respaldo completo antes de tocar nada:
+    /root/respaldos/hitex_antes_limpieza_total_20261014-132558.sql.gz
+    (de ahí se puede regresar cualquier cosa).
+  · Con el servicio de producción PARADO (un minuto), un script de un solo uso
+    fuera del repo: TRUNCATE de las 47 tablas de datos (los contadores
+    vuelven a 1), solo la lista "Público" y solo el usuario 1.
+  · Se borró: 8 hilos con 9 presentaciones, 1,423 paquetes, existencias,
+    kardex (13), 8 cargas, 3 traspasos, 1 venta con su pago, 1 cliente, 1 turno
+    de caja, la nómina (2 semanas, 10 recibos, 5 empleados con su horario y
+    vacaciones), los otros 4 usuarios del personal, los 3 almacenes, la caja,
+    el material Acrilan, las listas Premium, Medio Mayorista y Menudista, los
+    2 proveedores, las 3 cuentas de banco y los datos fiscales, la dirección y
+    el teléfono de la tienda.
+  · Se quedó, como el 2026-10-05: el administrador (id 1, mismo correo y
+    contraseña), los 5 puestos con sus permisos (28 y su asignación, 47),
+    unidades, métodos de pago (efectivo y transferencia activos y el interno
+    "Saldo a favor"), IVA, líneas (Turco, Nacional, Chino), paqueterías, la
+    lista "Público", la marca _zona_horaria y las 9 claves de configuración con
+    el valor de su migración (fiscales vacíos, envío 0.00, ticket de 58 mm, la
+    leyenda de siempre).
+  · Comprobado en el servidor: 24 pantallas como administrador contestan 200,
+    vacías, sin ningún 500; /health en 200 desde internet; las dos bases siguen
+    IDÉNTICAS en estructura. No había comprobantes en disco.
+
+LO QUE SIGUE PARA EL USUARIO (en este orden)
+  materiales (con sus calibres) → almacenes (marcar la matriz) → cajas →
+  listas de precio → personal (sus puestos ya traen sus permisos) →
+  Configuración (datos fiscales, ticket, dirección, teléfono, cuentas de banco)
+  → proveedores → nómina (empleados y horario) → cargar la mercancía.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (46) · Anticipos en efectivo y transferencia, y cobro parte y parte (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Se dan anticipos en efectivo y transferencia." Al preguntarle: es DINERO A
+  CUENTA, SIN NOTA (el cliente deja dinero antes de llevarse nada) y SÍ, también
+  al cobrar se paga una parte en efectivo y otra por transferencia.
+
+LO QUE SE CAMBIÓ
+  · Migración 2026-10_anticipos.sql (LAS DOS bases): saldo_favor_movimientos
+    admite el tipo 'anticipo' y guarda con qué se dejó (metodo_pago_id), a qué
+    turno entró el efectivo (sesion_caja_id) y el folio de la transferencia
+    (referencia).
+  · POST /clientes/:id/anticipos (clientes/saldo-favor.js → recibirAnticipo):
+    un renglón 'anticipo' por método. El efectivo entra al turno abierto como
+    'ingreso' ("Anticipo de …"), no como venta; sin turno, 409
+    FALTA_SESION_CAJA antes de asentar nada. La transferencia no toca la caja.
+    Le queda a favor y se gasta como el de las devoluciones.
+  · Pantalla: "Recibir anticipo" en el expediente (encabezado y tarjeta del
+    saldo a favor) y en el punto de venta junto al cliente
+    (clientes/anticipo-modal.ts). Desde la caja, el efectivo va a ese turno;
+    desde el expediente se busca el turno abierto (clientes/turnos-caja.ts,
+    sacado del abono, que ahora lo usa también). El historial del saldo dice
+    "Dejó a cuenta · efectivo" o "· transferencia · <folio>".
+  · Punto de venta: forma de pago "Efectivo y transferencia". Se teclea lo que
+    va por transferencia; la pantalla dice "El resto, $X, en efectivo" y lo
+    recibido en efectivo da el cambio. Se mandan dos pagos (el servidor ya los
+    aceptaba). Una nota en espera va con un solo método y la venta siguiente
+    vuelve a efectivo.
+
+EJEMPLOS
+  · Doña Mari deja $600 en efectivo y $400 por transferencia: le quedan $1,000
+    a favor; el corte de esa caja espera $600 más; en su expediente salen los
+    dos renglones.
+  · Venta de $3,820: paga $1,000 por transferencia y da $3,000 en efectivo →
+    cambio $180; al cajón entran $2,820.
+
+LA VERIFICACIÓN
+  · e2e-devoluciones.js: 73 comprobaciones (10 nuevas: anticipo vacío 422,
+    efectivo sin turno 409, $600 + $400 con el ingreso en la caja y el
+    historial, usar ese saldo al cobrar; cobro parte y parte con cambio, y la
+    transferencia sola por encima del total 422).
+  · Siguen: clientes-credito (59), notas-pendientes (40), pedidos-encargo (74),
+    nomina-pdf (40). 400 pruebas de pantallas y 20 del servidor.
+  · Visto en Chrome (1280 y 390 px) con datos TMPVV, ya borrados.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (45) · Lo que regresa de una nota que se debe se descuenta de ella
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Sale una nota a crédito y el cliente regresa hilo: cuando es un crédito que
+  aún no está pagado, esa devolución se le descuenta a la nota."
+
+LO QUE PASABA
+  · Había que elegir "Descontarlo de lo que debe", y aun así a la cuenta de
+    crédito entraba como un ABONO sin venta, que se reparte de lo más viejo a
+    lo más nuevo: con una nota vieja de $1,000 y esta de $2,000, regresar $800
+    de esta pagaba la vieja.
+
+LO QUE SE CAMBIÓ (sin cambios en la base)
+  · clientes/saldo-favor.js → debeDeVenta: lo que todavía debe UNA venta (la
+    fiada, su cargo con el reparto de los abonos; la nota pendiente de pago, lo
+    que le falta de sus pagos). descontarDeVenta: lo que regresa se descuenta
+    de ESA venta, hasta lo que debe: a la fiada un AJUSTE negativo con el
+    pedido_id (baja lo que debe esa venta y no lo más viejo; si lo cubre todo
+    queda pagada) y a la nota pendiente un pago "Saldo a favor".
+  · pedidos/devoluciones.js: se aplica SOLO y primero, sin importar el destino;
+    lo que sobre sigue el destino ('favor' o 'deuda' = lo demás que debe). La
+    vista previa trae debe_esta y debe_esta_tipo; la respuesta,
+    descontado_de_esta. aplicarADeuda ya no tiene "nota preferida".
+  · nomina/comisiones.js: para dar por liquidada una fiada, lo que se
+    descontó de ella por devolución cuenta como cubierto. Sin eso, una fiada de
+    $2,000 que regresó $800 y pagó los $1,200 nunca pagaba comisión.
+  · La ventana de devolución: recuadro "Esta nota a crédito todavía debe $X: lo
+    que regresa se descuenta de ella", renglón "Se descuenta de esta nota" en el
+    resumen, "Lo que regresa vale" en vez de "A favor por esta devolución", y
+    solo pregunta qué hacer con lo que SOBRA si debe algo más y de verdad sobra.
+
+LA VERIFICACIÓN
+  · e2e-devoluciones.js: 63 comprobaciones (10 nuevas: dos fiadas, regresa $800
+    de la nueva y la vieja sigue debiendo $1,000; regresa el resto y la nota
+    queda pagada; una nota pendiente que pagó $600 de $1,000 regresa todo: se
+    descuentan $400 y quedan $600 a favor).
+  · e2e-nomina-pdf.js: 40 (la fiada que regresó $400 y pagó $600 paga comisión
+    sobre $600 la semana en que se terminó de pagar).
+  · Siguen: clientes-credito (59), notas-pendientes (40), pedidos-encargo (74).
+    393 pruebas de pantallas (4 nuevas) y 20 del servidor.
+  · Visto en Chrome (1280 y 390 px) con datos TMPVV, ya borrados.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (44) · Tercera auditoría de diseño: lo que encontró
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "/impeccable audit" (16/20) y luego, en este orden: el cursor de la ventana
+  de devolución y el anuncio del resumen (P1), las ✕ a 44 px en el celular y el
+  renglón de las casillas (P2), y quitar los estilos escritos a mano, pasar los
+  3 colores sueltos a tokens y dejar una sola pieza de "paquete con ✕" (P3).
+  No se tocó la base.
+
+P1 · EL CURSOR AL ABRIR UNA VENTANA QUE CARGA
+  · La Devolución trae la venta del servidor al abrirse. El servicio que pone
+    el cursor (`core/services/foco-ventanas.service.ts`) entra a los 60 ms; sin
+    campos todavía, lo dejaba en la ✕. Escanear ahí: el código no iba a ningún
+    lado y el Enter de la pistola "apretaba" la ✕ y CERRABA la ventana.
+  · Arreglo general (todas las ventanas): si se dejó el foco en la ✕ o en la
+    ventana porque no había campos, en cuanto aparece el primero el foco pasa
+    ahí, salvo que la persona ya lo haya movido. En la Devolución, al elegir al
+    cliente (venta sin cliente) el cursor regresa al lector.
+  · El resumen de la Devolución era una región viva: el lector de pantalla lo
+    repetía en cada tecla de los kilos. Ahora una frase oculta ("Regresan 40.7
+    kg: $8,140 a favor…") se dice 0.9 s después de la última tecla.
+
+P2 · CON EL DEDO
+  · La ✕ de todas las ventanas (40 px) y la de cada paquete (28 px) miden 44
+    px con el dedo, y el renglón de una casilla ("Usar su saldo a favor" y las
+    demás `.field.check`), 44 px de alto.
+
+P3 · LIMPIEZA
+  · UNA pieza para el paquete escaneado con su ✕ (`.ficha-paquete`, en
+    styles.scss): la caja tenía `.bulto-chip` y la devolución una cápsula
+    verde con `.btn-x`. La ✕ es un SVG. En el carrito del celular el código y
+    el peso no se parten: el peso baja abajo del código y la ✕ se queda a la
+    derecha (se vio en Chrome: primero partía "TMPVV-" / "PAQ-6").
+  · Tokens: --barra-suave (#A9B0BD, el lema de Entrar), --barra-foco (#8FB2F2,
+    el foco del menú) y --viz-columna (#9EC3F2, las columnas de cajas); el
+    punto de "Sus visitas" usa --viz-series-1.
+  · Sin `style=` en lo nuevo: los puntos de las cifras de Notas pendientes
+    (`.punto.tono-aviso`…; con `.aviso` a secas chocaba con la clase global y
+    salía un círculo de 40 px), la ventana de pago de nota, el saldo a favor
+    del expediente, su línea en el Resumen y los párrafos de la columna de
+    cobro de la caja.
+
+LA VERIFICACIÓN
+  · 390 pruebas de pantallas (4 nuevas: el foco que espera a los campos, que
+    no se lo quita a quien ya lo movió, el anuncio y la ficha de la devolución).
+  · En Chrome con datos TMPVV (ya borrados), a 1280 y 390 px: la Devolución
+    abre con el cursor en "Escanea la etiqueta del paquete"; sin botones de
+    menos de 44 px en el celular; sin desbordes ni fallas de contraste.
+  · El detector solo da el falso positivo de siempre (la imagen del
+    comprobante, que sí tiene origen).
+  · Los datos de prueba se sembraron con un archivo FUERA del proyecto: el de
+    la auditoría (backend/scripts/_tmp_…) se había subido en el despliegue de
+    otra sesión y se quitó del servidor.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (43) · El ticket en la impresora de verdad: POS-58 (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PASÓ
+  El usuario imprimió desde el sistema y la vista previa de Chrome mostró una
+  hoja larguísima y angosta con el ticket diminuto A LA MITAD. La impresora está
+  instalada como "POS-58": rollo de 58 mm, y su hoja mide 58 × 3276 mm.
+
+POR QUÉ
+  · El ticket pedía una hoja de 80 × (lo que midiera) mm (@page size). En una
+    impresora física Chrome no usa una hoja que la impresora no tiene: encoge
+    la página para que quepa en la suya y la CENTRA. En 3,276 mm de rollo, eso
+    es el ticket chiquito a la mitad, con metro y medio de papel en blanco
+    antes. (Lo que se probó el 2026-10-13 fue imprimir a PDF, donde Chrome sí
+    respeta el tamaño: por eso no se vio.)
+  · Y el ticket era de 80 mm: en un rollo de 58 no cabe sin encogerse.
+
+LO QUE SE CAMBIÓ (shared/ticket/ticket.ts)
+  · El ticket ya NO pide tamaño de hoja: solo @page { margin: 0 }. Usa la hoja
+    de la impresora, empieza ARRIBA, y el controlador de la térmica imprime
+    hasta lo último con tinta y corta. El margen en 0 evita el encabezado y el
+    pie de Chrome (fecha y dirección de la página): el pie iba al final de los
+    3 m y obligaba a sacar todo ese papel (lo que el usuario vio al principio,
+    "se pasa de largo").
+  · Ya no se mide el ticket para fijar el largo (se quitó pxAMm); prepararHoja
+    solo espera al logo y pone "HITEX" en letras si no carga.
+  · El ancho se elige en Configuración → Ticket → "Ancho del papel": 58 mm
+    (por omisión: la POS-58 de la tienda) u 80 mm. En 58 el ticket mide 46 mm
+    (la impresora imprime 48), el logo 36 mm y la letra va al 84%; en 80, 70 mm,
+    50 mm y la letra normal. Clave nueva ticket_papel_mm (migración
+    2026-10_ticket_papel.sql en las dos bases, valor 58; respaldo previo
+    /root/respaldos/hitex_antes_ticket_papel_20261014-002138.sql.gz). La pantalla
+    de Configuración ahora sabe dibujar un selector (tipo 'select').
+
+LA VERIFICACIÓN
+  · 386 pruebas de pantallas (nuevas: no pide tamaño de hoja; 58 por omisión u
+    80; espera al logo en un marco de verdad).
+  · Simulado en Chrome sin ventana con una hoja de 58 mm sin márgenes y sin
+    respetar el tamaño de la página (como la impresora): la tinta va de 6.1 a
+    52.1 mm (la POS-58 imprime de 5 a 53) y empieza a 2.3 mm de arriba; 163 mm
+    de largo. D:\Imagenes\Ticket de ejemplo - Hitex.pdf es ese.
+  · Despliegue 20261014-002159; producción trae el código nuevo y la clave en 58.
+  · FALTA verlo en la POS-58 de verdad. Si aun así saca papel de más: en el
+    cuadro de imprimir, Más ajustes → Márgenes "Ninguno" y sin "Encabezados y
+    pies de página"; y en Windows, Preferencias de la POS-58 → papel.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (42) · El logo de Hitex y los datos fiscales en el ticket (DESPLEGADO)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "El ticket tiene que llevar la información que está en ticketinfo.pdf y el
+  ícono de la aplicación es Hitex.jpeg: ocúpalo y modifícalo donde sea necesario
+  para que se vea bien; igual lo necesito en el ticket, y en el login, el
+  favicon y dentro del sistema." ticketinfo.pdf es la Constancia de Situación
+  Fiscal de INSUMOS INTERNACIONALES HTX.
+
+1. EL LOGO (frontend/public)
+  · Del JPEG se separó cada pixel en tinta roja o azul marino sobre blanco: sin
+    fondo, con los colores exactos y sin el ruido de la compresión. Salen el
+    logo completo (hitex-logo.png), solo el cono (hitex-marca.png), el logo en
+    NEGRO para la térmica (hitex-ticket.png) y los íconos (favicon.ico de 16,
+    32 y 48; favicon-32, icono-192, icono-512 y apple-touch-icon): el cono sobre
+    un cuadro blanco con esquinas redondeadas.
+  · Menú lateral (también la barra de arriba en el celular): el cono en un
+    cuadro blanco junto a "Hitex", en lugar del dibujo azul de antes. Sobre la
+    barra oscura el rojo y el azul no se leen; sobre blanco sí.
+  · Entrar: el mismo cuadro en el lado oscuro y el logo completo a color arriba
+    del formulario.
+  · index.html: favicon, ícono de 32 y 192 y el de iPhone.
+
+2. EL TICKET
+  · Arriba el logo en negro (50 mm) y los datos fiscales: razón social, RFC,
+    régimen, domicilio fiscal y teléfono (778 654 2453); al pie, separada, la
+    leyenda "Este ticket no es un comprobante fiscal.".
+  · Los datos viven en la BASE, no en el código: claves nuevas fiscal_razon_social,
+    fiscal_rfc, fiscal_regimen, fiscal_domicilio y ticket_leyenda (migración
+    2026-10_datos_fiscales_ticket.sql: nacen vacías, solo la leyenda trae texto),
+    públicas porque las lee el ticket. Se capturaron directo en hitex y en
+    desarrollo. Configuración tiene dos tarjetas nuevas, "Datos fiscales" y
+    "Ticket", para corregirlos. El domicilio fiscal reemplaza a la dirección de
+    la tienda en el ticket (la de hitex decía "cuautepec de hijonosa, colonia
+    centro").
+  · imprimirTicket ahora ESPERA a que cargue el logo antes de medir la hoja
+    (prepararHoja): medido sin él, la hoja habría salido 30 mm corta y la
+    impresora cortaría a media cuenta. Si el logo no carga (4 s), va "HITEX" en
+    letras.
+  · ticketinfo.pdf va en .gitignore: el repositorio es público.
+
+BASE DE DATOS
+  Respaldo de hitex antes: /root/respaldos/hitex_antes_datos_fiscales_20261014-000713.sql.gz.
+  Migración en LAS DOS bases y registrada en estado-migraciones.js
+  (configuracion#clave=fiscal_rfc). Solo agrega claves; no cambia estructura.
+
+LA VERIFICACIÓN
+  · 383 de 384 pruebas de pantallas (la que falla, ComisionesSemanaComponent,
+    es del trabajo en curso de la otra sesión); 6 nuevas del ticket: datos
+    fiscales y leyenda, sin datos no deja renglones vacíos, el teléfono, y en
+    un marco de verdad: sin logo pone el nombre, con logo la hoja mide más.
+  · Compila sin avisos de tamaño.
+  · Visto en Chrome sin ventana: entrar y el menú a 1280 y 390 px, y
+    Configuración con sus tarjetas nuevas. Un ticket de ejemplo con los datos
+    reales mide 195 mm (una sola hoja): D:\Imagenes\Ticket de ejemplo - Hitex.pdf.
+  · DESPLEGADO en 20261014-001437 (lo subió la otra sesión con su entrada 41).
+    Producción sirve el logo, los íconos y el favicon (iguales a los de aquí),
+    sus <link> en la página, los datos fiscales en /configuracion y el código
+    nuevo del ticket.
+  · Falta imprimirlo en la Kinwodon de verdad.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-14 (41) · Lo que regresa no paga comisión ni cuenta como vendido
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  Al preguntarle (después de la entrada 40): "si una venta de $1,000 regresa
+  $400… la comisión tiene que ser sobre lo que se vendió, que serían los
+  $600"; y de los reportes: "en teoría como regresa a inventario, entonces se
+  le resta y se actualiza, porque al final es hilo que se regresó".
+
+LA BASE (migración 2026-10_comision_devoluciones.sql, en desarrollo y en hitex)
+  · nomina_comisiones.devuelto: cuánto de la venta (sin IVA) regresó y ya no
+    pagó comisión en ese renglón.
+  · El CHECK de nomina_comisiones.tipo acepta 'nota' y 'devolucion'. 'nota'
+    FALTABA desde la entrada 38: calcular una nómina con una nota pendiente
+    ya pagada habría fallado (no había pasado: en hitex no había ninguna).
+  · v_mas_vendidos resta lo que regresó de cada línea.
+
+LA COMISIÓN (nomina/comisiones.js)
+  · Lo que regresó se cuenta en venta neta: kilos devueltos × lo que se cobró
+    por kilo en esa línea (sin IVA), menos su parte del descuento.
+  · Regresó ANTES de que se pagara la comisión: la venta entra con la venta
+    neta menos lo devuelto (de $1,000 regresan $400: comisión sobre $600).
+  · Regresó DESPUÉS: la siguiente nómina que se calcule lleva un renglón
+    "Devolución" en negativo, con el porcentaje con que se pagó (−3% de $250
+    = −$7.50). `devuelto` de cada renglón es lo ya descontado: no se descuenta
+    dos veces, y recalcular no lo duplica. El total de comisión de una semana
+    puede salir negativo si solo hubo devoluciones.
+  · El reporte de comisiones (pantalla y PDF) dice "regresaron $400" bajo la
+    venta neta, trae el renglón "Devolución" y avisa "1 devolución de una venta
+    ya pagada se descuenta en la próxima nómina". La pantalla ahora nombra los
+    tipos como el resto del sistema (A crédito, Nota en espera, Nota pendiente).
+
+LOS REPORTES (reportes/model.js)
+  · "Venta por color", "Más vendidos" y los kilos de "Ventas por día" restan
+    lo que regresó de cada línea, en la FECHA DE LA VENTA (aunque haya
+    regresado como conos). "Más vendidos" ya no lista lo que regresó completo.
+  · No cambian el dinero de "Ventas" ni el "Hilo parado" de Cómo va el negocio.
+    Se le preguntó al usuario y decidió dejarlos así (2026-10-14): "Ventas"
+    cuenta cada venta completa, y en Hilo parado el hilo "entró y salió": lo
+    que regresó vuelve a estar en el inventario.
+
+LA VERIFICACIÓN
+  · e2e-nomina-pdf.js: 39 comprobaciones (10 nuevas: devolución antes y
+    después de pagada la comisión, sin duplicar, y una nota pendiente pagada).
+  · e2e-devoluciones.js: 53 (2 nuevas: Venta por color y Más vendidos).
+  · Siguen pasando reporte-color (30), costo-margen (17), notas-pendientes (40)
+    y pedidos-encargo (74). 385 pruebas de pantallas y 20 del servidor.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-13 (40) · Devoluciones con saldo a favor (parte 2 de 2)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Un cliente te compra hilo y regresa una parte o todo: no le quiero regresar
+  dinero, lo que se le tiene que agregar es como un saldo a favor de lo que
+  regresó." Y al preguntarle: "a veces el cliente pide que su saldo a favor se
+  utilice para otras compras y dejar su crédito o deuda a crédito como está:
+  dame esas opciones"; la devolución "con la nota del cliente, para que se
+  registre qué de esa nota regresa y qué se quedó" ("me llevé 3 paquetes de 12
+  conos y regreso 2 paquetes intactos y del otro solo 2 conos"). Aprobó el
+  plan: paquetes cerrados escaneados, conos sueltos pesados ("lo que marque la
+  báscula", SIN restar tubos), a favor al precio con que se vendió.
+
+LA BASE (migración 2026-10_saldo_a_favor.sql, en desarrollo y en hitex)
+  · devoluciones (folio DEV-…, venta, cliente, almacén, total,
+    aplicado_a_deuda), devolucion_detalle (de qué línea, a qué presentación
+    entró, kilos, conos, importe) y devolucion_bultos (los paquetes cerrados,
+    con código y peso congelados).
+  · saldo_favor_movimientos: el LIBRO del saldo a favor, como el de crédito
+    (devolucion +, uso −, aplicado −, reintegro +, ajuste ±). No hay campo de
+    saldo en clientes.
+  · metodos_pago.interno y el método "Saldo a favor" (interno): con él queda
+    asentado el pago que hace el saldo. No se ofrece al cobrar y se rechaza si
+    llega en `pagos` (METODO_PAGO_INVALIDO), en la venta, los abonos de una
+    nota, la entrega y los abonos a la cuenta.
+
+EL SERVIDOR
+  · GET /pedidos/:id/devolucion: lo que se puede regresar de cada línea (lo que
+    se llevó, lo que ya regresó, a cómo queda el kilo a favor, sus paquetes),
+    el saldo a favor y lo que debe el cliente. `?cliente_id=` para la venta
+    sin cliente.
+  · POST /pedidos/:id/devoluciones (hacer:cancelar_venta): `lineas` con
+    `codigos` (paquetes cerrados), `kg_sueltos` y `conos`; `destino` 'favor' o
+    'deuda'; `cliente_id` si la venta no tenía. En una transacción: los
+    paquetes vuelven a 'disponible' en el almacén de la venta; lo suelto de un
+    paquete entra al CONO del hilo (se crea si no existe, como al bajar
+    conos); inventario + kardex tipo 'devolucion' ("Devolución del cliente",
+    motivo con el folio); y el saldo a favor. Con 'deuda', se descuenta en el
+    acto: primero de ESA nota, luego de sus notas pendientes y su cuenta.
+    Rechaza: nada que regresar, paquete que no salió en esa línea, repetido,
+    ya devuelto o bajado a conos, más kilos de los que quedan, venta cancelada
+    o que no se ha entregado (nota en espera).
+  · POST /pedidos con `saldo_favor`: paga esa parte con su saldo (solo Cobrar
+    y A crédito, con cliente, sin pasarse del total ni de lo que tiene). Queda
+    un pago "Saldo a favor" (la venta se liquida y paga comisión como con
+    cualquier pago) y no entra nada a la caja por esa parte.
+  · POST /clientes/:id/saldo-favor/aplicar: descuenta su saldo de lo que debe
+    (notas pendientes de la más vieja, luego su cuenta de crédito).
+  · Cancelar una venta pagada con saldo le REGRESA el saldo (reintegro) y ya no
+    se reactiva (VENTA_CON_SALDO_FAVOR). Una venta con devoluciones ya no se
+    cancela completa (VENTA_CON_DEVOLUCIONES): lo demás también se devuelve.
+  · El expediente trae saldo_favor, sus movimientos y deuda_total; la búsqueda
+    de la caja trae saldo_favor.
+
+LAS PANTALLAS
+  · Detalle de la venta: el botón «Devolución» (antes «Devolver mercancía»,
+    que regresaba el dinero) abre la ventana nueva: lector para los paquetes
+    cerrados, por línea los kilos sueltos y cuántos conos, a quién (si la venta
+    no tenía cliente), "dejarlo a favor / descontarlo de lo que debe" si debe,
+    y el resumen (regresan, a favor, le queda a favor). El detalle muestra la
+    tarjeta Devoluciones, la cifra "Regresó" y lo que pasó. "Devuelto" ya no
+    se ofrece en el selector de estado.
+  · Punto de venta: con un cliente con saldo, "tiene $X a favor" y la casilla
+    "Usar su saldo a favor" (cuánto; vacío = todo lo que alcance). El botón
+    dice "Cobrar $132 y $300 de su saldo a favor".
+  · Expediente → Cuánto debe: tarjeta "Su saldo a favor" con lo que tiene, lo
+    que debe, "Descontar de lo que debe" (pregunta antes) y sus movimientos.
+
+LA VERIFICACIÓN
+  · e2e-devoluciones.js: 51 comprobaciones con el caso del usuario (3
+    paquetes; regresan 2 cerrados y 2 conos de 3.2 kg → $8,140 a favor).
+    Siguen pasando notas-pendientes (40), pedidos-encargo (74), apartados
+    (47), nomina-pdf (29), clientes-credito (59), devolucion-presentacion (18)
+    y comprobante-pago (41).
+  · 379 pruebas de pantallas (12 nuevas) y 20 del servidor.
+  · Visto en Chrome con datos TMPVV (ya borrados), a 1280 y 390 px: la
+    ventana, el detalle con su devolución, el punto de venta y el expediente.
+  · NO se registró una devolución real desde la pantalla.
+
+QUEDA POR DECIDIR (no se tocó)
+  · La COMISIÓN: una venta de la que regresó mercancía sigue pagando comisión
+    sobre lo que se vendió completo.
+  · Los reportes de venta ("Más vendidos", "Venta por color") no restan lo
+    que regresó.
 
 
 -------------------------------------------------------------------------------

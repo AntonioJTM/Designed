@@ -86,6 +86,13 @@ const MIGRACIONES = [
   ['2026-10_notas_pendientes (permiso)', 'permisos#clave=ver:notas_pendientes'],
   ['2026-10_saldo_a_favor', 'saldo_favor_movimientos'],
   ['2026-10_saldo_a_favor (método)', 'metodos_pago.interno'],
+  ['2026-10_comision_devoluciones', 'nomina_comisiones.devuelto'],
+  ['2026-10_anticipos', 'saldo_favor_movimientos.metodo_pago_id'],
+  ['2026-10_datos_fiscales_ticket', 'configuracion#clave=fiscal_rfc'],
+  ['2026-10_ticket_papel', 'configuracion#clave=ticket_papel_mm'],
+  ['2026-10_clientes_lugar_entrega', 'clientes.lugar_entrega_id'],
+  ['2026-10_puesto_cargador', 'roles.entra_al_sistema'],
+  ['2026-10_puesto_cargador (cargador)', 'roles#nombre=cargador'],
 ];
 
 (async () => {

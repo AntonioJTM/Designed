@@ -10,8 +10,8 @@ import { COLOR, capitalizar, diaCorto, enPeriodo, fechaCorta, horaRango, plural,
  */
 const TONOS: [string, string][] = [
   ['var(--fondo)', 'var(--tinta-3)'],
-  ['#DCE8FA', 'var(--acento-oscuro)'],
-  ['#9EC3F2', '#0F2E5C'],
+  ['var(--viz-calor-1)', 'var(--acento-oscuro)'],
+  ['var(--viz-calor-2)', 'var(--viz-calor-tinta)'],
   ['var(--viz-rampa-2)', 'var(--tinta)'], // tinta: 4.78:1 (blanco daba 3.64:1)
   ['var(--viz-rampa-3)', '#FFFFFF'],
   ['var(--viz-rampa-4)', '#FFFFFF'],

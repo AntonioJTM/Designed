@@ -80,6 +80,8 @@ td .mono.muted { font-size: 0.75rem; margin-top: 2px; }
   background: var(--superficie-2); border: 1px solid var(--borde-suave); border-radius: 8px;
 }
 .bloque-modo .dato { border-bottom: 0; padding: 0; }
+/* Lo de la columna de cobro va separado por su `gap`: sin el margen del párrafo. */
+.cobro > p, .bloque-modo > p { margin: 0; }
 .caja-cambio {
   display: flex; justify-content: space-between; align-items: center; padding: 12px 14px;
   border-radius: 8px; background: var(--fondo); font-size: 0.9375rem;
@@ -99,3 +101,5 @@ td .mono.muted { font-size: 0.75rem; margin-top: 2px; }
 @media (max-width: 900px) {
   .cobro { position: static; }
 }
+
+.a-favor { color: var(--ok-t); font-weight: 600; }

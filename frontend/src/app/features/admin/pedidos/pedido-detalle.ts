@@ -11,6 +11,7 @@ import {
   PagoLinea,
   Pedido,
   PedidoLinea,
+  ResultadoDevolucion,
 } from '../../../core/models/ventas.models';
 import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
@@ -18,6 +19,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
 import { ApiError } from '../../../core/models/auth.models';
 import { etiquetaEstado, tonoEstado } from './estados';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { DevolucionModal } from './devolucion-modal';
 
 /** Una cifra de la franja de arriba del pedido. */
 interface CifraPedido {
@@ -61,9 +63,9 @@ const MESES_LARGOS = [
 @Component({
   selector: 'app-pedido-detalle',
   host: { '(document:keydown.escape)': 'alEscape()' },
-  imports: [FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe],
+  imports: [FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal],
   templateUrl: './pedido-detalle.html',
-  styleUrl: './pedido-detalle.scss',
+  styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss'],
 })
 export class PedidoDetalle implements OnDestroy {
   private readonly ventas = inject(VentasService);
@@ -135,13 +137,19 @@ export class PedidoDetalle implements OnDestroy {
     // (NOTA_PENDIENTE_SIN_PAGAR / NOTA_YA_PAGADA en el servidor).
     const nota = !!p && this.esNotaPendiente(p) && !fiadaVigente && !this.inactivo(p);
     const notaDebe = nota ? this.faltaNota(p!) > 0.004 : false;
+    // Desde el 2026-10-13 lo que regresa queda A FAVOR del cliente (botón
+    // «Devolución»): "devuelto" regresaba el dinero y ya no se ofrece. Y una
+    // venta con devoluciones ya no se cancela completa (VENTA_CON_DEVOLUCIONES).
+    const conDevoluciones = !!p?.devoluciones?.length;
     return this.estados().filter((e) => {
       if (e === actual) return true;
-      if (!this.puedeCancelar() && (e === 'cancelado' || e === 'devuelto')) return false;
+      if (e === 'devuelto') return false;
+      if (conDevoluciones && e === 'cancelado') return false;
+      if (!this.puedeCancelar() && e === 'cancelado') return false;
       if (!enLinea && !pasosDePedido && (e === 'en_preparacion' || e === 'enviado')) return false;
-      if (fiadaVigente && actual === 'pendiente' && debe && e !== 'cancelado' && e !== 'devuelto') return false;
+      if (fiadaVigente && actual === 'pendiente' && debe && e !== 'cancelado') return false;
       if (fiadaVigente && e === 'pendiente' && !debe) return false;
-      if (nota && actual === 'pendiente' && notaDebe && e !== 'cancelado' && e !== 'devuelto') return false;
+      if (nota && actual === 'pendiente' && notaDebe && e !== 'cancelado') return false;
       if (nota && e === 'pendiente' && !notaDebe) return false;
       return true;
     });
@@ -268,6 +276,14 @@ export class PedidoDetalle implements OnDestroy {
     ];
   });
 
+  /** Las cifras de la franja más lo que el cliente regresó de esta nota (le quedó a favor). */
+  readonly cifrasConDevolucion = computed<CifraPedido[]>(() => {
+    const p = this.pedido();
+    const devuelto = Number(p?.devuelto_total ?? 0);
+    if (!p || devuelto <= 0) return this.cifras();
+    return [...this.cifras(), { etiqueta: 'Regresó', valor: devuelto, pie: 'le quedó a favor' }];
+  });
+
   /** Pagos, y lo fiado como un renglón más: es la forma en que se pagó esa parte. */
   readonly filasPago = computed<FilaPago[]>(() => {
     const p = this.pedido();
@@ -360,6 +376,14 @@ export class PedidoDetalle implements OnDestroy {
       ev.push({ t: a.creado_en, que: `${quien} abonó ${this.dinero(a.monto)} a su cuenta (se aplica a lo más antiguo que deba)` });
     }
     if (p.entregado_en) ev.push({ t: p.entregado_en, que: 'Se le entregó la mercancía' });
+    for (const d of p.devoluciones ?? []) {
+      const kg = d.lineas.reduce((s, l) => s + Number(l.kg), 0);
+      const a = d.nombre_comercial || d.cliente || quien;
+      let que = `Regresó ${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg (${d.folio}): ` +
+        `${this.dinero(d.total)} a favor de ${a}`;
+      if (Number(d.aplicado_a_deuda) > 0) que += `; se descontaron ${this.dinero(d.aplicado_a_deuda)} de lo que debía`;
+      ev.push({ t: d.creado_en, que });
+    }
     if (this.inactivo(p) && p.actualizado_en) {
       const verbo = p.estado === 'devuelto' ? 'Se devolvió' : 'Se canceló';
       ev.push({
@@ -470,20 +494,39 @@ export class PedidoDetalle implements OnDestroy {
     this.abrirDevolucion();
   }
 
-  /** El botón "Devolver mercancía": solo de lo que de verdad salió de la bodega. */
-  abrirDevolver(): void {
-    this.nuevoEstado = 'devuelto';
-    this.abrirDevolucion();
+  /**
+   * La DEVOLUCIÓN con saldo a favor (2026-10-13): la ventana dice qué puede
+   * regresar, se escanean los paquetes cerrados y se pesa lo suelto.
+   */
+  readonly devolviendo = signal(false);
+
+  /** Terminó la devolución: se dice cuánto le quedó a favor y se recarga la nota. */
+  alDevolver(r: ResultadoDevolucion): void {
+    this.devolviendo.set(false);
+    this.error.set(null);
+    const kg = r.kg.toLocaleString('es-MX', { maximumFractionDigits: 3 });
+    const deEsta = Number(r.descontado_de_esta ?? 0);
+    const deOtras = Math.round((r.aplicado_a_deuda - deEsta) * 100) / 100;
+    let txt = `Devolución ${r.folio}: regresaron ${kg} kg (${this.dinero(r.total)}).`;
+    if (deEsta > 0) txt += ` Se descontaron ${this.dinero(deEsta)} de esta nota.`;
+    if (deOtras > 0) txt += ` Se descontaron ${this.dinero(deOtras)} de lo demás que debía.`;
+    txt += ` A ${r.cliente} le quedan ${this.dinero(r.saldo_favor)} a favor.`;
+    this.mensaje.set(txt);
+    this.cargar(r.pedido_id);
   }
 
-  /** Se puede cancelar: el puesto tiene el permiso y el pedido sigue vivo. */
+  /**
+   * Se puede cancelar: el puesto tiene el permiso, el pedido sigue vivo y no
+   * tiene devoluciones (lo que regresó ya quedó a favor; lo demás también se
+   * regresa con «Devolución»).
+   */
   puedeCancelarEste(p: Pedido): boolean {
-    return this.puedeCancelar() && !this.inactivo(p);
+    return this.puedeCancelar() && !this.inactivo(p) && !p.devoluciones?.length;
   }
 
-  /** Devolver solo aplica a mercancía entregada: un apartado vigente nunca salió. */
+  /** Devolver solo aplica a mercancía entregada: una nota en espera nunca salió. */
   puedeDevolverEste(p: Pedido): boolean {
-    return this.puedeCancelarEste(p) && !this.esApartadoSinEntregar(p);
+    return this.puedeCancelar() && !this.inactivo(p) && !this.esApartadoSinEntregar(p);
   }
 
   /** Escape cierra el panel de cancelación, salvo mientras se aplica. */

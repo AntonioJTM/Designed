@@ -75,6 +75,7 @@
           } @else {
             Quedó cargado a su cuenta.
           }
+          @if (num(t.saldoUsado) > 0) { Usó <b>{{ t.saldoUsado | dinero }}</b> de su saldo a favor. }
         </p>
         <div class="acciones">
           <button class="btn btn-primary" (click)="nuevaVenta()">Nueva venta</button>
@@ -86,6 +87,9 @@
         <h2>Venta <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
         <div class="ticket-cifras">
           <div><span>Total</span><b>{{ t.pedido.total | dinero }}</b></div>
+          @if (num(t.saldoUsado) > 0) {
+            <div><span>De su saldo a favor</span><b>{{ t.saldoUsado | dinero }}</b></div>
+          }
           <div><span>Cambio</span><b>{{ t.cambio | dinero }}</b></div>
         </div>
         <div class="acciones">
@@ -154,6 +158,7 @@
                   <b>{{ c.nombre_comercial || c.nombre }}</b>
                   <span class="muted">
                     @if (c.nombre_comercial) { {{ c.nombre }} · }
+                    @if (c.codigo) { <span class="mono">{{ c.codigo }}</span> · }
                     {{ c.tipo_cliente ? 'Lista ' + c.tipo_cliente : 'Precio público' }}
                     ·
                     @if (num(c.limite_credito) > 0) {
@@ -161,6 +166,7 @@
                     } @else {
                       sin crédito autorizado
                     }
+                    @if (num(c.saldo_favor) > 0) { · <b class="a-favor">tiene {{ c.saldo_favor | dinero }} a favor</b> }
                   </span>
                 </div>
               </div>
@@ -170,6 +176,8 @@
                 @if (veClientes()) {
                   <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.id]" target="_blank">Ver expediente</a>
                 }
+                <!-- Deja dinero a cuenta, sin nota: le queda a favor (2026-10-14). -->
+                <button type="button" class="btn btn-ghost btn-sm" (click)="recibiendoAnticipo.set(true)">Recibir anticipo</button>
                 <button type="button" class="btn btn-ghost btn-sm" (click)="quitarCliente()">Quitar</button>
               </div>
             </div>
@@ -202,7 +210,7 @@
                   <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
                 </svg>
                 <input type="search" [(ngModel)]="qCliente" name="qcli" (keyup)="buscarCliente()"
-                       placeholder="Nombre, apodo o teléfono" autocomplete="off" />
+                       placeholder="Nombre, número o teléfono" autocomplete="off" />
               </div>
               <span class="ayuda">Si lo identificas, la venta queda en su historial, se le aplica su lista de precios y se le puede fiar.</span>
             </label>
@@ -214,6 +222,7 @@
                     <button type="button" (click)="elegirCliente(c)">
                       <b>{{ c.nombre_comercial || c.nombre }}</b>
                       <span class="muted">
+                        @if (c.codigo) { <span class="mono">{{ c.codigo }}</span>{{ c.nombre_comercial || c.telefono ? ' · ' : '' }} }
                         {{ c.nombre_comercial ? c.nombre : '' }}{{ c.nombre_comercial && c.telefono ? ' · ' : '' }}{{ c.telefono || '' }}
                         @if (num(c.limite_credito) > 0) {
                           · le quedan {{ c.credito_disponible | dinero }} de crédito
@@ -253,6 +262,8 @@
               <button type="button" class="btn btn-primary btn-lg" (click)="escanearOBuscar()">Buscar</button>
             </div>
           </label>
+          <!-- Lo que no se pudo agregar se dice AQUÍ, junto al lector, que es donde se mira al escanear. -->
+          @if (avisoLector()) { <p class="alert aviso-lector" role="alert">{{ avisoLector() }}</p> }
           <p class="muted nota">
             Al escanear un bulto se cobra por lo que pesa ESE bulto. El mismo bulto dos veces no se cobra doble.
           </p>
@@ -347,13 +358,14 @@
                         <div class="hilo">{{ i.producto }}{{ i.presentacion ? ' · ' + i.presentacion : '' }}</div>
                         <div class="muted mono">
                           @if (i.bultos?.length) {
-                            <!-- Cada bulto con su ✕: para cobrar menos se quita el que no se lleva. -->
-                            <span class="bultos-linea">
+                            <!-- Cada bulto con su ✕: para cobrar menos se quita el que no se lleva.
+                                 La ficha es la misma de la devolución (styles.scss). -->
+                            <span class="fichas-paquete bultos-linea">
                               @for (b of i.bultos; track b.codigo) {
-                                <span class="bulto-chip">
-                                  {{ b.codigo }} · {{ b.peso_kg | cantidad: 'kg' }}
-                                  <button type="button" (click)="quitarBulto(i, b.codigo)"
-                                          [attr.aria-label]="'Quitar el bulto ' + b.codigo">✕</button>
+                                <span class="ficha-paquete">
+                                  <span class="ficha-texto"><span class="mono">{{ b.codigo }}</span><b>{{ b.peso_kg | cantidad: 'kg' }}</b></span>
+                                  <button type="button" class="ficha-quitar" (click)="quitarBulto(i, b.codigo)"
+                                          [attr.aria-label]="'Quitar el bulto ' + b.codigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
                                 </span>
                               }
                             </span>
@@ -408,7 +420,7 @@
           }
         </div>
         @if (avisoCotizacion(); as aviso) {
-          <p class="alert" role="alert" style="margin: 0">{{ aviso }} Quítalo o cambia la cantidad para poder cobrar.</p>
+          <p class="alert" role="alert">{{ aviso }} Quítalo o cambia la cantidad para poder cobrar.</p>
         }
 
         @if (tiposCliente().length > 1) {
@@ -462,6 +474,25 @@
           </div>
         }
 
+        <!-- SALDO A FAVOR (2026-10-13): lo que le quedó de una devolución. Se usa
+             solo si el cliente lo pide; puede guardarlo para otra compra. -->
+        @if (ofreceSaldo()) {
+          <div class="bloque-modo">
+            <label class="field check">
+              <input type="checkbox" [(ngModel)]="usarSaldo" name="usar-saldo" />
+              <span>Usar su saldo a favor <b>({{ saldoFavorCliente() | dinero }})</b></span>
+            </label>
+            @if (usarSaldo) {
+              <label class="field">
+                Cuánto de su saldo
+                <input type="number" min="0" step="0.01" [(ngModel)]="saldoAUsar" name="saldo-usar"
+                       [placeholder]="propuestaSaldo().toFixed(2)" />
+                <span class="ayuda">Vacío = todo lo que alcance. Le quedan {{ saldoFavorCliente() - saldoActual() | dinero }} a favor.</span>
+              </label>
+            }
+          </div>
+        }
+
         @if (pidiendo()) {
           <!-- NOTA EN ESPERA: no sale ticket; la mercancía se aparta y se cobra al entregarla. -->
           <div class="bloque-modo">
@@ -478,7 +509,7 @@
               <input type="number" min="0" step="0.01" [(ngModel)]="anticipo" name="ped-deja" placeholder="0.00" />
               <span class="ayuda">Lo que falte se cobra al entregarla, a crédito o como nota pendiente de pago.</span>
             </label>
-            <p class="ayuda" style="margin: 0">No sale ticket. La mercancía se aparta: <b>no sale del inventario</b> hasta que se entrega, y la nota se puede modificar.</p>
+            <p class="ayuda">No sale ticket. La mercancía se aparta: <b>no sale del inventario</b> hasta que se entrega, y la nota se puede modificar.</p>
           </div>
           @if (num(anticipo) > 0) {
             <label class="field">
@@ -492,7 +523,7 @@
 
         @if (notaPendiente()) {
           <div class="bloque-modo">
-            <p class="ayuda" style="margin: 0">
+            <p class="ayuda">
               Se lleva la mercancía y sale el ticket como <b>nota pendiente de pago</b>. Hoy no paga nada y no
               usa su crédito: el pago se registra después en Notas pendientes de pago (o se pasa a crédito).
             </p>
@@ -502,13 +533,22 @@
             Método de pago
             <select [(ngModel)]="metodoSel" name="metodo">
               @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+              <!-- Parte y parte (2026-10-14): la transferencia y el resto en efectivo. -->
+              @if (permiteMixto()) { <option [ngValue]="'mixto'">Efectivo y transferencia</option> }
             </select>
           </label>
+          @if (esMixto()) {
+            <label class="field">
+              Por transferencia
+              <input type="number" min="0" step="0.01" [(ngModel)]="montoTransferencia" name="transf" placeholder="0.00" />
+              <span class="ayuda">El resto, {{ aCobrarEnEfectivo() | dinero }}, en efectivo.</span>
+            </label>
+          }
           @if (esEfectivoSel()) {
             <label class="field">
               Recibido en efectivo
               <input type="number" min="0" step="0.01" [(ngModel)]="montoPago" name="recibido"
-                     [placeholder]="aPagarHoy().toFixed(2)" />
+                     [placeholder]="aCobrarEnEfectivo().toFixed(2)" />
               <span class="ayuda">Vacío = pagó justo.</span>
             </label>
             @if (faltaPrevio() > 0) {
@@ -517,10 +557,12 @@
               <div class="caja-cambio"><span>Cambio</span><b>{{ cambioPrevio() | dinero }}</b></div>
             }
           } @else {
-            <p class="ayuda" style="margin: 0">Se cobran {{ aPagarHoy() | dinero }} justos.</p>
+            <p class="ayuda">Se cobran {{ aPagarHoy() | dinero }} justos.</p>
           }
         } @else if (fiando()) {
-          <p class="ayuda" style="margin: 0">Se lleva todo a crédito: hoy no paga nada.</p>
+          <p class="ayuda">Se lleva todo a crédito: hoy no paga nada.</p>
+        } @else if (saldoActual() > 0) {
+          <p class="ayuda">Todo se paga con su saldo a favor: hoy no paga nada.</p>
         }
 
         <button type="button" class="btn btn-primary btn-bloque btn-cobrar" (click)="cobrar()"
@@ -548,21 +590,15 @@
       </div>
       <div class="modal-body columna">
         @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-        <p class="muted">Solo el nombre y el teléfono. El resto se llena después en Clientes.</p>
+        <p class="muted">Solo el nombre y el teléfono. El número de cliente lo da el sistema; el resto se llena después en Clientes.</p>
         <label class="field">
           Nombre
           <input type="text" [(ngModel)]="nuevoCliente.nombre" name="ncn" placeholder="Mercería La Esperanza" />
         </label>
-        <div class="form-grid">
-          <label class="field">
-            <span>Como le dicen <span class="muted">(opcional)</span></span>
-            <input type="text" [(ngModel)]="nuevoCliente.nombre_comercial" name="ncc" placeholder="Doña Chela" />
-          </label>
-          <label class="field">
-            <span>Teléfono <span class="muted">(opcional)</span></span>
-            <input type="tel" [(ngModel)]="nuevoCliente.telefono" name="nct" maxlength="20" />
-          </label>
-        </div>
+        <label class="field">
+          <span>Teléfono <span class="muted">(opcional)</span></span>
+          <input type="tel" [(ngModel)]="nuevoCliente.telefono" name="nct" maxlength="20" />
+        </label>
         <p class="nota-info">
           Nace sin crédito: el cobro es completo. El administrador recibe el aviso para decidir si le autoriza fiarle.
         </p>
@@ -575,6 +611,12 @@
       </div>
     </div>
   </div>
+}
+
+@if (recibiendoAnticipo() && clienteSel(); as c) {
+  <app-anticipo-modal [clienteId]="c.id" [nombre]="c.nombre_comercial || c.nombre" [saldoFavor]="num(c.saldo_favor)"
+                      [sesionId]="sesion()?.id ?? null"
+                      (cerrado)="cerrarAnticipo()" (registrado)="anticipoRegistrado($event)" />
 }
 
 <!-- Abono a la cuenta del cliente, sin salir de la venta. Mismas reglas del modal. -->

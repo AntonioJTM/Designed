@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-14T03:17:41+00:00",
+  "generatedAt": "2026-10-15T12:00:00+00:00",
   "title": "Design System: Hitex",
   "extensions": {
     "colorMeta": {
@@ -184,6 +184,36 @@
           "#E9EFFC"
         ]
       },
+      "acento-tenue": {
+        "role": "primary",
+        "displayName": "Azul apenas (cambio sin guardar)",
+        "canonical": "oklch(98.2% 0.007 268.5)",
+        "tonalRamp": [
+          "#0A0B0E",
+          "#242529",
+          "#404246",
+          "#5F6165",
+          "#808287",
+          "#A3A5A9",
+          "#C7C9CE",
+          "#ECEEF3"
+        ]
+      },
+      "sobre-acento": {
+        "role": "primary",
+        "displayName": "Azul sobre azul (texto en la cifra total)",
+        "canonical": "oklch(92.3% 0.029 264.4)",
+        "tonalRamp": [
+          "#060B17",
+          "#1E2534",
+          "#3A4252",
+          "#596172",
+          "#7A8394",
+          "#9CA5B8",
+          "#C0C9DD",
+          "#E7EFFF"
+        ]
+      },
       "barra": {
         "role": "neutral",
         "displayName": "Menú de noche",
@@ -274,6 +304,51 @@
           "#C8FEDB"
         ]
       },
+      "ok-suave": {
+        "role": "state",
+        "displayName": "Verde listo (fondo de tarjeta)",
+        "canonical": "oklch(97.8% 0.011 158.9)",
+        "tonalRamp": [
+          "#080D09",
+          "#212723",
+          "#3D4440",
+          "#5C635F",
+          "#7D8480",
+          "#A0A7A2",
+          "#C4CBC7",
+          "#E9F1EC"
+        ]
+      },
+      "ok-borde": {
+        "role": "state",
+        "displayName": "Verde listo (borde de tarjeta)",
+        "canonical": "oklch(88.4% 0.049 157.2)",
+        "tonalRamp": [
+          "#000F06",
+          "#0C2C1B",
+          "#2B4A38",
+          "#4A6A56",
+          "#6A8C77",
+          "#8CAF99",
+          "#B0D3BD",
+          "#D5F9E2"
+        ]
+      },
+      "ok-oscuro": {
+        "role": "state",
+        "displayName": "Verde hondo (botón Ok bajo el puntero)",
+        "canonical": "oklch(38.6% 0.085 154.9)",
+        "tonalRamp": [
+          "#000F05",
+          "#032E17",
+          "#0F4F2D",
+          "#346F4B",
+          "#56926C",
+          "#79B58E",
+          "#9DDAB1",
+          "#C6FED8"
+        ]
+      },
       "aviso-f": {
         "role": "state",
         "displayName": "Ámbar en espera (fondo)",
@@ -362,6 +437,36 @@
           "#FB7866",
           "#FDB4A8",
           "#FFE9E5"
+        ]
+      },
+      "peligro-borde": {
+        "role": "state",
+        "displayName": "Borde rosado (botón Danger)",
+        "canonical": "oklch(86.4% 0.050 32.2)",
+        "tonalRamp": [
+          "#1C0301",
+          "#3A1B15",
+          "#593831",
+          "#7B574F",
+          "#9E7870",
+          "#C29A92",
+          "#E8BEB5",
+          "#FEE9E5"
+        ]
+      },
+      "peligro-oscuro": {
+        "role": "state",
+        "displayName": "Rojo hondo (botón rojo bajo el puntero)",
+        "canonical": "oklch(40.8% 0.142 29.5)",
+        "tonalRamp": [
+          "#1F0000",
+          "#4C0302",
+          "#7C110A",
+          "#A2392D",
+          "#C95C4E",
+          "#F1806F",
+          "#FBB5AA",
+          "#FEE9E5"
         ]
       },
       "viz-series-1": {
@@ -514,6 +619,51 @@
           "#E7EFFE"
         ]
       },
+      "velo": {
+        "role": "neutral",
+        "displayName": "Velo de ventana",
+        "canonical": "oklch(20.0% 0.019 266.0 / 60%)",
+        "tonalRamp": [
+          "#080B13",
+          "#21252F",
+          "#3D424D",
+          "#5C616D",
+          "#7D828E",
+          "#9FA5B2",
+          "#C3C9D6",
+          "#E8EFFC"
+        ]
+      },
+      "velo-claro": {
+        "role": "neutral",
+        "displayName": "Velo blanco (cargando)",
+        "canonical": "oklch(100.0% 0.000 89.9 / 88%)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "desplazamiento": {
+        "role": "neutral",
+        "displayName": "Riel de desplazamiento",
+        "canonical": "oklch(83.8% 0.014 262.4)",
+        "tonalRamp": [
+          "#080B11",
+          "#21252C",
+          "#3E4249",
+          "#5D6169",
+          "#7E828B",
+          "#A0A5AE",
+          "#C4C9D2",
+          "#EAEFF8"
+        ]
+      },
       "viz-rampa-1": {
         "role": "chart",
         "displayName": "Rampa azul 1 (claro)",
@@ -618,6 +768,51 @@
           "#EABEA9",
           "#FEEAE0"
         ]
+      },
+      "viz-calor-1": {
+        "role": "chart",
+        "displayName": "Calor 1 (Cuándo compra)",
+        "canonical": "oklch(92.7% 0.028 258.4)",
+        "tonalRamp": [
+          "#050B17",
+          "#1D2533",
+          "#394351",
+          "#586271",
+          "#788393",
+          "#9BA6B7",
+          "#BECADC",
+          "#E6EFFE"
+        ]
+      },
+      "viz-calor-2": {
+        "role": "chart",
+        "displayName": "Calor 2 (Cuándo compra)",
+        "canonical": "oklch(80.7% 0.078 254.6)",
+        "tonalRamp": [
+          "#000B1E",
+          "#04254A",
+          "#23436A",
+          "#42638D",
+          "#6285B1",
+          "#84A8D6",
+          "#A7CCFC",
+          "#E4F0FF"
+        ]
+      },
+      "viz-calor-tinta": {
+        "role": "chart",
+        "displayName": "Letra sobre calor 2",
+        "canonical": "oklch(30.7% 0.090 258.5)",
+        "tonalRamp": [
+          "#000A21",
+          "#042350",
+          "#224171",
+          "#406294",
+          "#6183B8",
+          "#82A7DE",
+          "#A9CBFE",
+          "#E5EFFE"
+        ]
       }
     },
     "typographyMeta": {
@@ -658,7 +853,7 @@
       {
         "name": "ventana-flotante",
         "value": "0 20px 50px rgba(18, 22, 31, 0.25)",
-        "purpose": "Solo los modales, sobre el velo #12161F99."
+        "purpose": "Solo los modales, sobre el velo (--velo, #12161F99)."
       },
       {
         "name": "anillo-foco",
@@ -722,7 +917,7 @@
       "refersTo": "button-danger",
       "description": "Lo que no tiene vuelta: lleva el verbo (Eliminar, Cancelar el pedido).",
       "html": "<button class=\"ds-btn-peligro\">Cancelar el pedido</button>",
-      "css": ".ds-btn-peligro { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #F1C7BE; background: #fff; color: var(--peligro-t); font-family: var(--fuente); font-size: 0.875rem; font-weight: 500; cursor: pointer; } .ds-btn-peligro:hover { background: var(--peligro-f); } .ds-btn-peligro:focus-visible { outline: none; box-shadow: 0 0 0 3px #A1231833; }"
+      "css": ".ds-btn-peligro { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--peligro-borde); background: #fff; color: var(--peligro-t); font-family: var(--fuente); font-size: 0.875rem; font-weight: 500; cursor: pointer; } .ds-btn-peligro:hover { background: var(--peligro-f); } .ds-btn-peligro:focus-visible { outline: none; box-shadow: 0 0 0 3px #A1231833; }"
     },
     {
       "name": "Campo con etiqueta",
@@ -830,7 +1025,8 @@
       "Don't cargar fuentes desde internet: IBM Plex va instalada en el proyecto.",
       "Don't poner sombras a tarjetas o cifras, ni bordes entre los tramos de una gráfica.",
       "Don't crear nombres de clase genéricos en la hoja global (`.linea`, `.detalle`, `.dato`): lo de una sola pantalla va en su componente.",
-      "Don't meter un SVG de gráfica en media tarjeta: el texto se deforma con el ancho."
+      "Don't meter un SVG de gráfica en media tarjeta: el texto se deforma con el ancho.",
+      "Don't ponerle `tabindex` a mano a una tabla desplazable, ni sombras en sus orillas: eso lo hace el servicio de las tablas, con `mask-image`."
     ]
   }
 }

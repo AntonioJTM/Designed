@@ -42,6 +42,16 @@
   text-decoration: none;
 }
 .brand:hover { color: #fff; }
+.brand-icono {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--superficie);
+}
+.brand-icono img { display: block; width: auto; height: 22px; }
 .btn-menu {
   display: none;
   width: 44px;
@@ -93,7 +103,7 @@
 .side nav a.on { background: var(--acento); color: #fff; font-weight: 500; }
 /* Sobre la barra oscura el contorno del foco va en azul claro (el del logo):
    el azul de siempre casi no se ve sobre el negro. */
-.side :focus-visible { outline-color: #8FB2F2; }
+.side :focus-visible { outline-color: var(--barra-foco); }
 
 .user {
   /* Siempre abajo y a la vista: el nombre, el puesto, la campana y "Salir". */

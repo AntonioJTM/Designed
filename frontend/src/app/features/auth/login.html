@@ -5,10 +5,8 @@
 -->
 <div class="lado">
   <div class="marca">
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#8FB2F2" stroke-width="1.75"
-         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M7 3h10 M7 21h10 M8.5 3v18 M15.5 3v18 M8.5 8l7 3 M8.5 12l7 3 M8.5 16l7 3"></path>
-    </svg>
+    <!-- El mismo ícono del menú del panel (2026-10-14). -->
+    <span class="icono"><img src="hitex-marca.png" alt="" width="65" height="96" /></span>
     <span>Hitex</span>
   </div>
   <div class="lema">
@@ -20,6 +18,8 @@
 
 <main>
   <form [formGroup]="form" (ngSubmit)="enviar()" novalidate>
+    <!-- El logo completo, a color: aquí el fondo es claro y se lee como es. -->
+    <img class="logo" src="hitex-logo.png" alt="Hitex · Hilos e indumentaria textil" width="720" height="420" />
     <div class="encabezado">
       <h1>Entrar</h1>
       <p>Con el correo y la contraseña que te dio el administrador.</p>

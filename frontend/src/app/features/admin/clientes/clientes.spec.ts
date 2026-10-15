@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { VistaTodos } from './vistas/vista-todos';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { ClientesPantalla } from './clientes';
@@ -18,6 +20,10 @@ import { Deuda, Frecuencia, Gasto, VistaClientes } from '../../../core/models/re
  *   · en Frecuencia, "A los que ya les toca" no enseña a los que van bien;
  *   · la frecuencia dice también cuánto se llevan, en kilos y en dinero;
  *   · Dejaron de venir pide el corte de la campana (60 días) si no se dice otro.
+ *   · Dónde entrego (2026-10-14) cuenta por estado y por lugar, sin periodo, y
+ *     al tocar un lugar lista a sus clientes.
+ *   · Todos los clientes (2026-10-14) dice cuántos son y los lista, con filtros
+ *     que van al servidor y "Ver más".
  */
 describe('ClientesPantalla', () => {
   const gasto: Gasto = {
@@ -50,6 +56,17 @@ describe('ClientesPantalla', () => {
   };
 
   let pedidos: { vista: string; dias: number }[];
+  let listados: Record<string, unknown>[];
+  /** Cuántos dice el servidor que hay con los filtros (para "Ver más"). */
+  let totalFalso = 1;
+  const lugares = {
+    clientes_activos: 10, sin_lugar: 3,
+    lugares: [
+      { id: 1, nombre: 'Tenango de Doria', estado: 'Hidalgo', num_clientes: 1 },
+      { id: 2, nombre: 'Tulancingo', estado: 'Hidalgo', num_clientes: 5 },
+      { id: 3, nombre: 'Huauchinango', estado: 'Puebla', num_clientes: 1 },
+    ],
+  };
   const apiFalsa = {
     frecuencia: (dias: number) => { pedidos.push({ vista: 'frecuencia', dias }); return of(frecuencia); },
     deuda: (dias: number) => { pedidos.push({ vista: 'deuda', dias }); return of(deuda); },
@@ -71,7 +88,15 @@ describe('ClientesPantalla', () => {
         { provide: AuthService, useValue: { puede: () => true } },
         {
           provide: ClientesService,
-          useValue: { buscar: () => of([]), listar: () => of({ items: [], total: 0, page: 1, limit: 100, pages: 0 }) },
+          useValue: {
+            buscar: () => of([]),
+            listar: (f: Record<string, unknown>) => {
+              listados.push(f);
+              const pagina = Number(f['page'] ?? 1);
+              return of({ items: [{ id: 6 + pagina, codigo: 'C-000' + (6 + pagina), nombre: 'Mercería Lupita ' + pagina, telefono: '775 100 2000', limite_credito: 0, activo: 1, saldo: '250.00', num_pedidos: 3, total_comprado: '4500.00', lugar_entrega: 'Tulancingo', lugar_entrega_estado: 'Hidalgo' }], total: totalFalso, page: pagina, limit: 100, paginas: 1 });
+            },
+            lugaresEntrega: () => { pedidos.push({ vista: 'lugares', dias: 0 }); return of(lugares); },
+          },
         },
         { provide: VentasService, useValue: { metodosPago: () => of([]), cajas: () => of([]) } },
         { provide: CatalogoService, useValue: { tiposCliente: () => of([]) } },
@@ -91,7 +116,11 @@ describe('ClientesPantalla', () => {
 
   const textoDe = (el: HTMLElement) => el.textContent?.replace(/\s+/g, ' ') ?? '';
 
-  beforeEach(() => (pedidos = []));
+  beforeEach(() => {
+    pedidos = [];
+    listados = [];
+    totalFalso = 1;
+  });
   afterEach(() => TestBed.resetTestingModule());
 
   it('pide la pestaña de su ruta con el periodo de la dirección, y la cabecera', async () => {
@@ -101,6 +130,60 @@ describe('ClientesPantalla', () => {
     expect(pedidos.every((p) => p.dias === 30)).toBe(true);
     const t = textoDe(f.nativeElement);
     expect(t).toContain('2 clientes · 1 compraron en los últimos 30 días · 1 te debe');
+  });
+
+  it('Todos los clientes dice cuántos son, los lista y filtra en el servidor', async () => {
+    totalFalso = 2;
+    const f = await montar('todos');
+    f.detectChanges();
+    expect(f.componentInstance.conPeriodo()).toBe(false);
+    // La lista de activos por número, y cuántos están dados de baja.
+    expect(listados).toContain(jasmine.objectContaining({ orden: 'numero', activo: true, page: 1, limit: 100 }));
+    expect(listados).toContain(jasmine.objectContaining({ activo: false, limit: 1 }));
+    const t = textoDe(f.nativeElement);
+    const cifras = [...f.nativeElement.querySelectorAll('.kpi-valor')].map((e: Element) => e.textContent?.trim());
+    expect(cifras).toEqual(['10', '7 de 10', '2']);
+    expect(t).toContain('2 clientes activos');
+    expect(t).toContain('C-0007');
+    expect(t).toContain('Tulancingo, Hidalgo');
+    expect(t).toContain('$250.00');
+    expect(t).toContain('Ver más (1 más)');
+
+    const v = f.debugElement.query(By.directive(VistaTodos)).componentInstance as VistaTodos;
+    v.verMas();
+    f.detectChanges();
+    expect(listados.at(-1)).toEqual(jasmine.objectContaining({ page: 2 }));
+    expect(v.lista().length).toBe(2);
+
+    v.lugar = 'sin';
+    v.mostrar = 'todos';
+    v.q = 'lupita';
+    v.buscar();
+    const ultimo = listados.at(-1)!;
+    expect(ultimo).toEqual(jasmine.objectContaining({ sin_lugar: true, q: 'lupita', page: 1 }));
+    expect('activo' in ultimo).toBe(false);
+    expect(v.cuenta()).toBe('2 clientes sin lugar de entrega con «lupita»');
+  });
+
+  it('Dónde entrego cuenta por estado y por lugar, sin periodo, y lista a los de un lugar', async () => {
+    const f = await montar('lugares');
+    expect(pedidos.some((p) => p.vista === 'lugares')).toBe(true);
+    expect(f.componentInstance.conPeriodo()).toBe(false);
+    const t = textoDe(f.nativeElement);
+    // Hidalgo primero (6 de 10 clientes), y adentro Tulancingo antes que Tenango.
+    expect(t).toContain('Hidalgo 6 clientes · 60% · 2 lugares');
+    expect(t.indexOf('Tulancingo')).toBeLessThan(t.indexOf('Tenango de Doria'));
+    expect(t).toContain('Puebla 1 cliente · 10% · 1 lugar');
+    expect(t).toContain('7 de 10');
+    expect(t).toContain('3 clientes activos todavía sin lugar');
+
+    const boton = [...f.nativeElement.querySelectorAll('button.lugar-boton')]
+      .find((b: Element) => b.textContent?.includes('Tulancingo')) as HTMLButtonElement;
+    boton.click();
+    f.detectChanges();
+    expect(listados.at(-1)).toEqual(jasmine.objectContaining({ lugar_entrega_id: 2, activo: true }));
+    expect(textoDe(f.nativeElement)).toContain('Clientes en Tulancingo, Hidalgo');
+    expect(textoDe(f.nativeElement)).toContain('C-0007');
   });
 
   it('sin ?dias usa 90 y no pide dos veces la misma vista', async () => {

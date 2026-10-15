@@ -236,13 +236,41 @@ tienda-hilos/
   (ver "Paquete encontrado en otro almacén" en el traspaso).
 - **El TICKET impreso es uno solo** (`shared/ticket/ticket.ts` + `core/services/ticket.service.ts`,
   2026-10-13): para la térmica Kinwodon de 80 mm (imprime 72 mm), en negro puro. Lo usan la caja
-  (botón "Imprimir ticket" al cobrar) y el detalle de la venta. **El corte depende del LARGO de la
-  hoja:** `imprimirTicket` mide el ticket dibujado y pone `@page { size: 80mm <largo>mm; margin: 0 }`;
-  sin eso la impresora saca papel en blanco hasta el largo de su hoja. Dice qué fue: Venta, A
+  (botón "Imprimir ticket" al cobrar) y el detalle de la venta. **La impresora de la tienda está
+  instalada como "POS-58": rollo de 58 mm cuya hoja mide 58 × 3276 mm.** Por eso el ticket NO pide
+  tamaño de hoja (`@page { margin: 0 }` y nada más): con `size`, Chrome lo ENCOGÍA y lo ponía a la
+  mitad de esa hoja de 3 m (2026-10-14, se vio en la vista previa). Sin tamaño usa la hoja de la
+  impresora, empieza arriba y el controlador imprime hasta lo último con tinta y corta. El
+  `margin: 0` quita el encabezado y el pie de Chrome (fecha y dirección), que iban al FINAL de los
+  3 m y obligaban a sacar todo el papel. El ancho se elige en Configuración → Ticket
+  (`ticket_papel_mm`: 58 u 80, migración `2026-10_ticket_papel.sql`; `PAPELES` en `ticket.ts`:
+  ticket de 46 o 60 mm, letra al 84% en los dos: el de 80 mide 60 y no 70 porque hay impresoras
+  de 80 que imprimen 64 mm y otras 72 —la WL88S cortó el de 70 y un carácter del de 62; se probaron
+  58 y 53 y el usuario eligió 60—). **El ticket va PEGADO A LA IZQUIERDA (1 mm),
+  NO centrado** (2026-10-14, con la SICAR WL88S: su controlador le da a Chrome una hoja de ~72 mm
+  pero la cabeza imprime ~48 mm desde la orilla izquierda; centrado empezaba a ~13 mm y se cortaba
+  a la derecha). Toda térmica imprime desde la izquierda: así cabe en cualquiera con el ancho que
+  de verdad imprime. Configuración → Ticket tiene **"Imprimir una prueba"** (`armarPrueba`: una
+  regla de 0 a 80 mm y un recuadro del ancho del ticket, con el ancho ELEGIDO aunque no esté
+  guardado) para saber si conviene 58 u 80. **La tienda usa la SICAR WL88S (80 mm) y quedó en 80 mm**
+  (2026-10-14): venía en modo 58 (su autoprueba decía 32/42 caracteres por renglón) y se cambió en
+  la impresora; en Windows lleva la hoja de 72 mm y en Configuración `ticket_papel_mm = 80`. Dice qué fue: Venta, A
   crédito (cuánto quedó a deber), Nota pendiente de pago (sin "pagado" ni "cambio"), Apartado.
   **Una NOTA EN ESPERA no lleva ticket** (todavía se modifica): `armarTicket` lo rechaza
   (`SIN_TICKET`) y `llevaTicket()` esconde el botón. El cambio no se guarda: la caja lo pasa al
   imprimir.
+  **El ENCABEZADO lleva el logo en negro y los DATOS FISCALES** (2026-10-14, de la Constancia de
+  Situación Fiscal): razón social, RFC, régimen, domicilio fiscal (en lugar de `tienda_direccion`,
+  que por eso ya NO se pide en Configuración desde el 2026-10-14: "me pones que ponga la dirección
+  de la tienda 2 veces"; está en `OCULTAS` y el checkout apagado usa el domicilio fiscal si no hay
+  otra). Si el RFC o el régimen se copiaron con su rótulo ("REGIMEN: 601…"), el ticket lo quita
+  (`sinRotulo`, solo con los dos puntos),
+  teléfono, y al pie `ticket_leyenda`. Viven en `configuracion` (claves `fiscal_*` y
+  `ticket_leyenda`, migración `2026-10_datos_fiscales_ticket.sql`, públicas; pantalla
+  Configuración → "Datos fiscales" y "Ticket"), NUNCA en el código ni en una migración: el
+  repositorio es público (la constancia, `ticketinfo.pdf`, está en `.gitignore`). El logo es
+  `public/hitex-ticket.png` (1009 × 588) y `imprimirTicket` ESPERA a que cargue antes de imprimir
+  (`prepararHoja`), o saldría en blanco; si no carga, va "HITEX" en letras.
 - **El pago en efectivo se asienta por lo COBRADO, no por el billete.** Una venta de $432 pagada
   con $500 deja un `pagos` de $432: `crearPedido` resta el cambio del efectivo antes de
   insertarlo y devuelve `cambio` en la respuesta (no se guarda: no es dinero de la tienda). Si
@@ -517,9 +545,34 @@ tienda-hilos/
   · **`cliente_desde` NO es `creado_en`.** Los clientes de años se capturan hoy pero compran desde
     antes: `creado_en` dice cuándo entró al sistema, `cliente_desde` cuándo empezó a comprar. Sin
     esa distinción, el día que se capturen todos parecería que la tienda estrenó clientela.
-  · **Se busca por el APODO y por el teléfono**, no por el nombre completo: `nombre_comercial`
-    guarda como le dicen de verdad ("Doña Mari") y es con lo que el mostrador lo encuentra.
-    `GET /clientes/buscar?q=` mira nombre, apodo, código y los dos teléfonos, y exige 2 letras.
+  · **Se busca por el nombre, el NÚMERO y el teléfono.** `GET /clientes/buscar?q=` mira nombre,
+    apodo, número y los dos teléfonos, y exige 2 letras. El apodo (`nombre_comercial`, "Doña Mari")
+    YA NO SE CAPTURA (2026-10-14: "vamos a quitar el como le dicen"): ni en Nuevo cliente ni en el
+    alta rápida de la caja. La columna sigue y los clientes de antes lo conservan (al editar no se
+    manda y el servidor deja lo que tenía); por eso las pantallas siguen diciendo "le dicen…" si
+    lo hay. Igual el CUMPLEAÑOS (`fecha_nacimiento`): ya no se pide ni se enseña.
+  · **El NÚMERO DE CLIENTE lo da el sistema y no se modifica** (2026-10-14: "quiero que tú me lo
+    des y que no se pueda modificar"): `clientes.codigo` = `C-` + el id con 4 ceros (C-0001; del
+    10,000 en adelante sin ceros), puesto en la misma transacción del alta (`clientes/model.js →
+    asignarCodigo`, también en el registro de la tienda en línea). `codigo` ya no está en el
+    esquema de alta ni de edición (mandarlo es 422) y el UPDATE no lo toca. La migración
+    `2026-10_clientes_lugar_entrega.sql` les puso el suyo a los que ya existían (en `desarrollo`
+    reemplazó los que se habían puesto a mano; `hitex` no tenía clientes). Nuevo cliente lo
+    enseña de solo lectura ("Se le asigna al guardar") y al guardar dice "con el número C-0001".
+  · **LUGAR DE ENTREGA** (2026-10-14: "los que entrego en Tulancingo, Tenango… necesito
+    etiquetar esos clientes para sacar a cuántos les entrego en los municipios o estados"). Es
+    una LISTA, no texto libre (con texto, "Tulancingo" y "tulancingo " partirían la cuenta):
+    `lugares_entrega` (municipio o lugar + estado, sin repetir el mismo en el mismo estado,
+    409 `LUGAR_REPETIDO`; mayúsculas, acentos y espacios de más no cuentan) y
+    `clientes.lugar_entrega_id` (uno o ninguno; uno que no está en la lista, 422
+    `LUGAR_INVALIDO`). `clientes/lugares.js`; `GET /clientes/lugares-entrega` (cada lugar con
+    sus clientes ACTIVOS, `clientes_activos` y `sin_lugar`), `POST` (alta) y `PUT /:id` (corregir
+    cómo se escribió; sus clientes lo siguen). `GET /clientes?lugar_entrega_id=` / `?sin_lugar=1`
+    lista a los de un lugar. En Nuevo/Editar cliente: "A dónde se le entrega" con el selector y
+    «Nuevo lugar» ahí mismo (municipio + estado, con los 32 estados de sugerencia, `ESTADOS_MX`
+    en `clientes-ui.ts`; si ya estaba, lo elige). "Capturar otro" conserva el lugar. La cuenta
+    vive en Clientes → **Dónde entrego** (ver abajo). No tiene nada que ver con `direccion`,
+    `ciudad` y `estado` del cliente ("Dónde está"), que se quedan como estaban.
   · `clientes.tipo_cliente_id` es su lista de precios habitual: al elegirlo en el POS se aplica
     sola, así nadie le cobra precio público a un cliente de mayoreo por descuido.
   · `direccion` es un campo libre y NO reemplaza a `direcciones`: esa tabla es para los envíos de
@@ -798,12 +851,79 @@ tienda-hilos/
     venta. La comisión se paga al liquidarse (tipo `'nota'`, "Nota pendiente de pago", en
     `nomina/comisiones.js`). La campana y Hoy avisan "N notas pendientes de pago" (en lugar del aviso de
     apartados ya pagados). `e2e-notas-pendientes.js` (40 comprobaciones).
-  · **FALTA (parte 2, aprobada por el usuario):** las DEVOLUCIONES con SALDO A FAVOR. Desde la nota
-    del cliente, línea por línea: los paquetes cerrados se escanean y vuelven como paquetes con su
-    peso; los conos sueltos se pesan y vuelven como conos —**lo que marque la báscula, sin restar
-    tubos**—; lo que regresa queda A FAVOR al precio con que se vendió (no se devuelve dinero). El
-    saldo a favor va APARTE de la deuda y el cliente elige: descontarlo de lo que debe o usarlo en sus
-    compras ("Usar saldo a favor" al cobrar), y también se aplica a su deuda desde el expediente.
+- **DEVOLUCIONES CON SALDO A FAVOR (2026-10-13)**: "un cliente regresa una parte o todo: no le quiero
+  regresar dinero, que se le agregue un saldo a favor de lo que regresó" (usuario). Migración
+  `2026-10_saldo_a_favor.sql` (LAS DOS bases); `pedidos/devoluciones.js` y `clientes/saldo-favor.js`.
+  · Se hace desde la VENTA (botón «Devolución», `pedidos/devolucion-modal.ts`, `hacer:cancelar_venta`),
+    línea por línea: los paquetes CERRADOS se escanean (solo los de esa línea, todavía `vendido`) y
+    vuelven `disponible` con su peso al almacén de la venta; lo SUELTO se pesa —**lo que marque la
+    báscula, sin restar tubos**— y de un paquete entra al CONO del hilo (se crea si falta, como al bajar
+    conos). Inventario + kardex tipo `'devolucion'`, `referencia_tipo='pedido'`, motivo con el folio
+    `DEV-…` ("Devolución del cliente"). `GET /pedidos/:id/devolucion` (lo que se puede regresar) y
+    `POST /pedidos/:id/devoluciones`. Lo que regresa queda A FAVOR al precio con que se vendió
+    (`(subtotal + impuesto) ÷ cantidad` de la línea). NO sale dinero; la venta sigue como estaba.
+  · **Si la venta que regresa TODAVÍA SE DEBE, lo que regresa se descuenta de ESA nota, solo y
+    primero** (2026-10-14: "una nota a crédito y el cliente regresa hilo: cuando es un crédito que aún
+    no está pagado, esa devolución se le descuenta a la nota"), hasta lo que debe
+    (`clientes/saldo-favor.js → debeDeVenta / descontarDeVenta`): a la FIADA, un `ajuste` negativo
+    LIGADO a la venta (`pedido_id`) en su cuenta —un abono sin venta se iba a lo MÁS VIEJO, no a esa
+    nota—; a la nota pendiente de pago, un pago "Saldo a favor". Si lo cubre todo, la venta queda
+    pagada. Lo que sobre sigue el destino elegido. La vista previa trae `debe_esta`/`debe_esta_tipo` y
+    la respuesta `descontado_de_esta`; la ventana lo dice ("Esta nota a crédito todavía debe $X: lo que
+    regresa se descuenta de ella") y solo pregunta qué hacer con lo que SOBRA si debe algo más. Para la
+    comisión, lo descontado de una fiada cuenta como cubierto (`nomina/comisiones.js`): pagar lo que
+    quedaba la liquida.
+  · El saldo a favor es un LIBRO (`saldo_favor_movimientos`: devolucion +, anticipo +, uso −,
+    aplicado −, reintegro +, ajuste ±), APARTE de la deuda ("a veces pide que su saldo se use para otras compras y
+    dejar su crédito como está"). El cliente elige: al devolver, con lo que sobre de esa nota,
+    **dejarlo a favor** o **descontarlo de lo demás que debe** (`destino: 'deuda'`: sus notas
+    pendientes de la más vieja y su cuenta de crédito); al cobrar, **"Usar su saldo a favor"** (`POST /pedidos` con `saldo_favor`, solo
+    Cobrar y A crédito, con cliente); y desde el expediente, «Descontar de lo que debe»
+    (`POST /clientes/:id/saldo-favor/aplicar`).
+  · Lo que paga el saldo es un `pagos` con el método INTERNO "Saldo a favor" (`metodos_pago.interno =
+    1`): la venta dice cómo se pagó, se liquida y paga comisión como con cualquier pago. Un método
+    interno no se ofrece (`/opciones/metodos-pago`) y se rechaza si llega en `pagos` (422
+    `METODO_PAGO_INVALIDO`): solo lo asienta el sistema.
+  · Cancelar una venta pagada con saldo le REGRESA el saldo (`reintegro`, idempotente) y ya no se
+    reactiva (409 `VENTA_CON_SALDO_FAVOR`). Una venta con devoluciones ya no se cancela completa (409
+    `VENTA_CON_DEVOLUCIONES`): lo que falta se regresa también con Devolución. "Devuelto" (que
+    regresaba el dinero) ya no se ofrece en el detalle; el servidor lo sigue aceptando.
+  · **Lo que regresa NO PAGA COMISIÓN NI CUENTA COMO VENDIDO** (2026-10-14: "si una venta de $1,000
+    regresa $400, la comisión es sobre los $600"; "como regresa a inventario, se le resta"). Migración
+    `2026-10_comision_devoluciones.sql`. En la comisión (`nomina/comisiones.js`): si regresó antes de
+    pagarse, la venta entra con la venta neta menos lo devuelto (sin IVA); si regresó después, la
+    siguiente nómina lleva un renglón tipo `'devolucion'` en negativo con el porcentaje con que se
+    pagó (`nomina_comisiones.devuelto` = lo ya descontado: nunca dos veces). "Venta por color", "Más
+    vendidos" (`v_mas_vendidos`) y los kilos de "Ventas por día" restan lo devuelto de la línea, en
+    la fecha de la venta. NO cambian el dinero de "Ventas" ni el "Hilo parado", y así se quedan
+    (decisión del usuario, 2026-10-14): "Ventas" cuenta cada venta completa, y en Hilo parado el
+    hilo "entró y salió": lo que regresó vuelve a estar en el inventario.
+  · `e2e-devoluciones.js` (73, con los anticipos y el pago parte y parte) y `e2e-nomina-pdf.js` (40).
+- **ANTICIPOS: dinero a cuenta, SIN NOTA (2026-10-14)**: "se dan anticipos en efectivo y
+  transferencia" (usuario; eligió "dinero a cuenta, sin nota"). El cliente deja dinero antes de
+  llevarse nada y le queda como SALDO A FAVOR: el mismo libro de las devoluciones, tipo `'anticipo'`,
+  y se gasta igual ("Usar su saldo a favor" al cobrar, o «Descontar de lo que debe»). NO es un
+  apartado (no aparta mercancía) ni un abono (no baja una deuda).
+  `POST /clientes/:id/anticipos` (`efectivo`, `transferencia`, `sesion_caja_id`, `referencia`,
+  `notas`; staff, como el abono; `clientes/saldo-favor.js → recibirAnticipo`). Puede dejar parte y
+  parte: un renglón por método. Migración `2026-10_anticipos.sql` (LAS DOS bases): el tipo nuevo y
+  `metodo_pago_id`, `sesion_caja_id` y `referencia` en `saldo_favor_movimientos`.
+  · El EFECTIVO entra al turno ABIERTO como `movimientos_caja` `'ingreso'` ("Anticipo de …"; no
+    `'venta'`: no se ha vendido nada), con su `referencia_id` en el renglón del saldo. Sin turno, 409
+    `FALTA_SESION_CAJA` antes de asentar nada; con el turno cerrado, 409 `CAJA_CERRADA`. La
+    TRANSFERENCIA no toca la caja y guarda su folio en `referencia`. Nada: 422 `ANTICIPO_VACIO`.
+  · Botón **"Recibir anticipo"** en el expediente (encabezado y la tarjeta del saldo a favor) y en el
+    punto de venta junto al cliente elegido (`clientes/anticipo-modal.ts`). Desde el punto de venta
+    el efectivo va al turno de esa caja; desde el expediente se buscan los turnos abiertos
+    (`clientes/turnos-caja.ts`, el mismo que el abono: el único, o el de `localStorage['caja_sel']`;
+    con varios, se elige). El historial lo dice "Dejó a cuenta · efectivo" / "· transferencia ·
+    folio".
+- **COBRAR PARTE Y PARTE: "Efectivo y transferencia" (2026-10-14)**. En el punto de venta, la forma
+  de pago ofrece esa opción (si existen los dos métodos): se teclea lo que paga "Por transferencia"
+  y "El resto, $X, en efectivo"; lo recibido en efectivo da el cambio. Se mandan dos `pagos`;
+  `crearPedido` ya los aceptaba y solo resta el cambio del efectivo (la transferencia por encima de
+  lo que se cobra sigue siendo 422 `PAGO_EXCEDE_TOTAL`). Al cajón entra solo el efectivo. Una nota
+  en espera va con un solo método, y la venta siguiente arranca otra vez en efectivo.
 - **Precio de lista en el producto.** `productos.precio_kg` es el precio del HILO por unidad de
   peso, que es como lo piensa la tienda. NO es el que se cobra —ese sigue siendo
   `producto_variantes.precio`, y es el que congela el pedido— pero las presentaciones que se creen
@@ -920,6 +1040,7 @@ tienda-hilos/
     en que quedó PAGADA: contado, el día; fiada, cuando los abonos la cubren (el mismo reparto FIFO
     de `clientes/model.js → repartirAbonos`, que se separó de `aplicarAbonos` para correrlo sobre
     los movimientos HASTA una fecha); apartado o pedido, cuando sus `pagos` llegan al total.
+    Lo que el cliente REGRESA no paga comisión (2026-10-14; ver "DEVOLUCIONES CON SALDO A FAVOR").
     `nomina/comisiones.js`: `ventasSinPagarComision` calcula para cada venta cuándo quedó liquidada;
     `_calcular` toma las liquidadas hasta el sábado que NO estén en otra nómina viva (no cancelada) y
     las anota en `nomina_comisiones` (migración `2026-10_comisiones_al_liquidar.sql`: folio,
@@ -1006,7 +1127,8 @@ tienda-hilos/
   permiso) va a `/admin/sin-acceso` ("Todavía no tienes pantallas"; si sí tiene alguna, lo manda a
   la suya). Si algún día vuelve, está en git hasta el 2026-10-13 y en CAMBIOS.txt.
 - **Un cliente registrado desde la caja nace SIN crédito.** El alta rápida del POS pide
-  nombre, apodo y teléfono y nada más, con `limite_credito: 0`, así que el cobro sale
+  nombre y teléfono y nada más (sin apodo desde el 2026-10-14; el número lo da el sistema),
+  con `limite_credito: 0`, así que el cobro sale
   completo. Es la decisión del usuario para un cliente nuevo: no se le fía todavía. La
   campana avisa a los 15 días (`nuevos_sin_credito`) para que se decida si se le abre
   crédito o se le sigue cobrando todo.
@@ -1039,6 +1161,19 @@ tienda-hilos/
     puestos. Una E2E que firme un token tiene que usar el id de alguien que DE VERDAD tenga ese
     puesto (`e2e-surtir-inventario.js` firmaba como almacenista con el id del administrador).
     `scripts/e2e-varios-puestos.js` lo prueba (28 comprobaciones).
+  · **El CARGADOR trabaja en la tienda pero NO ENTRA AL SISTEMA** (2026-10-14: "no tiene acceso
+    a nada del sistema; solo carga los paquetes que el personal con acceso ya escaneó"). Es un
+    puesto con `roles.entra_al_sistema = 0` (migración `2026-10_puesto_cargador.sql`, que además
+    deja `usuarios.correo` y `contrasena_hash` aceptar NULL). Se da de alta en Personal SIN correo
+    ni contraseña (mandarlos es 422 `PUESTO_SIN_ACCESO`) y va SOLO: ni lleva otros puestos ni se da
+    como "También trabaja como" (422 `PUESTO_SIN_ACCESO`). A quien sí entra se le siguen exigiendo
+    (422 `FALTA_CORREO` / `FALTA_CONTRASENA`). Sí sale en NÓMINA, que es para lo que existe. No sale
+    en Permisos y su columna no se guarda; `puestosDe` ignora los puestos sin acceso, así que
+    aunque tuviera un token vivo no puede nada. Pasar a alguien a cargador le QUITA correo,
+    contraseña y otros puestos (la ventana lo avisa); un cargador que pasa a un puesto que entra
+    necesita correo y contraseña (el único caso en que se manda `correo` al editar; el de quien ya
+    entra no se cambia, 422 `CORREO_NO_SE_CAMBIA`). La lista dice "No entra al sistema".
+    `scripts/e2e-cargador.js` (30 comprobaciones).
   · `scripts/e2e-permisos.js` prueba cada guarda sin escribir nada (ids que no existen o cuerpos
     inválidos: 403 al que no tiene, 404/422 al que sí).
 - **El COSTO no sale en las rutas públicas ni a quien no tiene `hacer:ver_costos`.** (Hoy lo
@@ -1062,7 +1197,24 @@ tienda-hilos/
   vendido / (vendido + lo que queda). "Vendido" es lo que salió del inventario: sin cancelados,
   devueltos ni apartados sin entregar (`inventario_descontado = 1`) — por eso puede salir un
   poco abajo de "Más vendidos", que sí cuenta los apartados.
-- **Clientes son SEIS miradas** (`GET /clientes/analisis/:vista?dias=30|90|365|3650`,
+- **Clientes → TODOS LOS CLIENTES** (2026-10-14: "no sé cuántos clientes tengo y qué clientes
+  tengo, como una lista"). Es la PRIMERA pestaña y Clientes abre ahí (`/admin/clientes` →
+  `clientes/todos`; `vistas/vista-todos.ts`, sin periodo). Arriba: activos, con lugar de entrega
+  y dados de baja; luego buscar (nombre, número o teléfono), Lugar de entrega (uno, todos o
+  "Sin lugar"), Mostrar (activos / dados de baja / todos) y Ordenar (por número —el de
+  siempre—, nombre, los más nuevos, quién debe más, quién compra más, quién vino más reciente).
+  La tabla: número, cliente, teléfono, lugar, lista, debe, ha comprado, última compra y "Ver"
+  ("Venderle" va en el expediente: con él la fila no cabía a 1280 px). Los filtros van al
+  servidor (`GET /clientes`, ahora con `orden=numero` y el id de desempate para que "Ver más" no
+  repita ni salte a nadie); trae de 100 en 100 con "Ver más". En esa pestaña no va el buscador de
+  la cabecera: la lista tiene el suyo. Al dar de alta un cliente, la lista se vuelve a pedir.
+- **Clientes → DÓNDE ENTREGO** (2026-10-14, `/admin/clientes/lugares`, `vistas/vista-lugares.ts`,
+  sin periodo): cuántos lugares y en cuántos estados, cuántos clientes activos tienen lugar y
+  dónde más se entrega; por ESTADO (del que tiene más clientes al que menos), cada lugar con su
+  barra = su parte de TODOS los clientes activos (y lo dice). Tocar un lugar lista a sus clientes
+  (número, teléfono, lista; Ver y Venderle) con "Corregir el nombre"; "Ver quiénes" lista a los
+  activos sin lugar, para ponérselo. Sale de `GET /clientes/lugares-entrega`, no de `analisis`.
+- **Clientes, además, son SEIS miradas** (`GET /clientes/analisis/:vista?dias=30|90|365|3650`,
   `clientes/analisis.js`): frecuencia de compra (contra el ritmo de CADA cliente, y cuánto se lleva
   en KILOS y en DINERO), dejaron de
   venir, cuánto debe (cartera por antigüedad, igual que el tablero), qué compra (por
@@ -1119,6 +1271,12 @@ tienda-hilos/
     primer campo, Tab da la vuelta dentro de ella y al cerrarla regresa al botón que la abrió. No
     lo repitas en cada modal; basta con que la ventana lleve `role="dialog"` (o `alertdialog`) y
     `aria-modal="true"`. Si una ventana pone su propio foco (el lector), el servicio no lo toca.
+    **Si la ventana todavía estaba cargando** (sin campos a los 60 ms), el foco espera en la ✕ y
+    pasa a su primer campo en cuanto aparece, salvo que la persona ya lo haya movido (2026-10-14:
+    en la Devolución se quedaba en la ✕ y el Enter de la pistola la cerraba).
+  · **Una región viva no se pone sobre algo que cambia con cada tecla** (el lector de pantalla lo
+    repite todo): se anuncia una frase un momento después de la última tecla, como el resumen de
+    la Devolución (`p.oculto[role=status]` con `cambio()`).
   · **Los mensajes que aparecen solos se anuncian:** todo `.alert` lleva `role="alert"` y todo
     `.ok-msg` / `p.ultimo` lleva `role="status"`. Un campo pintado de rojo (`.invalido`) lleva
     `[attr.aria-invalid]` con la MISMA condición.
@@ -1127,12 +1285,38 @@ tienda-hilos/
   · **Los tamaños de letra van en `rem`** (1 rem = 16 px), para que respeten el tamaño que cada
     quien tenga en su navegador. Espacios, bordes y alturas siguen en `px`.
   · **En el celular y en pantallas táctiles** (menos de 900 px o puntero grueso) los botones
-    chicos, de ícono, los selectores y "Volver" miden 44 px, y los enlaces agrandan su zona de
+    chicos, de ícono, la ✕ de cada ventana (`.modal-cerrar`) y de cada paquete (`.ficha-quitar`),
+    el renglón de una casilla (`.field.check`), los selectores y "Volver" miden 44 px, y los enlaces agrandan su zona de
     toque con un `::after` invisible (bloque al final de `styles.scss`). Una pantalla con un campo
     de ancho fijo lo pone con `min(Npx, 100%)`, o ensancha la página en el celular (pasó en Caja).
   · **Colores que se repiten son tokens:** `--punto-aviso`, `--punto-alerta` (los puntos de las
     cifras clave y el globo de la campana), `--foco` (el halo del campo) y `--barra-hover`,
-    `--barra-borde`, `--barra-claro` (el menú). El número escrito sobre un tramo de gráfica elige
+    `--barra-borde`, `--barra-claro`, `--barra-suave` (texto secundario sobre lo oscuro) y
+    `--barra-foco` (el contorno del foco sobre lo oscuro) (el menú y Entrar). Los puntos de una cifra
+    clave van por clase (`.punto.tono-aviso` / `.tono-alerta` / `.tono-serie-3` / `.tono-tinta`),
+    no con `style=`: `.aviso` y `.alerta` a secas son GLOBALES y el punto salía como un círculo de
+    40 px. El 2026-10-15 (cuarta auditoría) se pasaron a tokens los ~20 colores sueltos del panel:
+    `--ok-suave`/`--ok-borde`/`--ok-oscuro`, `--peligro-borde`/`--peligro-oscuro`, `--acento-tenue`,
+    `--sobre-acento`, `--velo`/`--velo-claro`, `--desplazamiento` y el mapa de "Cuándo compra"
+    (`--viz-calor-1/2/-tinta`). Solo quedan sueltos los de `shared/charts/contraste.ts` (la cuenta
+    de contraste necesita el color de verdad) y los de la tienda en línea apagada.
+  · **LA TABLA QUE NO CABE SE MUEVE CON EL TECLADO** (2026-10-15, cuarta auditoría, WCAG 2.1.1):
+    `core/services/tablas-desplazables.service.ts`, arrancado una vez en `app.ts` como el foco de
+    las ventanas, revisa cada `.tabla-scroll`: mientras desborda le pone `tabindex="0"`,
+    `role="region"` y "Tabla: <título de su tarjeta>", y las clases `hay-mas-der`/`hay-mas-izq`
+    desvanecen (con `mask-image`, sin sombra) la orilla donde hay más columnas; al caber, se lo
+    quita. NO le pongas `tabindex` a mano a una tabla: si se lo pones, el servicio la respeta y
+    ya no la nombra.
+  · **La nota del pie de una ventana** (`.modal-foot .nota`) ocupa lo que dejan los botones, pero
+    no menos de 14rem: en el celular toma su renglón ARRIBA de los botones (antes se partía en una
+    columnita de una palabra por renglón; la Devolución medía 150 px de pie).
+  · **Una etiqueta con "(opcional)" va envuelta en un `<span>`**
+    (`<span>Teléfono <span class="muted">(opcional)</span></span>`): suelta, `.field` (flex en
+    columna) la ponía en su propio renglón y el campo quedaba 23 px más abajo que su vecino.
+  · **El paquete escaneado con su ✕ es UNA pieza** (`.fichas-paquete` > `.ficha-paquete` con
+    `.ficha-texto` y `.ficha-quitar`, en `styles.scss`, 2026-10-14): la caja y la Devolución. La ✕
+    es un SVG, no el carácter; en el celular el peso baja abajo del código y la ✕ se queda a la
+    derecha. El número escrito sobre un tramo de gráfica elige
     su letra con `shared/charts/contraste.ts → tintaSobre` (la de MÁS contraste, por WCAG), y la
     rampa de azules es `RAMPA_AZUL` del mismo archivo.
   · **Los colores de las gráficas viven en la hoja, no en el código** (2026-10-13, segunda
@@ -1153,6 +1337,14 @@ tienda-hilos/
     pistola ya no aprieta el botón—, salvo con una ventana abierta, la barra espaciadora, atajos o
     letras sobre un selector. Al agregar algo al carrito se quita el ticket de la venta anterior.
     Probado en Chrome con teclas reales (CDP), no con la pistola.
+    **Lo que no se pudo agregar se avisa JUNTO AL LECTOR** (`avisoLector`, debajo del campo, no
+    arriba de la pantalla) y el campo queda VACÍO para el siguiente escaneo (2026-10-14: "escaneé
+    un código que no existe y me lo deja ahí; retrasa el escaneo"). Un código que el servidor no
+    conoce (404) y que TIENE FORMA de código (`pareceCodigo`: 6+ letras, números o guiones, sin
+    espacios, con 4+ números) ya no se busca como texto: "El código X no está registrado. Revisa la
+    etiqueta o escanea otro." Un texto ("rojo 2/30") sí se busca, y si no sale nada se dice ("No
+    encontré ningún hilo con…") y lo escrito queda seleccionado. Lo mismo con el paquete vendido,
+    apartado, de otra tienda, sin precio o ya en el ticket (`avisarLector`).
   · **Cada pantalla tiene su título de pestaña** ("Inventario · Hitex"): `title` en cada ruta
     (`admin.routes.ts`, con `nombreDe(clave)` de `core/navegacion.ts`, el mismo nombre que el
     menú) y `core/titulos.ts` (TitleStrategy) le pega el nombre del sistema. En pruebas queda
@@ -1179,6 +1371,18 @@ tienda-hilos/
   · **La cifra grande de una `.kpi` se encoge si no cabe** (`font-size: min(1.75rem, 15cqi)`,
     con `.kpi { container-type: inline-size }`): con la letra del navegador al doble,
     "$14,000.00" se salía de la tarjeta y ensanchaba la página. Con la letra normal sigue en 28 px.
+- **El LOGO de Hitex** (2026-10-14) sale de `frontend/marca/Hitex.jpeg` (el original del
+  usuario; estaba en `public/` y se movió el 2026-10-15 porque se publicaba sin usarse):
+  `hitex-logo.png` (completo, a color, sin fondo: la pantalla de entrar),
+  `hitex-marca.png` (solo el cono, para el menú y la pantalla de entrar), `hitex-ticket.png` (en
+  negro, para la térmica), `favicon.ico`/`favicon-32.png`/`icono-192.png`/`apple-touch-icon.png`.
+  Sus colores (rojo y azul marino) no se leen sobre la barra oscura: ahí la marca va sobre un
+  cuadro blanco (`.brand-icono`). Para rehacerlos se separa cada pixel en tinta roja o azul sobre
+  blanco (quita el ruido del JPEG) — así salieron; no los edites a mano.
+  **Lo publicado va a su tamaño de uso** (2026-10-15): `hitex-marca.png` de 65 × 96 (se pinta de
+  22 y 30 px de alto; 1.9 KB) y `hitex-logo.png` de 720 × 420 (se pinta de 240 px; 16.6 KB), los
+  dos reducidos con Lanczos y a una paleta de 64 colores. Los grandes viven en `frontend/marca/`
+  (`hitex-*-original.png`, `icono-512.png`), que no se publica: de ahí se vuelven a sacar.
 - **El menú es UNO** (`core/navegacion.ts`): de ahí salen el menú lateral, la guarda de cada ruta
   y la pantalla de inicio de cada puesto. Siete grupos por tarea; los nombres de pantalla son los
   de siempre (el usuario pidió conservarlos).
@@ -1542,6 +1746,14 @@ tienda-hilos/
       en Chrome headless (el panel se vio a media carga). Sin desplegar.
 
 ## Pendientes concretos para el usuario
+- **`hitex` QUEDÓ EN BLANCO (2026-10-14: "solo deja el usuario admin y todo lo demás lo puedes
+  eliminar; ahora sí ya van a hacer pruebas reales").** Igual que como nació el 2026-10-05: el
+  administrador (id 1) y lo que no tiene pantalla (puestos y permisos, unidades, métodos de pago,
+  IVA, líneas, paqueterías, la lista "Público", las claves de configuración con el valor de su
+  migración). Se borró TODO lo demás, también el personal, almacenes, caja, materiales, listas de
+  precio, proveedores, cuentas de banco y datos fiscales. Respaldo:
+  `/root/respaldos/hitex_antes_limpieza_total_20261014-132558.sql.gz`. Lo que sigue lo captura el
+  usuario (orden en CAMBIOS.txt, entrada 47). Lo de abajo del 2026-10-06 ya es historia.
 - **`hitex` SE LIMPIÓ (2026-10-06, a petición del usuario: "configuración se queda tal cual; se
   borra lo que está en inventario y las ventas, y el cliente que se hizo; siguen siendo
   pruebas").** Se borraron los 3 hilos (CAMEL, OPTIK, MARINO 2/30) con sus presentaciones, sus

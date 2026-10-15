@@ -2,7 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { Expediente, MovimientoCredito } from '../../../core/models/clientes.models';
+import { AplicacionSaldoFavor, Expediente, MovimientoCredito } from '../../../core/models/clientes.models';
 import { HabitosCliente } from '../../../core/models/rediseno.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
@@ -12,6 +12,8 @@ import { AbonoModal } from './abono-modal';
 import { AjusteModal } from './ajuste-modal';
 import { LineaVisitas } from './expediente/linea-visitas';
 import { TablaCompras } from './expediente/tabla-compras';
+import { SaldoFavor } from './expediente/saldo-favor';
+import { AnticipoModal } from './anticipo-modal';
 import { FolioPipe, folioCorto } from '../../../shared/folio.pipe';
 import {
   COLOR,
@@ -60,7 +62,7 @@ const PESTANAS: { clave: Pestana; etiqueta: string }[] = [
  */
 @Component({
   selector: 'app-cliente-expediente',
-  imports: [FolioPipe, RouterLink, CantidadPipe, DineroPipe, ClienteFormModal, AbonoModal, AjusteModal, LineaVisitas, TablaCompras],
+  imports: [FolioPipe, RouterLink, CantidadPipe, DineroPipe, ClienteFormModal, AbonoModal, AjusteModal, LineaVisitas, TablaCompras, SaldoFavor, AnticipoModal],
   templateUrl: './cliente-expediente.html',
   styles: `
     .cabeza-cliente { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; border-radius: 12px; padding: 24px; }
@@ -90,6 +92,8 @@ const PESTANAS: { clave: Pestana; etiqueta: string }[] = [
     .cifras-cuenta > div { display: flex; flex-direction: column; gap: 4px; }
     .cifras-cuenta .muted { font-size: 0.8125rem; }
     .datos-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+    .a-favor-resumen { margin: 14px 0 0; }
+    .a-favor-resumen b { color: var(--ok-t); }
     @media (max-width: 640px) { .datos-2 { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
@@ -122,6 +126,8 @@ export class ClienteExpediente implements OnInit {
   readonly editando = signal(false);
   readonly abonando = signal(false);
   readonly ajustando = signal(false);
+  /** "Recibir anticipo": dinero a cuenta, sin nota. */
+  readonly recibiendo = signal(false);
 
   // --- Lo que el puesto puede hacer o ver. El servidor también lo exige: esconder
   // es solo para no ofrecer lo que va a fallar.
@@ -194,6 +200,8 @@ export class ClienteExpediente implements OnInit {
   });
 
   readonly saldo = computed(() => this.num(this.exp()?.saldo));
+  /** Lo que le quedó a favor por devoluciones (2026-10-13); va aparte de lo que debe. */
+  readonly saldoFavor = computed(() => this.num(this.exp()?.saldo_favor));
   readonly limite = computed(() => this.num(this.exp()?.limite_credito));
   readonly disponible = computed(() => this.num(this.exp()?.credito_disponible));
   readonly usoCredito = computed(() => (this.limite() > 0 ? Math.round((100 * this.saldo()) / this.limite()) : null));
@@ -451,6 +459,23 @@ export class ClienteExpediente implements OnInit {
 
   abonoRegistrado(r: { saldo_nuevo: number }): void {
     this.mensaje.set(`Abono registrado. ${r.saldo_nuevo > 0 ? `Le quedan ${pesos(r.saldo_nuevo)} por pagar.` : 'Quedó al día.'}`);
+    this.cargar();
+  }
+
+  /** Dejó dinero a cuenta: le quedó a favor. */
+  anticipoRegistrado(r: { total: number; saldo_favor: number }): void {
+    this.recibiendo.set(false);
+    this.mensaje.set(`Anticipo de ${pesos(r.total)} registrado. Le quedan ${pesos(r.saldo_favor)} a favor.`);
+    this.cargar();
+  }
+
+  /** Se descontó su saldo a favor de lo que debía. */
+  saldoAplicado(r: AplicacionSaldoFavor): void {
+    this.mensaje.set(
+      `Se descontaron ${pesos(r.aplicado)} de lo que debía. ` +
+        (r.deuda_total.total > 0 ? `Todavía debe ${pesos(r.deuda_total.total)}. ` : 'Quedó al día. ') +
+        `Le quedan ${pesos(r.saldo_favor)} a favor.`
+    );
     this.cargar();
   }
 

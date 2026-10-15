@@ -46,9 +46,10 @@ async function _conoDe(ejecutor, paqueteId) {
  * Lo que se puede devolver de una nota: cada línea con lo que se llevó, lo que
  * ya regresó, lo que todavía puede regresar, a cómo queda el kilo a favor y sus
  * paquetes (los que todavía puede regresar cerrados). Más el cliente, lo que
- * debe y su saldo a favor. Solo lee.
+ * debe y su saldo a favor. Solo lee. `clienteId`: el que se elige cuando la
+ * venta no tenía cliente (para decir cuánto debe ese).
  */
-async function previa(pedidoId) {
+async function previa(pedidoId, clienteId = null) {
   const [[p]] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.estado, p.canal, p.inventario_descontado, p.almacen_id,
             a.nombre AS almacen, p.cliente_id, c.nombre AS cliente, c.nombre_comercial
@@ -112,7 +113,10 @@ async function previa(pedidoId) {
         })),
     };
   });
-  const deuda = p.cliente_id ? await saldoFavor.deudaTotal(p.cliente_id) : { credito: 0, notas: 0, total: 0 };
+  const quien = p.cliente_id ?? clienteId;
+  const deuda = quien ? await saldoFavor.deudaTotal(quien) : { credito: 0, notas: 0, total: 0 };
+  // Lo que todavía debe ESTA venta: ahí se descuenta primero lo que regrese.
+  const esta = await saldoFavor.debeDeVenta(pool, pedidoId);
   return {
     pedido_id: Number(p.id),
     numero_pedido: p.numero_pedido,
@@ -123,8 +127,10 @@ async function previa(pedidoId) {
     cliente: p.nombre_comercial || p.cliente || null,
     se_puede: !INACTIVOS.includes(p.estado) && !!Number(p.inventario_descontado),
     lineas: out,
-    saldo_favor: p.cliente_id ? await saldoFavor.saldoFavor(p.cliente_id) : 0,
+    saldo_favor: quien ? await saldoFavor.saldoFavor(quien) : 0,
     deuda,
+    debe_esta: esta.debe,
+    debe_esta_tipo: esta.tipo,
   };
 }
 
@@ -133,7 +139,9 @@ async function previa(pedidoId) {
  *   · lineas: [{ detalle_id, codigos?: [paquetes cerrados], kg_sueltos?: kilos
  *     pesados, conos?: cuántos conos eran }]
  *   · cliente_id: solo si la venta no tenía cliente (el saldo a favor es de alguien);
- *   · destino: 'favor' (se queda a favor) o 'deuda' (se descuenta de lo que debe);
+ *   · destino: 'favor' (se queda a favor) o 'deuda' (se descuenta de lo demás que
+ *     debe). Si ESTA venta todavía se debe, primero se descuenta de ella, sin
+ *     preguntar; el destino es para lo que sobre;
  *   · notas.
  */
 async function registrar(pedidoId, datos, usuarioId) {
@@ -338,14 +346,22 @@ async function registrar(pedidoId, datos, usuarioId) {
       clienteId, tipo: 'devolucion', monto: total, pedidoId, devolucionId, usuarioId,
       notas: `Regresó mercancía de ${p.numero_pedido} (${folio})`,
     });
-    let aplicado = { aplicado: 0, detalle: [] };
-    if (datos.destino === 'deuda') {
-      aplicado = await saldoFavor.aplicarADeuda(conn, {
-        clienteId, monto: total, preferirPedidoId: pedidoId, usuarioId, origen: folio,
-      });
-      if (aplicado.aplicado > 0) {
-        await conn.query('UPDATE devoluciones SET aplicado_a_deuda = :a WHERE id = :id', { a: aplicado.aplicado, id: devolucionId });
-      }
+    // 1. Si ESTA venta todavía se debe (fiada o nota pendiente de pago), lo que
+    //    regresa se descuenta de ella, solo y primero (2026-10-14).
+    const deEsta = await saldoFavor.descontarDeVenta(conn, {
+      clienteId, pedidoId, monto: total, usuarioId, origen: folio,
+    });
+    // 2. Lo que sobre, como se eligió: a favor, o a lo demás que debe.
+    const sobra = round2(total - deEsta.aplicado);
+    const deOtras = datos.destino === 'deuda' && sobra > 0.004
+      ? await saldoFavor.aplicarADeuda(conn, { clienteId, monto: sobra, usuarioId, origen: folio })
+      : { aplicado: 0, detalle: [] };
+    const aplicado = {
+      aplicado: round2(deEsta.aplicado + deOtras.aplicado),
+      detalle: [...deEsta.detalle, ...deOtras.detalle],
+    };
+    if (aplicado.aplicado > 0) {
+      await conn.query('UPDATE devoluciones SET aplicado_a_deuda = :a WHERE id = :id', { a: aplicado.aplicado, id: devolucionId });
     }
 
     return {
@@ -358,6 +374,8 @@ async function registrar(pedidoId, datos, usuarioId) {
       total,
       kg: round3(filas.reduce((s, f) => s + f.cantidad, 0)),
       aplicado_a_deuda: aplicado.aplicado,
+      // De eso, lo que se descontó de ESTA venta (la fiada o la nota que se debía).
+      descontado_de_esta: deEsta.aplicado,
       aplicaciones: aplicado.detalle,
       saldo_favor: await saldoFavor.saldoFavor(clienteId, conn),
     };

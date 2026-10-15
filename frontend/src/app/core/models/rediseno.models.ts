@@ -1,7 +1,7 @@
 // Modelos de las pantallas nuevas del rediseño (2026-10): las cinco pestañas de
 // Clientes, Hoy, Permisos y el resumen de Pedidos. Reflejan el backend.
 
-export type VistaClientes = 'frecuencia' | 'dejaron' | 'deuda' | 'que-compra' | 'cuando' | 'gasto';
+export type VistaClientes = 'todos' | 'frecuencia' | 'dejaron' | 'deuda' | 'que-compra' | 'cuando' | 'gasto' | 'lugares';
 /** Periodo de las pestañas de Clientes, en días. 3650 = desde siempre. */
 export type PeriodoClientes = 30 | 90 | 365 | 3650;
 

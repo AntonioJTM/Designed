@@ -27,10 +27,15 @@ import { VistaQueCompra } from './vistas/vista-que-compra';
 import { VistaCuando } from './vistas/vista-cuando';
 import { VistaGasto } from './vistas/vista-gasto';
 import { CORTES_SIN_VENIR, CorteSinVenir, VistaDejaron } from './vistas/vista-dejaron';
+import { VistaLugares } from './vistas/vista-lugares';
+import { VistaTodos } from './vistas/vista-todos';
+import { LugaresEntrega } from '../../../core/models/clientes.models';
 import { ClientesEnfriados } from '../../../core/models/analisis.models';
 
 /** Las pestañas, con su icono (trazos del diseño). */
 const PESTANAS: { vista: VistaClientes; etiqueta: string; d: string }[] = [
+  // La lista de TODOS: cuántos son y quiénes (2026-10-14). Clientes abre aquí.
+  { vista: 'todos', etiqueta: 'Todos los clientes', d: 'M8 6h13 M8 12h13 M8 18h13 M3.5 6h.01 M3.5 12h.01 M3.5 18h.01' },
   { vista: 'frecuencia', etiqueta: 'Frecuencia de compra', d: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2' },
   // Los mismos del aviso de la campana "N clientes dejaron de venir" (2026-10-03).
   { vista: 'dejaron', etiqueta: 'Dejaron de venir', d: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5 1.6 0 3 .5 4.1 1.3 M16 14l5 5 M21 14l-5 5' },
@@ -38,6 +43,8 @@ const PESTANAS: { vista: VistaClientes; etiqueta: string; d: string }[] = [
   { vista: 'que-compra', etiqueta: 'Qué compra', d: 'M7 3h10 M7 21h10 M8.5 3v18 M15.5 3v18 M8.5 8l7 3 M8.5 12l7 3 M8.5 16l7 3' },
   { vista: 'cuando', etiqueta: 'Cuándo compra', d: 'M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4' },
   { vista: 'gasto', etiqueta: 'Cuánto gasta', d: 'M4 20V11 M10 20V5 M16 20v-6 M3 20h18' },
+  // A cuántos se les entrega en cada municipio y estado (2026-10-14).
+  { vista: 'lugares', etiqueta: 'Dónde entrego', d: 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z' },
 ];
 
 /**
@@ -59,7 +66,7 @@ const PESTANAS: { vista: VistaClientes; etiqueta: string; d: string }[] = [
   selector: 'app-clientes',
   imports: [
     FormsModule, RouterLink, ClienteFormModal, AbonoModal,
-    VistaFrecuencia, VistaDejaron, VistaDeuda, VistaQueCompra, VistaCuando, VistaGasto,
+    VistaFrecuencia, VistaDejaron, VistaDeuda, VistaQueCompra, VistaCuando, VistaGasto, VistaLugares, VistaTodos,
   ],
   templateUrl: './clientes.html',
   styles: `
@@ -104,7 +111,7 @@ export class ClientesPantalla implements OnInit {
   readonly PESTANAS = PESTANAS;
   readonly PERIODOS = PERIODOS;
 
-  readonly vista = signal<VistaClientes>('frecuencia');
+  readonly vista = signal<VistaClientes>('todos');
   readonly dias = signal<PeriodoClientes>(90);
 
   readonly cargando = signal(true);
@@ -117,6 +124,7 @@ export class ClientesPantalla implements OnInit {
   readonly cuando = signal<Cuando | null>(null);
   readonly gasto = signal<Gasto | null>(null);
   readonly dejaron = signal<ClientesEnfriados | null>(null);
+  readonly lugares = signal<LugaresEntrega | null>(null);
   /** El corte de "dejaron de venir"; 60 es el del aviso de la campana. Va en `?sin_venir=`. */
   readonly sinVenir = signal<CorteSinVenir>(60);
 
@@ -125,9 +133,10 @@ export class ClientesPantalla implements OnInit {
 
   /**
    * Cuánto debe no depende del periodo (el saldo es el de hoy), ni Dejaron de
-   * venir, que lleva su propio corte de días sin venir.
+   * venir, que lleva su propio corte de días sin venir, ni Dónde entrego (es
+   * cómo están etiquetados hoy), ni la lista de todos.
    */
-  readonly conPeriodo = computed(() => this.vista() !== 'deuda' && this.vista() !== 'dejaron');
+  readonly conPeriodo = computed(() => !['todos', 'deuda', 'dejaron', 'lugares'].includes(this.vista()));
 
   readonly resumen = computed(() => {
     const c = this.cuenta();
@@ -158,7 +167,7 @@ export class ClientesPantalla implements OnInit {
   private carga?: Subscription;
 
   ngOnInit(): void {
-    this.vista.set((this.route.snapshot.data['vista'] as VistaClientes) ?? 'frecuencia');
+    this.vista.set((this.route.snapshot.data['vista'] as VistaClientes) ?? 'todos');
 
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((q) => {
       const d = Number(q.get('dias'));
@@ -204,12 +213,15 @@ export class ClientesPantalla implements OnInit {
     const deuda$ = this.api.deuda(dias).pipe(shareReplay(1));
     // Solo se arma la de la pestaña que se ve.
     const pedidos: Record<VistaClientes, () => Observable<unknown>> = {
+      // La lista se pide sola (con sus filtros); aquí, los lugares para su filtro y sus cifras.
+      todos: () => this.clientes.lugaresEntrega(),
       frecuencia: () => this.api.frecuencia(dias),
       dejaron: () => this.api.dejaron(this.sinVenir()),
       deuda: () => deuda$,
       'que-compra': () => this.api.queCompra(dias),
       cuando: () => this.api.cuando(dias),
       gasto: () => gasto$,
+      lugares: () => this.clientes.lugaresEntrega(),
     };
 
     this.carga = new Subscription();
@@ -222,6 +234,7 @@ export class ClientesPantalla implements OnInit {
           if (vista === 'que-compra') this.queCompra.set(d as QueCompra);
           if (vista === 'cuando') this.cuando.set(d as Cuando);
           if (vista === 'gasto') this.gasto.set(d as Gasto);
+          if (vista === 'lugares' || vista === 'todos') this.lugares.set(d as LugaresEntrega);
           this.cargando.set(false);
         },
         error: (e) => {
@@ -307,7 +320,7 @@ export class ClientesPantalla implements OnInit {
   }
 
   clienteGuardado(c: Cliente): void {
-    this.mensaje.set(`Se guardó a ${c.nombre_comercial || c.nombre}.`);
+    this.mensaje.set(`Se guardó a ${c.nombre}${c.codigo ? ' con el número ' + c.codigo : ''}.`);
     this.cargar();
   }
 

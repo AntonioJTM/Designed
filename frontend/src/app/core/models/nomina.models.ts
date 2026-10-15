@@ -166,7 +166,7 @@ export interface SemanaActual {
  * en que la venta quedó PAGADA (2026-10-07): la de contado el día que se vende;
  * la fiada, el apartado y el pedido cuando se terminan de pagar.
  */
-export type TipoVentaComision = 'contado' | 'credito' | 'apartado' | 'pedido';
+export type TipoVentaComision = 'contado' | 'credito' | 'apartado' | 'pedido' | 'nota' | 'devolucion';
 
 /** Una venta cuya comisión paga esta nómina (congelada en el recibo). */
 export interface VentaComision {
@@ -178,8 +178,13 @@ export interface VentaComision {
   /** Cuándo quedó pagada; null = se pagó con la regla anterior (al venderla). */
   liquidada_en: string | null;
   total: number;
-  /** Sin IVA ni envío: sobre esto es la comisión. */
+  /**
+   * Sin IVA ni envío y sin lo que regresó: sobre esto es la comisión. En un
+   * renglón 'devolucion' va en negativo (se descuenta).
+   */
   venta_neta: number;
+  /** Lo que regresó de la venta (sin IVA) y ya no paga comisión (2026-10-14). */
+  devuelto?: number;
   comision: number;
 }
 
@@ -204,7 +209,7 @@ export interface ComisionesVendedor {
   por_liquidar_comision: number;
   por_liquidar_debe: number;
   /** Ya pagadas, pero entran en la próxima nómina que se calcule. */
-  proxima_nomina: { ventas: number; venta_neta: number; comision: number };
+  proxima_nomina: { ventas: number; devoluciones?: number; venta_neta: number; comision: number };
 }
 
 /** El reporte de comisiones de una semana. */

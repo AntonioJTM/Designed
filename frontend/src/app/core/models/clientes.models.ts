@@ -11,6 +11,7 @@ type Cifra = string | number;
 /** Un cliente, como lo ve el personal. */
 export interface Cliente {
   id: number;
+  /** El número de cliente: lo da el sistema al darlo de alta (C-0001) y no se modifica. */
   codigo?: string | null;
   nombre: string;
   /** Como le dicen de verdad. Es con lo que la tienda lo busca. */
@@ -24,6 +25,10 @@ export interface Cliente {
   direccion?: string | null;
   ciudad?: string | null;
   estado?: string | null;
+  /** A dónde se le entrega (2026-10-14): uno de la lista de lugares. */
+  lugar_entrega_id?: number | null;
+  lugar_entrega?: string | null;
+  lugar_entrega_estado?: string | null;
   como_llego?: string | null;
   fecha_nacimiento?: string | null;
   /** Desde cuándo compra DE VERDAD, no desde cuándo se capturó. */
@@ -46,10 +51,30 @@ export interface Cliente {
   ultima_compra?: string | null;
 }
 
-/** Lo que se manda al crear o editar. */
-export type ClienteInput = Partial<Omit<Cliente, 'id' | 'saldo' | 'cargos' | 'abonos'>> & {
+/** Lo que se manda al crear o editar. Sin `codigo`: el número lo da el sistema. */
+export type ClienteInput = Partial<Omit<Cliente, 'id' | 'codigo' | 'saldo' | 'cargos' | 'abonos'>> & {
   nombre: string;
 };
+
+/**
+ * Un LUGAR DE ENTREGA (2026-10-14): el municipio (o como lo conoce la tienda) y
+ * su estado. Sirve para contar a cuántos clientes se les entrega en cada lugar.
+ */
+export interface LugarEntrega {
+  id: number;
+  nombre: string;
+  estado: string;
+  /** Clientes activos con ese lugar. */
+  num_clientes?: number;
+}
+
+/** La lista de lugares con sus cuentas (Clientes → Dónde entrego). */
+export interface LugaresEntrega {
+  lugares: LugarEntrega[];
+  clientes_activos: number;
+  /** Clientes activos sin lugar de entrega. */
+  sin_lugar: number;
+}
 
 /** Resumen de compras del cliente. */
 export interface EstadisticasCliente {
@@ -130,6 +155,58 @@ export interface Expediente extends Cliente {
   total_movimientos: number;
   /** Su costumbre: ritmo, día, hora, visitas y gasto por mes (vista Resumen). */
   habitos?: HabitosCliente;
+  /** Lo que le quedó a favor por devoluciones (2026-10-13). */
+  saldo_favor?: number;
+  saldo_favor_movimientos?: MovimientoSaldoFavor[];
+  /** Cuánto debe en total: su cuenta de crédito y sus notas pendientes de pago. */
+  deuda_total?: DeudaTotal;
+}
+
+/** Cuánto debe un cliente: su cuenta de crédito más sus notas pendientes de pago. */
+export interface DeudaTotal {
+  credito: number;
+  notas: number;
+  total: number;
+}
+
+/**
+ * Un movimiento de su SALDO A FAVOR: lo que regresó (devolucion), lo que dejó
+ * a cuenta sin nota (anticipo), lo que usó
+ * para pagar (uso), lo que se descontó de lo que debía (aplicado) y lo que le
+ * regresó al cancelarse una venta donde lo usó (reintegro).
+ */
+export interface MovimientoSaldoFavor {
+  id: number;
+  tipo: 'devolucion' | 'anticipo' | 'uso' | 'aplicado' | 'reintegro' | 'ajuste';
+  monto: Cifra;
+  notas?: string | null;
+  /** Con qué dejó el dinero (un anticipo). */
+  metodo?: string | null;
+  referencia?: string | null;
+  creado_en: string;
+  pedido_id?: number | null;
+  numero_pedido?: string | null;
+  devolucion_id?: number | null;
+  devolucion_folio?: string | null;
+  registro?: string | null;
+}
+
+/** Un anticipo: dinero a cuenta, sin nota (2026-10-14). */
+export interface AnticipoInput {
+  efectivo?: number;
+  transferencia?: number;
+  /** El turno al que entra el efectivo. */
+  sesion_caja_id?: number;
+  referencia?: string;
+  notas?: string;
+}
+
+/** Lo que pasó al descontar su saldo a favor de lo que debe. */
+export interface AplicacionSaldoFavor {
+  aplicado: number;
+  detalle: { a: 'nota' | 'credito'; monto: number; pedido_id?: number; numero_pedido?: string; pagada?: boolean }[];
+  saldo_favor: number;
+  deuda_total: DeudaTotal;
 }
 
 /** Estado de cuenta, para la pantalla de crédito. */
@@ -165,6 +242,8 @@ export interface ClienteParaVenta {
   saldo: Cifra;
   /** Cuánto más se le puede fiar. El cajero lo necesita AL elegirlo. */
   credito_disponible: Cifra;
+  /** Lo que le quedó a favor por devoluciones: se puede usar al cobrarle. */
+  saldo_favor?: Cifra;
 }
 
 /** Un abono del cliente. */

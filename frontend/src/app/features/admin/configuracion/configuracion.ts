@@ -4,12 +4,15 @@ import { TiendaService } from '../../../core/services/tienda.service';
 import { CuentaBancaria, OpcionConfiguracion } from '../../../core/models/tienda.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CuentaBancariaModal, clabeLegible } from './cuenta-bancaria-modal';
+import { armarPrueba, imprimirTicket } from '../../../shared/ticket/ticket';
 
 /** Cómo se dibuja un campo conocido. Los desconocidos usan su descripción. */
 interface Campo {
   etiqueta: string;
   placeholder?: string;
-  tipo?: 'text' | 'tel' | 'number';
+  tipo?: 'text' | 'tel' | 'number' | 'select';
+  /** Para `select`: las opciones (valor guardado y lo que se lee). */
+  opciones?: { valor: string; texto: string }[];
   /** `flex` del campo dentro de la fila de su tarjeta. */
   ancho?: string;
 }
@@ -19,6 +22,8 @@ interface Grupo {
   titulo: string;
   sub?: string;
   prefijos: string[];
+  /** Lleva el botón "Imprimir una prueba" (el del ticket). */
+  prueba?: boolean;
 }
 
 /**
@@ -36,8 +41,11 @@ interface Grupo {
  * TIENDA EN LÍNEA APAGADA (2026-10). Quién lee cada clave hoy:
  *  · `envio_costo_fijo`: SOLO la tienda en línea (la cotización del pedido en
  *    línea y el checkout). Se ESCONDE —ver `OCULTAS` y el grupo comentado—.
- *  · `tienda_direccion` y `tienda_telefono`: hoy solo los lee el checkout, pero
- *    el diseño aprobado los conserva como datos de la tienda. Se quedan.
+ *  · `tienda_direccion`: se ESCONDE desde el 2026-10-14 ("me pones que ponga la
+ *    dirección de la tienda 2 veces", usuario): el ticket imprime el DOMICILIO
+ *    FISCAL, y la dirección solo la leía el checkout de la tienda en línea, que
+ *    ahora usa el domicilio fiscal si no hay otra. La clave sigue en la base.
+ *  · `tienda_telefono`: va en el ticket y en el checkout. Se queda.
  *
  * CUENTAS PARA TRANSFERENCIAS (2026-10-06): ya no son tres claves sueltas
  * (`transferencia_*`, una sola cuenta) sino una lista —tabla
@@ -79,7 +87,19 @@ export class Configuracion implements OnInit {
    * se ve igual, en vez de desaparecer.
    */
   readonly grupos: Grupo[] = [
-    { titulo: 'La tienda', prefijos: ['tienda_'] },
+    { titulo: 'La tienda', sub: 'El teléfono sale en cada ticket, junto al domicilio fiscal.', prefijos: ['tienda_'] },
+    // El encabezado del ticket (2026-10-14).
+    {
+      titulo: 'Datos fiscales',
+      sub: 'Salen arriba de cada ticket. Cópialos como vienen en la Constancia de Situación Fiscal.',
+      prefijos: ['fiscal_'],
+    },
+    {
+      titulo: 'Ticket',
+      sub: 'El papel de la impresora de tickets y lo que va al pie. Si no sabes cuál ancho elegir, imprime una prueba: trae una regla para ver hasta dónde imprime tu impresora.',
+      prefijos: ['ticket_'],
+      prueba: true,
+    },
     // Las cuentas para transferencias ya no son claves: tienen su propia tarjeta (ver arriba).
     // TIENDA EN LÍNEA APAGADA (2026-10): la tarifa de envío solo la cobra el
     // pedido en línea. Para regresarla, descomentar este grupo y quitar
@@ -88,16 +108,32 @@ export class Configuracion implements OnInit {
   ];
 
   /**
-   * Prefijos que no se dibujan (ni en "Otros"): el envío mientras la tienda en
-   * línea esté apagada, y las claves viejas de la cuenta de banco por si la
-   * migración de cuentas todavía no corre en esa base.
+   * Prefijos que no se dibujan (ni en su tarjeta ni en "Otros"): el envío
+   * mientras la tienda en línea esté apagada, las claves viejas de la cuenta de
+   * banco por si la migración de cuentas todavía no corre en esa base, y la
+   * dirección de la tienda, que repetía el domicilio fiscal (2026-10-14).
    */
-  private readonly OCULTAS = ['envio_', 'transferencia_'];
+  private readonly OCULTAS = ['envio_', 'transferencia_', 'tienda_direccion'];
 
   /** Las etiquetas del diseño para las claves conocidas. */
   private readonly CAMPOS: Record<string, Campo> = {
     tienda_direccion: { etiqueta: 'Dirección', placeholder: 'Calle, número, colonia y ciudad', ancho: '2 1 360px' },
     tienda_telefono: { etiqueta: 'Teléfono', placeholder: '445 000 0000', tipo: 'tel', ancho: '1 1 220px' },
+    // En este orden en la pantalla (el servidor las manda por orden alfabético).
+    fiscal_razon_social: { etiqueta: 'Razón social', placeholder: 'Como en la constancia, con S.A. de C.V.', ancho: '2 1 360px' },
+    fiscal_rfc: { etiqueta: 'RFC', placeholder: '12 o 13 letras y números', ancho: '1 1 200px' },
+    fiscal_regimen: { etiqueta: 'Régimen fiscal', placeholder: 'Ej. 601 General de Ley Personas Morales', ancho: '2 1 360px' },
+    fiscal_domicilio: { etiqueta: 'Domicilio fiscal', placeholder: 'Calle, número, colonia, C.P., municipio y estado', ancho: '1 1 100%' },
+    ticket_papel_mm: {
+      etiqueta: 'Ancho del papel',
+      tipo: 'select',
+      opciones: [
+        { valor: '58', texto: '58 mm (imprime unos 48 mm)' },
+        { valor: '80', texto: '80 mm (imprime de 64 a 72 mm)' },
+      ],
+      ancho: '1 1 260px',
+    },
+    ticket_leyenda: { etiqueta: 'Leyenda al pie del ticket', placeholder: 'Este ticket no es un comprobante fiscal.', ancho: '3 1 480px' },
     // El costo de envío es dinero: se captura como número (oculto mientras la tienda esté apagada).
     envio_costo_fijo: { etiqueta: 'Costo de envío ($)', tipo: 'number', ancho: '1 1 220px' },
   };
@@ -147,9 +183,14 @@ export class Configuracion implements OnInit {
     });
   }
 
-  /** Las opciones de un grupo, en el orden en que vinieron. */
+  /** Las opciones de un grupo: las conocidas en el orden de `CAMPOS`, las demás como vinieron. */
   opcionesDe(prefijos: string[]): OpcionConfiguracion[] {
-    return this.opciones().filter((o) => prefijos.some((p) => o.clave.startsWith(p)));
+    const orden = Object.keys(this.CAMPOS);
+    const lugar = (c: string) => (orden.includes(c) ? orden.indexOf(c) : orden.length);
+    return this.opciones()
+      .filter((o) => prefijos.some((p) => o.clave.startsWith(p)))
+      .filter((o) => !this.OCULTAS.some((p) => o.clave.startsWith(p)))
+      .sort((a, b) => lugar(a.clave) - lugar(b.clave));
   }
 
   /** Las que no encajaron en ningún grupo ni están escondidas. */
@@ -160,6 +201,14 @@ export class Configuracion implements OnInit {
 
   campo(o: OpcionConfiguracion): Campo {
     return this.CAMPOS[o.clave] ?? { etiqueta: o.descripcion || o.clave };
+  }
+
+  /**
+   * La hoja de prueba con el ancho que está ELEGIDO (aunque no se haya guardado):
+   * así se prueba antes de guardar. Ver `armarPrueba`.
+   */
+  imprimirPrueba(): void {
+    void imprimirTicket(armarPrueba(this.valores['ticket_papel_mm']));
   }
 
   /** Si algo cambió; sin eso el botón de guardar no tiene nada que hacer. */

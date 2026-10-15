@@ -37,8 +37,7 @@
           </div>
         </label>
         <label class="field">
-          Para qué
-          @if (tipo === 'ingreso') { <span class="muted">(opcional)</span> }
+          <span>Para qué @if (tipo === 'ingreso') { <span class="muted">(opcional)</span> }</span>
           <input type="text" maxlength="255" [(ngModel)]="motivo" name="motivo-mov"
                  [placeholder]="tipo === 'retiro' ? 'Depósito al banco' : 'Cambio para el día'" />
         </label>

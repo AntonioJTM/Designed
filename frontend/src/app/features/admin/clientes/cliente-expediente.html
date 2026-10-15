@@ -20,7 +20,8 @@
             @if (e.nombre_comercial) { Le dicen <b>{{ e.nombre_comercial }}</b> · }
             <!-- cliente_desde es desde cuándo compra DE VERDAD, no cuándo se capturó -->
             cliente desde {{ e.cliente_desde ? mesYAnio(e.cliente_desde) : '—' }}
-            @if (e.codigo) { · código <span class="mono">{{ e.codigo }}</span> }
+            @if (e.codigo) { · número <span class="mono">{{ e.codigo }}</span> }
+            @if (e.lugar_entrega) { · se le entrega en <b>{{ e.lugar_entrega }}</b>, {{ e.lugar_entrega_estado }} }
           </p>
           <div class="etiquetas">
             <span class="pill gris">Lista: {{ e.tipo_cliente || 'Público' }}</span>
@@ -42,6 +43,10 @@
         }
         @if (saldo() > 0) {
           <button type="button" class="btn btn-ghost" (click)="abonando.set(true)">Registrar abono</button>
+        }
+        @if (e.activo) {
+          <!-- Dinero a cuenta, sin nota: le queda a favor (2026-10-14). -->
+          <button type="button" class="btn btn-ghost" (click)="recibiendo.set(true)">Recibir anticipo</button>
         }
         <button type="button" class="btn btn-ghost" (click)="editando.set(true)">Editar</button>
       </div>
@@ -116,6 +121,13 @@
             } @else if (limite() > 0) {
               <p class="muted" style="margin: 14px 0 0">Todavía no se le ha fiado nada.</p>
             }
+            @if (saldoFavor() > 0) {
+              <!-- Lo que le quedó de devoluciones (2026-10-13): va aparte de lo que debe. -->
+              <p class="a-favor-resumen">
+                Tiene <b>{{ pesos(saldoFavor()) }}</b> a favor de lo que ha regresado.
+                <button type="button" class="btn-enlace" (click)="elegir('deuda')">Ver su saldo a favor</button>
+              </p>
+            }
           </section>
 
           <section class="card mitad">
@@ -186,10 +198,10 @@
             <div class="dato"><span>Otro teléfono</span><span class="mono">{{ e.telefono_alt || '—' }}</span></div>
             <div class="dato"><span>Dirección</span><span>{{ e.direccion || '—' }}</span></div>
             <div class="dato"><span>Ciudad</span><span>{{ e.ciudad || '—' }}{{ e.estado ? ', ' + e.estado : '' }}</span></div>
+            <div class="dato"><span>Lugar de entrega</span><span>{{ e.lugar_entrega ? e.lugar_entrega + ', ' + e.lugar_entrega_estado : '—' }}</span></div>
             <div class="dato"><span>Correo</span><span>{{ e.correo || '—' }}</span></div>
             <div class="dato"><span>RFC</span><span class="mono">{{ e.rfc || '—' }}</span></div>
             <div class="dato"><span>Cómo llegó</span><span>{{ e.como_llego || '—' }}</span></div>
-            <div class="dato"><span>Cumpleaños</span><span>{{ e.fecha_nacimiento ? fechaLarga(e.fecha_nacimiento) : '—' }}</span></div>
             <div class="dato"><span>Cliente desde</span><span>{{ e.cliente_desde ? fechaLarga(e.cliente_desde) : '—' }}</span></div>
             <div class="dato"><span>Se capturó en el sistema</span><span>{{ e.creado_en ? fechaLarga(e.creado_en) : '—' }}</span></div>
             <div class="dato"><span>Número de cliente</span><span class="mono">{{ e.codigo || '—' }}</span></div>
@@ -284,6 +296,12 @@
             <div class="dato"><span>Ha abonado</span><span>{{ e.abonos | dinero }}</span></div>
           </div>
         </section>
+
+        <app-saldo-favor [clienteId]="e.id" [nombre]="e.nombre_comercial || e.nombre" [saldo]="saldoFavor()"
+                         [deuda]="e.deuda_total ?? { credito: 0, notas: 0, total: 0 }"
+                         [movimientos]="e.saldo_favor_movimientos ?? []" [vePedidos]="vePedidos()"
+                         [puedeRecibir]="!!e.activo" (recibir)="recibiendo.set(true)"
+                         (aplicado)="saldoAplicado($event)" />
 
         <section class="card">
           <div class="card-head">
@@ -493,6 +511,10 @@
 @if (exp(); as e) {
   @if (editando()) {
     <app-cliente-form-modal [cliente]="e" (cerrado)="editando.set(false)" (guardado)="guardado()" />
+  }
+  @if (recibiendo()) {
+    <app-anticipo-modal [clienteId]="e.id" [nombre]="e.nombre_comercial || e.nombre" [saldoFavor]="saldoFavor()"
+                        (cerrado)="recibiendo.set(false)" (registrado)="anticipoRegistrado($event)" />
   }
   @if (abonando()) {
     <app-abono-modal [clienteId]="e.id" [nombre]="e.nombre_comercial || e.nombre" [saldo]="saldo()"

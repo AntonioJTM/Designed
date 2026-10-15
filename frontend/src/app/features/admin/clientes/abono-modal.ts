@@ -1,12 +1,13 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, from, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { VentasService } from '../../../core/services/ventas.service';
 import { MetodoPago, SesionCaja } from '../../../core/models/ventas.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
+import { turnoPropuesto, turnosAbiertos } from './turnos-caja';
 
 /**
  * Registrar un abono del cliente. Se abre desde "Cuánto debe" (el botón Abonar
@@ -63,45 +64,12 @@ export class AbonoModal implements OnInit {
     this.monto = Number(this.saldo()) || null;
     forkJoin({
       metodos: this.ventas.metodosPago().pipe(catchError(() => of([] as MetodoPago[]))),
-      turnos: this.buscarTurnos(),
+      turnos: from(turnosAbiertos(this.ventas)),
     }).subscribe(({ metodos, turnos }) => {
       this.metodos.set(metodos);
       this.turnos.set(turnos);
-      this.turnoId = this.turnoPropuesto(turnos);
+      this.turnoId = turnoPropuesto(turnos);
       this.cargando.set(false);
-    });
-  }
-
-  /**
-   * El turno donde cae el efectivo: el único abierto, o el de la caja con que se
-   * está trabajando. Con varios abiertos y ninguna elegida, ninguno: adivinar
-   * descuadra dos cortes a la vez.
-   */
-  private turnoPropuesto(turnos: SesionCaja[]): number | null {
-    if (turnos.length === 1) return turnos[0].id;
-    let elegida: number | null = null;
-    try {
-      const v = Number(localStorage.getItem('caja_sel'));
-      elegida = Number.isFinite(v) && v > 0 ? v : null;
-    } catch {
-      elegida = null;
-    }
-    return turnos.find((t) => Number(t.caja_id) === elegida)?.id ?? null;
-  }
-
-  /** Prueba caja por caja; una caja que falla no tumba la búsqueda. */
-  private buscarTurnos() {
-    return new Promise<SesionCaja[]>((resolver) => {
-      this.ventas.cajas().subscribe({
-        next: (cajas) => {
-          const activas = cajas.filter((c) => c.activo);
-          if (activas.length === 0) return resolver([]);
-          forkJoin(activas.map((c) => this.ventas.sesionAbierta(c.id).pipe(catchError(() => of(null))))).subscribe(
-            (ss) => resolver(ss.filter((s): s is SesionCaja => !!s))
-          );
-        },
-        error: () => resolver([]),
-      });
     });
   }
 

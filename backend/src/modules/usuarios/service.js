@@ -11,9 +11,40 @@ function _otros(ids, principal) {
   return [...new Set((ids ?? []).map(Number))].filter((id) => id !== Number(principal));
 }
 
-async function _exigirOtrosRoles(ids) {
-  if (!(await model.existenRoles(ids))) {
+async function _rolPrincipal(rolId) {
+  const rol = await model.obtenerRol(rolId);
+  if (!rol) throw new AppError(422, 'ROL_INVALIDO', `No existe el rol con id ${rolId}`);
+  return rol;
+}
+
+/**
+ * Un puesto que NO entra al sistema (el cargador, 2026-10-14) va SOLO: no se da
+ * como "también trabaja como" —no daría nada— y quien lo tiene de principal no
+ * lleva otros, porque cualquier otro le daría entrada y entonces no es cargador.
+ */
+async function _exigirOtrosRoles(ids, principal) {
+  const roles = await model.obtenerRoles(ids);
+  if (roles.length !== ids.length) {
     throw new AppError(422, 'ROL_INVALIDO', 'Alguno de los otros puestos no existe');
+  }
+  if (ids.length && !principal.entra_al_sistema) {
+    throw new AppError(422, 'PUESTO_SIN_ACCESO',
+      `El puesto ${principal.nombre} no entra al sistema: no se combina con otros puestos.`);
+  }
+  const sinAcceso = roles.find((r) => !r.entra_al_sistema);
+  if (sinAcceso) {
+    throw new AppError(422, 'PUESTO_SIN_ACCESO',
+      `El puesto ${sinAcceso.nombre} no entra al sistema: va como puesto principal, no como otro puesto.`);
+  }
+}
+
+const _sinCorreoNiContrasena = (rol) =>
+  new AppError(422, 'PUESTO_SIN_ACCESO',
+    `El puesto ${rol.nombre} no entra al sistema: no lleva correo ni contraseña.`);
+
+async function _exigirCorreoLibre(correo, salvoId) {
+  if (await model.correoEnUso(correo, salvoId)) {
+    throw new AppError(409, 'CORREO_EN_USO', 'Ya existe un usuario con ese correo');
   }
 }
 
@@ -37,17 +68,23 @@ function emitirToken(usuario) {
 /**
  * Da de alta un usuario staff (lo hace un administrador desde el panel).
  * NO emite token: no cambia la sesión de quien lo crea.
+ *
+ * Quien entra al sistema lleva correo y contraseña; el puesto que no entra (el
+ * cargador) no lleva ninguno de los dos, y sigue saliendo en Nómina.
  */
 async function crearStaff({ rol_id, nombre, correo, telefono, contrasena, otros_roles }) {
-  if (!(await model.existeRol(rol_id))) {
-    throw new AppError(422, 'ROL_INVALIDO', `No existe el rol con id ${rol_id}`);
-  }
+  const rol = await _rolPrincipal(rol_id);
   const otros = _otros(otros_roles, rol_id);
-  await _exigirOtrosRoles(otros);
-  const existente = await model.buscarPorCorreoConHash(correo);
-  if (existente) {
-    throw new AppError(409, 'CORREO_EN_USO', 'Ya existe un usuario con ese correo');
+  await _exigirOtrosRoles(otros, rol);
+  if (!rol.entra_al_sistema) {
+    if (correo || contrasena) throw _sinCorreoNiContrasena(rol);
+    const usuario = await model.crear({ rol_id, nombre, telefono, otros_roles: [] });
+    permisosModel.invalidar();
+    return sanitizar(usuario);
   }
+  if (!correo) throw new AppError(422, 'FALTA_CORREO', 'Falta el correo: es con lo que entra al sistema.');
+  if (!contrasena) throw new AppError(422, 'FALTA_CONTRASENA', 'Falta la contraseña para entrar al sistema.');
+  await _exigirCorreoLibre(correo);
   const contrasena_hash = await hashPassword(contrasena);
   const usuario = await model.crear({ rol_id, nombre, correo, telefono, contrasena_hash, otros_roles: otros });
   permisosModel.invalidar();
@@ -58,23 +95,43 @@ async function listarStaff(filtros) {
   return model.listar(filtros);
 }
 
+/**
+ * Cambia a alguien. Al pasar a un puesto que NO entra al sistema (el cargador)
+ * se le quitan el correo y la contraseña —ya no entra— y sus otros puestos. Al
+ * revés, el cargador que pasa a un puesto que sí entra necesita correo y
+ * contraseña. El correo de quien ya entra no se cambia: es con lo que entra.
+ */
 async function actualizarStaff(id, datos) {
   const actual = await model.buscarPorId(id);
   if (!actual) throw new AppError(404, 'NO_ENCONTRADO', 'Usuario no encontrado');
-  if (datos.rol_id !== undefined && !(await model.existeRol(datos.rol_id))) {
-    throw new AppError(422, 'ROL_INVALIDO', `No existe el rol con id ${datos.rol_id}`);
-  }
+  const rol = await _rolPrincipal(datos.rol_id ?? actual.rol_id);
   const cambios = {
     rol_id: datos.rol_id,
     nombre: datos.nombre,
     telefono: datos.telefono,
     activo: datos.activo,
   };
-  if (datos.otros_roles !== undefined) {
-    cambios.otros_roles = _otros(datos.otros_roles, datos.rol_id ?? actual.rol_id);
-    await _exigirOtrosRoles(cambios.otros_roles);
+  const otros = datos.otros_roles !== undefined
+    ? _otros(datos.otros_roles, rol.id)
+    : rol.entra_al_sistema ? undefined : [];
+  if (otros !== undefined) {
+    await _exigirOtrosRoles(otros, rol);
+    cambios.otros_roles = otros;
   }
-  if (datos.contrasena) {
+  if (!rol.entra_al_sistema) {
+    if (datos.correo || datos.contrasena) throw _sinCorreoNiContrasena(rol);
+    cambios.correo = null;
+    cambios.contrasena_hash = null;
+  } else if (!actual.correo) {
+    // No entraba (era cargador) y ahora sí: necesita con qué entrar.
+    if (!datos.correo) throw new AppError(422, 'FALTA_CORREO', 'Falta el correo: es con lo que va a entrar al sistema.');
+    if (!datos.contrasena) throw new AppError(422, 'FALTA_CONTRASENA', 'Falta la contraseña para entrar al sistema.');
+    await _exigirCorreoLibre(datos.correo, id);
+    cambios.correo = datos.correo;
+  } else if (datos.correo && datos.correo !== actual.correo) {
+    throw new AppError(422, 'CORREO_NO_SE_CAMBIA', 'El correo no se puede cambiar: es con lo que entra.');
+  }
+  if (rol.entra_al_sistema && datos.contrasena) {
     cambios.contrasena_hash = await hashPassword(datos.contrasena);
   }
   const usuario = await model.actualizar(id, cambios);
@@ -93,7 +150,8 @@ async function iniciarSesion({ correo, contrasena }) {
 
   // Mensaje genérico para no revelar si el correo existe.
   const credencialesInvalidas = new AppError(401, 'CREDENCIALES_INVALIDAS', 'Correo o contraseña incorrectos');
-  if (!usuario) throw credencialesInvalidas;
+  // Sin contraseña no entra nadie (el cargador no tiene, ni correo).
+  if (!usuario || !usuario.contrasena_hash) throw credencialesInvalidas;
 
   const ok = await verificarPassword(contrasena, usuario.contrasena_hash);
   if (!ok) throw credencialesInvalidas;

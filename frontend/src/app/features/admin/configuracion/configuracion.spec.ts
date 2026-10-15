@@ -63,6 +63,10 @@ describe('Configuracion', () => {
     expect(texto).not.toContain('Costo de envío');
     expect(texto).not.toContain('Lo que se cobra por enviar');
     expect(texto).toContain('La tienda');
+    // La dirección de la tienda ya no se pide: repetía el domicilio fiscal (2026-10-14).
+    const etiquetas = [...(fixture.nativeElement as HTMLElement).querySelectorAll('label')].map((l) => l.textContent?.trim() ?? '');
+    expect(etiquetas.some((t) => t.startsWith('Dirección'))).toBe(false);
+    expect(etiquetas.some((t) => t.startsWith('Teléfono'))).toBe(true);
     expect(texto).not.toContain('Para recibir depósitos');
     expect(texto).toContain('Leyenda al pie del ticket');
     expect(texto).toContain('Apagada');

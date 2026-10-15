@@ -189,7 +189,8 @@ async function pasarACredito(req, res, next) {
 
 async function previaDevolucion(req, res, next) {
   try {
-    res.json({ data: await service.previaDevolucion(Number(req.params.id)), error: null });
+    const clienteId = Number(req.query.cliente_id) > 0 ? Number(req.query.cliente_id) : null;
+    res.json({ data: await service.previaDevolucion(Number(req.params.id), clienteId), error: null });
   } catch (err) { next(err); }
 }
 
