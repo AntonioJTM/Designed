@@ -3,7 +3,7 @@
     <div>
       <h1>Surtir sucursal</h1>
       <p class="sub">
-        Las sucursales piden en kilos; la bodega envía, y quien recibe confirma lo que de verdad llegó.
+        Las sucursales piden en paquetes; la bodega envía, y quien recibe confirma lo que de verdad llegó.
       </p>
     </div>
     <div class="acciones">
@@ -67,11 +67,11 @@
                 <span>{{ siguientePaso(t) }}</span>
               </div>
               <div class="traspaso-acciones">
-                @if (t.estado === 'solicitado' && puedeEnviar()) {
+                @if (t.estado === 'solicitado' && puedeSurtir(t)) {
                   <button type="button" class="btn btn-primary btn-sm" (click)="enviarTraspaso(t)">
                     {{ guardadosDe(t) > 0 ? 'Seguir escaneando' : 'Enviar' }}
                   </button>
-                } @else if (t.estado === 'en_transito' && puedeRecibir()) {
+                } @else if (t.estado === 'en_transito' && puedeFirmar(t)) {
                   <button type="button" class="btn btn-primary btn-sm" (click)="abrirRecepcion(t)">
                     Confirmar que llegó
                   </button>
@@ -116,7 +116,11 @@
       <div class="tabla-scroll">
         <table class="grid">
           <thead>
-            <tr><th>Hilo</th><th class="num">Se pidió</th><th class="num">Hay en origen</th></tr>
+            <tr>
+              <th>Hilo</th><th class="num">Se pidió</th>
+              <!-- A ciegas el servidor no dice cuánto hay en el origen (2026-10-15). -->
+              @if (u.lineas[0]?.saldo_origen != null) { <th class="num">Hay en origen</th> }
+            </tr>
           </thead>
           <tbody>
             @for (l of u.lineas; track l.variante_id) {
@@ -130,7 +134,7 @@
                     {{ l.cantidad | cantidad: 'kg' }}
                   }
                 </td>
-                <td class="num muted">{{ l.saldo_origen | cantidad: 'kg' }}</td>
+                @if (l.saldo_origen != null) { <td class="num muted">{{ l.saldo_origen | cantidad: 'kg' }}</td> }
               </tr>
             }
           </tbody>
@@ -148,7 +152,11 @@
     <div class="card-head">
       <div>
         <h2>Nueva solicitud</h2>
-        <p>Se pide en paquetes. Al lado dice más o menos cuántos kilos son, con el peso promedio de los paquetes que hay en la bodega.</p>
+        @if (aCiegas()) {
+          <p>Pide los paquetes que necesitas. Si en {{ nombreAlmacen(origen) }} no hay tantos, te mandan los que tengan.</p>
+        } @else {
+          <p>Se pide en paquetes. Al lado dice más o menos cuántos kilos son, con el peso promedio de los paquetes que hay en la bodega.</p>
+        }
       </div>
     </div>
 
@@ -213,7 +221,7 @@
               <th>Hilo</th>
               <th class="num">Paquetes que se piden</th>
               <th class="num">Son aprox.</th>
-              <th class="num">Hay libre</th>
+              @if (!aCiegas()) { <th class="num">Hay libre</th> }
               <th><span class="oculto">Quitar</span></th>
             </tr>
           </thead>
@@ -257,6 +265,7 @@
                   La comparación va en KILOS contra lo LIBRE (existencia menos lo
                   apartado), que es contra lo que valida el servidor.
                 -->
+                @if (!aCiegas()) {
                 <td class="num">
                   @if (kilosLibres(l) !== null) {
                     <b [class.neg]="insuficiente(l)">{{ paquetesLibres(l) }} paq.</b>
@@ -271,6 +280,7 @@
                     <span class="muted">—</span>
                   }
                 </td>
+                }
                 <td class="acciones">
                   <button type="button" class="btn btn-danger btn-icono" (click)="quitar(l)"
                           [attr.aria-label]="'Quitar ' + etiquetaHilo(l.variante)">

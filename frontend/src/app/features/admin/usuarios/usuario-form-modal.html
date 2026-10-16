@@ -46,7 +46,7 @@
               <!-- Los demás puestos: puede lo de todos juntos. -->
               <fieldset class="field full otros-puestos">
                 <legend>También trabaja como <span class="muted" style="font-weight: 400">(opcional)</span></legend>
-                <div class="casillas">
+                <div class="casillas puestos">
                   @for (r of otrosDisponibles(); track r.id) {
                     <label class="field check">
                       <input type="checkbox" [checked]="tieneOtro(r.id)"
@@ -81,6 +81,33 @@
                 </span>
               </label>
             }
+            <!-- De qué tiendas es (2026-10-15): solo ve ventas, caja e inventario de las suyas. -->
+            <fieldset class="field full otros-puestos">
+              <legend>Trabaja en</legend>
+              @if (esAdministrador()) {
+                <span class="ayuda">El administrador ve todas las tiendas, siempre.</span>
+              } @else {
+                <div class="casillas">
+                  @if (puedeDarTodas()) {
+                    <label class="field check">
+                      <input type="checkbox" [checked]="todas()" (change)="todas.set($any($event.target).checked)" />
+                      Todas las tiendas
+                    </label>
+                  }
+                  @for (a of almacenes(); track a.id) {
+                    <label class="field check">
+                      <input type="checkbox" [checked]="todas() || tieneTienda(a.id)" [disabled]="todas()"
+                             (change)="alternarTienda(a.id, $any($event.target).checked)" />
+                      {{ a.nombre }}
+                    </label>
+                  }
+                </div>
+                <span class="ayuda">
+                  {{ todas() ? 'Ve las ventas, la caja y el inventario de todas las tiendas, y los reportes.'
+                             : 'Solo ve las ventas, la caja y el inventario de las tiendas marcadas. No ve reportes ni lo de las otras tiendas.' }}
+                </span>
+              }
+            </fieldset>
             @if (esEdicion()) {
               <label class="field check full">
                 <input type="checkbox" formControlName="activo" />

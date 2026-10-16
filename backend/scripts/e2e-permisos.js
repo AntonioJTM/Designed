@@ -118,6 +118,8 @@ const ck = (n, ok, d) => {
     // Corregir una deuda
     ck('cajero → corregir deuda: no', negado(await cajero('POST', `/clientes/${NO_EXISTE}/ajustes`, {})));
     ck('administrador → pasa la guarda (422 del dato)', paso(await admin('POST', `/clientes/${NO_EXISTE}/ajustes`, {})));
+    ck('cajero → ajustar saldo a favor: no', negado(await cajero('POST', `/clientes/${NO_EXISTE}/saldo-favor/ajuste`, {})));
+    ck('administrador → ajustar saldo a favor pasa la guarda (422 del dato)', paso(await admin('POST', `/clientes/${NO_EXISTE}/saldo-favor/ajuste`, {})));
     // Cambiar precios
     ck('cajero → cambiar precio: no', negado(await cajero('PATCH', `/variantes/${NO_EXISTE}`, { precio: -1 })));
     ck('gerente → pasa la guarda', paso(await gerente('PATCH', `/variantes/${NO_EXISTE}`, { precio: -1 })));

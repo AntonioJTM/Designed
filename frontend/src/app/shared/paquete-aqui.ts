@@ -20,6 +20,10 @@ export function paqueteFueraDeAqui(
     return `El paquete ${b.codigo} viene en camino (${b.en_camino_folio}): primero recibe el envío en Surtir sucursal.`;
   }
   if (b.almacen_id != null && almacenId != null && Number(b.almacen_id) !== Number(almacenId)) {
+    // De una tienda que no es suya, el servidor no dice cuál (2026-10-15).
+    if (b.almacen === 'otra tienda') {
+      return `El paquete ${b.codigo} no está registrado en ${aqui ? `«${aqui}»` : 'esta tienda'}: toma uno que esté aquí.`;
+    }
     return (
       `El paquete ${b.codigo} sí existe, pero está en «${b.almacen ?? 'otro almacén'}»` +
       (aqui ? `, no en «${aqui}»` : '') +

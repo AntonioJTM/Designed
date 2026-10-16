@@ -265,7 +265,7 @@ async function listarCodigos(varianteId) {
   return model.codigosDe(varianteId);
 }
 
-async function agregarCodigo(varianteId, datos, usuarioId = null) {
+async function agregarCodigo(varianteId, datos, usuarioId = null, almacenes = null) {
   const variante = await obtener(varianteId);
   if (variante.tipo_presentacion === 'cono') {
     throw new AppError(422, 'NO_ES_PAQUETE', 'Los conos no llevan bultos: el bulto es del paquete.');
@@ -282,7 +282,7 @@ async function agregarCodigo(varianteId, datos, usuarioId = null) {
   if (dueno === varianteId) {
     throw new AppError(409, 'CODIGO_DUPLICADO', 'Esa variante ya tiene ese código');
   }
-  const almacenId = await _almacenDelBulto(varianteId, datos.almacen_id ?? null);
+  const almacenId = await _almacenDelBulto(varianteId, datos.almacen_id ?? null, almacenes);
   return model.agregarBultoConEntrada(varianteId, { ...datos, codigo: cod, almacen_id: almacenId }, usuarioId);
 }
 
@@ -296,13 +296,18 @@ async function agregarCodigo(varianteId, datos, usuarioId = null) {
  *   · Si no se dice y el hilo está en un solo lugar, entra ahí.
  *   · Si está en dos o más, o en ninguno, hay que decirlo (422 FALTA_ALMACEN).
  */
-async function _almacenDelBulto(varianteId, elegido) {
+async function _almacenDelBulto(varianteId, elegido, almacenes = null) {
+  // Quien es de una sola tienda solo carga en las suyas (2026-10-15).
+  if (elegido && Array.isArray(almacenes) && !almacenes.includes(Number(elegido))) {
+    throw new AppError(404, 'OTRA_TIENDA', 'Ese almacén es de otra tienda.');
+  }
   if (elegido) {
     const alm = await almacenesModel.obtener(elegido);
     if (!alm || !Number(alm.activo)) throw new AppError(422, 'ALMACEN_INVALIDO', 'Ese almacén no existe o está inactivo.');
     return Number(elegido);
   }
-  const donde = await model.almacenesConExistencia(varianteId);
+  const donde = (await model.almacenesConExistencia(varianteId))
+    .filter((d) => almacenes === null || almacenes.includes(d.almacen_id));
   if (donde.length === 1) return donde[0].almacen_id;
   throw new AppError(422, 'FALTA_ALMACEN', donde.length > 1
     ? `Este hilo está en ${donde.map((d) => `«${d.almacen}»`).join(' y ')}: di a cuál de ellos entra el bulto.`
@@ -340,9 +345,13 @@ async function resolverCodigo(codigo) {
  * volverlo a capturar bien deja el inventario igual. Los capturados a mano ANTES
  * nunca metieron kilos: solo borran su registro. Devuelve los kilos que salieron.
  */
-async function eliminarCodigo(codigoId, usuarioId = null) {
+async function eliminarCodigo(codigoId, usuarioId = null, almacenes = null) {
   const c = await model.obtenerCodigo(codigoId);
   if (!c) throw new AppError(404, 'NO_ENCONTRADO', 'Código no encontrado');
+  // Un bulto de otra tienda no se quita desde aquí (2026-10-15).
+  if (Array.isArray(almacenes) && !(c.almacen_id != null && almacenes.includes(Number(c.almacen_id)))) {
+    throw new AppError(404, 'OTRA_TIENDA', 'Ese bulto es de otra tienda.');
+  }
   const metioKilos = c.remesa_id != null || (await model.bultoConEntrada(codigoId));
   if (!metioKilos) {
     await model.eliminarCodigo(codigoId);

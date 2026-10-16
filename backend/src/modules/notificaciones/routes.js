@@ -3,6 +3,7 @@
 const { Router } = require('express');
 const model = require('./model');
 const { authRequired, requireTipo } = require('../../middlewares/auth');
+const { almacenesDe } = require('../permisos/service');
 
 const router = Router();
 
@@ -12,7 +13,7 @@ const router = Router();
  */
 router.get('/', authRequired, requireTipo('usuario'), async (req, res, next) => {
   try {
-    res.json({ data: await model.pendientes(), error: null });
+    res.json({ data: await model.pendientes(await almacenesDe(req.auth)), error: null });
   } catch (err) {
     next(err);
   }

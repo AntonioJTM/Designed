@@ -62,10 +62,11 @@ async function borrarComprobante(id) {
 // ---- Apartados ----
 
 /** Los apartados vigentes, con lo que llevan pagado. */
-async function apartados(filtros = {}) {
+async function apartados(filtros = {}, almacenes = null) {
   return model.listarApartados({
     cliente_id: filtros.cliente_id ? Number(filtros.cliente_id) : undefined,
     orden: filtros.orden,
+    almacenes,
   });
 }
 
@@ -90,17 +91,17 @@ async function modificarEncargo(id, datos) {
 }
 
 /** Los pedidos (encargos) sin entregar. */
-async function encargos(filtros = {}) {
-  return model.listarEncargos({ estado: filtros.estado, q: filtros.q });
+async function encargos(filtros = {}, almacenes = null) {
+  return model.listarEncargos({ estado: filtros.estado, q: filtros.q, almacenes });
 }
 
-async function resumen() {
-  return model.resumen();
+async function resumen(almacenes = null) {
+  return model.resumen(almacenes);
 }
 
 /** Las notas pendientes de pago por cobrar. */
-async function notasPendientes(filtros = {}) {
-  return model.listarNotasPendientes({ q: filtros.q });
+async function notasPendientes(filtros = {}, almacenes = null) {
+  return model.listarNotasPendientes({ q: filtros.q, almacenes });
 }
 
 /** Lo que falta de una nota pendiente de pago, a la cuenta de crédito del cliente. */

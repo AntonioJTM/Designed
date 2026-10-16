@@ -1,9 +1,13 @@
 import { Injectable, Injector, inject } from '@angular/core';
 import { Observable, catchError, defer, forkJoin, from, map, of, shareReplay, switchMap } from 'rxjs';
-import { Pedido } from '../models/ventas.models';
+import { DevolucionHecha, Pedido } from '../models/ventas.models';
 import { VentasService } from './ventas.service';
 import { TiendaService } from './tienda.service';
-import { DatosTienda, ExtrasTicket, armarTicket, imprimirTicket } from '../../shared/ticket/ticket';
+import { ClientesService } from './clientes.service';
+import {
+  DatosTienda, ExtrasTicket, armarTicket, armarTicketAbonoCuenta, armarTicketAnticipo, armarTicketDevolucion,
+  armarTicketPagoNota, imprimirTicket,
+} from '../../shared/ticket/ticket';
 
 /**
  * Imprime el ticket de una venta, el mismo desde la caja y desde el detalle.
@@ -43,6 +47,35 @@ export class TicketService {
   /** Con la venta ya cargada (el detalle). */
   imprimirPedido(p: Pedido, extras?: ExtrasTicket): Observable<void> {
     return this.datos$.pipe(switchMap((t) => from(imprimirTicket(armarTicket(p, t, extras)))));
+  }
+
+  /** El ticket de UNA devolución de esa venta (el de la venta sigue con `imprimirPedido`). */
+  imprimirDevolucion(p: Pedido, d: DevolucionHecha): Observable<void> {
+    return this.datos$.pipe(switchMap((t) => from(imprimirTicket(armarTicketDevolucion(p, d, t)))));
+  }
+
+  /**
+   * Los tickets de la cuenta del cliente (2026-10-15): se piden al servidor con
+   * el movimiento recién registrado —o uno viejo, para reimprimirlo— y salen
+   * igual las dos veces.
+   */
+  imprimirAbonoCuenta(clienteId: number, movimientoId: number): Observable<void> {
+    return forkJoin([this.injector.get(ClientesService).ticketAbono(clienteId, movimientoId), this.datos$]).pipe(
+      switchMap(([d, t]) => from(imprimirTicket(armarTicketAbonoCuenta(d, t))))
+    );
+  }
+
+  imprimirAnticipo(clienteId: number, movimientoId: number): Observable<void> {
+    return forkJoin([this.injector.get(ClientesService).ticketAnticipo(clienteId, movimientoId), this.datos$]).pipe(
+      switchMap(([d, t]) => from(imprimirTicket(armarTicketAnticipo(d, t))))
+    );
+  }
+
+  /** Un abono a una nota (pendiente de pago, en espera o apartado): uno de sus pagos. */
+  imprimirPagoNota(pedidoId: number, pagoId: number): Observable<void> {
+    return forkJoin([this.injector.get(VentasService).ticketPago(pedidoId, pagoId), this.datos$]).pipe(
+      switchMap(([d, t]) => from(imprimirTicket(armarTicketPagoNota(d, t))))
+    );
   }
 
   /** Recién cobrada (la caja): se pide completa, con sus artículos y pagos. */

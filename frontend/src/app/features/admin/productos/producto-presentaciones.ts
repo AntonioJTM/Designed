@@ -511,7 +511,7 @@ export class ProductoPresentaciones {
     forkJoin({
       tiposCliente: this.catalogo.tiposCliente(),
       producto: this.catalogo.obtenerProducto(id),
-      almacenes: this.inv.almacenes(),
+      almacenes: this.inv.misAlmacenes(),
     }).subscribe({
       next: (o) => {
         this.tiposCliente.set(o.tiposCliente);

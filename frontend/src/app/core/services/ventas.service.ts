@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
 import { Paginado } from '../models/catalogo.models';
 import { MetodoEntrega } from '../models/tienda.models';
+import { TicketPagoNota } from '../models/tickets.models';
 import {
   Apartados,
   Caja,
@@ -284,6 +285,13 @@ export class VentasService {
   modificarPedido(pedidoId: number, body: ModificarPedidoInput): Observable<Pedido> {
     return this.http
       .put<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/encargo`, body)
+      .pipe(map(data));
+  }
+
+  /** Los datos del ticket de un abono a una nota (uno de sus pagos; 2026-10-15). */
+  ticketPago(pedidoId: number, pagoId: number): Observable<TicketPagoNota> {
+    return this.http
+      .get<ApiResponse<TicketPagoNota>>(`${this.base}/pedidos/${pedidoId}/pagos/${pagoId}/ticket`)
       .pipe(map(data));
   }
 

@@ -36,3 +36,8 @@ backend/uploads/
 # ticket, que viven en la base: Configuración -> Datos fiscales). El repositorio
 # es PÚBLICO: no se sube.
 /ticketinfo.pdf
+
+# Los permisos PERSONALES de Claude Code (los que se van aprobando en cada
+# sesión): llevan rutas de la máquina y comandos sueltos. El repo es PÚBLICO.
+# Lo compartido (candados y avisos) va en .claude/settings.json.
+/.claude/settings.local.json

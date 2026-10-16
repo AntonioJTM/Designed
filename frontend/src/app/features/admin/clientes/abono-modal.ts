@@ -45,7 +45,8 @@ export class AbonoModal implements OnInit {
   readonly saldo = input.required<number>();
 
   readonly cerrado = output<void>();
-  readonly registrado = output<{ saldo_nuevo: number }>();
+  /** `movimiento_id`: con él se imprime su ticket. */
+  readonly registrado = output<{ saldo_nuevo: number; movimiento_id: number }>();
 
   readonly cargando = signal(true);
   readonly guardando = signal(false);
@@ -115,7 +116,7 @@ export class AbonoModal implements OnInit {
       .subscribe({
         next: (r) => {
           this.guardando.set(false);
-          this.registrado.emit({ saldo_nuevo: Number(r.saldo_nuevo) });
+          this.registrado.emit({ saldo_nuevo: Number(r.saldo_nuevo), movimiento_id: Number(r.movimiento_id) });
           this.cerrar();
         },
         error: (e) => {

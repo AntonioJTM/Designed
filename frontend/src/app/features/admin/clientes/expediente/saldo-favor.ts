@@ -1,6 +1,7 @@
 import { Component, inject, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ClientesService } from '../../../../core/services/clientes.service';
+import { TicketService } from '../../../../core/services/ticket.service';
 import { ConfirmacionService } from '../../../../core/services/confirmacion.service';
 import {
   AplicacionSaldoFavor,
@@ -18,7 +19,7 @@ const ETIQUETA: Record<MovimientoSaldoFavor['tipo'], string> = {
   uso: 'Pagó una compra con él',
   aplicado: 'Se descontó de lo que debía',
   reintegro: 'Le regresó (se canceló la compra)',
-  ajuste: 'Ajuste',
+  ajuste: 'Ajuste a mano',
 };
 const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
   devolucion: 1, anticipo: 1, uso: -1, aplicado: -1, reintegro: 1, ajuste: 1,
@@ -45,6 +46,9 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
         <div class="acciones">
           @if (puedeRecibir()) {
             <button type="button" class="btn btn-ghost btn-sm" (click)="recibir.emit()">Recibir anticipo</button>
+          }
+          @if (puedeAjustar()) {
+            <button type="button" class="btn btn-ghost btn-sm" (click)="ajustar.emit()">Ajustar</button>
           }
           @if (saldo() > 0.004 && deuda().total > 0.004) {
             <button type="button" class="btn btn-primary btn-sm" (click)="aplicar()" [disabled]="aplicando()">
@@ -76,13 +80,14 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
       } @else {
         <div class="tabla-scroll">
           <table class="grid sf-tabla">
-            <thead><tr><th>Fecha</th><th>Qué pasó</th><th class="num">Monto</th><th>Quién</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Qué pasó</th><th class="num">Monto</th><th>Quién</th><th><span class="oculto">Ticket</span></th></tr></thead>
             <tbody>
               @for (m of movimientos(); track m.id) {
                 <tr>
                   <td class="muted sf-fecha">{{ fechaCorta(m.creado_en) }}</td>
                   <td>
                     {{ etiqueta(m) }}
+                    @if (m.otra_tienda) { <span class="muted"> · en otra tienda</span> }
                     @if (m.metodo) { <span class="muted"> · {{ m.metodo.toLowerCase() }}</span> }
                     @if (m.referencia) { <span class="mono muted"> · {{ m.referencia }}</span> }
                     @if (m.devolucion_folio) { <span class="mono muted"> · {{ m.devolucion_folio | folio }}</span> }
@@ -98,6 +103,13 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
                   </td>
                   <td class="num sf-monto" [class.entra]="efecto(m) > 0">{{ monto(m) }}</td>
                   <td class="muted">{{ m.registro || '—' }}</td>
+                  <!-- Cada anticipo se puede reimprimir (si dejó parte y parte, sale un solo ticket). -->
+                  <td class="acciones">
+                    @if (m.tipo === 'anticipo' && !m.otra_tienda) {
+                      <button type="button" class="btn btn-ghost btn-sm" (click)="ticketAnticipo(m)"
+                              [attr.aria-label]="'Ticket del anticipo del ' + fechaCorta(m.creado_en)">Ticket</button>
+                    }
+                  </td>
                 </tr>
               }
             </tbody>
@@ -122,6 +134,7 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
 export class SaldoFavor {
   private readonly clientes = inject(ClientesService);
   private readonly confirmacion = inject(ConfirmacionService);
+  private readonly tickets = inject(TicketService);
 
   readonly clienteId = input.required<number>();
   readonly nombre = input<string>('');
@@ -131,6 +144,9 @@ export class SaldoFavor {
   readonly vePedidos = input(false);
   /** Se ofrece "Recibir anticipo" (cliente activo). */
   readonly puedeRecibir = input(false);
+  /** Se ofrece "Ajustar" (quien tiene «Corregir deuda»; 2026-10-16). */
+  readonly puedeAjustar = input(false);
+  readonly ajustar = output<void>();
   readonly aplicado = output<AplicacionSaldoFavor>();
   readonly recibir = output<void>();
 
@@ -149,6 +165,14 @@ export class SaldoFavor {
   monto(m: MovimientoSaldoFavor): string {
     const n = this.efecto(m);
     return (n < 0 ? '−' : '+') + pesos(Math.abs(n)).replace('-', '');
+  }
+
+  /** El ticket de un anticipo de su historial (sale igual que el día que lo dejó). */
+  ticketAnticipo(m: MovimientoSaldoFavor): void {
+    this.error.set(null);
+    this.tickets.imprimirAnticipo(this.clienteId(), m.id).subscribe({
+      error: (e) => this.error.set((e as { error?: { error?: ApiError } })?.error?.error?.message ?? 'No se pudo imprimir el ticket.'),
+    });
   }
 
   /** "Aplica mi saldo a lo que debo": pregunta antes, diciendo a qué se va. */

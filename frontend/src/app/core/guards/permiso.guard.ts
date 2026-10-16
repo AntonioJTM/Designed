@@ -26,8 +26,12 @@ export const permisoGuard: CanActivateFn = (route) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   const permiso = (route.data?.['permiso'] ?? null) as string | null;
+  // Lo que suma todas las tiendas, solo para quien las ve todas (2026-10-15).
+  const todas = !!route.data?.['todasLasTiendas'];
   return conSesion(auth, router, () =>
-    auth.puede(permiso) ? true : router.createUrlTree([rutaDeInicio((p) => auth.puede(p))])
+    auth.puede(permiso) && (!todas || auth.veTodasLasTiendas())
+      ? true
+      : router.createUrlTree([rutaDeInicio((p) => auth.puede(p))])
   );
 };
 

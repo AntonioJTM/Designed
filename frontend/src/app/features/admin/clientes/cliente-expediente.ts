@@ -2,7 +2,9 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { AplicacionSaldoFavor, Expediente, MovimientoCredito } from '../../../core/models/clientes.models';
+import { TicketService } from '../../../core/services/ticket.service';
+import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
+import { AjusteSaldoFavor, AplicacionSaldoFavor, Expediente, MovimientoCredito } from '../../../core/models/clientes.models';
 import { HabitosCliente } from '../../../core/models/rediseno.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
@@ -10,6 +12,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
 import { ClienteFormModal } from './cliente-form-modal';
 import { AbonoModal } from './abono-modal';
 import { AjusteModal } from './ajuste-modal';
+import { AjusteFavorModal } from './expediente/ajuste-favor-modal';
 import { LineaVisitas } from './expediente/linea-visitas';
 import { TablaCompras } from './expediente/tabla-compras';
 import { SaldoFavor } from './expediente/saldo-favor';
@@ -62,7 +65,7 @@ const PESTANAS: { clave: Pestana; etiqueta: string }[] = [
  */
 @Component({
   selector: 'app-cliente-expediente',
-  imports: [FolioPipe, RouterLink, CantidadPipe, DineroPipe, ClienteFormModal, AbonoModal, AjusteModal, LineaVisitas, TablaCompras, SaldoFavor, AnticipoModal],
+  imports: [FolioPipe, RouterLink, CantidadPipe, DineroPipe, ClienteFormModal, AbonoModal, AjusteModal, AjusteFavorModal, LineaVisitas, TablaCompras, SaldoFavor, AnticipoModal],
   templateUrl: './cliente-expediente.html',
   styles: `
     .cabeza-cliente { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; border-radius: 12px; padding: 24px; }
@@ -102,6 +105,7 @@ export class ClienteExpediente implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
+  private readonly tickets = inject(TicketService);
 
   readonly PESTANAS = PESTANAS;
   readonly ESTADO = ESTADO_RITMO;
@@ -117,6 +121,8 @@ export class ClienteExpediente implements OnInit {
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+  /** El botón de ticket del aviso: el abono o el anticipo recién registrado (2026-10-15). */
+  readonly ticketAviso = new TicketDelAviso(this.mensaje);
   readonly pestana = signal<Pestana>('resumen');
   /** Ya se pidieron TODAS sus compras, no solo las 20 recientes. */
   readonly todas = signal(false);
@@ -126,6 +132,8 @@ export class ClienteExpediente implements OnInit {
   readonly editando = signal(false);
   readonly abonando = signal(false);
   readonly ajustando = signal(false);
+  /** La ventana de ajustar su saldo a favor (2026-10-16). */
+  readonly ajustandoFavor = signal(false);
   /** "Recibir anticipo": dinero a cuenta, sin nota. */
   readonly recibiendo = signal(false);
 
@@ -457,16 +465,32 @@ export class ClienteExpediente implements OnInit {
     this.cargar();
   }
 
-  abonoRegistrado(r: { saldo_nuevo: number }): void {
-    this.mensaje.set(`Abono registrado. ${r.saldo_nuevo > 0 ? `Le quedan ${pesos(r.saldo_nuevo)} por pagar.` : 'Quedó al día.'}`);
+  abonoRegistrado(r: { saldo_nuevo: number; movimiento_id: number }): void {
+    const texto = `Abono registrado. ${r.saldo_nuevo > 0 ? `Le quedan ${pesos(r.saldo_nuevo)} por pagar.` : 'Quedó al día.'}`;
+    this.mensaje.set(texto);
+    const id = this.exp()?.id;
+    if (id) this.ticketAviso.poner(texto, 'Imprimir ticket del abono', () => this.imprimirAbono(r.movimiento_id));
     this.cargar();
   }
 
   /** Dejó dinero a cuenta: le quedó a favor. */
-  anticipoRegistrado(r: { total: number; saldo_favor: number }): void {
+  anticipoRegistrado(r: { total: number; saldo_favor: number; movimiento_id: number }): void {
     this.recibiendo.set(false);
-    this.mensaje.set(`Anticipo de ${pesos(r.total)} registrado. Le quedan ${pesos(r.saldo_favor)} a favor.`);
+    const texto = `Anticipo de ${pesos(r.total)} registrado. Le quedan ${pesos(r.saldo_favor)} a favor.`;
+    this.mensaje.set(texto);
+    const id = this.exp()?.id;
+    if (id) {
+      this.ticketAviso.poner(texto, 'Imprimir ticket del anticipo', () =>
+        this.tickets.imprimirAnticipo(id, r.movimiento_id).subscribe({ error: (e) => this.error.set(this.msg(e)) }));
+    }
     this.cargar();
+  }
+
+  /** El ticket de un abono a su cuenta: el recién registrado o uno de su historial. */
+  imprimirAbono(movimientoId: number): void {
+    const id = this.exp()?.id;
+    if (!id) return;
+    this.tickets.imprimirAbonoCuenta(id, movimientoId).subscribe({ error: (e) => this.error.set(this.msg(e)) });
   }
 
   /** Se descontó su saldo a favor de lo que debía. */
@@ -476,6 +500,11 @@ export class ClienteExpediente implements OnInit {
         (r.deuda_total.total > 0 ? `Todavía debe ${pesos(r.deuda_total.total)}. ` : 'Quedó al día. ') +
         `Le quedan ${pesos(r.saldo_favor)} a favor.`
     );
+    this.cargar();
+  }
+
+  ajusteFavorRegistrado(r: AjusteSaldoFavor): void {
+    this.mensaje.set(`Saldo a favor ajustado: tenía ${pesos(r.tenia)} y ahora tiene ${pesos(r.saldo_favor)} a favor.`);
     this.cargar();
   }
 

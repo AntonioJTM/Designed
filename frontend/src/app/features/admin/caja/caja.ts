@@ -298,7 +298,7 @@ export class CajaPantalla {
     this.errorCaja.set(null);
     this.modalCaja.set(id);
     if (this.almacenes().length === 0) {
-      this.inv.almacenes().subscribe({
+      this.inv.misAlmacenes().subscribe({
         next: (a) => {
           this.almacenes.set(a);
           if (!this.formCaja.almacen_id && a[0]) this.formCaja.almacen_id = a[0].id;

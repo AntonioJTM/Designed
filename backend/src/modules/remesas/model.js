@@ -368,14 +368,16 @@ const SELECT_REMESA = `
     LEFT JOIN proveedores prv  ON prv.id = r.proveedor_id
 `;
 
-async function listar({ variante_id, producto_id, proveedor_id, limit, offset }) {
+async function listar({ variante_id, producto_id, proveedor_id, limit, offset, almacenes }) {
   const cond = [];
+  // Las cargas de SUS tiendas (2026-10-15).
+  if (Array.isArray(almacenes)) cond.push(almacenes.length ? 'r.almacen_id IN (:almacenesAlcance)' : '1 = 0');
   if (variante_id) cond.push('r.variante_id = :variante_id');
   if (proveedor_id) cond.push('r.proveedor_id = :proveedor_id');
   // Por hilo: todas sus presentaciones. El conteo necesita el mismo JOIN.
   if (producto_id) cond.push('r.variante_id IN (SELECT id FROM producto_variantes WHERE producto_id = :producto_id)');
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
-  const params = { variante_id, producto_id, proveedor_id, limit, offset };
+  const params = { variante_id, producto_id, proveedor_id, limit, offset, almacenesAlcance: almacenes };
   const [rows] = await pool.query(
     `${SELECT_REMESA} ${where} ORDER BY r.creado_en DESC, r.id DESC LIMIT :limit OFFSET :offset`,
     params

@@ -93,6 +93,8 @@ const MIGRACIONES = [
   ['2026-10_clientes_lugar_entrega', 'clientes.lugar_entrega_id'],
   ['2026-10_puesto_cargador', 'roles.entra_al_sistema'],
   ['2026-10_puesto_cargador (cargador)', 'roles#nombre=cargador'],
+  ['2026-10_tiendas_por_persona', 'usuarios.todas_las_tiendas'],
+  ['2026-10_tiendas_por_persona (tiendas)', 'usuario_almacenes'],
 ];
 
 (async () => {

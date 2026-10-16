@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-14
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-16
 ===============================================================================
 
 ⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
@@ -25,6 +25,46 @@
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
+  AJUSTAR A MANO EL SALDO A FAVOR (2026-10-16, entrada 61, DESPLEGADO en
+  20261016-105041, sin cambios en la base): botón "Ajustar" en la tarjeta "Su saldo
+  a favor" del expediente: quitarle o agregarle, con motivo, para quien tiene
+  «Corregir deuda». Y las decisiones del revisor: lo demás se queda como está.
+  Antes:
+  LO QUE ENCONTRÓ EL REVISOR DE TIENDAS (2026-10-16, entrada 60, DESPLEGADO en
+  20261016-092706, sin cambios en la base): el lector de la caja ya no manda los
+  paquetes de otras tiendas, el costo ya no sale en ninguna respuesta de ventas,
+  inventario ni presentaciones a quien no lo ve, a ciegas solo a la Matriz y la
+  Matriz ya puede escoger a qué sucursal surtir. Quedan 3 decisiones del usuario.
+  Antes:
+  HERRAMIENTAS DE CLAUDE CODE (2026-10-16, entrada 59; no toca el sistema, no se
+  despliega): los permisos personales salieron del repo público, candado que no
+  deja desplegar si fallan las pruebas, aviso antes de commit/push, skill
+  /desplegar y agente revisor-tiendas. TRELLO EN PAUSA: no escribir ahí hasta que
+  el usuario diga.
+  Antes:
+  EL TICKET DICE QUE SE PAGÓ CON SALDO A FAVOR (2026-10-15, entrada 58,
+  DESPLEGADO en 20261015-232325, sin cambios en la base): "Pagó con su saldo a
+  favor" y, si aún le queda, "Le queda a favor $X"; reimpreso después, también
+  "Su saldo a favor hoy" si cambió.
+  Antes:
+  CADA QUIEN, SUS TIENDAS (2026-10-15, entrada 57, DESPLEGADO en 20261015-225909;
+  migración 2026-10_tiendas_por_persona en las dos bases, respaldo
+  /root/respaldos/hitex_antes_tiendas_por_persona_20261015-225847.sql.gz): en
+  Personal cada quien "Trabaja en" una o varias tiendas o en todas; quien es de
+  una sola solo ve sus ventas, caja, inventario, kardex y envíos, pide a la
+  Matriz a ciegas, y no ve Reportes, Cómo va el negocio, Nómina ni las miradas
+  de Clientes. FALTA que el usuario le ponga su tienda a cada quien (hoy todos
+  siguen en «Todas»).
+  Antes:
+  TICKETS DE ABONO Y DE ANTICIPO (2026-10-15, entrada 56, DESPLEGADO en
+  20261015-215729, sin cambios en la base): abono a su cuenta, anticipo y abono a
+  una nota, cada uno con su ticket al registrarlo y para reimprimirlo después.
+  Antes:
+  TICKET DE DEVOLUCIÓN (2026-10-15, entrada 55, DESPLEGADO en 20261015-213124, sin
+  cambios en la base): cada devolución imprime su ticket ("Devolución", qué regresó,
+  cuánto le quedó a favor y su saldo a favor de hoy); el de la venta sigue igual,
+  con su botón "Ticket de venta".
+  Antes:
   CUARTA AUDITORÍA Y SUS ARREGLOS (2026-10-15, entrada 54, DESPLEGADO en
   20261015-001405, sin cambios en la base): 16/20; las tablas anchas se mueven con
   el teclado, la nota del pie de las ventanas sube arriba de los botones en el
@@ -567,6 +607,364 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (61) · Ajustar a mano el saldo a favor (DESPLEGADO 20261016-105041)
+-------------------------------------------------------------------------------
+
+LAS DECISIONES DEL USUARIO (a las 3 preguntas de la entrada 60)
+  1. Abonos por transferencia y ajustes de otra tienda, completos en el
+     expediente: "se queda así".
+  2. Saldo a favor contra notas de otra tienda: se queda igual (paga notas de
+     cualquier tienda), y "que sea ajuste de saldo a favor: se le puede quitar o
+     agregar". Se le preguntó y eligió: igual + ajuste a mano, con el permiso
+     «Corregir deuda».
+  3. Personal: "gerencia igual" (la gerente sigue pudiendo editar a quien
+     trabaja en su tienda y en otra).
+
+LO QUE SE CAMBIÓ (sin cambios en la base: el libro ya tenía el tipo 'ajuste')
+  SERVIDOR
+    · POST /clientes/:id/saldo-favor/ajuste { monto (positivo agrega, negativo
+      quita, nunca 0), notas (el motivo, obligatorio) }, con hacer:corregir_deuda.
+      clientes/saldo-favor.js → ajustarSaldo: bloquea al cliente, no lo deja en
+      negativo (409 SALDO_FAVOR_INSUFICIENTE) y asienta un 'ajuste' con su motivo
+      y quién. Contesta tenia / saldo_favor / movimiento_id.
+  PANTALLA
+    · Expediente → Cuánto debe → "Su saldo a favor": botón "Ajustar" (solo con
+      «Corregir deuda») que abre clientes/expediente/ajuste-favor-modal.ts:
+      Quitarle / Agregarle, de cuánto, motivo y "Le quedaría a favor" (no deja
+      guardar en negativo ni sin motivo). En su historial dice "Ajuste a mano"
+      con el motivo. El aviso: "Saldo a favor ajustado: tenía $X y ahora tiene $Y".
+
+LA VERIFICACIÓN
+  · e2e-devoluciones 84 (5 nuevas: +$200, -$200, quitar de más 409, sin motivo
+    422, queda en el historial con su motivo) y e2e-permisos 41 (el cajero no lo
+    puede: 403).
+  · 436 pruebas de pantallas (3 nuevas de la ventana).
+  · La ventana abierta en Chrome a 1280 y 390 px, con axe sin fallas.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (60) · Lo que encontró el revisor de tiendas (DESPLEGADO 20261016-092706)
+-------------------------------------------------------------------------------
+
+CÓMO SE ENCONTRÓ
+  El agente nuevo revisor-tiendas (entrada 59) revisó "cada quien, sus tiendas"
+  (entrada 57) de punta a punta: 3 fallas graves y 13 menores. Se corrigieron las
+  graves y las menores que eran huecos claros; las que son decisión quedan abajo.
+
+LO GRAVE
+  1. El LECTOR de la caja (GET /variantes/resolver/:codigo) y crear / cambiar
+     precio o peso / precios por lista regresaban la presentación con TODOS sus
+     bultos (`codigos`): de todas las tiendas, con su almacén y el folio de la
+     venta donde salieron. Ahora solo los de SUS tiendas (`_bultosDeSusTiendas`
+     en variantes/controller.js) y de un paquete ajeno no se dice el folio ni el
+     envío en camino.
+  2. El COSTO salía en el detalle de cualquier venta (`pedido_detalle.costo_unitario`
+     por el `SELECT d.*`), en el kardex y en las respuestas de presentaciones.
+     Ahora UN middleware (`permisos.sinCostosEnRespuesta`) en los routers de
+     pedidos, inventario y variantes quita costo / costo_unitario /
+     costo_actualizado_en de TODA respuesta a quien no tiene «Ver costos», en vez
+     de que cada ruta se acuerde.
+  3. Mandar un costo sin «Ver costos» (alta de presentación, merma con costo): 403
+     (`permisos.exigirVerCostos`; vacío o null no cuenta). Cambiar precio y peso ni
+     acepta el costo (422).
+
+LO MENOR QUE SE CORRIGIÓ
+  · Mensajes que nombraban otra tienda, el folio o el cliente: el paquete apartado
+    o vendido (en la caja, al modificar una nota, al surtir y al bajar conos) y
+    "«…» solo tiene X kg" al pasar un paquete encontrado: con `enOtraTienda`.
+  · A CIEGAS solo se le pide a la MATRIZ (antes a cualquier almacén, por la API).
+  · Quien es de la Matriz ve todas las tiendas en GET /almacenes (sus nombres, con
+    mio:false) para poder surtirles; "Va a" ofrece a todas si sale de una suya.
+    Y "Va a" ya se recalcula al cambiar "Sale de" (era un computed sobre un campo
+    ngModel: se quedaba con el primer origen, desde antes).
+  · Una venta "en línea" del personal sin almacén: el de la tienda en línea tiene
+    que ser suyo.
+  · La campana: "N compras" de un cliente nuevo, solo de sus tiendas.
+
+LO QUE QUEDA POR DECIDIR (se le preguntó al usuario)
+  · Abonos por transferencia y ajustes de otra tienda: no pasan por caja, no se
+    sabe de qué tienda son y en el expediente se ven completos.
+  · Descontar el saldo a favor de lo que debe paga también notas de otra tienda y
+    lo dice con sus folios.
+  · Personal: una gerente puede editar o dar de baja a quien trabaja en su tienda y
+    en otra.
+  · (Sin tocar: el catálogo público enseña existencias del almacén de la tienda en
+    línea, que está apagada.)
+
+LA VERIFICACIÓN
+  · e2e-tiendas 53 (12 nuevas: el lector, el paquete ajeno sin folio, el costo en
+    venta / kardex / búsqueda, 403 al mandar costo, a ciegas solo a la Matriz, la
+    Matriz ve a quién surtir). Base igual.
+  · 16 E2E más en verde (permisos 39, costo-margen 17, surtir-inventario 25,
+    paquete-de-otra-tienda 32, pedidos-encargo 74, devoluciones 79,
+    clientes-credito 75, notas-pendientes 43, cancelacion-caja 31…).
+  · 433 pruebas de pantallas (una nueva: la Matriz surte a cualquier tienda).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (59) · Herramientas de Claude Code: candados, /desplegar y revisor de tiendas (no se despliega)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Instala [claude-code-setup] y córrela para ver qué sugerencias me da." Y sobre
+  las sugerencias: "vamos a hacerlo, pero lo del Trello por el momento no quiero
+  que escribas nada ahí".
+
+LO QUE SE HIZO
+  · Se instaló el plugin oficial claude-code-setup (de Anthropic, revisado) para el
+    USUARIO, no en el proyecto (~/.claude, scope user). Sugirió: una skill de
+    despliegue, candados (hooks), un agente revisor y NO conectar la base por MCP
+    (el 3306 sigue abierto).
+  · .claude/settings.json estaba en el repo PÚBLICO con 85 permisos acumulados
+    (rutas de carpetas temporales, una contraseña de prueba de julio, un ssh a
+    root con la IP). Pasaron a .claude/settings.local.json, que ahora está en
+    .gitignore. OJO: la versión vieja sigue en el HISTORIAL de git (no se reescribió:
+    no hay secretos reales); el GitHub se limpia en el próximo commit.
+  · .claude/settings.json (compartido) ahora solo lleva:
+    - "ask" para `git commit` y `git push`: Claude pregunta antes (la regla de
+      "no commit sin que lo pida", ahora como candado);
+    - el hook PreToolUse `.claude/hooks/antes-de-desplegar.js`: antes de `npm run
+      deploy` (y :frontend / :backend) corre las pruebas del servidor (npm test, 20)
+      y de pantallas (ng test sin ventana, 432); si alguna falla, sale con 2 y NO
+      se sube. Tarda unos 16 s. Probado: deja pasar lo demás, deja pasar el
+      despliegue en verde y lo detiene con pruebas que fallan.
+  · .claude/skills/desplegar/SKILL.md: el ritual completo (otra sesión, pruebas,
+    migración en las dos bases con respaldo, subir, CAMBIOS.txt, CLAUDE.md,
+    memoria, aviso al usuario). Solo con /desplegar (disable-model-invocation).
+  · .claude/agents/revisor-tiendas.md: revisor de solo lectura de "cada quien, sus
+    tiendas", permisos y costo.
+  · `claude plugin validate .claude`: pasa. Los hooks, la skill y el agente se
+    cargan al abrir una sesión NUEVA.
+  · TRELLO EN PAUSA (memoria tablero-trello): no crear ni mover tarjetas.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-15 (58) · El ticket dice que se pagó con saldo a favor y cuánto le queda (DESPLEGADO 20261015-232325)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  (Con foto del ticket POS-…CCA3: VINO CLARO 2/30, $2,820.25, y abajo solo
+  "Saldo a favor $2,820.25".) "En el ticket, cuando se paga con saldo a favor,
+  que diga que se pagó con saldo a favor y que diga cuánto le queda si es que
+  aún tiene saldo a favor."
+
+LA DECISIÓN
+  · El renglón del pago dice "Pagó con su saldo a favor" (antes, el nombre del
+    método a secas: "Saldo a favor" se leía como lo que le quedaba).
+  · "Le queda a favor $X" (en negritas) SOLO si aún le queda: lo pidió así.
+  · La cifra es la de JUSTO DESPUÉS de esa venta, sacada del libro del saldo a
+    favor hasta ese uso: el ticket reimpreso dice lo mismo que el del día. Si
+    después cambió, se agrega "Su saldo a favor hoy" en recuadro, como en los
+    tickets de devolución y de anticipo.
+
+LO QUE SE CAMBIÓ (sin cambios en la base)
+  · clientes/saldo-favor.js → usadoEnVenta: lo usado en la venta (movimientos
+    'uso' y 'aplicado' con su pedido_id), lo que le quedó (la suma del libro del
+    cliente hasta el último de ellos) y lo que tiene hoy. El GET de la venta lo
+    trae en `saldo_favor_usado` (null si no usó saldo).
+  · shared/ticket/ticket.ts (armarTicket): el renglón y las dos cifras.
+
+LA VERIFICACIÓN
+  · 432 pruebas de pantallas (una nueva: pagado todo con saldo, lo usó todo,
+    reimpreso con otro saldo, y parte con saldo y parte en efectivo).
+  · e2e-devoluciones 79 (3 nuevas: usó $1,000 y le quedaron $5,140; la venta
+    anterior reimpresa dice que le quedaron $6,140 ese día y hoy $5,140; la
+    pagada en efectivo no trae nada).
+  · El ticket de la foto dibujado en Chrome a 80 mm.
+  · FALTA imprimirlo en la WL88S.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-15 (57) · Cada quien, sus tiendas (DESPLEGADO 20261015-225909)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "No quiero que todos los usuarios vean lo que se vende en las dos tiendas, eso
+  solo lo puede ver el administrador. Si abro una caja en Moroleón no quiero que
+  vea nada relacionado a la otra tienda ni a nada del inventario, porque entonces
+  sabría muchas cosas que no quiero que sepa; solo quiero que sepa lo que hay en
+  su tienda y en su almacén si es que tiene. Y lo mismo en Cuautepec. Y las de
+  surtir sucursal igual, para que haga la solicitud."
+
+LO QUE DECIDIÓ (cuatro preguntas)
+  1. Se dice en PERSONAL, por persona: "Trabaja en" una o varias tiendas, o
+     «Todas las tiendas». El administrador, todas siempre.
+  2. Surtir sucursal: "nada de la Matriz". La tienda pide a ciegas ("20 paquetes
+     de NEGRO 2/30") y, si no hay tantos, la Matriz manda lo que tenga.
+  3. El cliente es COMPARTIDO: cualquier tienda lo encuentra, le vende y ve cuánto
+     debe en total; su historial solo enseña lo que compró en esa tienda.
+  4. Reportes, Cómo va el negocio y las miradas de Clientes: solo quien ve todas.
+     Hoy, Ventas, Caja, Notas, Inventario, Kardex y Surtir se filtran a la suya.
+
+LO QUE SE CAMBIÓ
+  BASE (migración 2026-10_tiendas_por_persona.sql, en LAS DOS bases)
+    · usuarios.todas_las_tiendas (1 = todas; los que ya existían quedaron en 1:
+      nada cambia hasta que se le diga a cada quien su tienda) y la tabla
+      usuario_almacenes. schema_mysql.sql y estado-migraciones al día.
+  SERVIDOR
+    · permisos: almacenesDe (de la base, con caché que se tira al guardar a
+      alguien), exigirAlmacen (404 OTRA_TIENDA), exigirTurno, filtroAlmacen; el
+      middleware requireTodasLasTiendas (403 SOLO_TODAS_LAS_TIENDAS).
+    · Personal: alta y edición con todas_las_tiendas / tiendas; sin ninguna, 422
+      FALTA_TIENDA; nadie da tiendas que no ve (403 SOLO_SUS_TIENDAS); la sesión
+      trae su "alcance"; la lista solo enseña a la gente de sus tiendas.
+    · Ventas: lista, notas pendientes, notas en espera, apartados y las cifras de
+      arriba, de sus tiendas; toda ruta con :id de una venta de otra tienda da
+      404 (router.param); la caja, el almacén y el turno con que se cobra, suyos.
+    · Caja: sus cajas; abrir, ver, mover efectivo y cerrar, solo en las suyas.
+      Dar de alta cajas y almacenes: solo quien ve todas.
+    · Inventario: existencias, panorama, alertas, kardex, desarmes, detalle del
+      hilo y sus lotes, equivalencia, ajuste/merma, mínimos y bajar conos, de sus
+      tiendas. Traspasos: los que salen o llegan a ellas; surte quien es del
+      origen, firma quien es del destino; quien solo es del destino pide A CIEGAS
+      (sin rechazo por existencias y sin decir cuánto hay en el origen).
+    · Presentaciones: buscar con existencias de otra tienda, 404; los bultos de
+      una presentación, solo los suyos (la ruta ya pide sesión); el bulto a mano
+      entra solo a sus almacenes; quitar uno de otra tienda, 404.
+    · Cargas del proveedor: el historial, los PDF y los datos, de sus tiendas;
+      cargar solo a un almacén suyo.
+    · Hoy y la campana, de sus tiendas (sin cobranza ni "dejaron de venir", que
+      llevan a miradas de todas las tiendas). Reportes ahora pide ver:reportes.
+    · Clientes: las miradas, solo quien ve todas; el expediente y la lista
+      cuentan las compras de sus tiendas; lo que debe y su saldo a favor, completo,
+      con los movimientos de la otra tienda sin folio ni quién; abono, anticipo y
+      sus tickets, con turnos de sus cajas.
+    · Los mensajes que nombran otra tienda (el paquete está en «…») le llegan sin
+      el nombre a quien no la ve (enOtraTienda en middlewares/error.js).
+  PANTALLA
+    · Personal: "Trabaja en" (todas o las casillas de cada tienda) y la columna
+      Tiendas.
+    · El menú esconde Reportes, Cómo va el negocio, Nómina y Almacenes a quien es
+      de una sola tienda; Clientes le enseña solo Todos los clientes y Dónde
+      entrego (las demás rutas lo regresan a su inicio).
+    · Los selectores de almacén usan misAlmacenes() (sus tiendas).
+    · Surtir sucursal: "Va a" solo sus tiendas; a ciegas sin la columna "Hay
+      libre" ni el aviso de insuficiente, con los kilos al peso del catálogo y el
+      texto "Si en … no hay tantos, te mandan los que tengan"; Enviar solo a quien
+      es del origen y "Confirmar que llegó" a quien es del destino.
+    · El expediente marca "en otra tienda" y no ofrece reimprimir esos tickets.
+
+LA VERIFICACIÓN
+  · 431 pruebas de pantallas (una nueva: pedir a ciegas).
+  · E2E contra la base de pruebas: e2e-tiendas 41 (nueva, con una gerente de
+    tienda moroleon: ventas, cajas, inventario, kardex, traspasos, reportes,
+    cliente compartido, a ciegas y el cambio a todas en el acto; la base quedó
+    igual) y las otras 26 que corren sin las listas de muestras/: todas en verde
+    (permisos 39, varios-puestos 28, cargador 30, apartados 47, clientes-credito 75,
+    devoluciones 76, notas-pendientes 43, pedidos-encargo 74, carga-lista 60…).
+    e2e-cancelacion-caja se caía desde el 2026-10-13 porque vendía con TARJETA
+    (desactivada ese día); ahora usa la transferencia y pasa completa.
+  · En Chrome, como una gerente que solo es de tienda moroleon, a 1280 y 390 px
+    (axe sin fallas, nada se ensancha): Hoy, Inventario, Kardex, Ventas, Caja y
+    Clientes solo con lo suyo; Reportes, Cómo va el negocio y las miradas de
+    Clientes la regresan a Hoy; Surtir sucursal pide a la matriz a ciegas (sin
+    "Hay libre", "Va a" solo su tienda). De paso: el subtítulo de Surtir
+    sucursal decía "piden en kilos" (desde el 2026-10-06 es en paquetes).
+  · BASE: respaldo /root/respaldos/hitex_antes_tiendas_por_persona_20261015-225847.sql.gz
+    y la migración en hitex (los 5 empleados quedaron en «Todas»); en desarrollo
+    también. estado-migraciones dice al día en las dos.
+
+LO QUE TIENE QUE HACER EL USUARIO
+  En Personal, a cada quien su tienda ("Trabaja en"). Mientras no se haga, todos
+  siguen viendo todo, como hasta hoy.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-15 (56) · Tickets de abono y de anticipo (DESPLEGADO 20261015-215729)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Igual necesito que me generes tickets de anticipos y tickets de abono."
+
+LA DECISIÓN
+  · Tres tickets, porque son tres cosas distintas para el cliente: el ABONO A SU
+    CUENTA de crédito (baja lo que debe), el ANTICIPO (dinero a cuenta, le queda a
+    favor) y el ABONO A UNA NOTA (pendiente de pago, en espera o apartado: cada
+    pago de la nota).
+  · Los datos los arma el SERVIDOR con el libro hasta ese movimiento, no la
+    pantalla con lo que tenga a la mano: así el ticket sale IGUAL al registrarlo y
+    al reimprimirlo días después (lo que cambie desde entonces sale aparte: "Hoy
+    debe", "Hoy le falta", "Su saldo a favor hoy").
+  · Al registrar, el aviso verde trae el botón del ticket (no se imprime solo,
+    como el de la venta). Se reimprimen desde donde se ven en la historia.
+
+LO QUE SE CAMBIÓ (sin cambios en la base)
+  SERVIDOR
+    · clientes/tickets.js: abonoCuenta (debía, abonó, quedó debiendo, debe hoy y
+      las ventas fiadas que ESTE abono terminó de pagar: repartirAbonos antes y
+      después) y anticipo (junta las partes efectivo/transferencia del mismo
+      cliente, persona y momento; tenía, quedó y tiene hoy a favor).
+      GET /clientes/:id/abonos/:movId/ticket y /anticipos/:movId/ticket.
+    · pedidos/tickets.js: pagoDeNota (llevaba pagado, abonó, le falta, le falta
+      hoy, qué nota era). GET /pedidos/:id/pagos/:pagoId/ticket.
+    · El anticipo devuelve movimiento_id y el pago de una nota, pago_id.
+  PANTALLA
+    · shared/ticket/ticket.ts: armarTicketAbonoCuenta (banda "Abono", AB-…),
+      armarTicketAnticipo ("Anticipo", AN-…) y armarTicketPagoNota ("Abono",
+      PG-…), con el mismo encabezado y hoja que la venta. TicketService con sus
+      tres imprimir…; ClientesService.ticketAbono/ticketAnticipo y
+      VentasService.ticketPago.
+    · shared/ticket/ticket-del-aviso.ts (TicketDelAviso): el botón de ticket del
+      aviso verde, que se va cuando cambia el aviso; `.ok-msg.con-accion` pasó a
+      la hoja general.
+    · Al registrar: caja (anticipo y abono a su cuenta), expediente (abono y
+      anticipo), Clientes → Cuánto debe (abono) y Notas pendientes de pago (pago).
+    · Para reimprimir: "Ticket" en cada abono de "Movimientos de su cuenta" y en
+      cada anticipo de "Su saldo a favor" (expediente), y en cada pago de una nota
+      (detalle de la venta, sección Pagos).
+
+LA VERIFICACIÓN
+  · 430 pruebas de pantallas (6 nuevas: los tres tickets y el botón del aviso;
+    se ajustó la del anticipo, que ahora también reporta su id).
+  · E2E contra la base de pruebas: e2e-clientes-credito 75 (el ticket del abono
+    que liquidó la venta mixta, el de uno parcial, uno ajeno da 404 y el
+    reimpreso sale igual con "Hoy debe"), e2e-notas-pendientes 43 (el ticket de
+    cada abono a la nota, reimpreso) y e2e-devoluciones 76 (el del anticipo en
+    efectivo y transferencia, en uno, y reimpreso después de usarlo).
+  · Los tres tickets dibujados en Chrome (80 mm) y el expediente con sus botones
+    "Ticket" a 1280 y 390 px, con axe sin fallas.
+  · FALTA imprimirlos en la WL88S de la tienda.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-15 (55) · Ticket de devolución, aparte del de la venta (DESPLEGADO 20261015-213124)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  (Con captura del detalle de POS-…468D tras la devolución DEV-…B23B) "Cuando se
+  realice una devolución, que el ticket salga como devolución y cuánto tiene a
+  favor. No elimines el ticket de venta: quiero poder generar alguno de los 2;
+  cuando sea devolución que me dé el de devolución y cuando sea venta, el de venta."
+
+LO QUE SE CAMBIÓ (sin cambios en la base)
+  · shared/ticket/ticket.ts: armarTicketDevolucion(venta, devolución, tienda). Se
+    separaron el encabezado (cabeceraTienda) y la hoja (hojaTicket) para que los
+    dos tickets sean iguales por fuera; el de venta sale idéntico. El de devolución:
+    banda "DEVOLUCIÓN", folio DEV-…, fecha, de qué venta y cuándo se vendió, a qué
+    tienda regresó, quién la recibió, cliente; cada línea con sus kilos × el precio
+    con que se vendió y cómo regresó (paquete cerrado con su código, conos sueltos
+    o suelto pesado); "REGRESÓ $X"; lo que se descontó de lo que debía; "Le quedó a
+    favor"; recuadro "Su saldo a favor hoy"; la nota si la tiene; "No se entregó
+    dinero: el saldo a favor se usa en sus próximas compras"; folio y leyenda.
+  · Servidor: devoluciones.js → deVenta trae saldo_favor_hoy (el saldo a favor de
+    HOY del cliente de cada devolución) en el GET de la venta.
+  · Detalle de la venta: el botón del encabezado dice "Ticket de venta" cuando hay
+    devoluciones (sigue imprimiendo el de la venta); cada devolución tiene su botón
+    "Ticket de devolución"; y el aviso verde de una devolución recién registrada
+    trae "Imprimir ticket de devolución" (se quita en cuanto el aviso cambia).
+    TicketService.imprimirDevolucion.
+
+LA VERIFICACIÓN
+  · 425 pruebas de pantallas (5 nuevas: el ticket de devolución en sus casos y los
+    dos botones en el detalle).
+  · e2e-devoluciones: 74 comprobaciones (1 nueva: cada devolución trae el saldo de
+    hoy de su cliente) contra la base de pruebas; no quedó basura.
+  · Los dos tickets dibujados en Chrome con los datos de la captura (80 mm): el de
+    venta sin cambios y el de devolución completo.
+  · FALTA imprimirlo en la WL88S de la tienda.
 
 
 -------------------------------------------------------------------------------

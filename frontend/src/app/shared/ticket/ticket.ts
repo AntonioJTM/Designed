@@ -1,4 +1,5 @@
-import { Pedido, PedidoLinea } from '../../core/models/ventas.models';
+import { DevolucionHecha, Pedido, PedidoLinea } from '../../core/models/ventas.models';
+import { ClienteTicket, TicketAbonoCuenta, TicketAnticipo, TicketPagoNota } from '../../core/models/tickets.models';
 
 /**
  * EL TICKET IMPRESO (2026-10-13: "tengo la impresora Kinwodon; que el corte lo
@@ -201,10 +202,21 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
 
   // Cómo se pagó: cada pago cobrado; el efectivo con lo recibido y el cambio.
   // Una nota pendiente de pago no lleva ni "pagado" ni "cambio".
-  const pagos = notaPendiente ? '' : cobrado.map((g) => renglon(esc(g.metodo), esc(dineroTicket(g.monto)))).join('');
+  // Lo pagado con su saldo a favor lo dice así, no con el nombre del método (2026-10-15).
+  const nombrePago = (m: string) => (/saldo a favor/i.test(m) ? 'Pagó con su saldo a favor' : m);
+  const pagos = notaPendiente ? '' : cobrado.map((g) => renglon(esc(nombrePago(g.metodo)), esc(dineroTicket(g.monto)))).join('');
   const efectivo = cobrado.find((g) => /efectivo/i.test(g.metodo));
   const conCambio = !notaPendiente && efectivo && cambio > 0
     ? renglon('Recibido', esc(dineroTicket(Number(efectivo.monto) + cambio))) + renglon('Cambio', esc(dineroTicket(cambio)), 'fuerte')
+    : '';
+
+  // Si pagó con su saldo a favor: cuánto le QUEDÓ (si aún le queda) y, al
+  // reimprimirlo después, cuánto tiene hoy si ya cambió (2026-10-15).
+  const sf = notaPendiente ? null : p.saldo_favor_usado;
+  const favor = sf
+    ? (Number(sf.quedo) > 0.004 ? renglon('Le queda a favor', esc(dineroTicket(sf.quedo)), 'fuerte') : '') +
+      (Math.abs(Number(sf.hoy) - Number(sf.quedo)) > 0.004
+        ? `<div class="aviso">Su saldo a favor hoy<b>${esc(dineroTicket(sf.hoy))}</b></div>` : '')
     : '';
 
   // Lo que queda pendiente, según qué fue.
@@ -247,9 +259,29 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
     Number(p.costo_envio) > 0 ? renglon('Envío', esc(dineroTicket(p.costo_envio))) : '',
   ].join('');
 
-  const papel = papelDe(tienda.papelMm);
-  const px = (n: number) => `${Math.round(n * papel.escala * 10) / 10}px`;
+  return hojaTicket(p.numero_pedido, papelDe(tienda.papelMm), `
+  ${cabeceraTienda(tienda)}
+  <div class="tipo">${esc(tipo)}</div>
+  <div class="datos">${datos}</div>
+  <hr class="corte">
+  ${lineas.map(lineaHtml).join('')}
+  <hr class="corte">
+  <div class="resumen">${esc(kg(kilos))}${paquetes ? ` · ${paquetes} ${paquetes === 1 ? 'paquete' : 'paquetes'}` : ''} · ${lineas.length} ${lineas.length === 1 ? 'artículo' : 'artículos'}</div>
+  ${totales}
+  <div class="total"><span>TOTAL</span><span>${esc(dineroTicket(total))}</span></div>
+  ${pagos}${conCambio}
+  ${favor}
+  ${saldo.join('')}
+  <div class="gracias">¡Gracias por su compra!</div>
+  <div class="pie">${esc(p.numero_pedido)}</div>
+  ${tienda.leyenda ? `<div class="leyenda">${esc(tienda.leyenda)}</div>` : ''}`);
+}
 
+/**
+ * El logo (o el nombre en letras) y los datos fiscales: el mismo encabezado en
+ * el ticket de venta y en el de devolución.
+ */
+function cabeceraTienda(tienda: DatosTienda): string {
   // Si se copió de la constancia con su rótulo ("REGIMEN: 601…", "RFC: …"), se
   // quita: el ticket ya pone el suyo y salía "Régimen: REGIMEN: 601…" (2026-10-14).
   // Solo con los dos puntos: "Régimen Simplificado de Confianza" es el nombre del
@@ -269,8 +301,16 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
     ? `<img class="logo" src="${esc(tienda.logo)}" width="${LOGO_ANCHO_PX}" height="${LOGO_ALTO_PX}" alt="${esc(tienda.nombre)}">` +
       `<template id="sin-logo">${nombre}</template>`
     : nombre;
+  return `<div class="tienda">
+    ${encabezado}
+    ${fiscal}
+  </div>`;
+}
 
-  return `<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><title>${esc(p.numero_pedido)}</title>
+/** La hoja del ticket: las medidas del papel, en negro puro, pegada a la izquierda. */
+function hojaTicket(titulo: string, papel: Papel, cuerpo: string): string {
+  const px = (n: number) => `${Math.round(n * papel.escala * 10) / 10}px`;
+  return `<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><title>${esc(titulo)}</title>
 <style>
   @page { margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -303,28 +343,205 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
   .total span:last-child { font-size: ${px(22)}; }
   .fuerte { font-weight: 700; font-size: ${px(13)}; }
   .aviso { border: 1.5px solid #000; padding: ${px(5)} ${px(6)}; margin: ${px(6)} 0; font-size: ${px(11.5)}; font-weight: 700; text-align: center; }
+  .aviso b { display: block; font-size: ${px(18)}; font-weight: 900; margin-top: ${px(2)}; }
+  .nota { font-size: ${px(10.5)}; text-align: center; margin: ${px(4)} 0; }
   .gracias { text-align: center; margin-top: ${px(10)}; font-size: ${px(13)}; font-weight: 700; }
   .pie { text-align: center; font-size: ${px(10)}; margin-top: ${px(2)}; }
   .leyenda { text-align: center; font-size: ${px(10)}; margin-top: ${px(6)}; padding-top: ${px(4)}; border-top: 1px dashed #000; }
-</style></head><body><div class="t" id="ticket">
-  <div class="tienda">
-    ${encabezado}
-    ${fiscal}
-  </div>
-  <div class="tipo">${esc(tipo)}</div>
+</style></head><body><div class="t" id="ticket">${cuerpo}
+</div></body></html>`;
+}
+
+/** Cómo regresó una línea, en palabras de la tienda. */
+function comoRegreso(l: DevolucionHecha['lineas'][number]): string {
+  if (l.codigos.length === 1) return `Paquete cerrado ${esc(l.codigos[0])}`;
+  if (l.codigos.length > 1) return `${l.codigos.length} paquetes cerrados: ${l.codigos.map(esc).join(', ')}`;
+  if (l.como === 'cono') return l.piezas ? `${l.piezas} ${l.piezas === 1 ? 'cono suelto' : 'conos sueltos'}` : 'Conos sueltos';
+  return 'Suelto, pesado en la báscula';
+}
+
+/**
+ * EL TICKET DE DEVOLUCIÓN (2026-10-15: "cuando se realice una devolución, que el
+ * ticket salga como devolución y cuánto tiene a favor; no elimines el de venta").
+ * Uno por devolución (cada una tiene su folio DEV-…): qué regresó, cuánto vale
+ * —al precio con que se vendió—, cuánto se descontó de lo que debía, cuánto le
+ * quedó a favor y su saldo a favor de hoy. Dice que no salió dinero de la caja.
+ * El de la venta sigue saliendo igual, con su botón.
+ */
+export function armarTicketDevolucion(p: Pedido, d: DevolucionHecha, tienda: DatosTienda): string {
+  const lineas = d.lineas ?? [];
+  const total = Number(d.total);
+  const aplicado = Number(d.aplicado_a_deuda ?? 0);
+  const aFavor = Math.max(0, Math.round((total - aplicado) * 100) / 100);
+  const kilos = lineas.reduce((s, l) => s + Number(l.kg), 0);
+  const paquetes = lineas.reduce((s, l) => s + l.codigos.length, 0);
+  const cliente = d.nombre_comercial && d.cliente && d.nombre_comercial !== d.cliente
+    ? `${d.nombre_comercial} (${d.cliente})`
+    : d.nombre_comercial || d.cliente || '';
+
+  const datos = [
+    renglon('Folio', `<span class="mono">${esc(d.folio)}</span>`),
+    renglon('Fecha', esc(fechaTicket(d.creado_en))),
+    renglon('De la venta', `<span class="mono">${esc(p.numero_pedido)}</span>`),
+    renglon('Vendida', esc(fechaTicket(p.creado_en))),
+    p.almacen ? renglon('Regresó a', esc(p.almacen)) : '',
+    d.usuario ? renglon('La recibió', esc(d.usuario)) : '',
+    cliente ? renglon('Cliente', esc(cliente)) : '',
+  ].join('');
+
+  const articulos = lineas.map((l) => {
+    const precio = Number(l.kg) > 0 ? Number(l.importe) / Number(l.kg) : 0;
+    return `<div class="art">
+    <div class="art-nombre">${esc(l.hilo)}</div>
+    ${renglon(`${esc(kg(l.kg))} × ${esc(dineroTicket(precio))}`, esc(dineroTicket(l.importe)))}
+    <div class="art-extra">${comoRegreso(l)}</div>
+  </div>`;
+  }).join('');
+
+  const destino = [
+    aplicado > 0 ? renglon('Se descontó de lo que debía', esc(dineroTicket(aplicado))) : '',
+    renglon('Le quedó a favor', esc(dineroTicket(aFavor)), 'fuerte'),
+  ].join('');
+  const saldoHoy = d.saldo_favor_hoy;
+  const saldo = saldoHoy != null
+    ? `<div class="aviso">Su saldo a favor hoy<b>${esc(dineroTicket(saldoHoy))}</b></div>`
+    : '';
+
+  return hojaTicket(d.folio, papelDe(tienda.papelMm), `
+  ${cabeceraTienda(tienda)}
+  <div class="tipo">Devolución</div>
   <div class="datos">${datos}</div>
   <hr class="corte">
-  ${lineas.map(lineaHtml).join('')}
+  ${articulos}
   <hr class="corte">
   <div class="resumen">${esc(kg(kilos))}${paquetes ? ` · ${paquetes} ${paquetes === 1 ? 'paquete' : 'paquetes'}` : ''} · ${lineas.length} ${lineas.length === 1 ? 'artículo' : 'artículos'}</div>
-  ${totales}
-  <div class="total"><span>TOTAL</span><span>${esc(dineroTicket(total))}</span></div>
-  ${pagos}${conCambio}
-  ${saldo.join('')}
-  <div class="gracias">¡Gracias por su compra!</div>
-  <div class="pie">${esc(p.numero_pedido)}</div>
-  ${tienda.leyenda ? `<div class="leyenda">${esc(tienda.leyenda)}</div>` : ''}
-</div></body></html>`;
+  <div class="total"><span>REGRESÓ</span><span>${esc(dineroTicket(total))}</span></div>
+  ${destino}
+  ${saldo}
+  ${d.notas ? `<div class="nota">Nota: ${esc(d.notas)}</div>` : ''}
+  <div class="nota">No se entregó dinero: el saldo a favor se usa en sus próximas compras.</div>
+  <div class="pie">${esc(d.folio)}</div>
+  ${tienda.leyenda ? `<div class="leyenda">${esc(tienda.leyenda)}</div>` : ''}`);
+}
+
+/** "Doña Chela (Graciela Ruiz)" y su número, como en el de la venta. */
+function datosCliente(c: ClienteTicket | null | undefined): string {
+  if (!c) return '';
+  const nombre = c.nombre_comercial && c.nombre !== c.nombre_comercial ? `${c.nombre_comercial} (${c.nombre})` : c.nombre;
+  return renglon('Cliente', esc(nombre)) + (c.codigo ? renglon('Número', `<span class="mono">${esc(c.codigo)}</span>`) : '');
+}
+
+/** El método con su referencia ("Transferencia · folio 12345"). */
+function metodoHtml(metodo: string | null | undefined, monto: number, referencia?: string | null): string {
+  return renglon(esc(metodo || 'Pago'), esc(dineroTicket(monto))) +
+    (referencia ? `<div class="art-extra">Referencia: ${esc(referencia)}</div>` : '');
+}
+
+/**
+ * EL TICKET DE UN ABONO A SU CUENTA (2026-10-15: "tickets de abono"): cuánto
+ * debía, cuánto abonó y con qué, cuánto quedó debiendo y qué ventas fiadas
+ * quedaron pagadas con él. Al reimprimirlo después, también cuánto debe hoy.
+ */
+export function armarTicketAbonoCuenta(d: TicketAbonoCuenta, tienda: DatosTienda): string {
+  const folio = `AB-${d.id}`;
+  const datos = [
+    renglon('Folio', `<span class="mono">${esc(folio)}</span>`),
+    renglon('Fecha', esc(fechaTicket(d.fecha))),
+    datosCliente(d.cliente),
+    d.caja ? renglon('Caja', esc(d.caja)) : '',
+    d.usuario ? renglon('Lo recibió', esc(d.usuario)) : '',
+  ].join('');
+  const alCorriente = d.quedo_debiendo <= 0.004;
+  const liquidadas = d.liquidadas.length
+    ? `<div class="nota">Con este abono ${d.liquidadas.length === 1 ? 'quedó pagada la nota' : 'quedaron pagadas las notas'}:` +
+      `<br><span class="mono">${d.liquidadas.map(esc).join('<br>')}</span></div>`
+    : '';
+  const hoy = Math.abs(d.debe_hoy - d.quedo_debiendo) > 0.004 ? renglon('Hoy debe', esc(dineroTicket(d.debe_hoy))) : '';
+  return hojaTicket(folio, papelDe(tienda.papelMm), `
+  ${cabeceraTienda(tienda)}
+  <div class="tipo">Abono</div>
+  <div class="datos">${datos}</div>
+  <hr class="corte">
+  <div class="resumen">A su cuenta</div>
+  ${renglon('Debía', esc(dineroTicket(d.debia)))}
+  <div class="total"><span>ABONÓ</span><span>${esc(dineroTicket(d.monto))}</span></div>
+  ${metodoHtml(d.metodo, d.monto, d.referencia)}
+  ${alCorriente
+    ? '<div class="aviso">Quedó al corriente: ya no debe nada</div>'
+    : `<div class="aviso">Quedó debiendo<b>${esc(dineroTicket(d.quedo_debiendo))}</b></div>`}
+  ${hoy}
+  ${liquidadas}
+  ${d.notas ? `<div class="nota">Nota: ${esc(d.notas)}</div>` : ''}
+  <div class="gracias">¡Gracias por su pago!</div>
+  <div class="pie">${esc(folio)}</div>
+  ${tienda.leyenda ? `<div class="leyenda">${esc(tienda.leyenda)}</div>` : ''}`);
+}
+
+/**
+ * EL TICKET DE UN ANTICIPO (2026-10-15): lo que dejó a cuenta —efectivo y/o
+ * transferencia—, cuánto tenía a favor, con cuánto quedó y su saldo a favor de
+ * hoy. Dice que se usa en sus próximas compras y que no aparta mercancía.
+ */
+export function armarTicketAnticipo(d: TicketAnticipo, tienda: DatosTienda): string {
+  const folio = `AN-${d.id}`;
+  const datos = [
+    renglon('Folio', `<span class="mono">${esc(folio)}</span>`),
+    renglon('Fecha', esc(fechaTicket(d.fecha))),
+    datosCliente(d.cliente),
+    d.caja ? renglon('Caja', esc(d.caja)) : '',
+    d.usuario ? renglon('Lo recibió', esc(d.usuario)) : '',
+  ].join('');
+  return hojaTicket(folio, papelDe(tienda.papelMm), `
+  ${cabeceraTienda(tienda)}
+  <div class="tipo">Anticipo</div>
+  <div class="datos">${datos}</div>
+  <hr class="corte">
+  ${d.partes.map((p) => metodoHtml(p.metodo, p.monto, p.referencia)).join('')}
+  <div class="total"><span>A CUENTA</span><span>${esc(dineroTicket(d.total))}</span></div>
+  ${d.tenia_a_favor > 0.004 ? renglon('Ya tenía a favor', esc(dineroTicket(d.tenia_a_favor))) : ''}
+  ${renglon('Le quedó a favor', esc(dineroTicket(d.quedo_a_favor)), 'fuerte')}
+  ${Math.abs(d.a_favor_hoy - d.quedo_a_favor) > 0.004
+    ? `<div class="aviso">Su saldo a favor hoy<b>${esc(dineroTicket(d.a_favor_hoy))}</b></div>` : ''}
+  ${d.notas ? `<div class="nota">Nota: ${esc(d.notas)}</div>` : ''}
+  <div class="nota">Se usa en sus próximas compras. No aparta mercancía.</div>
+  <div class="gracias">¡Gracias!</div>
+  <div class="pie">${esc(folio)}</div>
+  ${tienda.leyenda ? `<div class="leyenda">${esc(tienda.leyenda)}</div>` : ''}`);
+}
+
+/**
+ * EL TICKET DE UN ABONO A UNA NOTA (2026-10-15): de qué nota —pendiente de pago,
+ * en espera o apartado—, cuánto llevaba pagado, cuánto abonó y con qué, y cuánto
+ * le falta. Si con él se pagó completa, lo dice.
+ */
+export function armarTicketPagoNota(d: TicketPagoNota, tienda: DatosTienda): string {
+  const folio = `PG-${d.id}`;
+  const datos = [
+    renglon('Folio', `<span class="mono">${esc(folio)}</span>`),
+    renglon('Fecha', esc(fechaTicket(d.fecha))),
+    datosCliente(d.cliente),
+    d.pedido.almacen ? renglon('Tienda', esc(d.pedido.almacen)) : '',
+  ].join('');
+  const pagada = d.falta <= 0.004;
+  const hoy = Math.abs(d.falta_hoy - d.falta) > 0.004 ? renglon('Hoy le falta', esc(dineroTicket(d.falta_hoy))) : '';
+  return hojaTicket(folio, papelDe(tienda.papelMm), `
+  ${cabeceraTienda(tienda)}
+  <div class="tipo">Abono</div>
+  <div class="datos">${datos}</div>
+  <hr class="corte">
+  ${renglon('A la nota', `<span class="mono">${esc(d.pedido.numero_pedido)}</span>`)}
+  <div class="art-extra">${esc(d.pedido.de)} · del ${esc(fechaTicket(d.pedido.creado_en))}</div>
+  ${renglon('Total de la nota', esc(dineroTicket(d.pedido.total)))}
+  ${d.llevaba_pagado > 0.004 ? renglon('Llevaba pagado', esc(dineroTicket(d.llevaba_pagado))) : ''}
+  <div class="total"><span>ABONÓ</span><span>${esc(dineroTicket(d.monto))}</span></div>
+  ${metodoHtml(d.metodo, d.monto, d.referencia)}
+  ${pagada
+    ? '<div class="aviso">Nota pagada completa</div>'
+    : `<div class="aviso">Le falta por pagar<b>${esc(dineroTicket(d.falta))}</b></div>`}
+  ${hoy}
+  <div class="gracias">¡Gracias por su pago!</div>
+  <div class="pie">${esc(folio)}</div>
+  ${tienda.leyenda ? `<div class="leyenda">${esc(tienda.leyenda)}</div>` : ''}`);
 }
 
 /**

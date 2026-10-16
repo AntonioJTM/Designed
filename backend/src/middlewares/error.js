@@ -16,6 +16,16 @@ class AppError extends Error {
   }
 }
 
+/**
+ * Marca un error cuyo mensaje NOMBRA otra tienda (2026-10-15: "no quiero que vea
+ * nada de la otra tienda"). `almacenes` son los ids que nombra y `mensaje` lo que
+ * se le dice a quien no los puede ver. El manejador decide cuál mensaje va.
+ */
+function enOtraTienda(err, almacenes, mensaje) {
+  err.otraTienda = { almacenes: almacenes.filter((a) => a != null).map(Number), mensaje };
+  return err;
+}
+
 /** Envía la forma de respuesta de error del proyecto: { data: null, error: {...} }. */
 function enviarError(res, status, code, message, detalles = null) {
   return res.status(status).json({
@@ -38,6 +48,29 @@ function errorHandler(err, req, res, next) {
     const campos = [...new Set(err.issues.map((i) => i.path.join('.')).filter(Boolean))];
     const detalle = campos.length ? `: revisa ${campos.join(', ')}` : '';
     return enviarError(res, 422, 'VALIDACION', `Datos de entrada inválidos${detalle}`, err.issues);
+  }
+
+  if (err instanceof AppError && err.otraTienda && req.auth?.tipo === 'usuario') {
+    // Quien no ve esa tienda recibe el mensaje sin su nombre, y en los detalles
+    // dice "otra tienda".
+    const { almacenesDe } = require('../modules/permisos/service');
+    almacenesDe(req.auth)
+      .then((alcance) => {
+        const ajena = (id) => Array.isArray(alcance) && !alcance.includes(Number(id));
+        if (!err.otraTienda.almacenes.some(ajena)) {
+          return enviarError(res, err.status, err.code, err.message, err.detalles);
+        }
+        const detalles = err.detalles?.paquetes
+          ? {
+              ...err.detalles,
+              paquetes: err.detalles.paquetes.map((p) =>
+                ajena(p.almacen_id) ? { ...p, almacen: 'otra tienda' } : p),
+            }
+          : err.detalles;
+        return enviarError(res, err.status, err.code, err.otraTienda.mensaje, detalles);
+      })
+      .catch(() => enviarError(res, err.status, err.code, err.otraTienda.mensaje, null));
+    return undefined;
   }
 
   if (err instanceof AppError) {
@@ -84,4 +117,4 @@ function errorHandler(err, req, res, next) {
   );
 }
 
-module.exports = { AppError, enviarError, notFound, errorHandler };
+module.exports = { AppError, enOtraTienda, enviarError, notFound, errorHandler };

@@ -59,6 +59,54 @@ tienda-hilos/
   backend al guardar, y no deja quitarlo sin designar otro). Resuélvelo SIEMPRE con `almacenes/model.js → idTiendaLinea()`, nunca con una
   consulta ad hoc: el catálogo público y el checkout deben mirar el mismo almacén o el cliente verá
   existencias que no puede comprar.
+- **CADA QUIEN, SUS TIENDAS (2026-10-15)**: "si abro una caja en Moroleón no quiero que vea nada
+  de la otra tienda ni del inventario; solo lo que hay en su tienda y en su almacén. Lo de las dos
+  tiendas solo lo ve el administrador" (usuario). En Personal cada persona lleva **"Trabaja en"**:
+  una o varias tiendas, o «Todas las tiendas» (`usuarios.todas_las_tiendas` + `usuario_almacenes`,
+  migración `2026-10_tiendas_por_persona.sql`; los que ya existían quedaron en «Todas»). El
+  ADMINISTRADOR las ve todas siempre. Un alta nueva sin decir nada hereda las de quien la hace, y
+  nadie da tiendas que no ve (403 `SOLO_SUS_TIENDAS`); sin ninguna, 422 `FALTA_TIENDA`.
+  · Servidor: `permisos/service.js → almacenesDe(auth)` (null = todas, lista = esas, se lee de la
+    BASE como los puestos), `exigirAlmacen` (404 `OTRA_TIENDA`, como si no existiera),
+    `exigirTurno` (el turno de caja con que se cobra), `filtroAlmacen(col, almacenes)` (el pedazo
+    de SQL). Cada lista FILTRA (ventas, notas, pedidos en espera, cajas, turnos, existencias,
+    panorama, alertas, kardex, desarmes, detalle del hilo, traspasos —los que salen O llegan a
+    sus tiendas—, cargas del proveedor, bultos de una presentación, Hoy y la campana) y cada cosa
+    con `:id` o con almacén en la petición se EXIGE (`router.param('id')` en pedidos e
+    inventario: corre ANTES de `authRequired`, así que lee el token con `authOpcional`).
+    `GET /almacenes` le da sus tiendas y la MATRIZ (para pedirle) con `mio: false`; la pantalla usa
+    `InventarioService.misAlmacenes()` en todo selector salvo el origen de Surtir sucursal.
+  · **Lo que suma todas las tiendas lo ve solo quien las ve todas** (`requireTodasLasTiendas`, 403
+    `SOLO_TODAS_LAS_TIENDAS`; en la pantalla `SOLO_TODAS_LAS_TIENDAS` de `auth.service.ts` y
+    `data.todasLasTiendas` en la ruta): Reportes (que además ahora pide `ver:reportes`), Cómo va el
+    negocio, Nómina, Almacenes y las seis MIRADAS de Clientes (Frecuencia, Dejaron de venir, Cuánto
+    debe, Qué compra, Cuándo compra, Cuánto gasta). La campana no le avisa cobranza ni "dejaron
+    de venir" (llevan a esas miradas).
+  · **El CLIENTE es compartido** (decisión del usuario): cualquier tienda lo encuentra, le vende y
+    ve cuánto debe EN TOTAL y su saldo a favor; su expediente (compras, estadísticas, colores,
+    costumbre) y la lista ("ha comprado", "última compra") cuentan solo las ventas de SUS tiendas.
+    Un movimiento de su cuenta o de su saldo a favor hecho en otra tienda sale con su monto y
+    "en otra tienda", sin folio, notas ni quién (`_deOtraTienda`, `otra_tienda: true`).
+  · **SURTIR A CIEGAS** ("nada de la Matriz"): quien solo es del DESTINO pide sin ver cuánto hay en
+    el origen: el servidor no rechaza por existencias (aparta lo pedido: el apartado es blando) ni
+    manda `saldo_origen`, la pantalla no pregunta la equivalencia y calcula los kilos con el peso
+    del catálogo, y al surtir sale lo que haya. Surte (enviar / guardar escaneos) solo quien es del
+    ORIGEN y firma de recibido solo quien es del DESTINO; cancelar, cualquiera de los dos.
+  · Un mensaje que NOMBRA otra tienda se marca con `enOtraTienda(err, [almacenes], mensajeSinNombre)`
+    (`middlewares/error.js`): a quien no la ve le llega sin el nombre (el paquete de otra tienda en
+    la caja, al bajar conos o al surtir; el lector dice `almacen: 'otra tienda'`).
+  · **El COSTO se quita en UN lugar** (2026-10-16): `permisos.sinCostosEnRespuesta` va como
+    `router.use` en pedidos, inventario y variantes y quita `costo`, `costo_unitario` y
+    `costo_actualizado_en` de TODA respuesta a quien no tiene «Ver costos»; mandar un costo sin
+    poder verlo es 403 (`exigirVerCostos`). Una presentación con sus `codigos` (bultos) se
+    filtra a sus tiendas (`_bultosDeSusTiendas`). A ciegas solo se le pide a la MATRIZ, y quien
+    es de la Matriz ve todas las tiendas en `GET /almacenes` para surtirles.
+  · **Decidido por el usuario el 2026-10-16:** los abonos por transferencia y los ajustes (no pasan
+    por caja: no se sabe su tienda) se ven completos en el expediente; descontar el saldo a favor
+    paga notas de cualquier tienda; y la gerente puede editar a quien trabaja en su tienda y en
+    otra. No los "arregles".
+  · `scripts/e2e-tiendas.js` (53 comprobaciones) lo recorre con una gerente de una sola tienda.
+    Después de un cambio de este tipo, el agente `revisor-tiendas` lo revisa.
 - **Inventario con bitácora.** Toda modificación de existencias debe (1) actualizar `inventario` y
   (2) insertar un registro en `movimientos_inventario`. Hacerlo dentro de una transacción.
 - **Al confirmar una venta**, dentro de una sola transacción: crear `pedidos` + `pedido_detalle`,
@@ -259,6 +307,40 @@ tienda-hilos/
   **Una NOTA EN ESPERA no lleva ticket** (todavía se modifica): `armarTicket` lo rechaza
   (`SIN_TICKET`) y `llevaTicket()` esconde el botón. El cambio no se guarda: la caja lo pasa al
   imprimir.
+  **CADA DEVOLUCIÓN TIENE SU TICKET, aparte del de la venta** (2026-10-15: "que el ticket salga
+  como devolución y cuánto tiene a favor; no elimines el de venta"). `armarTicketDevolucion(p, d,
+  tienda)` (mismo encabezado y hoja que la venta: `cabeceraTienda` + `hojaTicket`): la banda dice
+  "Devolución", su folio DEV-…, de qué venta y cuándo se vendió, a qué tienda regresó, quién la
+  recibió, cada línea (kilos × el precio con que se vendió, y si fue paquete cerrado con su código,
+  conos sueltos o suelto pesado), "REGRESÓ $X", lo que se descontó de lo que debía, "Le quedó a
+  favor" y en un recuadro **"Su saldo a favor hoy"** (`devoluciones[].saldo_favor_hoy`, que el GET
+  de la venta calcula en `devoluciones.js → deVenta` para el cliente de cada devolución), y que no
+  salió dinero. En el detalle de la venta: el botón del encabezado dice **"Ticket de venta"** cuando
+  hay devoluciones (sigue sacando el de la venta), cada devolución trae **"Ticket de devolución"**,
+  y el aviso de una devolución recién registrada trae **"Imprimir ticket de devolución"** (se va en
+  cuanto cambia el aviso). `TicketService.imprimirDevolucion`.
+  **PAGADO CON SALDO A FAVOR** (2026-10-15: "que diga que se pagó con saldo a favor y cuánto le
+  queda, si aún tiene"): el renglón del pago dice "Pagó con su saldo a favor" y, si le queda,
+  "Le queda a favor $X"; reimpreso, "Su saldo a favor hoy" si cambió. Lo da el GET de la venta
+  en `saldo_favor_usado` (`clientes/saldo-favor.js → usadoEnVenta`: lo usado, lo que le quedó con
+  el libro HASTA ese uso, y lo de hoy).
+  **TICKETS DE ABONO Y DE ANTICIPO** (2026-10-15: "genérame tickets de anticipos y tickets de
+  abono"). Tres, con el mismo encabezado y hoja: **abono a su cuenta** (banda "Abono", folio
+  `AB-<id del movimiento>`: debía, ABONÓ, con qué, "Quedó debiendo" o "Quedó al corriente", qué
+  ventas fiadas quedaron pagadas con él y, al reimprimir, "Hoy debe"), **anticipo** (banda
+  "Anticipo", `AN-<id>`: efectivo y/o transferencia en UN ticket, "A CUENTA", ya tenía a favor, le
+  quedó a favor, "Su saldo a favor hoy" si cambió, "No aparta mercancía") y **abono a una nota**
+  —pendiente de pago, en espera o apartado— (banda "Abono", `PG-<id del pago>`: a qué nota, total,
+  llevaba pagado, ABONÓ, "Le falta por pagar" o "Nota pagada completa", "Hoy le falta").
+  Los datos los arma el SERVIDOR con el libro HASTA ese movimiento, así salen igual al registrarlos
+  que al reimprimirlos: `GET /clientes/:id/abonos/:movId/ticket` y `/anticipos/:movId/ticket`
+  (`clientes/tickets.js`; el anticipo junta las partes del mismo cliente, persona y momento) y
+  `GET /pedidos/:id/pagos/:pagoId/ticket` (`pedidos/tickets.js`). Por eso el abono, el anticipo y
+  el pago de una nota devuelven su id (`movimiento_id`, `pago_id`). En pantalla: el aviso verde de
+  lo recién registrado trae su botón —caja, expediente, Clientes → Cuánto debe y Notas pendientes
+  de pago— con `shared/ticket/ticket-del-aviso.ts` (`TicketDelAviso`, en `.ok-msg.con-accion`), y
+  se reimprimen desde el expediente (cada abono en "Movimientos de su cuenta", cada anticipo en
+  "Su saldo a favor") y desde el detalle de una nota (cada pago en "Pagos").
   **El ENCABEZADO lleva el logo en negro y los DATOS FISCALES** (2026-10-14, de la Constancia de
   Situación Fiscal): razón social, RFC, régimen, domicilio fiscal (en lugar de `tienda_direccion`,
   que por eso ya NO se pide en Configuración desde el 2026-10-14: "me pones que ponga la dirección
@@ -880,6 +962,12 @@ tienda-hilos/
     pendientes de la más vieja y su cuenta de crédito); al cobrar, **"Usar su saldo a favor"** (`POST /pedidos` con `saldo_favor`, solo
     Cobrar y A crédito, con cliente); y desde el expediente, «Descontar de lo que debe»
     (`POST /clientes/:id/saldo-favor/aplicar`).
+  · **Se AJUSTA a mano** (2026-10-16: "que sea ajuste de saldo a favor: se le puede quitar o
+    agregar"): `POST /clientes/:id/saldo-favor/ajuste` (`monto` ±, `notas` = motivo obligatorio;
+    `hacer:corregir_deuda`; `saldo-favor.js → ajustarSaldo`, nunca en negativo: 409
+    `SALDO_FAVOR_INSUFICIENTE`). Botón "Ajustar" en la tarjeta del saldo a favor del expediente
+    (`expediente/ajuste-favor-modal.ts`); el historial dice "Ajuste a mano" con su motivo.
+    Descontarlo de lo que debe sigue pagando notas de CUALQUIER tienda (decisión del usuario).
   · Lo que paga el saldo es un `pagos` con el método INTERNO "Saldo a favor" (`metodos_pago.interno =
     1`): la venta dice cómo se pagó, se liquida y paga comisión como con cualquier pago. Un método
     interno no se ofrece (`/opciones/metodos-pago`) y se rechaza si llega en `pagos` (422
@@ -898,7 +986,8 @@ tienda-hilos/
     la fecha de la venta. NO cambian el dinero de "Ventas" ni el "Hilo parado", y así se quedan
     (decisión del usuario, 2026-10-14): "Ventas" cuenta cada venta completa, y en Hilo parado el
     hilo "entró y salió": lo que regresó vuelve a estar en el inventario.
-  · `e2e-devoluciones.js` (73, con los anticipos y el pago parte y parte) y `e2e-nomina-pdf.js` (40).
+  · `e2e-devoluciones.js` (74, con los anticipos, el pago parte y parte y el saldo de hoy del
+    ticket) y `e2e-nomina-pdf.js` (40). Su ticket: ver "El TICKET impreso es uno solo".
 - **ANTICIPOS: dinero a cuenta, SIN NOTA (2026-10-14)**: "se dan anticipos en efectivo y
   transferencia" (usuario; eligió "dinero a cuenta, sin nota"). El cliente deja dinero antes de
   llevarse nada y le queda como SALDO A FAVOR: el mismo libro de las devoluciones, tipo `'anticipo'`,
@@ -1220,7 +1309,9 @@ tienda-hilos/
   venir, cuánto debe (cartera por antigüedad, igual que el tablero), qué compra (por
   `producto_id`, con calibre), cuándo compra (día × hora) y cuánto gasta (contra el periodo
   anterior). El expediente trae las miradas para un cliente (`habitos` en `GET /clientes/:id`).
-  El cajero las ve todas, incluida "Cuánto debe" (decisión del usuario).
+  El cajero las ve todas, incluida "Cuánto debe" (decisión del usuario) — SI tiene «Todas las
+  tiendas» en Personal: desde el 2026-10-15 las seis miradas son solo de quien ve todas (ver
+  "CADA QUIEN, SUS TIENDAS").
   **La frecuencia dice también cuánto se llevan** (2026-10-03: "tiene que ser igual por kg y por
   dinero"): `ritmos()` trae de cada cliente los kilos y el dinero desde siempre y POR VISITA (por
   día con compra, igual que el ritmo), y `frecuencia` los del periodo y la visita típica
@@ -1579,6 +1670,14 @@ tienda-hilos/
   esa etiqueta por su cuenta.
 
 ## Convenciones de código
+- **Herramientas de Claude Code (2026-10-16).** `.claude/settings.json` es COMPARTIDO y va al
+  repo público: solo candados ("ask" antes de `git commit`/`git push` y el hook
+  `.claude/hooks/antes-de-desplegar.js`, que corre `npm test` del backend y `ng test` sin ventana
+  antes de `npm run deploy` y no deja subir si fallan). Los permisos PERSONALES van en
+  `.claude/settings.local.json` (en `.gitignore`): nunca rutas de la máquina ni comandos con
+  servidores en el compartido. El ritual de subir está en la skill `/desplegar`; el agente
+  `revisor-tiendas` revisa "cada quien, sus tiendas", permisos y costo. **Trello EN PAUSA**: no
+  escribir ahí hasta que el usuario diga.
 - API REST versionada bajo `/api/v1`. Recursos en plural: `/api/v1/productos`, `/api/v1/pedidos`.
 - Respuestas JSON con forma `{ "data": ..., "error": null }` o `{ "data": null, "error": {...} }`.
 - Nombres de tablas/campos en español (como en el esquema); en el código JS usar los mismos nombres.
@@ -1746,6 +1845,11 @@ tienda-hilos/
       en Chrome headless (el panel se vio a media carga). Sin desplegar.
 
 ## Pendientes concretos para el usuario
+- **CADA QUIEN, SUS TIENDAS (2026-10-15): DESPLEGADO** (20261015-225909; migración
+  `2026-10_tiendas_por_persona.sql` en LAS DOS bases, respaldo
+  `/root/respaldos/hitex_antes_tiendas_por_persona_20261015-225847.sql.gz`). Los 5 empleados de
+  `hitex` quedaron en «Todas las tiendas»: FALTA que el usuario le marque a cada quien su tienda
+  en Personal → Editar → "Trabaja en".
 - **`hitex` QUEDÓ EN BLANCO (2026-10-14: "solo deja el usuario admin y todo lo demás lo puedes
   eliminar; ahora sí ya van a hacer pruebas reales").** Igual que como nació el 2026-10-05: el
   administrador (id 1) y lo que no tiene pantalla (puestos y permisos, unidades, métodos de pago,

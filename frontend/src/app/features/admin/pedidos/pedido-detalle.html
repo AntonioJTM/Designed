@@ -7,7 +7,15 @@
   </a>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+  @if (mensaje()) {
+    <!-- Tras una devolución, su aviso trae el botón de su ticket. -->
+    <div class="ok-msg con-accion" role="status">
+      <span>{{ mensaje() }}</span>
+      @if (devolucionDelAviso(); as d) {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirDevolucion(d)">Imprimir ticket de devolución</button>
+      }
+    </div>
+  }
 
   @if (cargando() && !pedido()) {
     <p class="muted">Cargando…</p>
@@ -30,7 +38,10 @@
         </div>
         <div class="acciones">
           @if (llevaTicket()) {
-            <button type="button" class="btn btn-ghost" (click)="imprimirTicket()">Imprimir ticket</button>
+            <!-- Con devoluciones hay dos tickets: este es el de la venta; el de cada devolución va abajo. -->
+            <button type="button" class="btn btn-ghost" (click)="imprimirTicket()">
+              {{ p.devoluciones?.length ? 'Ticket de venta' : 'Imprimir ticket' }}
+            </button>
           }
           @if (esEncargo(p) && esApartadoSinEntregar(p) && !inactivo(p) && veEncargos()) {
             <a class="btn btn-ghost" routerLink="/admin/notas-en-espera">Entregar o cobrar</a>
@@ -191,6 +202,8 @@
                     @if (+d.aplicado_a_deuda > 0) { se descontaron {{ d.aplicado_a_deuda | dinero }} de lo que debía }
                     @else { a favor }
                   </div>
+                  <button type="button" class="btn btn-ghost btn-sm devolucion-ticket" (click)="imprimirDevolucion(d)"
+                          [attr.aria-label]="'Ticket de devolución ' + d.folio">Ticket de devolución</button>
                 </div>
               </div>
               <ul class="devolucion-lineas">
@@ -223,7 +236,7 @@
         @if (filasPago().length) {
           <div class="tabla-scroll">
             <table class="grid">
-              <thead><tr><th>Cómo</th><th class="num">Monto</th><th>Estado</th></tr></thead>
+              <thead><tr><th>Cómo</th><th class="num">Monto</th><th>Estado</th><th><span class="oculto">Ticket</span></th></tr></thead>
               <tbody>
                 @for (f of filasPago(); track $index) {
                   <tr>
@@ -233,6 +246,13 @@
                     </td>
                     <td class="num"><b>{{ f.monto | dinero }}</b></td>
                     <td><span [class]="'pill ' + f.tono">{{ f.estado }}</span></td>
+                    <!-- En una nota que se paga en abonos, cada abono tiene su ticket. -->
+                    <td class="acciones">
+                      @if (f.pagoId) {
+                        <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirPago(f.pagoId)"
+                                [attr.aria-label]="'Ticket del abono de ' + (f.monto | dinero)">Ticket</button>
+                      }
+                    </td>
                   </tr>
                 }
               </tbody>

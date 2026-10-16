@@ -22,6 +22,7 @@
 
 const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
+const { filtroAlmacen } = require('../permisos/service');
 
 const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 
@@ -42,8 +43,12 @@ async function _hilo(productoId) {
   return hilo;
 }
 
-async function detalleHilo(productoId) {
+async function detalleHilo(productoId, almacenes = null) {
   const hilo = await _hilo(productoId);
+  // CADA QUIEN, SUS TIENDAS (2026-10-15): de un hilo, solo lo que hay en ellas.
+  const fi = filtroAlmacen('i.almacen_id', almacenes);
+  const fb = filtroAlmacen('vc.almacen_id', almacenes);
+  const fc = filtroAlmacen('cv.almacen_destino_id', almacenes);
 
   // 1 · Las presentaciones y su saldo en cada almacén (los saldos son la verdad).
   const [presentaciones] = await pool.query(
@@ -58,9 +63,9 @@ async function detalleHilo(productoId) {
        FROM inventario i
        JOIN producto_variantes pv ON pv.id = i.variante_id
        JOIN almacenes a           ON a.id = i.almacen_id
-      WHERE pv.producto_id = :id AND (i.cantidad <> 0 OR i.cantidad_reservada <> 0)
+      WHERE pv.producto_id = :id AND (i.cantidad <> 0 OR i.cantidad_reservada <> 0)${fi.sql}
       ORDER BY a.es_matriz DESC, a.id`,
-    { id: productoId }
+    { id: productoId, ...fi.params }
   );
 
   // Bultos por lote, estado y almacén: con eso se arma todo lo demás.
@@ -71,9 +76,9 @@ async function detalleHilo(productoId) {
        FROM variante_codigos vc
        JOIN producto_variantes pv ON pv.id = vc.variante_id
        LEFT JOIN almacenes a      ON a.id = vc.almacen_id
-      WHERE pv.producto_id = :id
+      WHERE pv.producto_id = :id${fb.sql}
       GROUP BY vc.lote, vc.estado, vc.almacen_id, a.nombre`,
-    { id: productoId }
+    { id: productoId, ...fb.params }
   );
 
   // Lo que se bajó a conos, por lote: cuántos conos salieron y con cuánto destare.
@@ -83,9 +88,9 @@ async function detalleHilo(productoId) {
        FROM variante_codigos vc
        JOIN producto_variantes pv    ON pv.id = vc.variante_id
        JOIN variante_conversiones cv ON vc.consumido_tipo = 'conversion' AND cv.id = vc.consumido_id
-      WHERE pv.producto_id = :id AND vc.estado = 'desarmado'
+      WHERE pv.producto_id = :id AND vc.estado = 'desarmado'${fc.sql}
       GROUP BY vc.lote`,
-    { id: productoId }
+    { id: productoId, ...fc.params }
   );
 
   // En qué carga llegó cada lote (puede venir en varias).
@@ -96,10 +101,10 @@ async function detalleHilo(productoId) {
        JOIN producto_variantes pv ON pv.id = vc.variante_id
        JOIN remesas r             ON r.id = vc.remesa_id
        LEFT JOIN proveedores pr   ON pr.id = r.proveedor_id
-      WHERE pv.producto_id = :id
+      WHERE pv.producto_id = :id${fb.sql}
       GROUP BY vc.lote, r.id, r.folio, fecha_ingreso, pr.nombre
       ORDER BY fecha_ingreso, r.id`,
-    { id: productoId }
+    { id: productoId, ...fb.params }
   );
 
   // ---- Se arma la respuesta ----
@@ -220,8 +225,9 @@ async function detalleHilo(productoId) {
  * uno: su peso real, sus conos, dónde está o qué pasó con él, y en qué carga
  * llegó. Todos los estados: la pantalla filtra.
  */
-async function bultosDeLote(productoId, lote) {
+async function bultosDeLote(productoId, lote, almacenes = null) {
   await _hilo(productoId);
+  const fb = filtroAlmacen('vc.almacen_id', almacenes);
   const [rows] = await pool.query(
     `SELECT vc.id, vc.codigo, vc.peso_kg, vc.conos, vc.estado, vc.almacen_id, a.nombre AS almacen,
             pv.sku, pv.tipo_presentacion,
@@ -237,9 +243,9 @@ async function bultosDeLote(productoId, lote) {
        LEFT JOIN traspasos tra     ON vc.consumido_tipo = 'traspaso' AND tra.id = vc.consumido_id
        LEFT JOIN variante_conversiones cv ON vc.consumido_tipo = 'conversion' AND cv.id = vc.consumido_id
       WHERE pv.producto_id = :id
-        AND ${lote === null ? "(vc.lote IS NULL OR TRIM(vc.lote) = '')" : 'vc.lote = :lote'}
+        AND ${lote === null ? "(vc.lote IS NULL OR TRIM(vc.lote) = '')" : 'vc.lote = :lote'}${fb.sql}
       ORDER BY FIELD(vc.estado, 'disponible', 'apartado', 'desarmado', 'vendido'), a.nombre, vc.codigo`,
-    { id: productoId, lote }
+    { id: productoId, lote, ...fb.params }
   );
   return rows.map((b) => ({
     ...b,

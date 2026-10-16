@@ -4,13 +4,14 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
 
 const router = Router();
 
 // La nómina expone sueldos del personal: es exclusiva de administradores,
 // igual que la gestión de staff.
-const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:nomina')];
+// Las comisiones son de las ventas de todas las tiendas: solo quien las ve todas (2026-10-15).
+const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:nomina'), requireTodasLasTiendas];
 
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa el formato YYYY-MM-DD');
 const hora = z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, 'Usa el formato HH:MM');

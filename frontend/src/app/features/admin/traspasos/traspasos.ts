@@ -122,10 +122,43 @@ export class Traspasos {
   notas = '';
   q = '';
 
-  /** Solo tiene sentido mandar a un almacén distinto del que surte. */
-  readonly destinos = computed(() =>
-    this.almacenes().filter((a) => a.id !== Number(this.origen) && a.activo)
-  );
+  /**
+   * Solo tiene sentido mandar a un almacén distinto del que surte. Quien es de
+   * una sola tienda pide para LAS SUYAS (2026-10-15).
+   */
+  // Método y no computed: depende de `origen`, que es un campo [(ngModel)] y no
+  // una señal; un computed se quedaba con el primer origen (2026-10-16).
+  destinos(): Almacen[] {
+    return this.almacenes().filter(
+      // Si SALE de una de sus tiendas (la Matriz), a cualquiera; si pide a ciegas, a las suyas.
+      (a) => a.id !== Number(this.origen) && a.activo && (this.esMio(this.origen) || a.mio !== false)
+    );
+  }
+
+  /** ¿Es una de SUS tiendas? (Quien ve todas, todas.) */
+  esMio(almacenId: number | string | null | undefined): boolean {
+    if (this.auth.veTodasLasTiendas()) return true;
+    const a = this.almacenes().find((x) => x.id === Number(almacenId));
+    return !!a && a.mio !== false;
+  }
+
+  /**
+   * ¿Pide A CIEGAS? (2026-10-15, "nada de la Matriz"): quien es de una sola
+   * tienda y le pide a otra no ve cuánto hay allá. Pide los paquetes que quiere y,
+   * si no hay tantos, le mandan los que haya. Los kilos van con el peso del
+   * catálogo.
+   */
+  aCiegas(): boolean {
+    return !!this.origen && !this.esMio(this.origen);
+  }
+
+  /** Surte quien es del origen; firma de recibido quien es del destino. */
+  puedeSurtir(t: Traspaso): boolean {
+    return this.puedeEnviar() && this.esMio(t.almacen_origen_id);
+  }
+  puedeFirmar(t: Traspaso): boolean {
+    return this.puedeRecibir() && this.esMio(t.almacen_destino_id);
+  }
 
   /** La matriz, para señalarla en el selector de origen. */
   readonly matriz = computed(() => this.almacenes().find((a) => a.es_matriz) ?? null);
@@ -183,7 +216,8 @@ export class Traspasos {
         // El origen que se propone es la matriz; si no hay, el primero activo.
         const matriz = activos.find((x) => x.es_matriz);
         this.origen = (matriz ?? activos[0])?.id ?? '';
-        const otro = activos.find((x) => x.id !== Number(this.origen));
+        // El destino, una de SUS tiendas.
+        const otro = this.destinos()[0];
         if (otro) this.destino = otro.id;
       },
       error: (e) => this.error.set(this.msg(e)),
@@ -224,12 +258,14 @@ export class Traspasos {
    * servidor (`inventario/model.js → pesoPorPaquete`).
    */
   pesoPaquete(l: LineaEnvio): number | null {
+    if (this.aCiegas()) return Number(l.variante.peso_kg) || null;
     const eq = this.pesos()[l.variante.id];
     return eq ? Number(eq.peso_referencia) : null;
   }
 
   /** ¿El peso salió del catálogo porque en el origen no hay paquetes con peso? */
   pesoDeCatalogo(l: LineaEnvio): boolean {
+    if (this.aCiegas()) return true;
     return !!this.pesos()[l.variante.id]?.referencia_nominal;
   }
 
@@ -240,9 +276,13 @@ export class Traspasos {
    * unos gramos más de los que hay y no dejaba.
    */
   kgAprox(l: LineaEnvio): number | null {
+    const n = Math.max(0, Math.floor(Number(l.paquetes) || 0));
+    if (this.aCiegas()) {
+      const peso = Number(l.variante.peso_kg) || 0;
+      return peso > 0 ? Math.round(n * peso * 1000) / 1000 : null;
+    }
     const eq = this.pesos()[l.variante.id];
     if (!eq) return null;
-    const n = Math.max(0, Math.floor(Number(l.paquetes) || 0));
     const d = eq.disponible;
     const kg = eq.referencia_nominal || !d.paquetes
       ? n * Number(eq.peso_referencia)
@@ -294,7 +334,8 @@ export class Traspasos {
 
   /** Consulta los pesos reales de una variante en el almacén de origen. */
   private cargarPesos(varianteId: number): void {
-    if (!this.origen) return;
+    // A ciegas no se pregunta cuánto hay en el origen (el servidor tampoco lo dice).
+    if (!this.origen || this.aCiegas()) return;
     this.inv.equivalenciaPaquetes(varianteId, Number(this.origen)).subscribe({
       next: (eq) => this.pesos.update((m) => ({ ...m, [varianteId]: eq })),
       error: () => {},
@@ -304,6 +345,8 @@ export class Traspasos {
   /** Al cambiar el origen cambian los pesos: se vuelven a consultar. */
   alCambiarOrigen(): void {
     this.pesos.set({});
+    // El destino no puede ser el mismo almacén del que sale.
+    if (Number(this.destino) === Number(this.origen)) this.destino = this.destinos()[0]?.id ?? '';
     for (const l of this.lineas()) this.cargarPesos(l.variante.id);
   }
 

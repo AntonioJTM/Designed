@@ -112,4 +112,21 @@ function requirePermisoAlguno(...claves) {
   };
 }
 
-module.exports = { authRequired, requireTipo, requireRol, requirePermiso, requirePermisoAlguno };
+/**
+ * Solo quien ve TODAS las tiendas (2026-10-15): Reportes, Cómo va el negocio,
+ * Nómina y las miradas de Clientes suman las dos tiendas. A una persona de una
+ * sola tienda no se le muestran (403 `SOLO_TODAS_LAS_TIENDAS`). Además de su
+ * permiso, que se sigue pidiendo con `requirePermiso`.
+ */
+function requireTodasLasTiendas(req, res, next) {
+  if (!req.auth || req.auth.tipo !== 'usuario') {
+    return next(new AppError(403, 'PROHIBIDO', 'Recurso exclusivo de personal (staff)'));
+  }
+  const { veTodasLasTiendas } = require('../modules/permisos/service');
+  veTodasLasTiendas(req.auth)
+    .then((si) => next(si ? undefined : new AppError(403, 'SOLO_TODAS_LAS_TIENDAS',
+      'Esto suma todas las tiendas: solo lo ve quien tiene «Todas las tiendas» en Personal.')))
+    .catch(next);
+}
+
+module.exports = { authRequired, requireTipo, requireRol, requirePermiso, requirePermisoAlguno, requireTodasLasTiendas };

@@ -2,7 +2,8 @@
 
 const crypto = require('crypto');
 const { pool, withTransaction } = require('../../config/db');
-const { AppError } = require('../../middlewares/error');
+const { AppError, enOtraTienda } = require('../../middlewares/error');
+const { filtroAlmacen } = require('../permisos/service');
 const almacenesModel = require('../almacenes/model');
 const configuracionModel = require('../configuracion/model');
 const clientesModel = require('../clientes/model');
@@ -948,6 +949,8 @@ async function _obtenerConn(ejecutor, id) {
   // Lo que el cliente REGRESÓ de esta nota y le quedó a favor (2026-10-13).
   pedido.devoluciones = await devoluciones.deVenta(ejecutor, id);
   pedido.devuelto_total = round2(pedido.devoluciones.reduce((s, d) => s + Number(d.total), 0));
+  // Si se pagó con su SALDO A FAVOR: cuánto, cuánto le quedó y cuánto tiene hoy (el ticket).
+  pedido.saldo_favor_usado = await saldoFavor.usadoEnVenta(ejecutor, id);
   return pedido;
 }
 
@@ -955,7 +958,18 @@ async function obtener(id) {
   return _obtenerConn(pool, id);
 }
 
-async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, limit, offset }) {
+/**
+ * Solo las ventas de SUS tiendas (2026-10-15). `almacenes` null = todas; una
+ * lista = esas; vacía = ninguna. Se agrega al WHERE de cada lista.
+ */
+function _deSusTiendas(where, params, almacenes, columna = 'p.almacen_id') {
+  if (!Array.isArray(almacenes)) return;
+  if (!almacenes.length) { where.push('1 = 0'); return; }
+  where.push(`${columna} IN (:almacenesAlcance)`);
+  params.almacenesAlcance = almacenes;
+}
+
+async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, limit, offset, almacenes }) {
   const where = [];
   const params = {};
   if (canal) { where.push('p.canal = :canal'); params.canal = canal; }
@@ -970,6 +984,7 @@ async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, lim
     params.q = `%${q}%`;
   }
   if (caja_id) { where.push('sc.caja_id = :caja_id'); params.caja_id = caja_id; }
+  _deSusTiendas(where, params, almacenes);
   if (desde) { where.push('p.creado_en >= :desde'); params.desde = desde; }
   if (hasta) { where.push('p.creado_en < DATE_ADD(:hasta, INTERVAL 1 DAY)'); params.hasta = hasta; }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -2041,7 +2056,7 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
       sesionId = null;
     }
 
-    await conn.query(
+    const [pagoIns] = await conn.query(
       `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
        VALUES (:pedido, :metodo, :monto, 'completado', :ref)`,
       {
@@ -2075,6 +2090,8 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
     }
     return {
       pedido_id: pedidoId,
+      // Con él se pide su ticket (2026-10-15).
+      pago_id: Number(pagoIns.insertId),
       numero_pedido: pedido.numero_pedido,
       total: round2(pedido.total),
       abonado: nuevoAbonado,
@@ -2140,13 +2157,14 @@ async function pasarACredito(pedidoId, usuarioId) {
  * Las NOTAS PENDIENTES DE PAGO por cobrar, de la más antigua a la más nueva,
  * con quién es, qué se llevó, lo que ya abonó y lo que falta.
  */
-async function listarNotasPendientes({ q } = {}) {
+async function listarNotasPendientes({ q, almacenes } = {}) {
   const where = [
     'p.nota_pendiente = 1',
     "p.estado = 'pendiente'",
     "NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')",
   ];
   const params = {};
+  _deSusTiendas(where, params, almacenes);
   if (q && String(q).trim()) {
     where.push(`(p.numero_pedido LIKE :q OR c.nombre LIKE :q OR c.nombre_comercial LIKE :q
                  OR c.telefono LIKE :q OR c.telefono_alt LIKE :q)`);
@@ -2431,13 +2449,22 @@ async function _exigirPaqueteAqui(conn, bultoId, almacenId) {
       `El paquete ${u.codigo} viene en camino (${u.en_camino}): primero recibe el envío en Surtir sucursal.`);
   }
   if (u.almacen_id != null && Number(u.almacen_id) !== Number(almacenId)) {
-    throw new AppError(409, 'PAQUETE_EN_OTRA_SUCURSAL',
+    throw enOtraTienda(new AppError(409, 'PAQUETE_EN_OTRA_SUCURSAL',
       `El paquete ${u.codigo} sí existe, pero está en «${u.almacen}», no en «${u.aqui}»: ` +
-      'toma uno que esté en esta tienda.');
+      'toma uno que esté en esta tienda.'),
+    [u.almacen_id],
+    `El paquete ${u.codigo} no está registrado en «${u.aqui}»: toma uno que esté en esta tienda.`);
   }
 }
 
 async function _errorBultoTomado(conn, codigo, bulto) {
+  // De OTRA tienda no se dice para qué envío, pedido o cliente (2026-10-16).
+  const [[dondeEsta]] = await conn.query('SELECT almacen_id FROM variante_codigos WHERE codigo = :c LIMIT 1', { c: codigo });
+  return enOtraTienda(await _errorBultoTomadoDetalle(conn, codigo, bulto), [dondeEsta?.almacen_id],
+    `El paquete ${codigo} no está disponible en esta tienda: escanea otro.`);
+}
+
+async function _errorBultoTomadoDetalle(conn, codigo, bulto) {
   if (bulto.estado === 'apartado' && bulto.consumido_tipo === 'traspaso') {
     // Se escaneó al surtir una sucursal y se guardó: va en ese envío.
     const [[t]] = await conn.query(
@@ -2869,9 +2896,10 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
  * Los PEDIDOS (encargos) sin entregar —en espera—, con quién es, qué lleva y
  * cuánto falta cobrar.
  */
-async function listarEncargos({ estado, q } = {}) {
+async function listarEncargos({ estado, q, almacenes } = {}) {
   const where = ["p.encargo = 1", 'p.inventario_descontado = 0', "p.estado IN ('en_preparacion', 'listo', 'enviado')"];
   const params = {};
+  _deSusTiendas(where, params, almacenes);
   if (estado && PASOS_ENCARGO.includes(estado)) {
     where.push('p.estado = :estado');
     params.estado = estado;
@@ -2957,9 +2985,10 @@ async function listarEncargos({ estado, q } = {}) {
 }
 
 /** Los apartados vigentes, con lo que llevan pagado. */
-async function listarApartados({ cliente_id, orden } = {}) {
+async function listarApartados({ cliente_id, orden, almacenes } = {}) {
   const where = [];
   const params = {};
+  _deSusTiendas(where, params, almacenes, 'almacen_id');
   if (cliente_id) {
     where.push('cliente_id = :cliente_id');
     params.cliente_id = cliente_id;
@@ -3031,27 +3060,37 @@ async function listarApartados({ cliente_id, orden } = {}) {
  * Las cifras de arriba de la pantalla Pedidos. En "por cobrar", `ventas` es en
  * realidad el número de CLIENTES que deben (ver abajo).
  */
-async function resumen() {
-  const vivo = "estado NOT IN ('cancelado', 'devuelto')";
+async function resumen(almacenes = null) {
+  // Quien es de una sola tienda ve las cifras de ella (2026-10-15).
+  const f = filtroAlmacen('almacen_id', almacenes);
+  const vivo = `estado NOT IN ('cancelado', 'devuelto')${f.sql}`;
   const [[hoy]] = await pool.query(
     `SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total FROM pedidos
-      WHERE ${vivo} AND DATE(creado_en) = CURDATE()`
+      WHERE ${vivo} AND DATE(creado_en) = CURDATE()`,
+    f.params
   );
   const [[semana]] = await pool.query(
     `SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total FROM pedidos
-      WHERE ${vivo} AND creado_en >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)`
+      WHERE ${vivo} AND creado_en >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)`,
+    f.params
   );
   // Lo fiado se debe en la CUENTA del cliente, no en cada venta: los abonos se
   // aplican al saldo, así que una venta fiada sigue "pendiente" aunque el
   // cliente ya haya pagado. Lo que de verdad se debe es el saldo de las cuentas.
+  // De una sola tienda: lo que deben los clientes que le han comprado a ella.
   const [[fiado]] = await pool.query(
-    `SELECT COUNT(*) AS ventas, COALESCE(SUM(saldo), 0) AS monto FROM v_clientes_saldo WHERE saldo > 0`
+    `SELECT COUNT(*) AS ventas, COALESCE(SUM(saldo), 0) AS monto FROM v_clientes_saldo s
+      WHERE s.saldo > 0${f.sql
+        ? ` AND EXISTS (SELECT 1 FROM pedidos pc WHERE pc.cliente_id = s.cliente_id${filtroAlmacen('pc.almacen_id', almacenes).sql})`
+        : ''}`,
+    f.params
   );
   // Las que se CANCELARON este mes (su última modificación es la cancelación),
   // no las que se vendieron este mes y luego se cancelaron.
   const [[canceladas]] = await pool.query(
     `SELECT COUNT(*) AS ventas, COALESCE(SUM(total), 0) AS total FROM pedidos
-      WHERE estado IN ('cancelado', 'devuelto') AND actualizado_en >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`
+      WHERE estado IN ('cancelado', 'devuelto') AND actualizado_en >= DATE_FORMAT(CURDATE(), '%Y-%m-01')${f.sql}`,
+    f.params
   );
   const n = (x) => ({ ventas: Number(x.ventas), total: round2(Number(x.total ?? x.monto)) });
   return { hoy: n(hoy), semana: n(semana), por_cobrar: n(fiado), canceladas_mes: n(canceladas) };

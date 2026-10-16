@@ -3,7 +3,19 @@
 const crypto = require('crypto');
 const { pool, withTransaction } = require('../../config/db');
 const { porPalabras } = require('../../utils/query');
-const { AppError } = require('../../middlewares/error');
+const { AppError, enOtraTienda } = require('../../middlewares/error');
+const { filtroAlmacen } = require('../permisos/service');
+
+/**
+ * CADA QUIEN, SUS TIENDAS (2026-10-15): agrega al WHERE el filtro de los
+ * almacenes que puede ver (`almacenes` null = todos; vacío = ninguno).
+ */
+function _deSusTiendas(where, params, columna, almacenes) {
+  const f = filtroAlmacen(columna, almacenes);
+  if (!f.sql) return;
+  where.push(f.sql.replace(/^ AND /, ''));
+  Object.assign(params, f.params);
+}
 
 // Acceso a datos de inventario (multi-almacén) y su bitácora (kardex).
 // REGLA: todo cambio de existencias = UPDATE inventario + INSERT movimiento,
@@ -46,9 +58,10 @@ const SELECT_STOCK = `
  */
 const COND_ALERTA = '(i.stock_minimo > 0 AND (i.cantidad - i.cantidad_reservada) <= i.stock_minimo)';
 
-async function listarStock({ almacen_id, variante_id, q, bajo_stock, apartado, limit, offset }) {
+async function listarStock({ almacen_id, variante_id, q, bajo_stock, apartado, limit, offset, almacenes }) {
   const where = [];
   const params = {};
+  _deSusTiendas(where, params, 'i.almacen_id', almacenes);
   if (almacen_id !== undefined) {
     where.push('i.almacen_id = :almacen_id');
     params.almacen_id = almacen_id;
@@ -104,7 +117,9 @@ const TOPE_RESUMEN = 300;
  * Las cantidades no se pueden sumar todas juntas: los conos son piezas y el
  * resto son kilos, así que el total va separado.
  */
-async function resumenPorAlmacen() {
+async function resumenPorAlmacen(alcance = null) {
+  const fa = filtroAlmacen('a.id', alcance);
+  const fi = filtroAlmacen('i.almacen_id', alcance);
   const [almacenes] = await pool.query(
     `SELECT a.id AS almacen_id, a.nombre, a.es_punto_venta, a.es_matriz,
             a.es_tienda_linea, a.activo,
@@ -122,9 +137,10 @@ async function resumenPorAlmacen() {
        FROM almacenes a
        LEFT JOIN inventario i          ON i.almacen_id = a.id
        LEFT JOIN producto_variantes pv ON pv.id = i.variante_id
-      WHERE a.activo = 1
+      WHERE a.activo = 1${fa.sql}
       GROUP BY a.id, a.nombre, a.es_punto_venta, a.es_matriz, a.es_tienda_linea, a.activo
-      ORDER BY a.es_matriz DESC, a.nombre`
+      ORDER BY a.es_matriz DESC, a.nombre`,
+    fa.params
   );
 
   // Variantes con presencia en algún almacén (existencia o mínimo definido).
@@ -141,8 +157,9 @@ async function resumenPorAlmacen() {
        JOIN productos prod        ON prod.id = pv.producto_id
        JOIN categorias cat        ON cat.id = prod.categoria_id
        LEFT JOIN lineas lin       ON lin.id = prod.linea_id
-      WHERE i.cantidad > 0 OR i.stock_minimo > 0
-      ORDER BY prod.nombre, pv.sku`
+      WHERE (i.cantidad > 0 OR i.stock_minimo > 0)${fi.sql}
+      ORDER BY prod.nombre, pv.sku`,
+    fi.params
   );
 
   const porVariante = new Map();
@@ -183,10 +200,12 @@ async function resumenPorAlmacen() {
 }
 
 /** Existencias por debajo (o al nivel) del stock mínimo, con mínimo capturado. */
-async function alertas() {
+async function alertas(almacenes = null) {
+  const f = filtroAlmacen('i.almacen_id', almacenes);
   const [rows] = await pool.query(
-    `${SELECT_STOCK} WHERE ${COND_ALERTA}
-      ORDER BY (i.cantidad - i.cantidad_reservada) - i.stock_minimo`
+    `${SELECT_STOCK} WHERE ${COND_ALERTA}${f.sql}
+      ORDER BY (i.cantidad - i.cantidad_reservada) - i.stock_minimo`,
+    f.params
   );
   return rows;
 }
@@ -243,9 +262,10 @@ const FROM_KARDEX = `
        LEFT JOIN usuarios u       ON u.id = m.usuario_id
        ${JOINS_DOCUMENTO}`;
 
-async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, q, desde, hasta, limit, offset }) {
+async function listarMovimientos({ variante_id, almacen_id, tipo, concepto, q, desde, hasta, limit, offset, almacenes }) {
   const where = [];
   const params = {};
+  _deSusTiendas(where, params, 'm.almacen_id', almacenes);
   if (concepto && FILTROS_CONCEPTO[concepto]) {
     where.push(`(${FILTROS_CONCEPTO[concepto]})`);
   }
@@ -535,14 +555,15 @@ async function conoDe(paqueteId) {
 }
 
 /** En qué almacenes hay existencias de una variante, para proponer el origen. */
-async function existenciasDe(varianteId) {
+async function existenciasDe(varianteId, almacenes = null) {
+  const f = filtroAlmacen('i.almacen_id', almacenes);
   const [rows] = await pool.query(
     `SELECT i.almacen_id, a.nombre AS almacen, i.cantidad
        FROM inventario i
        JOIN almacenes a ON a.id = i.almacen_id
-      WHERE i.variante_id = :id AND i.cantidad > 0
+      WHERE i.variante_id = :id AND i.cantidad > 0${f.sql}
       ORDER BY i.cantidad DESC`,
-    { id: varianteId }
+    { id: varianteId, ...f.params }
   );
   return rows;
 }
@@ -644,11 +665,13 @@ async function desarmar(datos, usuarioId) {
           `El paquete ${bulto.codigo} viene en camino (${u.en_camino_folio}): primero recibe el envío en Surtir sucursal.`);
       }
       if (u?.almacen_id != null && Number(u.almacen_id) !== Number(almacen_destino_id)) {
-        throw new AppError(409, 'PAQUETE_EN_OTRA_SUCURSAL',
+        throw enOtraTienda(new AppError(409, 'PAQUETE_EN_OTRA_SUCURSAL',
           `El paquete ${bulto.codigo} no está en «${tienda.nombre}»: el sistema lo tiene en «${u.almacen}». ` +
           (Number(u.es_punto_venta)
             ? 'Bájalo en esa tienda, o mándalo con Surtir sucursal.'
-            : 'Primero mándalo a la tienda con Surtir sucursal.'));
+            : 'Primero mándalo a la tienda con Surtir sucursal.')),
+        [u.almacen_id],
+        `El paquete ${bulto.codigo} no está registrado en «${tienda.nombre}»: toma uno que esté aquí.`);
       }
     }
 
@@ -837,7 +860,7 @@ async function _varianteParaTraspaso(conn, varianteId) {
  * se convierte a kilos, que es como se lleva el inventario: la conversión usa los
  * bultos que de verdad hay (su peso real) y cae al nominal si no hay ubicados.
  */
-async function solicitarTraspaso(datos, usuarioId) {
+async function solicitarTraspaso(datos, usuarioId, { aCiegas = false } = {}) {
   const { almacen_origen_id, almacen_destino_id, items } = datos;
   if (almacen_origen_id === almacen_destino_id) {
     throw new AppError(422, 'ALMACENES_IGUALES', 'El origen y el destino deben ser distintos');
@@ -894,7 +917,11 @@ async function solicitarTraspaso(datos, usuarioId) {
       const saldo = fila ? Number(fila.cantidad) : 0;
       const apartado = fila ? Number(fila.cantidad_reservada) : 0;
       const libre = round3(saldo - apartado);
-      if (libre < cantidad) {
+      // A CIEGAS (2026-10-15, "nada de la Matriz"): quien pide para SU tienda no
+      // ve lo que hay en el origen, así que no se le rechaza ni se le dice cuánto
+      // hay. Se aparta lo pedido (el apartado es blando) y al surtir sale lo que
+      // haya ("se manda lo que hay").
+      if (!aCiegas && libre < cantidad) {
         throw new AppError(409, 'STOCK_INSUFICIENTE',
           `No alcanza "${v.producto} · ${v.sku}": en el origen hay ${saldo} kg` +
           (apartado > 0 ? ` (${apartado} kg ya apartados a otra solicitud)` : '') +
@@ -920,8 +947,7 @@ async function solicitarTraspaso(datos, usuarioId) {
         unidad: 'kg',
         peso_estimado: estimado,
         peso_nominal: esPaquete && v.peso_kg ? round3(paquetes * Number(v.peso_kg)) : null,
-        saldo_origen: saldo,
-        apartado_origen: round3(apartado + cantidad),
+        ...(aCiegas ? {} : { saldo_origen: saldo, apartado_origen: round3(apartado + cantidad) }),
       });
     }
 
@@ -1000,8 +1026,9 @@ async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe, 
         ? `está apartado para el envío ${b.traspaso_folio ?? ''} a otra sucursal`
         : `está apartado para ${b.pedido_folio ? 'el pedido ' + b.pedido_folio : 'un pedido de un cliente'}`;
       const que = { vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: apartadoPara };
-      throw new AppError(409, 'BULTO_NO_DISPONIBLE',
-        `El paquete ${c} de ${nombreDe(b.variante_id)} ${que[b.estado] ?? 'no está disponible'}.`);
+      throw enOtraTienda(new AppError(409, 'BULTO_NO_DISPONIBLE',
+        `El paquete ${c} de ${nombreDe(b.variante_id)} ${que[b.estado] ?? 'no está disponible'}.`),
+      [b.almacen_id], `El paquete ${c} no está disponible en esta tienda: escanea otro.`);
     }
     if (b.peso_kg == null || Number(b.peso_kg) <= 0) {
       throw new AppError(422, 'BULTO_SIN_PESO',
@@ -1040,10 +1067,13 @@ async function _traerAlOrigen(conn, bultos, t, encontrados, usuarioId, nombreDe)
   const [[origen]] = await conn.query('SELECT nombre FROM almacenes WHERE id = :id', { id: t.almacen_origen_id });
   if (sinConfirmar.length) {
     const b = sinConfirmar[0];
-    throw new AppError(409, 'PAQUETE_EN_OTRO_ALMACEN',
+    throw enOtraTienda(new AppError(409, 'PAQUETE_EN_OTRO_ALMACEN',
       `El paquete ${b.codigo} el sistema lo tiene en «${b.almacen}», no en «${origen.nombre}». ` +
       'Si de verdad está aquí, quítalo de la lista y vuelve a escanearlo para confirmarlo.',
-      { paquetes: sinConfirmar.map((x) => ({ codigo: x.codigo, almacen_id: x.almacen_id, almacen: x.almacen })) });
+      { paquetes: sinConfirmar.map((x) => ({ codigo: x.codigo, almacen_id: x.almacen_id, almacen: x.almacen })) }),
+    sinConfirmar.map((x) => x.almacen_id),
+    `El paquete ${b.codigo} el sistema lo tiene en otra tienda, no en «${origen.nombre}». ` +
+      'Si de verdad está aquí, quítalo de la lista y vuelve a escanearlo para confirmarlo.');
   }
   for (const b of fuera) {
     const peso = round3(b.peso_kg);
@@ -1051,9 +1081,11 @@ async function _traerAlOrigen(conn, bultos, t, encontrados, usuarioId, nombreDe)
     const alla = await _leerCantidad(conn, b.variante_id, b.almacen_id);
     const saldoAlla = alla ? Number(alla.cantidad) : 0;
     if (saldoAlla + 0.0005 < peso) {
-      throw new AppError(409, 'STOCK_INSUFICIENTE',
+      throw enOtraTienda(new AppError(409, 'STOCK_INSUFICIENTE',
         `«${b.almacen}» solo tiene ${round3(saldoAlla)} kg de ${hilo}: no alcanza para pasar los ${peso} kg ` +
-        `del paquete ${b.codigo} a «${origen.nombre}». Cuadra ese almacén con un Ajuste o avisa al administrador.`);
+        `del paquete ${b.codigo} a «${origen.nombre}». Cuadra ese almacén con un Ajuste o avisa al administrador.`),
+      [b.almacen_id], `No se puede pasar el paquete ${b.codigo} a «${origen.nombre}»: el almacén donde lo ` +
+        'tenía el sistema no tiene esos kilos. Avisa al administrador.');
     }
     const aqui = await _leerCantidad(conn, b.variante_id, t.almacen_origen_id);
     await _aplicarSaldo(conn, b.variante_id, b.almacen_id, round3(saldoAlla - peso));
@@ -1577,9 +1609,19 @@ async function cancelarTraspaso(id, usuarioId, motivo) {
 }
 
 /** Historial de traspasos con sus líneas. */
-async function listarTraspasos({ almacen_destino_id, limit, offset }) {
-  const where = almacen_destino_id ? 'WHERE t.almacen_destino_id = :almacen_destino_id' : '';
+async function listarTraspasos({ almacen_destino_id, limit, offset, almacenes }) {
+  const condiciones = [];
   const params = { almacen_destino_id, limit, offset };
+  if (almacen_destino_id) condiciones.push('t.almacen_destino_id = :almacen_destino_id');
+  // Los de SUS tiendas: los que salen de ellas y los que les llegan.
+  if (Array.isArray(almacenes)) {
+    if (!almacenes.length) condiciones.push('1 = 0');
+    else {
+      condiciones.push('(t.almacen_origen_id IN (:almacenesAlcance) OR t.almacen_destino_id IN (:almacenesAlcance))');
+      params.almacenesAlcance = almacenes;
+    }
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
 
   const [rows] = await pool.query(
     `SELECT t.id, t.folio, t.estado, t.notas, t.creado_en,
@@ -1675,11 +1717,12 @@ async function obtenerTraspaso(id) {
 }
 
 /** Historial de desarmes, para auditar de dónde salieron los conos. */
-async function listarConversiones({ variante_id, limit, offset }) {
-  const where = variante_id
-    ? 'WHERE c.variante_origen_id = :variante_id OR c.variante_destino_id = :variante_id'
-    : '';
+async function listarConversiones({ variante_id, limit, offset, almacenes }) {
+  const condiciones = [];
   const params = { variante_id, limit, offset };
+  if (variante_id) condiciones.push('(c.variante_origen_id = :variante_id OR c.variante_destino_id = :variante_id)');
+  _deSusTiendas(condiciones, params, 'c.almacen_destino_id', almacenes);
+  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
 
   const [rows] = await pool.query(
     `SELECT c.id, c.paquetes, c.kg_consumidos, c.destare_kg, c.piezas_generadas, c.codigo_bulto,

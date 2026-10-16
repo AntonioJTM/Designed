@@ -154,7 +154,7 @@ export class Remesas {
   }
 
   constructor() {
-    this.inv.almacenes().subscribe({
+    this.inv.misAlmacenes().subscribe({
       next: (a) => {
         const activos = a.filter((x) => x.activo);
         this.almacenes.set(activos);

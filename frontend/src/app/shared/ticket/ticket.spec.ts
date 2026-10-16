@@ -1,5 +1,6 @@
-import { Pedido } from '../../core/models/ventas.models';
-import { SIN_TICKET, armarTicket, llevaTicket, papelDe, prepararHoja, telefonoLegible, tipoDeTicket, armarPrueba } from './ticket';
+import { DevolucionHecha, Pedido } from '../../core/models/ventas.models';
+import { TicketAbonoCuenta, TicketAnticipo, TicketPagoNota } from '../../core/models/tickets.models';
+import { SIN_TICKET, armarTicket, armarTicketAbonoCuenta, armarTicketAnticipo, armarTicketDevolucion, armarTicketPagoNota, llevaTicket, papelDe, prepararHoja, telefonoLegible, tipoDeTicket, armarPrueba } from './ticket';
 
 /**
  * El ticket impreso: dice qué fue (venta, apartado, pedido, a crédito), qué hilo
@@ -57,6 +58,48 @@ describe('Ticket impreso', () => {
     // Sin IVA, descuento ni envío no se pintan renglones en cero.
     expect(html).not.toContain('IVA');
     expect(html).not.toContain('Subtotal');
+  });
+
+  /*
+   * Pagada con su SALDO A FAVOR (2026-10-15: "que diga que se pagó con saldo a
+   * favor y cuánto le queda, si aún tiene"). El caso de la foto: $2,820.25.
+   */
+  it('pagada con su saldo a favor: lo dice así, y cuánto le queda si aún tiene', () => {
+    const conSaldo = (quedo: number, hoy: number) => venta({
+      total: '2820.25', subtotal: '2820.25',
+      pagos: [{ id: 2, metodo_pago_id: 9, metodo: 'Saldo a favor', monto: '2820.25', estado: 'completado', creado_en: '2026-10-15 23:10:00' }],
+      saldo_favor_usado: { usado: 2820.25, quedo, hoy },
+    });
+
+    let html = armarTicket(conSaldo(500, 500), tienda);
+    expect(html).toContain('Pagó con su saldo a favor');
+    expect(html).toContain('Le queda a favor');
+    expect(html).toContain('$500.00');
+    expect(html).not.toContain('Su saldo a favor hoy');
+
+    // Lo usó todo: no se dice "le queda".
+    html = armarTicket(conSaldo(0, 0), tienda);
+    expect(html).toContain('Pagó con su saldo a favor');
+    expect(html).not.toContain('Le queda a favor');
+
+    // Reimpreso días después, ya con otro saldo: lo que le quedó ese día y lo de hoy.
+    html = armarTicket(conSaldo(500, 1200), tienda);
+    expect(html).toContain('Le queda a favor');
+    expect(html).toContain('Su saldo a favor hoy');
+    expect(html).toContain('$1,200.00');
+
+    // Pagada parte con saldo y parte en efectivo: los dos renglones.
+    html = armarTicket(venta({
+      total: '2820.25', subtotal: '2820.25',
+      pagos: [
+        { id: 2, metodo_pago_id: 9, metodo: 'Saldo a favor', monto: '800.00', estado: 'completado', creado_en: '2026-10-15 23:10:00' },
+        { id: 3, metodo_pago_id: 1, metodo: 'Efectivo', monto: '2020.25', estado: 'completado', creado_en: '2026-10-15 23:10:00' },
+      ],
+      saldo_favor_usado: { usado: 800, quedo: 0, hoy: 0 },
+    }), tienda);
+    expect(html).toContain('Pagó con su saldo a favor');
+    expect(html).toContain('$800.00');
+    expect(html).toContain('Efectivo');
   });
 
   it('dice qué fue: apartado, a crédito, nota pendiente, cancelada', () => {
@@ -252,5 +295,156 @@ describe('Ticket impreso', () => {
       // 36 mm de ancho en papel de 58 (unos 136 pixeles), con la proporción del logo.
       expect(Math.round(logo!.getBoundingClientRect().width)).toBe(136);
     });
+  });
+});
+
+/**
+ * EL TICKET DE DEVOLUCIÓN (2026-10-15): dice "Devolución", de qué venta, qué
+ * regresó y a cuánto, cuánto le quedó a favor y su saldo a favor de hoy. El de
+ * la venta no cambia.
+ */
+describe('Ticket de devolución', () => {
+  const tienda = { nombre: 'Hitex', leyenda: 'Este ticket no es un comprobante fiscal.' };
+  const venta = {
+    id: 760, numero_pedido: 'POS-1792036260049-468D', canal: 'punto_venta', estado: 'pagado',
+    almacen: 'TIENDA MOROLEON', creado_en: '2026-10-14 21:51:03', total: '2726.00', detalle: [], pagos: [],
+  } as unknown as Pedido;
+
+  function devolucion(extra: Partial<DevolucionHecha> = {}): DevolucionHecha {
+    return {
+      id: 5, folio: 'DEV-1792120547056-B23B', total: 2726, aplicado_a_deuda: 0, notas: null,
+      creado_en: '2026-10-15 00:35:47', cliente_id: 9, cliente: 'INES HERNANDEZ SALAIS', usuario: 'Yessica Lucio',
+      lineas: [{ detalle_id: 1, hilo: 'CAMEL 2/30', como: 'paquete', kg: 18.8, piezas: null, importe: 2726, codigos: ['00621999'] }],
+      saldo_favor_hoy: 2726,
+      ...extra,
+    };
+  }
+
+  it('dice que es una devolución, de qué venta, qué regresó y cuánto le quedó a favor', () => {
+    const html = armarTicketDevolucion(venta, devolucion(), tienda);
+    expect(html).toContain('<div class="tipo">Devolución</div>');
+    expect(html).toContain('DEV-1792120547056-B23B');
+    expect(html).toContain('POS-1792036260049-468D');
+    expect(html).toContain('15 de octubre de 2026, 00:35');
+    expect(html).toContain('14 de octubre de 2026, 21:51');
+    expect(html).toContain('TIENDA MOROLEON');
+    expect(html).toContain('INES HERNANDEZ SALAIS');
+    expect(html).toContain('CAMEL 2/30');
+    expect(html).toContain('18.8 kg × $145.00');
+    expect(html).toContain('Paquete cerrado 00621999');
+    expect(html).toContain('REGRESÓ');
+    expect(html).toContain('Le quedó a favor');
+    expect(html).toContain('Su saldo a favor hoy<b>$2,726.00</b>');
+    expect(html).toContain('No se entregó dinero');
+    expect(html).toContain('Este ticket no es un comprobante fiscal.');
+    // No es el de la venta.
+    expect(html).not.toContain('Gracias por su compra');
+    expect(html).not.toContain('TOTAL<');
+  });
+
+  it('si se descontó de lo que debía, lo dice, y a favor queda solo lo que sobró', () => {
+    const html = armarTicketDevolucion(venta, devolucion({ aplicado_a_deuda: 1000, saldo_favor_hoy: 1726 }), tienda);
+    expect(html).toContain('Se descontó de lo que debía');
+    expect(html).toContain('$1,000.00');
+    expect(html).toMatch(/Le quedó a favor<\/span><span>\$1,726\.00/);
+  });
+
+  it('conos sueltos y lo pesado en la báscula se dicen en palabras de la tienda', () => {
+    const html = armarTicketDevolucion(venta, devolucion({
+      lineas: [
+        { detalle_id: 1, hilo: 'ROJO 2/30', como: 'cono', kg: 2.5, piezas: 6, importe: 362.5, codigos: [] },
+        { detalle_id: 2, hilo: 'HUESO 2/30', como: 'simple', kg: 1, piezas: null, importe: 145, codigos: [] },
+      ],
+    }), tienda);
+    expect(html).toContain('6 conos sueltos');
+    expect(html).toContain('Suelto, pesado en la báscula');
+    expect(html).toContain('3.5 kg · 2 artículos');
+  });
+
+  it('sin el saldo de hoy no inventa uno', () => {
+    expect(armarTicketDevolucion(venta, devolucion({ saldo_favor_hoy: null }), tienda)).not.toContain('saldo a favor hoy');
+  });
+});
+
+/**
+ * LOS TICKETS DE ABONO Y DE ANTICIPO (2026-10-15): el abono a su cuenta, el
+ * abono a una nota y el anticipo, cada uno con su banda y lo que queda.
+ */
+describe('Tickets de abono y de anticipo', () => {
+  const tienda = { nombre: 'Hitex' };
+  const cliente = { nombre: 'Graciela Ruiz', nombre_comercial: 'Doña Chela', codigo: 'C-0007' };
+
+  function abono(extra: Partial<TicketAbonoCuenta> = {}): TicketAbonoCuenta {
+    return {
+      id: 41, cliente, fecha: '2026-10-15 10:20:00', monto: 1000, metodo: 'Efectivo', referencia: null, notas: null,
+      usuario: 'Yessica Lucio', caja: 'Caja Moroleón', debia: 3000, quedo_debiendo: 2000, debe_hoy: 2000, liquidadas: [],
+      ...extra,
+    };
+  }
+
+  it('abono a su cuenta: cuánto debía, cuánto abonó y con qué, y cuánto quedó debiendo', () => {
+    const html = armarTicketAbonoCuenta(abono(), tienda);
+    expect(html).toContain('<div class="tipo">Abono</div>');
+    expect(html).toContain('AB-41');
+    expect(html).toContain('Doña Chela (Graciela Ruiz)');
+    expect(html).toContain('C-0007');
+    expect(html).toContain('Caja Moroleón');
+    expect(html).toContain('A su cuenta');
+    expect(html).toContain('Debía');
+    expect(html).toContain('$3,000.00');
+    expect(html).toContain('ABONÓ');
+    expect(html).toContain('Efectivo');
+    expect(html).toContain('Quedó debiendo<b>$2,000.00</b>');
+    expect(html).not.toContain('Hoy debe');
+  });
+
+  it('si con él quedó al corriente y pagó notas, lo dice; al reimprimirlo, cuánto debe hoy', () => {
+    const html = armarTicketAbonoCuenta(abono({ quedo_debiendo: 0, debe_hoy: 500, liquidadas: ['POS-1-AAAA', 'POS-2-BBBB'] }), tienda);
+    expect(html).toContain('Quedó al corriente');
+    expect(html).toContain('quedaron pagadas las notas');
+    expect(html).toContain('POS-1-AAAA<br>POS-2-BBBB');
+    expect(html).toContain('Hoy debe');
+    expect(html).toContain('$500.00');
+  });
+
+  it('anticipo: lo que dejó en efectivo y por transferencia, y con cuánto quedó a favor', () => {
+    const d: TicketAnticipo = {
+      id: 9, cliente, fecha: '2026-10-15 11:00:00', total: 800, notas: 'Para el pedido del sábado',
+      partes: [{ metodo: 'Efectivo', monto: 500 }, { metodo: 'Transferencia', monto: 300, referencia: '123456' }],
+      usuario: 'Yessica Lucio', caja: 'Caja Moroleón', tenia_a_favor: 200, quedo_a_favor: 1000, a_favor_hoy: 1000,
+    };
+    const html = armarTicketAnticipo(d, tienda);
+    expect(html).toContain('<div class="tipo">Anticipo</div>');
+    expect(html).toContain('AN-9');
+    expect(html).toContain('Transferencia');
+    expect(html).toContain('Referencia: 123456');
+    expect(html).toContain('A CUENTA');
+    expect(html).toContain('$800.00');
+    expect(html).toContain('Ya tenía a favor');
+    expect(html).toMatch(/Le quedó a favor<\/span><span>\$1,000\.00/);
+    expect(html).toContain('No aparta mercancía');
+    expect(html).toContain('Para el pedido del sábado');
+    // El saldo de hoy solo sale si cambió desde entonces.
+    expect(html).not.toContain('saldo a favor hoy');
+    expect(armarTicketAnticipo({ ...d, a_favor_hoy: 250 }, tienda)).toContain('Su saldo a favor hoy<b>$250.00</b>');
+  });
+
+  it('abono a una nota: a qué nota, cuánto llevaba, cuánto abonó y cuánto le falta (o que quedó pagada)', () => {
+    const d: TicketPagoNota = {
+      id: 77, cliente, fecha: '2026-10-15 12:00:00', monto: 1500, metodo: 'Transferencia', referencia: 'F-99',
+      pedido: { id: 5, numero_pedido: 'POS-1792036260049-468D', creado_en: '2026-10-14 21:51:03', total: 4000, de: 'Nota pendiente de pago' },
+      llevaba_pagado: 1000, pagado: 2500, falta: 1500, falta_hoy: 1500,
+    };
+    const html = armarTicketPagoNota(d, tienda);
+    expect(html).toContain('<div class="tipo">Abono</div>');
+    expect(html).toContain('PG-77');
+    expect(html).toContain('POS-1792036260049-468D');
+    expect(html).toContain('Nota pendiente de pago');
+    expect(html).toContain('Total de la nota');
+    expect(html).toContain('Llevaba pagado');
+    expect(html).toContain('Le falta por pagar<b>$1,500.00</b>');
+    const pagada = armarTicketPagoNota({ ...d, pagado: 4000, falta: 0, falta_hoy: 0 }, tienda);
+    expect(pagada).toContain('Nota pagada completa');
+    expect(pagada).not.toContain('Le falta por pagar');
   });
 });

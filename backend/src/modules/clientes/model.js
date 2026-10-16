@@ -1,5 +1,6 @@
 'use strict';
 
+const { filtroAlmacen } = require('../permisos/service');
 const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 
@@ -99,9 +100,11 @@ async function asignarCodigo(ejecutor, id) {
  * `q` busca en nombre, apodo, código y los dos teléfonos. Un cliente se busca
  * por como le dicen o por su número, casi nunca por su nombre completo.
  */
-async function listar({ q, con_saldo, activo, lugar_entrega_id, sin_lugar, orden, limit, offset } = {}) {
+async function listar({ q, con_saldo, activo, lugar_entrega_id, sin_lugar, orden, limit, offset, almacenes = null } = {}) {
   const where = [];
-  const params = { limit, offset };
+  // Cuánto ha comprado y cuándo vino: en SUS tiendas (2026-10-15).
+  const fv = filtroAlmacen('almacen_id', almacenes);
+  const params = { limit, offset, ...fv.params };
 
   if (q) {
     where.push(`(c.nombre LIKE :q OR c.nombre_comercial LIKE :q OR c.codigo LIKE :q
@@ -157,7 +160,7 @@ async function listar({ q, con_saldo, activo, lugar_entrega_id, sin_lugar, orden
                SUM(total) AS total_comprado,
                MAX(creado_en) AS ultima_compra
           FROM pedidos
-         WHERE cliente_id IS NOT NULL AND estado NOT IN ${ESTADOS_MUERTOS}
+         WHERE cliente_id IS NOT NULL AND estado NOT IN ${ESTADOS_MUERTOS}${fv.sql}
          GROUP BY cliente_id
       ) v ON v.cliente_id = c.id
       ${whereSql}
@@ -286,7 +289,9 @@ async function duplicado({ correo, exceptoId }) {
  * Resumen de compras. Los cancelados y devueltos NO cuentan: preguntarle al
  * sistema "cuánto me ha comprado" y que incluya lo que devolvió sería mentir.
  */
-async function estadisticas(id) {
+async function estadisticas(id, almacenes = null) {
+  const f = filtroAlmacen('almacen_id', almacenes);
+  const fp = filtroAlmacen('p.almacen_id', almacenes);
   const [[r]] = await pool.query(
     `SELECT COUNT(*) AS num_pedidos,
             COALESCE(SUM(total), 0) AS total_comprado,
@@ -300,8 +305,8 @@ async function estadisticas(id) {
             COALESCE(SUM(canal = 'punto_venta'), 0) AS pedidos_mostrador,
             COALESCE(SUM(canal = 'tienda_linea'), 0) AS pedidos_linea
        FROM pedidos
-      WHERE cliente_id = :id AND estado NOT IN ${ESTADOS_MUERTOS}`,
-    { id }
+      WHERE cliente_id = :id AND estado NOT IN ${ESTADOS_MUERTOS}${f.sql}`,
+    { id, ...f.params }
   );
 
   // Los kilos van aparte: viven en el detalle, no en el pedido.
@@ -309,16 +314,16 @@ async function estadisticas(id) {
     `SELECT COALESCE(SUM(d.cantidad), 0) AS kilos
        FROM pedido_detalle d
        JOIN pedidos p ON p.id = d.pedido_id
-      WHERE p.cliente_id = :id AND p.estado NOT IN ${ESTADOS_MUERTOS}`,
-    { id }
+      WHERE p.cliente_id = :id AND p.estado NOT IN ${ESTADOS_MUERTOS}${fp.sql}`,
+    { id, ...fp.params }
   );
 
   // Y lo que canceló o devolvió, que también dice algo del cliente.
   const [[dev]] = await pool.query(
     `SELECT COUNT(*) AS num_devueltos, COALESCE(SUM(total), 0) AS total_devuelto
        FROM pedidos
-      WHERE cliente_id = :id AND estado IN ${ESTADOS_MUERTOS}`,
-    { id }
+      WHERE cliente_id = :id AND estado IN ${ESTADOS_MUERTOS}${f.sql}`,
+    { id, ...f.params }
   );
 
   return { ...r, kilos: k.kilos, ...dev };
@@ -329,7 +334,8 @@ async function estadisticas(id) {
  * color en dos calibres son dos productos distintos y agruparlos por nombre los
  * sumaría en un renglón que no existe.
  */
-async function coloresMasComprados(id, limite = 10) {
+async function coloresMasComprados(id, limite = 10, almacenes = null) {
+  const f = filtroAlmacen('ped.almacen_id', almacenes);
   const [rows] = await pool.query(
     `SELECT p.id AS producto_id, p.nombre AS color, p.grosor_calibre AS calibre,
             cat.nombre AS material, l.nombre AS linea,
@@ -343,11 +349,11 @@ async function coloresMasComprados(id, limite = 10) {
        JOIN productos p            ON p.id = pv.producto_id
        LEFT JOIN categorias cat    ON cat.id = p.categoria_id
        LEFT JOIN lineas l          ON l.id = p.linea_id
-      WHERE ped.cliente_id = :id AND ped.estado NOT IN ${ESTADOS_MUERTOS}
+      WHERE ped.cliente_id = :id AND ped.estado NOT IN ${ESTADOS_MUERTOS}${f.sql}
       GROUP BY p.id, p.nombre, p.grosor_calibre, cat.nombre, l.nombre
       ORDER BY kilos DESC
       LIMIT :limite`,
-    { id, limite }
+    { id, limite, ...f.params }
   );
   return rows;
 }
@@ -362,7 +368,10 @@ async function coloresMasComprados(id, limite = 10) {
  * con GROUP_CONCAT en la principal— para no depender del tope de 1,024
  * caracteres ni de subconsultas correlacionadas que MariaDB no acepta.
  */
-async function pedidos(id, { limit = 20, offset = 0 } = {}) {
+async function pedidos(id, { limit = 20, offset = 0, almacenes = null } = {}) {
+  // Solo las compras de SUS tiendas (2026-10-15).
+  const f = filtroAlmacen('almacen_id', almacenes);
+  const fp = filtroAlmacen('p.almacen_id', almacenes);
   const [rows] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.canal, p.metodo_entrega, p.estado,
             p.subtotal, p.descuento, p.impuestos, p.costo_envio, p.total,
@@ -371,14 +380,14 @@ async function pedidos(id, { limit = 20, offset = 0 } = {}) {
             (SELECT COALESCE(SUM(d.cantidad), 0) FROM pedido_detalle d WHERE d.pedido_id = p.id) AS kilos
        FROM pedidos p
        LEFT JOIN usuarios u ON u.id = p.usuario_id
-      WHERE p.cliente_id = :id
+      WHERE p.cliente_id = :id${fp.sql}
       ORDER BY p.creado_en DESC, p.id DESC
       LIMIT :limit OFFSET :offset`,
-    { id, limit, offset }
+    { id, limit, offset, ...fp.params }
   );
   const [[{ total }]] = await pool.query(
-    'SELECT COUNT(*) AS total FROM pedidos WHERE cliente_id = :id',
-    { id }
+    `SELECT COUNT(*) AS total FROM pedidos WHERE cliente_id = :id${f.sql}`,
+    { id, ...f.params }
   );
 
   const ids = rows.map((r) => r.id);
@@ -457,15 +466,29 @@ async function saldo(clienteId, ejecutor = pool, bloquear = false) {
   return Math.round(total * 100) / 100;
 }
 
+/**
+ * Un movimiento de su cuenta hecho en OTRA tienda (2026-10-15): se ve el monto
+ * —el cliente es compartido y lo que debe es uno— pero no la venta, la nota ni
+ * quién lo registró. `otra_tienda` lo marca para la pantalla.
+ */
+function _deOtraTienda(m, almacenes) {
+  const { almacen_id: almacenId, ...resto } = m;
+  if (!Array.isArray(almacenes) || almacenId == null || almacenes.includes(Number(almacenId))) return resto;
+  return { ...resto, pedido_id: null, numero_pedido: null, referencia: null, notas: null, registro: null, otra_tienda: true };
+}
+
 /** Los movimientos de crédito de un cliente, con el saldo corriente. */
-async function movimientosCredito(clienteId, { limit = 50, offset = 0 } = {}) {
+async function movimientosCredito(clienteId, { limit = 50, offset = 0, almacenes = null } = {}) {
   const [rows] = await pool.query(
     `SELECT m.id, m.tipo, m.monto, m.referencia, m.notas, m.creado_en,
             m.pedido_id, p.numero_pedido,
             m.metodo_pago_id, mp.nombre AS metodo_pago,
-            m.sesion_caja_id, u.nombre AS registro
+            m.sesion_caja_id, u.nombre AS registro,
+            COALESCE(p.almacen_id, cj.almacen_id) AS almacen_id
        FROM credito_movimientos m
        LEFT JOIN pedidos p       ON p.id = m.pedido_id
+       LEFT JOIN sesiones_caja sc ON sc.id = m.sesion_caja_id
+       LEFT JOIN cajas cj        ON cj.id = sc.caja_id
        LEFT JOIN metodos_pago mp ON mp.id = m.metodo_pago_id
        LEFT JOIN usuarios u      ON u.id = m.usuario_id
       WHERE m.cliente_id = :id
@@ -477,7 +500,7 @@ async function movimientosCredito(clienteId, { limit = 50, offset = 0 } = {}) {
     'SELECT COUNT(*) AS total FROM credito_movimientos WHERE cliente_id = :id',
     { id: clienteId }
   );
-  return { rows, total: Number(total) };
+  return { rows: rows.map((m) => _deOtraTienda(m, almacenes)), total: Number(total) };
 }
 
 /**
@@ -801,8 +824,11 @@ async function ajustarCreditoPorPedido(conn, { pedidoId, numeroPedido, usuarioId
  * El ritmo se mide en DÍAS con compra (dos tickets el mismo día son una visita),
  * igual que en la pestaña Frecuencia de compra.
  */
-async function habitos(clienteId) {
-  const vivo = "estado NOT IN ('cancelado', 'devuelto')";
+async function habitos(clienteId, almacenes = null) {
+  // Su costumbre en SUS tiendas (2026-10-15).
+  const f = filtroAlmacen('almacen_id', almacenes);
+  const fp = filtroAlmacen('p.almacen_id', almacenes);
+  const vivo = `estado NOT IN ('cancelado', 'devuelto')${f.sql}`;
   const [[v]] = await pool.query(
     `SELECT COUNT(DISTINCT DATE(creado_en)) AS dias_con_compra,
             DATE_FORMAT(MIN(creado_en), '%Y-%m-%d') AS primera,
@@ -810,26 +836,26 @@ async function habitos(clienteId) {
             DATEDIFF(CURDATE(), DATE(MAX(creado_en))) AS dias_sin_venir,
             DATEDIFF(DATE(MAX(creado_en)), DATE(MIN(creado_en))) AS lapso
        FROM pedidos WHERE cliente_id = :id AND ${vivo}`,
-    { id: clienteId }
+    { id: clienteId, ...f.params }
   );
   const [visitas] = await pool.query(
     `SELECT DISTINCT DATE_FORMAT(creado_en, '%Y-%m-%d') AS dia, DATEDIFF(CURDATE(), DATE(creado_en)) AS hace
        FROM pedidos
       WHERE cliente_id = :id AND ${vivo} AND creado_en >= CURDATE() - INTERVAL 90 DAY
       ORDER BY dia`,
-    { id: clienteId }
+    { id: clienteId, ...f.params }
   );
   const [porDia] = await pool.query(
     `SELECT DAYOFWEEK(creado_en) AS dow, COUNT(*) AS n FROM pedidos
       WHERE cliente_id = :id AND ${vivo} GROUP BY dow`,
-    { id: clienteId }
+    { id: clienteId, ...f.params }
   );
   // Todas las horas, no solo la de costumbre: la pestaña "Cuándo compra" del
   // expediente dibuja cómo se reparten. La primera sigue siendo la que más.
   const [porHora] = await pool.query(
     `SELECT HOUR(creado_en) AS hora, COUNT(*) AS n FROM pedidos
       WHERE cliente_id = :id AND ${vivo} GROUP BY hora ORDER BY n DESC, hora`,
-    { id: clienteId }
+    { id: clienteId, ...f.params }
   );
   // Los últimos 90 días contra los 90 anteriores, con la MISMA ventana que la
   // pestaña Cuánto gasta (NOW() - INTERVAL): así el expediente y la pestaña
@@ -841,7 +867,7 @@ async function habitos(clienteId) {
             COALESCE(SUM(CASE WHEN creado_en < NOW() - INTERVAL 90 DAY THEN total END), 0) AS total_antes
        FROM pedidos
       WHERE cliente_id = :id AND ${vivo} AND creado_en >= NOW() - INTERVAL 180 DAY`,
-    { id: clienteId }
+    { id: clienteId, ...f.params }
   );
   // Qué se llevó en esos 90 días: kilos, cuántos en cono y de cuántos HILOS
   // distintos (producto_id: el mismo color en dos calibres son dos hilos).
@@ -853,15 +879,16 @@ async function habitos(clienteId) {
        JOIN pedidos p             ON p.id = d.pedido_id
        JOIN producto_variantes pv ON pv.id = d.variante_id
       WHERE p.cliente_id = :id AND p.estado NOT IN ('cancelado', 'devuelto')
-        AND p.creado_en >= NOW() - INTERVAL 90 DAY`,
-    { id: clienteId }
+        AND p.creado_en >= NOW() - INTERVAL 90 DAY${fp.sql}`,
+    { id: clienteId, ...fp.params }
   );
   // Contra qué se compara su compra promedio: la de TODOS los clientes
   // identificados en el mismo periodo (el "Por compra" de Cuánto gasta).
   const [[tienda]] = await pool.query(
     `SELECT COUNT(*) AS compras, COALESCE(SUM(total), 0) AS total FROM pedidos
       WHERE cliente_id IS NOT NULL AND estado NOT IN ('cancelado', 'devuelto')
-        AND creado_en >= NOW() - INTERVAL 90 DAY`
+        AND creado_en >= NOW() - INTERVAL 90 DAY${f.sql}`,
+    f.params
   );
   const [porMes] = await pool.query(
     `SELECT DATE_FORMAT(creado_en, '%Y-%m') AS mes, COUNT(*) AS compras, SUM(total) AS total
@@ -869,7 +896,7 @@ async function habitos(clienteId) {
       WHERE cliente_id = :id AND ${vivo}
         AND creado_en >= DATE_FORMAT(CURDATE() - INTERVAL 5 MONTH, '%Y-%m-01')
       GROUP BY mes ORDER BY mes`,
-    { id: clienteId }
+    { id: clienteId, ...f.params }
   );
   const n = Number(v.dias_con_compra ?? 0);
   const ritmo = n > 1 && Number(v.lapso) > 0 ? Math.max(1, Math.round(Number(v.lapso) / (n - 1))) : null;

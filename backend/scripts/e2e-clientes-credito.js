@@ -321,6 +321,15 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       `${await estadoDe(mixta.data.id)} · liquidadas ${JSON.stringify(ab.data?.liquidadas)}`);
     ck('y el abono dice qué ventas quedaron pagadas', ab.data?.liquidadas?.includes(mixta.data.numero_pedido),
       JSON.stringify(ab.data?.liquidadas));
+    // Su TICKET (2026-10-15): cuánto debía, cuánto quedó debiendo y qué pagó.
+    const movAbono = ab.data?.movimiento_id;
+    let tk = await api('GET', `/clientes/${cli.id}/abonos/${movAbono}/ticket`);
+    ck('el ticket del abono: debía lo que abonó, quedó en 0 y pagó la venta mixta',
+      tk.status === 200 && tk.data?.debia === debe && tk.data?.monto === debe && tk.data?.quedo_debiendo === 0 &&
+      tk.data?.liquidadas?.includes(mixta.data.numero_pedido) && tk.data?.referencia === 'SPEI-TMPCC-2' &&
+      tk.data?.cliente?.nombre === cli.nombre, tk.error ?? tk.data);
+    tk = await api('GET', `/clientes/${cli.id}/abonos/999999999/ticket`);
+    ck('el ticket de un abono que no es suyo: 404', tk.status === 404, tk.status);
     ck('la cancelada sigue cancelada', (await estadoDe(fiado.data.id)) === 'cancelado');
 
     // Dos ventas fiadas: un abono que solo alcanza para la primera.
@@ -332,6 +341,12 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       `vieja ${await estadoDe(vieja.data.id)} · nueva ${await estadoDe(nueva.data.id)}`);
     ab = await api('POST', `/clientes/${cli.id}/abonos`, { monto: 150, metodo_pago_id: transferencia, referencia: 'SPEI-TMPCC-4' });
     ck('un abono parcial no la da por pagada', (await estadoDe(nueva.data.id)) === 'pendiente', await estadoDe(nueva.data.id));
+    tk = await api('GET', `/clientes/${cli.id}/abonos/${ab.data?.movimiento_id}/ticket`);
+    ck('su ticket: debía 200, abonó 150, quedó debiendo 50 y no pagó ninguna nota',
+      tk.data?.debia === 200 && tk.data?.monto === 150 && tk.data?.quedo_debiendo === 50 && tk.data?.liquidadas?.length === 0, tk.data);
+    const reimpreso = await api('GET', `/clientes/${cli.id}/abonos/${movAbono}/ticket`);
+    ck('al reimprimir el de antes, sale igual (y dice cuánto debe hoy)', reimpreso.data?.quedo_debiendo === 0 &&
+      reimpreso.data?.debe_hoy === 50 && reimpreso.data?.liquidadas?.includes(mixta.data.numero_pedido), reimpreso.data);
     // El último tramo se condona con un ajuste: también cuenta como pagado.
     const condona = await api('POST', `/clientes/${cli.id}/ajustes`, { monto: -50, notas: 'TMPCC se le perdona el resto' });
     ck('condonar el resto con un ajuste la da por pagada', condona.status === 200 && (await estadoDe(nueva.data.id)) === 'pagado',

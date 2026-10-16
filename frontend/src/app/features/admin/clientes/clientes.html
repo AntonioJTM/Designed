@@ -52,7 +52,7 @@
 
     <div class="tabs-fila">
       <nav class="tabs" aria-label="Qué quieres saber de tus clientes">
-        @for (t of PESTANAS; track t.vista) {
+        @for (t of pestanas(); track t.vista) {
           <a [routerLink]="'/admin/clientes/' + t.vista" queryParamsHandling="preserve"
              [class.on]="t.vista === vista()" [attr.aria-current]="t.vista === vista() ? 'page' : null">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -72,7 +72,15 @@
     </div>
   </header>
 
-  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+  @if (mensaje()) {
+    <!-- Lo recién registrado trae el botón de su ticket. -->
+    <div class="ok-msg con-accion" role="status">
+      <span>{{ mensaje() }}</span>
+      @if (ticketAviso.actual(); as t) {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+      }
+    </div>
+  }
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
   @switch (vista()) {

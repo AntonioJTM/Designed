@@ -18,6 +18,9 @@ export interface CrearUsuarioInput {
   contrasena?: string;
   /** Sus DEMÁS puestos (el principal es `rol_id`). */
   otros_roles?: number[];
+  /** De qué tiendas es (2026-10-15). */
+  todas_las_tiendas?: boolean;
+  tiendas?: number[];
 }
 
 export interface ActualizarUsuarioInput {
@@ -29,6 +32,8 @@ export interface ActualizarUsuarioInput {
   correo?: string;
   contrasena?: string;
   otros_roles?: number[];
+  todas_las_tiendas?: boolean;
+  tiendas?: number[];
 }
 
 /** Gestión de personal (staff). Todos los endpoints requieren rol administrador. */

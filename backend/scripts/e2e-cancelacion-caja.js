@@ -9,7 +9,7 @@
  *   node scripts/e2e-cancelacion-caja.js   # BASE=http://localhost:3220/api/v1
  *
  * Cubre lo delicado: que el turno YA CERRADO no se toque (su corte está
- * cuadrado), que la tarjeta no mueva el cajón, y que si no hay turno abierto la
+ * cuadrado), que la transferencia no mueva el cajón, y que si no hay turno abierto la
  * cancelación se rechace COMPLETA en vez de perder el registro del dinero.
  *
  * Crea todo con prefijo TMPK y lo borra al terminar. Sale 1 si algo falla.
@@ -55,7 +55,9 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
     const alm = (await api('POST', '/almacenes', { nombre: 'TMPK Tienda', es_punto_venta: true })).data.id;
     const caja = (await api('POST', '/caja/cajas', { almacen_id: alm, nombre: 'TMPK Caja' })).data.id;
     await api('POST', '/inventario/movimientos', { variante_id: v, almacen_id: alm, tipo: 'entrada', cantidad: 500, motivo: 'TMPK inicial' });
-    const [met] = await db.query('SELECT id,nombre FROM metodos_pago');
+    // Solo los que se ofrecen: la tarjeta se desactivó el 2026-10-13 (quedan efectivo y
+    // transferencia) y "Saldo a favor" es interno. Lo que no es efectivo: la transferencia.
+    const [met] = await db.query('SELECT id,nombre FROM metodos_pago WHERE activo = 1 AND interno = 0');
     const efe = met.find((x) => /efectivo/i.test(x.nombre));
     const tarj = met.find((x) => !/efectivo/i.test(x.nombre));
 
@@ -85,7 +87,7 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
     ck('entra como ingreso, no como venta nueva', mc2[0].tipo === 'ingreso', mc2[0].tipo);
     ck('el pago vuelve a completado', (await estadoPago(ped)) === 'completado');
 
-    console.log('\n=== 4. La TARJETA no toca el cajón ===');
+    console.log('\n=== 4. La TRANSFERENCIA no toca el cajón ===');
     r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s.id, items: [{ variante_id: v, cantidad: 5 }], pagos: [{ metodo_pago_id: tarj.id, monto: 500 }] });
     const pedT = r.data.id;
     const antes = await neto(s.id);
@@ -129,7 +131,7 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
     ck('AL CANCELAR SALEN $400, NO $500', (await neto(s2.id)) === netoAntes7, '$' + ((await neto(s2.id)) - netoAntes7) + ' neto');
 
     r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s2.id, items: [{ variante_id: v, cantidad: 4 }], pagos: [{ metodo_pago_id: tarj.id, monto: 500 }] });
-    ck('con tarjeta por encima del total: 422 PAGO_EXCEDE_TOTAL', r.status === 422 && r.error?.code === 'PAGO_EXCEDE_TOTAL', r.status + ' ' + r.error?.code);
+    ck('con transferencia por encima del total: 422 PAGO_EXCEDE_TOTAL', r.status === 422 && r.error?.code === 'PAGO_EXCEDE_TOTAL', r.status + ' ' + r.error?.code);
 
     console.log('\n=== 8. Retiros e ingresos de efectivo ===');
     const esperado8 = Number((await api('GET', '/caja/sesiones/' + s2.id)).data.esperado_actual);

@@ -19,6 +19,7 @@ describe('UsuarioFormModal (varios puestos)', () => {
   const toño = {
     id: 7, rol_id: 3, rol: 'cajero', nombre: 'Toño', correo: 'tono@x.mx', telefono: null, activo: true,
     otros_roles: [{ id: 4, nombre: 'almacenista' }], creado_en: '', actualizado_en: '',
+    todas_las_tiendas: 1,
   } as unknown as Usuario;
 
   let enviado: Record<string, unknown> | null = null;
@@ -42,6 +43,8 @@ describe('UsuarioFormModal (varios puestos)', () => {
     }).compileComponents();
     const f = TestBed.createComponent(UsuarioFormModal);
     f.componentRef.setInput('roles', roles);
+    // Una sola tienda: un alta nueva la trae marcada (2026-10-15).
+    f.componentRef.setInput('almacenes', [{ id: 1, nombre: 'Matriz' }]);
     f.componentRef.setInput('usuario', usuario);
     f.detectChanges();
     return f;
@@ -55,7 +58,7 @@ describe('UsuarioFormModal (varios puestos)', () => {
     const c = f.componentInstance;
     expect(c.otrosDisponibles().map((r) => r.nombre)).toEqual(['gerente', 'almacenista']);
     expect(c.tieneOtro(4)).toBe(true);
-    const marcadas = [...(f.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>('.casillas input')]
+    const marcadas = [...(f.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>('.casillas.puestos input')]
       .filter((i) => i.checked);
     expect(marcadas.length).toBe(1);
   });
@@ -95,10 +98,12 @@ describe('UsuarioFormModal (cargador)', () => {
   const beto = {
     id: 9, rol_id: 6, rol: 'cargador', entra_al_sistema: 0, nombre: 'Beto', correo: null, telefono: null,
     activo: true, otros_roles: [], creado_en: '', actualizado_en: '',
+    todas_las_tiendas: 0, tiendas: [{ id: 1, nombre: 'Matriz' }],
   } as unknown as Usuario;
   const toño = {
     id: 7, rol_id: 3, rol: 'cajero', entra_al_sistema: 1, nombre: 'Toño', correo: 'tono@x.mx', telefono: null,
     activo: true, otros_roles: [{ id: 4, nombre: 'almacenista' }], creado_en: '', actualizado_en: '',
+    todas_las_tiendas: 1,
   } as unknown as Usuario;
 
   let enviado: Record<string, unknown> | null = null;
@@ -122,6 +127,8 @@ describe('UsuarioFormModal (cargador)', () => {
     }).compileComponents();
     const f = TestBed.createComponent(UsuarioFormModal);
     f.componentRef.setInput('roles', roles);
+    // Una sola tienda: un alta nueva la trae marcada (2026-10-15).
+    f.componentRef.setInput('almacenes', [{ id: 1, nombre: 'Matriz' }]);
     f.componentRef.setInput('usuario', usuario);
     f.detectChanges();
     return f;
@@ -142,10 +149,11 @@ describe('UsuarioFormModal (cargador)', () => {
     expect(c.sinAcceso()).toBe(true);
     expect(campo(f, 'correo')).toBeNull();
     expect(campo(f, 'contrasena')).toBeNull();
-    expect(f.nativeElement.querySelector('.casillas')).toBeNull();
+    expect(f.nativeElement.querySelector('.casillas.puestos')).toBeNull();
     expect(f.nativeElement.textContent).toContain('no entra al sistema');
     c.guardar();
-    expect(enviado).toEqual({ rol_id: 6, otros_roles: [], nombre: 'Beto', telefono: undefined });
+    // Su tienda va también (la única que hay, marcada sola al abrir).
+    expect(enviado).toEqual({ rol_id: 6, otros_roles: [], nombre: 'Beto', telefono: undefined, todas_las_tiendas: false, tiendas: [1] });
   });
 
   it('el cargador no se ofrece como otro puesto', async () => {

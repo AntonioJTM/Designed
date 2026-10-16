@@ -607,6 +607,14 @@ export class InventarioService {
     return this.http.get<ApiResponse<Almacen[]>>(`${this.base}/almacenes`).pipe(map(data));
   }
 
+  /**
+   * Solo los almacenes de SUS tiendas (2026-10-15): para ver existencias, el
+   * kardex, cargar mercancía o abrir una caja. A quien ve todas, todos.
+   */
+  misAlmacenes(): Observable<Almacen[]> {
+    return this.almacenes().pipe(map((l) => l.filter((a) => a.mio !== false)));
+  }
+
   // ---- Remesas: carga masiva de bultos desde la lista de empaque ----
 
   /** Lee el .xlsx en el servidor y devuelve la vista previa sin guardar nada. */

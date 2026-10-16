@@ -24,7 +24,7 @@ describe('AnticipoModal', () => {
             recibirAnticipo: (id: number, body: AnticipoInput) => {
               enviado = { id, body };
               const total = (body.efectivo ?? 0) + (body.transferencia ?? 0);
-              return of({ total, saldo_favor: 200 + total, efectivo: body.efectivo ?? 0, transferencia: body.transferencia ?? 0 });
+              return of({ movimiento_id: 31, total, saldo_favor: 200 + total, efectivo: body.efectivo ?? 0, transferencia: body.transferencia ?? 0 });
             },
           },
         },
@@ -55,7 +55,7 @@ describe('AnticipoModal', () => {
 
   it('desde la caja: $600 en efectivo y $400 por transferencia, el efectivo a ese turno', async () => {
     const c = await montar(9);
-    let hecho: { total: number; saldo_favor: number } | null = null;
+    let hecho: { total: number; saldo_favor: number; movimiento_id: number } | null = null;
     c.registrado.subscribe((r) => (hecho = r));
     c.efectivo = 600;
     c.transferencia = 400;
@@ -63,7 +63,8 @@ describe('AnticipoModal', () => {
     expect(c.total()).toBe(1000);
     c.registrar();
     expect(enviado).toEqual({ id: 20, body: { efectivo: 600, transferencia: 400, sesion_caja_id: 9, referencia: 'folio 123' } });
-    expect(hecho!).toEqual({ total: 1000, saldo_favor: 1200 });
+    // Con `movimiento_id` se imprime su ticket.
+    expect(hecho!).toEqual({ total: 1000, saldo_favor: 1200, movimiento_id: 31 });
   });
 
   it('sin poner cuánto no registra nada', async () => {

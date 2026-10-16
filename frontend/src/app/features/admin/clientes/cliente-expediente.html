@@ -6,7 +6,15 @@
   </a>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+  @if (mensaje()) {
+    <!-- Un abono o un anticipo recién registrado trae el botón de su ticket. -->
+    <div class="ok-msg con-accion" role="status">
+      <span>{{ mensaje() }}</span>
+      @if (ticketAviso.actual(); as t) {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+      }
+    </div>
+  }
   @if (cargando() && !exp()) { <p class="muted">Cargando…</p> }
 
   @if (exp(); as e) {
@@ -301,6 +309,7 @@
                          [deuda]="e.deuda_total ?? { credito: 0, notas: 0, total: 0 }"
                          [movimientos]="e.saldo_favor_movimientos ?? []" [vePedidos]="vePedidos()"
                          [puedeRecibir]="!!e.activo" (recibir)="recibiendo.set(true)"
+                         [puedeAjustar]="puedeCorregir()" (ajustar)="ajustandoFavor.set(true)"
                          (aplicado)="saldoAplicado($event)" />
 
         <section class="card">
@@ -321,7 +330,7 @@
             <div class="tabla-scroll">
               <table class="grid" style="min-width: 720px">
                 <thead>
-                  <tr><th>Fecha</th><th>Qué pasó</th><th class="num">Monto</th><th>Con qué</th><th>Quién</th></tr>
+                  <tr><th>Fecha</th><th>Qué pasó</th><th class="num">Monto</th><th>Con qué</th><th>Quién</th><th><span class="oculto">Ticket</span></th></tr>
                 </thead>
                 <tbody>
                   @for (m of e.credito_movimientos; track m.id) {
@@ -329,6 +338,7 @@
                       <td class="muted" style="white-space: nowrap">{{ fechaCorta(m.creado_en) }}</td>
                       <td>
                         {{ etiquetaMovimiento(m.tipo) }}
+                        @if (m.otra_tienda) { <span class="muted"> · en otra tienda</span> }
                         @if (m.numero_pedido) {
                           <br />
                           @if (vePedidos() && m.pedido_id) {
@@ -344,6 +354,13 @@
                         @if (m.referencia) { <br /><span class="mono">{{ m.referencia }}</span> }
                       </td>
                       <td class="muted">{{ m.registro || '—' }}</td>
+                      <!-- Cada abono se puede reimprimir: sale igual que el día que se registró. -->
+                      <td class="acciones">
+                        @if (m.tipo === 'abono' && !m.otra_tienda) {
+                          <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirAbono(m.id)"
+                                  [attr.aria-label]="'Ticket del abono del ' + fechaCorta(m.creado_en)">Ticket</button>
+                        }
+                      </td>
                     </tr>
                   }
                 </tbody>
@@ -519,6 +536,10 @@
   @if (abonando()) {
     <app-abono-modal [clienteId]="e.id" [nombre]="e.nombre_comercial || e.nombre" [saldo]="saldo()"
                      (cerrado)="abonando.set(false)" (registrado)="abonoRegistrado($event)" />
+  }
+  @if (ajustandoFavor() && puedeCorregir()) {
+    <app-ajuste-favor-modal [clienteId]="e.id" [nombre]="e.nombre_comercial || e.nombre" [saldo]="saldoFavor()"
+                            (cerrado)="ajustandoFavor.set(false)" (registrado)="ajusteFavorRegistrado($event)" />
   }
   @if (ajustando() && puedeCorregir()) {
     <app-ajuste-modal [clienteId]="e.id" [nombre]="e.nombre_comercial || e.nombre" [saldo]="saldo()"

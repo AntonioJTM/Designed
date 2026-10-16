@@ -15,6 +15,16 @@ export interface ApiError {
   detalles?: unknown;
 }
 
+/**
+ * De qué tiendas es una persona (2026-10-15): `todas` (el administrador siempre)
+ * o las de la lista. Quien no ve todas solo ve ventas, caja e inventario de las
+ * suyas, y no ve Reportes, Cómo va el negocio, Nómina ni las miradas de Clientes.
+ */
+export interface Alcance {
+  todas: boolean;
+  almacenes: { id: number; nombre: string }[];
+}
+
 /** Usuario staff (tabla `usuarios`). Nunca incluye contrasena_hash. */
 export interface Usuario {
   id: number;
@@ -37,6 +47,11 @@ export interface Usuario {
   otros_roles?: Rol[];
   /** Lo que pueden ver y hacer sus puestos, sumados (Administración → Permisos). */
   permisos?: string[];
+  /** Lo que guarda Personal: ve todas las tiendas, o las de `tiendas`. */
+  todas_las_tiendas?: boolean;
+  tiendas?: { id: number; nombre: string }[];
+  /** Al entrar: las tiendas que de verdad ve (el administrador, todas). */
+  alcance?: Alcance;
 }
 
 /** Rol de staff (tabla `roles`). */
@@ -83,4 +98,6 @@ export interface SesionActual {
   puestos?: string[];
   /** Claves de Permisos del puesto (solo staff). El administrador las trae todas. */
   permisos?: string[];
+  /** De qué tiendas es (solo staff). Sin dato: todas, como antes. */
+  alcance?: Alcance;
 }

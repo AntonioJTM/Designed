@@ -7,6 +7,22 @@ const pdf = require('../../utils/pdf');
 const permisos = require('../permisos/service');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
+const { pool } = require('../../config/db');
+
+/**
+ * CADA QUIEN, SUS TIENDAS (2026-10-15): se carga mercancía solo a un almacén
+ * suyo, y una carga de otra tienda no se ve (404, como si no existiera).
+ */
+async function _deSusTiendas(req, { almacenId, cargas } = {}) {
+  const almacenes = await permisos.almacenesDe(req.auth);
+  if (almacenes === null) return almacenes;
+  if (almacenId != null) permisos.exigirAlmacen(almacenes, almacenId, 'Ese almacén');
+  if (cargas?.length) {
+    const [rows] = await pool.query('SELECT almacen_id FROM remesas WHERE id IN (:ids)', { ids: cargas });
+    for (const r of rows) permisos.exigirAlmacen(almacenes, r.almacen_id, 'Esa carga');
+  }
+  return almacenes;
+}
 
 /**
  * Lee el archivo y devuelve la vista previa sin tocar la base.
@@ -59,6 +75,7 @@ async function _exigirCostoSiLoMandan(req, costos) {
 
 async function confirmarLista(req, res, next) {
   try {
+    await _deSusTiendas(req, { almacenId: req.body.almacen_id });
     await _exigirCostoSiLoMandan(req, (req.body.hilos ?? []).map((h) => h.costo_kg));
   } catch (err) {
     return next(err);
@@ -102,6 +119,7 @@ async function confirmarLista(req, res, next) {
 
 async function confirmar(req, res, next) {
   try {
+    await _deSusTiendas(req, { almacenId: req.body.almacen_id });
     await _exigirCostoSiLoMandan(req, [req.body.costo_kg]);
     res.status(201).json({ data: await service.confirmar(req.body, req.auth.sub), error: null });
   } catch (err) {
@@ -114,6 +132,7 @@ async function editarDatos(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) throw new AppError(404, 'NO_ENCONTRADO', 'Esa carga no existe');
+    await _deSusTiendas(req, { cargas: [id] });
     if (req.body.costo_kg !== undefined) {
       if (!(await permisos.veCostos(req))) {
         throw new AppError(403, 'SIN_PERMISO', 'El costo por kilo solo lo capturan administración y contabilidad.');
@@ -144,6 +163,7 @@ async function listar(req, res, next) {
       page,
       limit,
       offset,
+      almacenes: await permisos.almacenesDe(req.auth),
     });
     await _sinCostoSiNoVe(req, data.items);
     res.json({ data, error: null });
@@ -165,6 +185,7 @@ async function pdfCarga(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) throw new AppError(404, 'NO_ENCONTRADO', 'Esa carga no existe');
+    await _deSusTiendas(req, { cargas: [id] });
     const { buffer, folio } = await reportes.pdfCarga(id, {
       usuarioId: req.auth.sub,
       veCostos: await permisos.veCostos(req),
@@ -183,6 +204,7 @@ async function pdfCargas(req, res, next) {
     if (!ids.length || ids.length > 200) {
       throw new AppError(422, 'IDS_INVALIDOS', 'Indica de qué cargas es el reporte (?ids=1,2,3)');
     }
+    await _deSusTiendas(req, { cargas: ids });
     const { buffer, nombre } = await reportes.pdfCargas(ids, {
       usuarioId: req.auth.sub,
       veCostos: await permisos.veCostos(req),
@@ -199,6 +221,7 @@ async function pdfProducto(req, res, next) {
     const id = Number(req.params.productoId);
     if (!Number.isInteger(id) || id <= 0) throw new AppError(404, 'NO_ENCONTRADO', 'Ese producto no existe');
     const { buffer, hilo } = await reportes.pdfProducto(id, {
+      almacenes: await permisos.almacenesDe(req.auth),
       usuarioId: req.auth.sub,
       veCostos: await permisos.veCostos(req),
       desde: fecha(req.query.desde),

@@ -4,6 +4,7 @@ import { of } from 'rxjs';
 import { Usuarios } from './usuarios';
 import { UsuariosService } from '../../../core/services/usuarios.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { InventarioService } from '../../../core/services/inventario.service';
 import { Rol, Usuario } from '../../../core/models/auth.models';
 
 /**
@@ -40,13 +41,14 @@ describe('Usuarios (Personal)', () => {
   const apiFalso = { listar: () => of(usuarios), roles: () => of(roles) };
 
   async function montar(esAdmin: boolean) {
-    const authFalso = { esAdmin: () => esAdmin, puede: () => esAdmin };
+    const authFalso = { esAdmin: () => esAdmin, puede: () => esAdmin, veTodasLasTiendas: () => true, tiendas: () => [] };
     await TestBed.configureTestingModule({
       imports: [Usuarios],
       providers: [
         provideRouter([]),
         { provide: UsuariosService, useValue: apiFalso },
         { provide: AuthService, useValue: authFalso },
+        { provide: InventarioService, useValue: { almacenes: () => of([]) } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Usuarios);

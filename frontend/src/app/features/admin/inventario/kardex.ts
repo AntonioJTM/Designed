@@ -62,7 +62,7 @@ export class Kardex {
   ];
 
   constructor() {
-    this.inv.almacenes().subscribe({ next: (a) => this.almacenes.set(a), error: () => {} });
+    this.inv.misAlmacenes().subscribe({ next: (a) => this.almacenes.set(a), error: () => {} });
     this.cargar();
   }
 
