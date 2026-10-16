@@ -65,7 +65,8 @@ export const ADMIN_ROUTES: Routes = [
         path: 'clientes/' + vista,
         title: `${nombre} · ${nombreDe('clientes')}`,
         canActivate: [permisoGuard],
-        data: { permiso: 'ver:clientes', vista },
+        // Las miradas que suman todas las tiendas, solo para quien las ve todas (2026-10-15).
+        data: { permiso: 'ver:clientes', vista, todasLasTiendas: !['todos', 'lugares'].includes(vista) },
         loadComponent: () => import('./clientes/clientes').then((m) => m.ClientesPantalla),
       })),
       { path: 'clientes/:id', ...p('ver:clientes'), title: 'Expediente del cliente', loadComponent: () => import('./clientes/cliente-expediente').then((m) => m.ClienteExpediente) },

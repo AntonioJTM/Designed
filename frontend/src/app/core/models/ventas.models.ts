@@ -288,6 +288,8 @@ export interface Apartados {
 /** Lo que devuelve un abono a un apartado. */
 export interface ResultadoAbono {
   pedido_id: number;
+  /** El pago que se acaba de registrar: con él se pide su ticket (2026-10-15). */
+  pago_id?: number;
   numero_pedido: string;
   total: number;
   abonado: number;
@@ -346,6 +348,11 @@ export interface Pedido {
   devoluciones?: DevolucionHecha[];
   /** Cuánto suman esas devoluciones. */
   devuelto_total?: number;
+  /**
+   * Si se pagó con su SALDO A FAVOR (2026-10-15): cuánto se usó, cuánto le quedó
+   * a favor justo después y cuánto tiene hoy. null si no se usó.
+   */
+  saldo_favor_usado?: { usado: number; quedo: number; hoy: number } | null;
   actualizado_en?: string;
   subtotal: string;
   descuento: string;
@@ -532,4 +539,6 @@ export interface DevolucionHecha {
   nombre_comercial?: string | null;
   usuario?: string | null;
   lineas: { detalle_id: number; hilo: string; como: string; kg: number; piezas?: number | null; importe: number; codigos: string[] }[];
+  /** El saldo a favor que tiene HOY quien recibió la devolución (para su ticket). */
+  saldo_favor_hoy?: number | null;
 }

@@ -2,6 +2,8 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
+import { TicketService } from '../../../core/services/ticket.service';
+import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { NotaPendiente, NotaPendienteHilo, NotasPendientes, ResultadoAbono } from '../../../core/models/ventas.models';
@@ -33,6 +35,7 @@ import { PagoNotaModal } from './pago-nota-modal';
 })
 export class NotasPendientesPantalla {
   private readonly ventas = inject(VentasService);
+  private readonly tickets = inject(TicketService);
   private readonly auth = inject(AuthService);
   private readonly confirmacion = inject(ConfirmacionService);
 
@@ -40,6 +43,8 @@ export class NotasPendientesPantalla {
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+  /** El botón de ticket del aviso: el pago recién registrado (2026-10-15). */
+  readonly ticketAviso = new TicketDelAviso(this.mensaje);
   /** La nota a la que se le está registrando un pago (abre la ventana). */
   readonly pagando = signal<NotaPendiente | null>(null);
   /** La que se está pasando a crédito (apaga su botón mientras). */
@@ -101,11 +106,15 @@ export class NotasPendientesPantalla {
   alPagar(r: ResultadoAbono): void {
     this.pagando.set(null);
     const dinero = (n: number) => `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    this.mensaje.set(
-      r.liquidado
-        ? `${r.numero_pedido} quedó pagada.`
-        : `Pago registrado en ${r.numero_pedido}. Le faltan ${dinero(r.pendiente)}.`
-    );
+    const texto = r.liquidado
+      ? `${r.numero_pedido} quedó pagada.`
+      : `Pago registrado en ${r.numero_pedido}. Le faltan ${dinero(r.pendiente)}.`;
+    this.mensaje.set(texto);
+    if (r.pago_id) {
+      const pagoId = r.pago_id;
+      this.ticketAviso.poner(texto, 'Imprimir ticket del abono', () =>
+        this.tickets.imprimirPagoNota(r.pedido_id, pagoId).subscribe({ error: (e) => this.error.set(this.msg(e)) }));
+    }
     this.error.set(null);
     this.cargar();
   }

@@ -44,7 +44,7 @@ describe('CajaPantalla', () => {
       providers: [
         provideRouter([]),
         { provide: VentasService, useValue: ventasFalso },
-        { provide: InventarioService, useValue: { almacenes: () => of([]) } },
+        { provide: InventarioService, useValue: { almacenes: () => of([]), misAlmacenes: () => of([]) } },
         { provide: AuthService, useValue: { sesion: () => ({}), puede: (p: string) => permisos.includes(p) } },
       ],
     }).compileComponents();

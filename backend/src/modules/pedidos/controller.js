@@ -1,13 +1,54 @@
 'use strict';
 
 const service = require('./service');
+const tickets = require('./tickets');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisos = require('../permisos/service');
+const { pool } = require('../../config/db');
+
+/**
+ * CADA QUIEN, SUS TIENDAS (2026-10-15): una venta de otra tienda no se ve ni se
+ * toca (404, como si no existiera). Corre para TODA ruta con `:id` del personal
+ * (`router.param` en routes.js): detalle, estado, devolución, abonos, entrega,
+ * comprobante, ticket…
+ */
+async function deSusTiendas(req, res, next, id) {
+  try {
+    // Corre ANTES que las guardas de la ruta: el token se lee aquí mismo.
+    const auth = req.auth ?? permisos.authOpcional(req);
+    if (auth?.tipo !== 'usuario' || !(Number(id) > 0)) return next();
+    const almacenes = await permisos.almacenesDe(auth);
+    if (almacenes === null) return next();
+    const [[p]] = await pool.query('SELECT almacen_id FROM pedidos WHERE id = :id', { id: Number(id) });
+    if (p) permisos.exigirAlmacen(almacenes, p.almacen_id, 'Esa venta');
+    return next();
+  } catch (err) { return next(err); }
+}
+
+/** La caja con que se cobra tiene que ser de SUS tiendas. */
+async function _cajaDeSusTiendas(auth, sesionId) {
+  return permisos.exigirTurno(auth, sesionId);
+}
+
+/** La caja y el almacén de una venta del personal tienen que ser de SUS tiendas. */
+async function _ventaDeSusTiendas(req) {
+  if (req.auth?.tipo !== 'usuario') return;
+  await _cajaDeSusTiendas(req.auth, req.body.sesion_caja_id);
+  if (req.body.almacen_id != null) {
+    permisos.exigirAlmacen(await permisos.almacenesDe(req.auth), req.body.almacen_id, 'Ese almacén');
+  } else if (req.body.canal === 'tienda_linea' && !req.body.sesion_caja_id) {
+    // Sin almacén, la venta en línea descuenta del marcado para la tienda en
+    // línea: tiene que ser de SUS tiendas (2026-10-16).
+    const id = await require('../almacenes/model').idTiendaLinea();
+    if (id != null) permisos.exigirAlmacen(await permisos.almacenesDe(req.auth), id, 'Ese almacén');
+  }
+}
 
 async function cotizar(req, res, next) {
   try {
     if (req.auth?.tipo === 'cliente') req.body.cliente_id = req.auth.sub;
+    await _ventaDeSusTiendas(req);
     const data = await service.cotizar(req.body, { esCliente: req.auth?.tipo === 'cliente' });
     res.json({ data, error: null });
   } catch (err) { next(err); }
@@ -31,6 +72,7 @@ async function crear(req, res, next) {
     }
     // usuario_id solo si el que crea es staff (POS/admin); en online el cliente no lo lleva.
     const usuarioId = req.auth?.tipo === 'usuario' ? req.auth.sub : null;
+    await _ventaDeSusTiendas(req);
     // El cliente no fija el costo de envío ni se declara pagado; lo resuelve
     // el backend. Ver `_cotizar` en el modelo.
     const esCliente = req.auth?.tipo === 'cliente';
@@ -61,6 +103,7 @@ async function listar(req, res, next) {
       desde: fecha(req.query.desde),
       hasta: fecha(req.query.hasta),
       page, limit, offset,
+      almacenes: await permisos.almacenesDe(req.auth),
     });
     res.json({ data, error: null });
   } catch (err) { next(err); }
@@ -140,14 +183,23 @@ async function eliminarComprobante(req, res, next) {
 
 async function apartados(req, res, next) {
   try {
-    res.json({ data: await service.apartados(req.query), error: null });
+    res.json({ data: await service.apartados(req.query, await permisos.almacenesDe(req.auth)), error: null });
   } catch (err) { next(err); }
 }
 
 async function abonarApartado(req, res, next) {
   try {
+    await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
     const data = await service.abonarApartado(Number(req.params.id), req.body, req.auth?.sub);
     res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/** Los datos del ticket de un abono a una nota (al registrarlo o para reimprimirlo). */
+async function ticketPago(req, res, next) {
+  try {
+    const data = await tickets.pagoDeNota(Number(req.params.id), Number(req.params.pagoId));
+    res.json({ data, error: null });
   } catch (err) { next(err); }
 }
 
@@ -157,6 +209,7 @@ async function entregarApartado(req, res, next) {
     if (Number(req.body?.a_credito ?? 0) > 0 && !(await permisos.puede(req.auth, 'hacer:fiar'))) {
       throw new AppError(403, 'SIN_PERMISO', 'Tu puesto no tiene permiso para «Fiar». Pídeselo al administrador.');
     }
+    await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
     const data = await service.entregarApartado(Number(req.params.id), req.auth?.sub, req.body ?? {});
     res.json({ data, error: null });
   } catch (err) { next(err); }
@@ -171,13 +224,13 @@ async function modificarEncargo(req, res, next) {
 
 async function encargos(req, res, next) {
   try {
-    res.json({ data: await service.encargos(req.query), error: null });
+    res.json({ data: await service.encargos(req.query, await permisos.almacenesDe(req.auth)), error: null });
   } catch (err) { next(err); }
 }
 
 async function notasPendientes(req, res, next) {
   try {
-    res.json({ data: await service.notasPendientes(req.query), error: null });
+    res.json({ data: await service.notasPendientes(req.query, await permisos.almacenesDe(req.auth)), error: null });
   } catch (err) { next(err); }
 }
 
@@ -202,14 +255,15 @@ async function devolver(req, res, next) {
 
 async function resumen(req, res, next) {
   try {
-    res.json({ data: await service.resumen(), error: null });
+    res.json({ data: await service.resumen(await permisos.almacenesDe(req.auth)), error: null });
   } catch (err) { next(err); }
 }
 
 module.exports = {
+  deSusTiendas,
   resumen,
   crear, obtener, listar, misPedidos, cambiarEstado, cotizar,
   subirComprobante, verComprobante, eliminarComprobante,
-  apartados, abonarApartado, entregarApartado, modificarEncargo, encargos,
+  apartados, abonarApartado, entregarApartado, modificarEncargo, encargos, ticketPago,
   notasPendientes, pasarACredito, previaDevolucion, devolver,
 };

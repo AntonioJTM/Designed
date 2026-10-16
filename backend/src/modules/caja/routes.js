@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -47,7 +47,7 @@ router.use(...soloStaff);
 
 // Cualquier cajero necesita ver las cajas para abrir su turno, pero darlas de
 // alta o modificarlas es configuración: lo da Permisos («Almacenes y Listas de precio»).
-const soloAdmin = requirePermiso('ver:almacenes');
+const soloAdmin = [requirePermiso('ver:almacenes'), requireTodasLasTiendas];
 
 router.get('/cajas', controller.listarCajas);
 router.post('/cajas', soloAdmin, validate(cajaSchema), controller.crearCaja);

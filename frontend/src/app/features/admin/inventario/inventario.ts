@@ -155,7 +155,7 @@ export class Inventario {
   private readonly COLOR_OTROS = 'var(--viz-otros)';
 
   constructor() {
-    this.inv.almacenes().subscribe({
+    this.inv.misAlmacenes().subscribe({
       next: (a) => this.almacenes.set(a.filter((x) => x.activo)),
       error: (e) => this.error.set(this.msg(e)),
     });

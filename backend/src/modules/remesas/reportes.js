@@ -258,7 +258,7 @@ async function pdfCargas(ids, { usuarioId, veCostos }) {
 
 // ---------------------------------------------------------- todo un producto
 
-async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta }) {
+async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, almacenes = null }) {
   const [[p]] = await pool.query(
     `SELECT prod.id, prod.nombre AS producto, prod.grosor_calibre AS calibre,
             cat.nombre AS material, l.nombre AS linea
@@ -272,6 +272,11 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta }) {
 
   const where = ['pv.producto_id = :id'];
   const params = { id: productoId };
+  // Solo las cargas de SUS tiendas (2026-10-15).
+  if (Array.isArray(almacenes)) {
+    where.push(almacenes.length ? 'r.almacen_id IN (:almacenesAlcance)' : '1 = 0');
+    params.almacenesAlcance = almacenes;
+  }
   if (desde) { where.push('r.creado_en >= :desde'); params.desde = desde; }
   // `hasta` incluye el día completo, como lo teclea la persona.
   if (hasta) { where.push('r.creado_en < DATE_ADD(:hasta, INTERVAL 1 DAY)'); params.hasta = hasta; }

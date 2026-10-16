@@ -407,10 +407,17 @@ async function deVenta(ejecutor, pedidoId) {
       ORDER BY dd.id`,
     { ids: devs.map((d) => d.id) }
   );
+  // Lo que cada cliente tiene a favor HOY: lo dice el ticket de la devolución
+  // (2026-10-15: "que salga como devolución y cuánto tiene a favor").
+  const saldoHoy = new Map();
+  for (const clienteId of new Set(devs.map((d) => Number(d.cliente_id)))) {
+    saldoHoy.set(clienteId, await saldoFavor.saldoFavor(clienteId, ejecutor));
+  }
   return devs.map((d) => ({
     ...d,
     total: round2(d.total),
     aplicado_a_deuda: round2(d.aplicado_a_deuda),
+    saldo_favor_hoy: saldoHoy.get(Number(d.cliente_id)) ?? null,
     lineas: lineas
       .filter((l) => l.devolucion_id === d.id)
       .map((l) => ({

@@ -7,6 +7,10 @@ const { validate } = require('../../middlewares/validate');
 const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
 
 const router = Router();
+// Un envío de otras tiendas no se ve ni se toca (2026-10-15): toda ruta con `:id`.
+router.param('id', controller.traspasoDeSusTiendas);
+// El costo del kardex y de las existencias solo a quien ve costos (2026-10-16).
+router.use(require('../permisos/service').sinCostosEnRespuesta);
 const soloStaff = [authRequired, requireTipo('usuario')];
 
 const movimientoSchema = z

@@ -176,6 +176,8 @@ export class DesarmeModal implements OnInit {
     }
     if (b.almacen_id != null && b.almacen_id !== Number(this.tienda)) {
       const aqui = this.tiendas().find((t) => t.id === Number(this.tienda))?.nombre ?? 'esta tienda';
+      // De una tienda que no es suya, el servidor no dice cuál (2026-10-15).
+      if (b.almacen === 'otra tienda') return `Este paquete no está registrado en «${aqui}»: toma uno que esté aquí.`;
       return (
         `Este paquete no está en «${aqui}»: el sistema lo tiene en «${b.almacen}». ` +
         (b.en_tienda ? 'Elige esa tienda para bajarlo ahí.' : 'Primero mándalo a la tienda con Surtir sucursal.')

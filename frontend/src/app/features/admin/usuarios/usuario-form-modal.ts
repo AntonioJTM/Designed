@@ -40,6 +40,10 @@ export class UsuarioFormModal implements OnInit {
   readonly usuario = input<Usuario | null>(null);
   /** Los puestos que esta sesión puede asignar (sin "administrador" si no lo es). */
   readonly roles = input<Rol[]>([]);
+  /** Las tiendas que esta sesión puede dar (todas, o las suyas). */
+  readonly almacenes = input<{ id: number; nombre: string }[]>([]);
+  /** Puede dar «Todas las tiendas» (solo quien las ve todas). */
+  readonly puedeDarTodas = input(true);
 
   readonly cerrado = output<void>();
   readonly guardado = output<Usuario>();
@@ -51,6 +55,14 @@ export class UsuarioFormModal implements OnInit {
 
   /** Los puestos que tiene ADEMÁS del principal (ids). */
   readonly otros = signal<number[]>([]);
+
+  /**
+   * DE QUÉ TIENDAS ES (2026-10-15): «Todas las tiendas» o las que se marquen. Quien
+   * no ve todas solo ve ventas, caja e inventario de las suyas. El administrador
+   * las ve todas siempre.
+   */
+  readonly todas = signal(false);
+  readonly tiendasSel = signal<number[]>([]);
 
   readonly form = this.fb.nonNullable.group({
     rol_id: [null as number | null, Validators.required],
@@ -74,9 +86,14 @@ export class UsuarioFormModal implements OnInit {
     if (!u) {
       this.form.patchValue({ rol_id: this.rolPorOmision() });
       this.ajustarAcceso();
+      // Con una sola tienda que dar, ya va marcada.
+      const solo = this.almacenes();
+      if (solo.length === 1) this.tiendasSel.set([solo[0].id]);
       return;
     }
     this.otros.set((u.otros_roles ?? []).map((r) => r.id));
+    this.todas.set(!!u.todas_las_tiendas && this.puedeDarTodas());
+    this.tiendasSel.set((u.tiendas ?? []).map((t) => t.id));
     this.form.reset({
       rol_id: u.rol_id,
       nombre: u.nombre,
@@ -152,6 +169,10 @@ export class UsuarioFormModal implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
+    if (!this.esAdministrador() && !this.todas() && !this.tiendasSel().length) {
+      this.error.set('Elige de qué tienda es, o marca «Todas las tiendas».');
+      return;
+    }
     this.guardando.set(true);
     this.error.set(null);
 
@@ -160,6 +181,8 @@ export class UsuarioFormModal implements OnInit {
     // El cargador no entra al sistema: va sin correo, sin contraseña y sin otros puestos.
     const sin = this.sinAcceso();
     const otros_roles = sin ? [] : this.otrosParaGuardar(v.rol_id);
+    const todas = this.esAdministrador() || this.todas();
+    const tiendas = { todas_las_tiendas: todas, tiendas: todas ? [] : this.tiendasSel() };
     const obs = u
       ? this.api.actualizar(u.id, {
           rol_id: v.rol_id!,
@@ -169,6 +192,7 @@ export class UsuarioFormModal implements OnInit {
           activo: v.activo,
           correo: this.pideCorreo() ? v.correo.trim() : undefined,
           contrasena: sin ? undefined : v.contrasena.trim() || undefined,
+          ...tiendas,
         })
       : this.api.crear({
           rol_id: v.rol_id!,
@@ -176,6 +200,7 @@ export class UsuarioFormModal implements OnInit {
           nombre: v.nombre.trim(),
           telefono: v.telefono.trim() || undefined,
           ...(sin ? {} : { correo: v.correo.trim(), contrasena: v.contrasena }),
+          ...tiendas,
         });
 
     obs.subscribe({
@@ -205,6 +230,19 @@ export class UsuarioFormModal implements OnInit {
     const principal = this.form.controls.rol_id.value;
     // El que no entra al sistema (el cargador) no se da "además": no daría nada.
     return this.roles().filter((r) => r.id !== principal && r.entra_al_sistema !== false);
+  }
+
+  /** El puesto principal elegido es el de administrador: ve todas las tiendas siempre. */
+  esAdministrador(): boolean {
+    return this.rolElegido()?.nombre === 'administrador';
+  }
+
+  tieneTienda(id: number): boolean {
+    return this.tiendasSel().includes(id);
+  }
+
+  alternarTienda(id: number, marcado: boolean): void {
+    this.tiendasSel.update((t) => (marcado ? [...new Set([...t, id])] : t.filter((x) => x !== id)));
   }
 
   tieneOtro(id: number): boolean {

@@ -4,7 +4,7 @@ const model = require('./model');
 const variantesModel = require('../variantes/model');
 const variantesService = require('../variantes/service');
 const { paginado } = require('../../utils/query');
-const { AppError } = require('../../middlewares/error');
+const { AppError, enOtraTienda } = require('../../middlewares/error');
 
 // Las cantidades son DECIMAL(12,3): un gramo de resolución.
 const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
@@ -30,12 +30,12 @@ async function listarStock(filtros) {
   return paginado(items, total, filtros.page, filtros.limit);
 }
 
-async function resumenPorAlmacen() {
-  return model.resumenPorAlmacen();
+async function resumenPorAlmacen(almacenes = null) {
+  return model.resumenPorAlmacen(almacenes);
 }
 
-async function alertas() {
-  return model.alertas();
+async function alertas(almacenes = null) {
+  return model.alertas(almacenes);
 }
 
 /**
@@ -142,7 +142,7 @@ async function registrarMovimiento(datos, usuarioId) {
  * hay que configurar nada: se responde el paquete, sus kilos reales, los conos y
  * en qué almacén está.
  */
-async function previaDesarmeBulto(codigo) {
+async function previaDesarmeBulto(codigo, almacenes = null) {
   const cod = String(codigo ?? '').trim();
   if (!cod) throw new AppError(422, 'CODIGO_REQUERIDO', 'Escanea o teclea el código del bulto');
 
@@ -152,8 +152,9 @@ async function previaDesarmeBulto(codigo) {
   }
   if (bulto.estado && bulto.estado !== 'disponible') {
     const donde = bulto.consumido_folio ? ` en ${bulto.consumido_folio}` : '';
-    throw new AppError(409, 'BULTO_NO_DISPONIBLE',
-      `El bulto ${bulto.codigo} ya está ${bulto.estado}${donde}.`);
+    throw enOtraTienda(new AppError(409, 'BULTO_NO_DISPONIBLE',
+      `El bulto ${bulto.codigo} ya está ${bulto.estado}${donde}.`),
+    [bulto.almacen_id], `El bulto ${bulto.codigo} no está disponible en esta tienda.`);
   }
 
   const paquete = await variantesModel.obtener(bulto.variante_id);
@@ -167,7 +168,7 @@ async function previaDesarmeBulto(codigo) {
   // dice el bulto. Aquí solo se informa.
   const cono = await model.conoDe(paquete.id);
   // Dónde hay existencias de ese paquete, para proponer el almacén de origen.
-  const existencias = await model.existenciasDe(paquete.id);
+  const existencias = await model.existenciasDe(paquete.id, almacenes);
   // Dónde está ESTE paquete: tiene que estar en la tienda donde se abre.
   const u = await model.ubicacionBulto(null, bulto.id);
 
@@ -179,7 +180,10 @@ async function previaDesarmeBulto(codigo) {
       conos: bulto.conos,
       remesa_folio: bulto.remesa_folio,
       almacen_id: u?.almacen_id ?? null,
-      almacen: u?.almacen ?? null,
+      // De otra tienda no se dice cuál (2026-10-15): solo que no está aquí.
+      almacen: u?.almacen_id != null && Array.isArray(almacenes) && !almacenes.includes(Number(u.almacen_id))
+        ? 'otra tienda'
+        : u?.almacen ?? null,
       en_tienda: u?.almacen_id != null ? !!Number(u.es_punto_venta) : null,
       en_camino_folio: u?.en_camino_folio ?? null,
     },
@@ -209,14 +213,14 @@ async function previaDesarmeBulto(codigo) {
  * cono SE CREA con lo que dice el bulto. Así bajar mercancía a mostrador es
  * escanear y confirmar, sin configurar nada antes.
  */
-async function desarmar(datos, usuarioId) {
+async function desarmar(datos, usuarioId, almacenes = null) {
   if (datos.cono_variante_id) return model.desarmar(datos, usuarioId);
 
   if (!datos.codigo_bulto) {
     throw new AppError(422, 'FALTA_DESTINO',
       'Escanea el bulto o indica qué cono se va a producir');
   }
-  const previa = await previaDesarmeBulto(datos.codigo_bulto);
+  const previa = await previaDesarmeBulto(datos.codigo_bulto, almacenes);
   const conos = datos.conos ?? previa.conos_a_generar;
   if (!conos) {
     throw new AppError(422, 'CONOS_REQUERIDOS',
@@ -305,11 +309,11 @@ async function equivalenciaPaquetes({ variante_id, almacen_id, kg }) {
  * enviar (sale del origen) y recibir (entra al destino, con acuse). Antes era uno
  * solo, inmediato.
  */
-async function solicitarTraspaso(datos, usuarioId) {
+async function solicitarTraspaso(datos, usuarioId, opciones = {}) {
   if (!datos.items?.length) {
     throw new AppError(422, 'SIN_LINEAS', 'Agrega al menos un producto a la solicitud');
   }
-  return model.solicitarTraspaso(datos, usuarioId);
+  return model.solicitarTraspaso(datos, usuarioId, opciones);
 }
 
 async function enviarTraspaso(id, usuarioId, datos) {

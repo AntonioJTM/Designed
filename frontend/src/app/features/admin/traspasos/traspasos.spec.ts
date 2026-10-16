@@ -95,10 +95,18 @@ describe('Traspasos', () => {
   /** La equivalencia que contesta el servidor; una prueba la cambia. */
   let eqActual: EquivalenciaPaquetes = equivalencia;
 
+  /** Los almacenes que contesta el servidor; una prueba los cambia. */
+  let almacenesActuales: Almacen[] = almacenes;
+  /** ¿Se preguntó cuánto hay en el origen? */
+  let pidioEquivalencia = false;
+
   const invFalso = {
-    almacenes: () => of(almacenes),
+    almacenes: () => of(almacenesActuales),
     traspasos: () => of({ items: [enTransito], total: 1, page: 1, limit: 50, paginas: 1 }),
-    equivalenciaPaquetes: () => of(eqActual),
+    equivalenciaPaquetes: () => {
+      pidioEquivalencia = true;
+      return of(eqActual);
+    },
     buscarVariantes: () => of([paquete, cono]),
     solicitarTraspaso: (body: TraspasoInput) => {
       solicitado = body;
@@ -118,7 +126,12 @@ describe('Traspasos', () => {
 
   /** Los permisos del puesto; null = todos (el administrador). */
   let permisos: string[] | null = null;
-  const authFalso = { puede: (p: string) => permisos === null || permisos.includes(p) };
+  const authFalso = {
+    puede: (p: string) => permisos === null || permisos.includes(p),
+    veTodasLasTiendas: () => todasLasTiendas,
+  };
+  /** ¿Ve todas las tiendas? Una prueba lo apaga (pedir a ciegas). */
+  let todasLasTiendas = true;
 
   /** El historial que contesta el servidor; una prueba lo cambia. */
   let historial: Traspaso[] = [enTransito];
@@ -147,6 +160,9 @@ describe('Traspasos', () => {
     eqActual = equivalencia;
     permisos = null;
     historial = [enTransito];
+    todasLasTiendas = true;
+    almacenesActuales = almacenes;
+    pidioEquivalencia = false;
   });
   afterEach(() => TestBed.resetTestingModule());
 
@@ -380,5 +396,57 @@ describe('Traspasos', () => {
     fixture = await montarFixture();
     expect(boton()).not.toContain('Enviar');
     expect(boton()).toContain('Cancelar');
+  });
+
+  /*
+   * CADA QUIEN, SUS TIENDAS (2026-10-15, "nada de la Matriz"): quien es de una
+   * sola tienda pide para la suya y no ve cuánto hay en la matriz; si no hay
+   * tantos, le mandan los que tengan. Surtir le toca a la matriz.
+   */
+  it('quien solo es de la MATRIZ surte: manda a cualquier tienda y no pide a ciegas', async () => {
+    todasLasTiendas = false;
+    almacenesActuales = [
+      { ...almacenes[0], mio: true },
+      { ...almacenes[1], mio: false },
+    ] as Almacen[];
+    const c = await montar();
+    expect(c.origen).toBe(1);
+    expect(c.aCiegas()).toBe(false);
+    expect(c.destinos().map((a) => a.id)).toEqual([2]);
+    expect(c.destino).toBe(2);
+  });
+
+  it('quien es de una sola tienda pide A CIEGAS y no surte lo de la matriz', async () => {
+    todasLasTiendas = false;
+    almacenesActuales = [
+      { ...almacenes[0], mio: false },
+      { ...almacenes[1], mio: true },
+    ] as Almacen[];
+    historial = [{ ...enTransito, id: 80, folio: 'TRA-80', estado: 'solicitado', almacen_origen_id: 1, almacen_destino_id: 2 }];
+    permisos = ['ver:surtir', 'hacer:enviar_traspaso'];
+    const fixture = await montarFixture();
+    const c = fixture.componentInstance;
+
+    expect(c.origen).toBe(1);
+    expect(c.aCiegas()).toBe(true);
+    // Solo pide para SU tienda.
+    expect(c.destinos().map((a) => a.id)).toEqual([2]);
+
+    c.agregar(paquete);
+    c.cambiarPaquetes(c.lineas()[0], 2);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    // No pregunta cuánto hay allá, ni lo dice, ni lo detiene.
+    expect(pidioEquivalencia).toBe(false);
+    expect(el.textContent).not.toContain('Hay libre');
+    expect(c.hayInsuficientes()).toBe(false);
+    // Los kilos van con el peso del catálogo.
+    expect(c.kgAprox(c.lineas()[0])).toBe(38.022);
+    expect(el.textContent).toContain('te mandan los que tengan');
+
+    // La solicitud que espera a la matriz no la surte ella.
+    const botones = [...el.querySelectorAll('.traspaso-acciones button')].map((b) => b.textContent!.trim());
+    expect(botones).not.toContain('Enviar');
+    expect(botones).toContain('Cancelar');
   });
 });

@@ -8,6 +8,7 @@ import {
   AbonoInput,
   AnticipoInput,
   AplicacionSaldoFavor,
+  AjusteSaldoFavor,
   Cliente,
   ClienteInput,
   ClienteParaVenta,
@@ -16,6 +17,16 @@ import {
   LugarEntrega,
   LugaresEntrega,
 } from '../models/clientes.models';
+import { TicketAbonoCuenta, TicketAnticipo } from '../models/tickets.models';
+
+/** Lo que devuelve un anticipo: `movimiento_id` es con lo que se pide su ticket. */
+export interface ResultadoAnticipo {
+  movimiento_id: number;
+  total: number;
+  saldo_favor: number;
+  efectivo: number;
+  transferencia: number;
+}
 
 function data<T>(r: ApiResponse<T>): T {
   if (r.error || r.data === null) throw r.error ?? { code: 'DESCONOCIDO', message: 'Respuesta vacía' };
@@ -123,6 +134,13 @@ export class ClientesService {
    * pago (de la más vieja) y luego su cuenta de crédito. Sin `monto`, todo lo
    * que alcance.
    */
+  /** Ajustar a mano su saldo a favor: positivo le agrega, negativo le quita (con motivo). */
+  ajustarSaldoFavor(id: number, monto: number, notas: string): Observable<AjusteSaldoFavor> {
+    return this.http
+      .post<ApiResponse<AjusteSaldoFavor>>(`${this.base}/${id}/saldo-favor/ajuste`, { monto, notas })
+      .pipe(map(data));
+  }
+
   aplicarSaldoFavor(id: number, monto?: number): Observable<AplicacionSaldoFavor> {
     return this.http
       .post<ApiResponse<AplicacionSaldoFavor>>(`${this.base}/${id}/saldo-favor/aplicar`, monto ? { monto } : {})
@@ -133,9 +151,23 @@ export class ClientesService {
    * Un ANTICIPO: el cliente deja dinero a cuenta, sin nota (efectivo, transferencia
    * o las dos) y le queda a favor. El efectivo necesita `sesion_caja_id`.
    */
-  recibirAnticipo(id: number, body: AnticipoInput): Observable<{ total: number; saldo_favor: number; efectivo: number; transferencia: number }> {
+  recibirAnticipo(id: number, body: AnticipoInput): Observable<ResultadoAnticipo> {
     return this.http
-      .post<ApiResponse<{ total: number; saldo_favor: number; efectivo: number; transferencia: number }>>(`${this.base}/${id}/anticipos`, body)
+      .post<ApiResponse<ResultadoAnticipo>>(`${this.base}/${id}/anticipos`, body)
+      .pipe(map(data));
+  }
+
+  /** Los datos del ticket de un abono a su cuenta (2026-10-15). */
+  ticketAbono(id: number, movimientoId: number): Observable<TicketAbonoCuenta> {
+    return this.http
+      .get<ApiResponse<TicketAbonoCuenta>>(`${this.base}/${id}/abonos/${movimientoId}/ticket`)
+      .pipe(map(data));
+  }
+
+  /** Los datos del ticket de un anticipo (2026-10-15). */
+  ticketAnticipo(id: number, movimientoId: number): Observable<TicketAnticipo> {
+    return this.http
+      .get<ApiResponse<TicketAnticipo>>(`${this.base}/${id}/anticipos/${movimientoId}/ticket`)
       .pipe(map(data));
   }
 

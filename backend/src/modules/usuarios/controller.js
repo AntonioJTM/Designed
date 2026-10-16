@@ -6,6 +6,7 @@ const { parseBool } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisosModel = require('../permisos/model');
 const usuariosModel = require('./model');
+const { pool } = require('../../config/db');
 
 /**
  * El puesto de ADMINISTRADOR solo lo da —o lo toca— otro administrador.
@@ -32,12 +33,32 @@ async function cuidarAdministrador(req, { rolNuevo, otrosNuevos, usuarioId }) {
   }
 }
 
+/**
+ * De qué tiendas es quien entra (2026-10-15), para que el panel solo le ofrezca
+ * lo suyo: `{ todas: true }` o `{ todas: false, almacenes: [{ id, nombre }] }`.
+ */
+async function tiendasDeSesion(usuarioId) {
+  const ids = await permisos.almacenesDe({ tipo: 'usuario', sub: usuarioId });
+  if (ids === null) return { todas: true, almacenes: [] };
+  if (!ids.length) return { todas: false, almacenes: [] };
+  const [rows] = await pool.query('SELECT id, nombre FROM almacenes WHERE id IN (:ids) ORDER BY nombre', { ids });
+  return { todas: false, almacenes: rows.map((r) => ({ id: Number(r.id), nombre: r.nombre })) };
+}
+
+/** Quien NO ve todas las tiendas solo ve y edita al personal de las suyas. */
+function esDeSusTiendas(u, alcance) {
+  if (alcance === null) return true;
+  if (u.todas_las_tiendas && u.rol !== 'cargador') return false;
+  return (u.tiendas ?? []).some((t) => alcance.includes(Number(t.id)));
+}
+
 // Login y perfil (sesión propia).
 async function iniciarSesion(req, res, next) {
   try {
     const resultado = await service.iniciarSesion(req.body);
     // Lo que puede ver y hacer, para que el panel arme su menú sin otra consulta.
     resultado.usuario.permisos = [...(await permisos.clavesDe({ tipo: 'usuario', sub: resultado.usuario.id }))];
+    resultado.usuario.alcance = await tiendasDeSesion(resultado.usuario.id);
     return res.status(200).json({ data: resultado, error: null });
   } catch (err) {
     return next(err);
@@ -48,6 +69,7 @@ async function perfil(req, res, next) {
   try {
     const usuario = await service.perfil(req.auth.sub);
     usuario.permisos = [...(await permisos.clavesDe({ tipo: 'usuario', sub: usuario.id }))];
+    usuario.alcance = await tiendasDeSesion(usuario.id);
     return res.status(200).json({ data: usuario, error: null });
   } catch (err) {
     return next(err);
@@ -57,7 +79,9 @@ async function perfil(req, res, next) {
 // Gestión de staff (solo administradores).
 async function listar(req, res, next) {
   try {
-    const data = await service.listarStaff({ q: req.query.q, activo: parseBool(req.query.activo) });
+    const alcance = await permisos.almacenesDe(req.auth);
+    const data = (await service.listarStaff({ q: req.query.q, activo: parseBool(req.query.activo) }))
+      .filter((u) => esDeSusTiendas(u, alcance));
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -67,7 +91,7 @@ async function listar(req, res, next) {
 async function crear(req, res, next) {
   try {
     await cuidarAdministrador(req, { rolNuevo: req.body.rol_id, otrosNuevos: req.body.otros_roles });
-    const data = await service.crearStaff(req.body);
+    const data = await service.crearStaff(req.body, await permisos.almacenesDe(req.auth));
     return res.status(201).json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -79,7 +103,12 @@ async function actualizar(req, res, next) {
     await cuidarAdministrador(req, {
       rolNuevo: req.body.rol_id, otrosNuevos: req.body.otros_roles, usuarioId: Number(req.params.id),
     });
-    const data = await service.actualizarStaff(Number(req.params.id), req.body);
+    const alcance = await permisos.almacenesDe(req.auth);
+    const actual = await usuariosModel.buscarPorId(Number(req.params.id));
+    if (actual && !esDeSusTiendas(actual, alcance)) {
+      throw new AppError(404, 'OTRA_TIENDA', 'Esa persona es de otra tienda.');
+    }
+    const data = await service.actualizarStaff(Number(req.params.id), req.body, alcance);
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);

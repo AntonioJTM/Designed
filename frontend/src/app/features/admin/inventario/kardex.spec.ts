@@ -32,6 +32,7 @@ describe('Kardex', () => {
   let pedido: { concepto?: string; extra?: FiltroKardex } = {};
   const invFalso = {
     almacenes: () => of([]),
+    misAlmacenes: () => of([]),
     movimientos: (_a?: number, _v?: number, concepto?: string, extra?: FiltroKardex) => {
       pedido = { concepto, extra };
       return of({ items: [venta, remesa, conos, desarme, ajuste, merma], total: 6, page: 1, limit: 100, paginas: 1 });

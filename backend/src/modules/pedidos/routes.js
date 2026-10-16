@@ -6,8 +6,13 @@ const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
 const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { sinCostosEnRespuesta } = require('../permisos/service');
 
 const router = Router();
+// Una venta de otra tienda no se ve ni se toca (2026-10-15): toda ruta con `:id`.
+router.param('id', controller.deSusTiendas);
+// El costo congelado de cada línea (`costo_unitario`) solo a quien ve costos (2026-10-16).
+router.use(sinCostosEnRespuesta);
 const soloStaff = [authRequired, requireTipo('usuario')];
 
 /** Un bulto físico que se entregó en esta línea, con lo que pesó. */
@@ -171,6 +176,8 @@ const abonoApartadoSchema = z
   .strict();
 
 router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), controller.abonarApartado);
+// Los datos del ticket de uno de sus pagos, al registrarlo o para reimprimirlo (2026-10-15).
+router.get('/:id/pagos/:pagoId/ticket', ...soloStaff, controller.ticketPago);
 // Pasar a crédito lo que falta de una nota pendiente de pago (es vender a crédito: pide su permiso).
 router.post('/:id/a-credito', ...soloStaff, requirePermiso('hacer:fiar'), controller.pasarACredito);
 

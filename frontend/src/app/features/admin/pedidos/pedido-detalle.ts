@@ -6,6 +6,7 @@ import { TicketService } from '../../../core/services/ticket.service';
 import { llevaTicket } from '../../../shared/ticket/ticket';
 import { AuthService } from '../../../core/services/auth.service';
 import {
+  DevolucionHecha,
   DevolucionLinea,
   EstadoPedido,
   PagoLinea,
@@ -38,6 +39,8 @@ interface FilaPago {
   estado: string;
   tono: string;
   referencia?: string | null;
+  /** En una nota (pendiente de pago, en espera o apartado) cada pago es un abono con su ticket. */
+  pagoId?: number;
 }
 
 /** Algo que le pasó al pedido, con su fecha. */
@@ -288,11 +291,14 @@ export class PedidoDetalle implements OnDestroy {
   readonly filasPago = computed<FilaPago[]>(() => {
     const p = this.pedido();
     if (!p) return [];
+    // En una nota que se paga en abonos, cada pago cobrado tiene su ticket de abono.
+    const enAbonos = this.esNotaPendiente(p) || this.esEncargo(p) || this.esApartadoSinEntregar(p) || p.estado === 'apartado';
     const filas: FilaPago[] = (p.pagos ?? []).map((g) => ({
       como: g.metodo,
       monto: Number(g.monto),
       ...this.estadoPago(g.estado),
       referencia: g.referencia_transaccion,
+      pagoId: enAbonos && g.estado === 'completado' ? g.id : undefined,
     }));
     const fiado = this.fiado(p);
     if (fiado > 0) {
@@ -512,8 +518,20 @@ export class PedidoDetalle implements OnDestroy {
     if (deOtras > 0) txt += ` Se descontaron ${this.dinero(deOtras)} de lo demás que debía.`;
     txt += ` A ${r.cliente} le quedan ${this.dinero(r.saldo_favor)} a favor.`;
     this.mensaje.set(txt);
+    this.ultimaDevolucion.set({ id: r.devolucion_id, texto: txt });
     this.cargar(r.pedido_id);
   }
+
+  /**
+   * La devolución que se acaba de registrar: su aviso trae el botón de su
+   * ticket. En cuanto el aviso cambia por otro, el botón se va con él.
+   */
+  private readonly ultimaDevolucion = signal<{ id: number; texto: string } | null>(null);
+  readonly devolucionDelAviso = computed(() => {
+    const u = this.ultimaDevolucion();
+    if (!u || this.mensaje() !== u.texto) return null;
+    return this.pedido()?.devoluciones?.find((d) => d.id === u.id) ?? null;
+  });
 
   /**
    * Se puede cancelar: el puesto tiene el permiso, el pedido sigue vivo y no
@@ -545,6 +563,28 @@ export class PedidoDetalle implements OnDestroy {
     const p = this.pedido();
     if (!p) return;
     this.tickets.imprimirPedido(p).subscribe({
+      error: (e) => this.error.set(e instanceof Error ? e.message : this.msg(e)),
+    });
+  }
+
+  /**
+   * El ticket de UNA devolución (2026-10-15): dice "Devolución", qué regresó,
+   * cuánto le quedó a favor y su saldo a favor de hoy. El de la venta sigue
+   * saliendo con su propio botón.
+   */
+  imprimirDevolucion(d: DevolucionHecha): void {
+    const p = this.pedido();
+    if (!p) return;
+    this.tickets.imprimirDevolucion(p, d).subscribe({
+      error: (e) => this.error.set(e instanceof Error ? e.message : this.msg(e)),
+    });
+  }
+
+  /** El ticket de un abono a esta nota (uno de sus pagos): sale igual que el día que se pagó. */
+  imprimirPago(pagoId: number): void {
+    const p = this.pedido();
+    if (!p) return;
+    this.tickets.imprimirPagoNota(p.id, pagoId).subscribe({
       error: (e) => this.error.set(e instanceof Error ? e.message : this.msg(e)),
     });
   }

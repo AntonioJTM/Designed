@@ -10,6 +10,12 @@ export interface Almacen {
   /** Solo uno puede tenerlo: es el que surte a las demás sucursales. */
   es_matriz: boolean | number;
   activo: boolean | number;
+  /**
+   * ¿Es de las tiendas de quien pregunta? (2026-10-15) A quien es de una sola
+   * tienda el servidor le manda las suyas y la Matriz (a la que le pide
+   * mercancía) con `mio: false`.
+   */
+  mio?: boolean;
 }
 
 export interface AlmacenInput {

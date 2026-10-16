@@ -2,12 +2,13 @@
 
 const { Router } = require('express');
 const controller = require('./controller');
-const { authRequired, requireTipo } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
 
 const router = Router();
 
-// Reportes: solo staff.
-router.use(authRequired, requireTipo('usuario'));
+// Reportes: quien tiene la pantalla y ve TODAS las tiendas (2026-10-15: suman
+// las dos tiendas; "eso solo lo ve el administrador").
+router.use(authRequired, requireTipo('usuario'), requirePermiso('ver:reportes'), requireTodasLasTiendas);
 
 router.get('/ventas', controller.ventas); // ?desde=&hasta= (por defecto hoy)
 router.get('/mas-vendidos', controller.masVendidos); // ?limite=

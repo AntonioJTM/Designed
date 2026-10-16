@@ -69,6 +69,10 @@ const actualizarSchema = z
   .strict()
   .refine((d) => Object.keys(d).length > 0, { message: 'No hay nada que cambiar' });
 
+// El costo de cada presentación solo a quien ve costos, en TODAS sus respuestas
+// (crear, cambiar precio o peso, precios por lista, el lector…; 2026-10-16).
+router.use(require('../permisos/service').sinCostosEnRespuesta);
+
 const soloStaff = [authRequired, requireTipo('usuario')];
 // Cambiar el precio que se le cobra a todos es decisión de los jefes, no de caja.
 const soloJefes = [...soloStaff, requirePermiso('hacer:cambiar_precios')];
@@ -87,7 +91,8 @@ router.put('/:id/precios', ...soloJefes, validate(precioTipoSchema), controller.
 // Códigos de barras adicionales de una variante
 // Antes de '/:id' para que 'resolver' no se interprete como un id.
 router.get('/resolver/:codigo', ...soloStaff, controller.resolverCodigo);
-router.get('/:id/codigos', controller.listarCodigos);
+// Del personal: dice dónde está cada bulto (y solo los de sus tiendas).
+router.get('/:id/codigos', ...soloStaff, controller.listarCodigos);
 router.post('/:id/codigos', ...catalogo, validate(codigoSchema), controller.agregarCodigo);
 router.delete('/codigos/:codigoId', ...catalogo, controller.eliminarCodigo);
 

@@ -179,6 +179,9 @@ const ck = (n, ok, d) => {
     ck('el detalle de la venta trae la devolución (paquetes y conos)', r.data?.devuelto_total === 8140 &&
       r.data?.devoluciones?.[0]?.lineas?.length === 2 && r.data.devoluciones[0].lineas[0].codigos.length === 2 &&
       r.data.devoluciones[0].lineas[1].piezas === 2, r.data?.devoluciones);
+    // El ticket de la devolución dice el saldo a favor de HOY (2026-10-15).
+    ck('cada devolución trae el saldo a favor de hoy de su cliente (para su ticket)',
+      r2(r.data?.devoluciones?.[0]?.saldo_favor_hoy) === r2(await favor(cli.id)), r.data?.devoluciones?.[0]?.saldo_favor_hoy);
     r = await api('GET', `/pedidos/${vA.id}/devolucion`);
     ck('ya solo puede regresar 15.6 kg (el tercer paquete)', r.data?.lineas?.[0]?.disponible === 15.6 &&
       r.data.lineas[0].bultos.filter((b) => b.devolvible).length === 1, r.data?.lineas?.[0]);
@@ -222,6 +225,15 @@ const ck = (n, ok, d) => {
     ck('al cajón entran solo $1,000', (await caja(sesion.id)).at(-1) === 'venta:1000', await caja(sesion.id));
     ck('le quedan $5,140 a favor', (await favor(cli.id)) === 5140, await favor(cli.id));
 
+    // El TICKET de la venta dice cuánto pagó con su saldo y cuánto le quedó (2026-10-15).
+    let sf = (await api('GET', `/pedidos/${vC.id}`)).data?.saldo_favor_usado;
+    ck('ticket: usó $1,000 de su saldo y le quedaron $5,140', sf?.usado === 1000 && sf?.quedo === 5140 && sf?.hoy === 5140, sf);
+    sf = (await api('GET', `/pedidos/${vB.id}`)).data?.saldo_favor_usado;
+    ck('reimpreso el de la compra anterior: le quedaron $6,140 ese día y hoy tiene $5,140',
+      sf?.usado === 2000 && sf?.quedo === 6140 && sf?.hoy === 5140, sf);
+    sf = (await api('GET', `/pedidos/${vA.id}`)).data;
+    ck('la que pagó en efectivo no trae nada de saldo a favor', sf?.saldo_favor_usado === null, sf?.saldo_favor_usado);
+
     r = await api('POST', '/pedidos', { ...pos, cliente_id: cli.id, items: [{ variante_id: paquete.id, cantidad: 30 }], saldo_favor: 6000 });
     ck('no le alcanza ($6,000 de $5,140): 409 SALDO_FAVOR_INSUFICIENTE', r.status === 409 && r.error?.code === 'SALDO_FAVOR_INSUFICIENTE', r.error?.code);
 
@@ -234,6 +246,21 @@ const ck = (n, ok, d) => {
     ck('cancelar dos veces no lo regresa dos veces', (await favor(cli.id)) === 7140, await favor(cli.id));
     r = await api('PATCH', `/pedidos/${vB.id}/estado`, { estado: 'pagado' });
     ck('no se reactiva: 409 VENTA_CON_SALDO_FAVOR', r.status === 409 && r.error?.code === 'VENTA_CON_SALDO_FAVOR', r.error?.code);
+
+    // AJUSTE A MANO del saldo a favor (2026-10-16): sumarle o quitarle, con motivo.
+    r = await api('POST', `/clientes/${cli.id}/saldo-favor/ajuste`, { monto: 200, notas: 'TMPDV le faltó a favor' });
+    ck('ajuste: se le agregan $200 ($7,340)', r.status === 201 && r.data?.tenia === 7140 && r.data?.saldo_favor === 7340 &&
+      (await favor(cli.id)) === 7340, r.error ?? r.data);
+    r = await api('POST', `/clientes/${cli.id}/saldo-favor/ajuste`, { monto: -200, notas: 'TMPDV se corrige' });
+    ck('ajuste: se le quitan $200 (vuelve a $7,140)', r.status === 201 && (await favor(cli.id)) === 7140, r.error ?? r.data);
+    r = await api('POST', `/clientes/${cli.id}/saldo-favor/ajuste`, { monto: -9000, notas: 'TMPDV de más' });
+    ck('quitarle más de lo que tiene: 409 SALDO_FAVOR_INSUFICIENTE', r.status === 409 && r.error?.code === 'SALDO_FAVOR_INSUFICIENTE', r.error?.code);
+    r = await api('POST', `/clientes/${cli.id}/saldo-favor/ajuste`, { monto: 50, notas: '   ' });
+    ck('sin motivo: 422', r.status === 422, r.error?.code);
+    const [[ult]] = await db.query(
+      "SELECT tipo, monto, notas FROM saldo_favor_movimientos WHERE cliente_id = ? ORDER BY id DESC LIMIT 1", [cli.id]
+    );
+    ck('queda en su historial como ajuste, con su motivo', ult?.tipo === 'ajuste' && Number(ult.monto) === -200 && ult.notas === 'TMPDV se corrige', ult);
 
     console.log('\n=== 6. Lo que regresa se DESCUENTA de lo que debe ===');
     r = await api('POST', '/pedidos', { ...pos, cliente_id: cli.id, pendiente_pago: true, items: item10 });
@@ -342,6 +369,12 @@ const ck = (n, ok, d) => {
       r.data?.saldo_favor === r2(antes12 + 1000), r.error ?? r.data);
     ck('al turno entran solo los $600 del efectivo, como ingreso', JSON.stringify((await caja(sesion.id)).slice(cajaA.length)) === JSON.stringify(['ingreso:600']),
       (await caja(sesion.id)).slice(cajaA.length));
+    // Su TICKET (2026-10-15): las dos partes en uno, y con cuánto quedó a favor.
+    const movAnt = r.data?.movimiento_id;
+    let tkA = await api('GET', `/clientes/${otro.id}/anticipos/${movAnt}/ticket`);
+    ck('el ticket del anticipo: $600 en efectivo y $400 por transferencia, en uno', tkA.status === 200 && tkA.data?.total === 1000 &&
+      tkA.data?.partes?.length === 2 && tkA.data?.partes?.some((p) => p.referencia === 'TMPDV folio 123') &&
+      tkA.data?.tenia_a_favor === r2(antes12) && tkA.data?.quedo_a_favor === r2(antes12 + 1000), tkA.error ?? tkA.data);
     r = await api('GET', `/clientes/${otro.id}`);
     const ants = (r.data?.saldo_favor_movimientos ?? []).filter((m) => m.tipo === 'anticipo');
     ck('su expediente dice cada parte con su forma de pago', ants.length === 2 && ants.some((m) => m.metodo?.startsWith('Efectivo') && Number(m.monto) === 600) &&
@@ -349,6 +382,9 @@ const ck = (n, ok, d) => {
     r = await api('POST', '/pedidos', { ...pos, cliente_id: otro.id, items: [{ variante_id: paquete.id, cantidad: 5 }], saldo_favor: 1000 });
     ck('con su anticipo se lleva $1,000 de hilo: pagado, sin dinero en la caja', r.status === 201 && r.data?.estado === 'pagado' &&
       (await favor(otro.id)) === r2(antes12), r.error ?? [r.data?.estado, await favor(otro.id)]);
+    tkA = await api('GET', `/clientes/${otro.id}/anticipos/${movAnt}/ticket`);
+    ck('reimpreso después de usarlo: sale igual y dice cuánto tiene hoy', tkA.data?.quedo_a_favor === r2(antes12 + 1000) &&
+      tkA.data?.a_favor_hoy === r2(antes12), tkA.data);
 
     console.log('\n=== 13. Cobrar con efectivo Y transferencia (2026-10-14) ===');
     const cajaM = await caja(sesion.id);

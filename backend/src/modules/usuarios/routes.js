@@ -27,6 +27,9 @@ const crearSchema = z
     contrasena: z.string().min(8).max(72).optional(),
     // Sus DEMÁS puestos (el principal es rol_id). Puede lo de todos.
     otros_roles: z.array(z.coerce.number().int().positive()).max(30).optional(),
+    // De qué tiendas es (2026-10-15): todas, o las de la lista.
+    todas_las_tiendas: z.boolean().optional(),
+    tiendas: z.array(z.coerce.number().int().positive()).max(50).optional(),
   })
   .strict();
 
@@ -41,6 +44,8 @@ const actualizarSchema = z
     correo: z.string().trim().toLowerCase().email().max(160).optional(),
     contrasena: z.string().min(8).max(72).optional(),
     otros_roles: z.array(z.coerce.number().int().positive()).max(30).optional(),
+    todas_las_tiendas: z.boolean().optional(),
+    tiendas: z.array(z.coerce.number().int().positive()).max(50).optional(),
   })
   .strict();
 

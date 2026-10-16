@@ -143,6 +143,8 @@ export interface MovimientoCredito {
   sesion_caja_id?: number | null;
   /** Quién lo registró. */
   registro?: string | null;
+  /** Se hizo en OTRA tienda (2026-10-15): se ve el monto, no el folio ni quién. */
+  otra_tienda?: boolean;
 }
 
 /** El expediente completo: datos, compras, colores y crédito. */
@@ -189,6 +191,8 @@ export interface MovimientoSaldoFavor {
   devolucion_id?: number | null;
   devolucion_folio?: string | null;
   registro?: string | null;
+  /** Se hizo en OTRA tienda (2026-10-15): se ve el monto, no el folio ni quién. */
+  otra_tienda?: boolean;
 }
 
 /** Un anticipo: dinero a cuenta, sin nota (2026-10-14). */
@@ -207,6 +211,15 @@ export interface AplicacionSaldoFavor {
   detalle: { a: 'nota' | 'credito'; monto: number; pedido_id?: number; numero_pedido?: string; pagada?: boolean }[];
   saldo_favor: number;
   deuda_total: DeudaTotal;
+}
+
+/** Lo que contesta el ajuste a mano de su saldo a favor (2026-10-16). */
+export interface AjusteSaldoFavor {
+  movimiento_id: number;
+  /** Lo que tenía a favor antes del ajuste. */
+  tenia: number;
+  /** Lo que le quedó a favor. */
+  saldo_favor: number;
 }
 
 /** Estado de cuenta, para la pantalla de crédito. */

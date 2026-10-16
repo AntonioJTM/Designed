@@ -41,6 +41,7 @@
             <tr>
               <th>Nombre</th>
               <th>Puestos</th>
+              <th>Tiendas</th>
               <th>Estado</th>
               <th>Último acceso</th>
               <th><span class="oculto">Acciones</span></th>
@@ -61,6 +62,9 @@
                             [attr.title]="primero ? 'Puesto principal' : 'También trabaja como ' + puesto(p)">{{ puesto(p) }}</span>
                     }
                   </div>
+                </td>
+                <td>
+                  <span [class.muted]="tiendasDe(u) === 'Todas'">{{ tiendasDe(u) }}</span>
                 </td>
                 <td>
                   @if (u.activo) {
@@ -90,6 +94,8 @@
   <app-usuario-form-modal
     [usuario]="usuarioModal()"
     [roles]="rolesAsignables()"
+    [almacenes]="almacenesAsignables()"
+    [puedeDarTodas]="puedeDarTodas()"
     (cerrado)="modal.set(null)"
     (guardado)="guardado($event, usuarioModal() === null)"
   />

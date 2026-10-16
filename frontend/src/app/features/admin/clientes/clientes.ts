@@ -5,6 +5,9 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, Subject, Subscription, forkJoin, of } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, shareReplay, switchMap } from 'rxjs/operators';
 import { ClientesService } from '../../../core/services/clientes.service';
+import { TicketService } from '../../../core/services/ticket.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { RedisenoService } from '../../../core/services/rediseno.service';
 import { Cliente, ClienteParaVenta } from '../../../core/models/clientes.models';
 import {
@@ -31,6 +34,13 @@ import { VistaLugares } from './vistas/vista-lugares';
 import { VistaTodos } from './vistas/vista-todos';
 import { LugaresEntrega } from '../../../core/models/clientes.models';
 import { ClientesEnfriados } from '../../../core/models/analisis.models';
+
+/**
+ * Las miradas que suman las compras de TODAS las tiendas (2026-10-15): solo las
+ * ve quien tiene «Todas las tiendas» en Personal. Las demás pestañas (la lista y
+ * Dónde entrego) son de los clientes, que se comparten.
+ */
+export const MIRADAS_DE_TODAS = new Set<VistaClientes>(['frecuencia', 'dejaron', 'deuda', 'que-compra', 'cuando', 'gasto']);
 
 /** Las pestañas, con su icono (trazos del diseño). */
 const PESTANAS: { vista: VistaClientes; etiqueta: string; d: string }[] = [
@@ -107,6 +117,13 @@ export class ClientesPantalla implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly api = inject(RedisenoService);
   private readonly clientes = inject(ClientesService);
+  private readonly tickets = inject(TicketService);
+  private readonly auth = inject(AuthService);
+
+  /** Las pestañas que puede abrir: sin las miradas de todas las tiendas si es de una sola. */
+  readonly pestanas = computed(() =>
+    this.auth.veTodasLasTiendas() ? PESTANAS : PESTANAS.filter((t) => !MIRADAS_DE_TODAS.has(t.vista))
+  );
 
   readonly PESTANAS = PESTANAS;
   readonly PERIODOS = PERIODOS;
@@ -117,6 +134,8 @@ export class ClientesPantalla implements OnInit {
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+  /** El botón de ticket del aviso: el abono recién registrado (2026-10-15). */
+  readonly ticketAviso = new TicketDelAviso(this.mensaje);
 
   readonly frecuencia = signal<Frecuencia | null>(null);
   readonly deuda = signal<Deuda | null>(null);
@@ -244,6 +263,8 @@ export class ClientesPantalla implements OnInit {
       })
     );
     // Si la cabecera falla, la pestaña igual sirve: solo se queda el texto genérico.
+    // Sale de dos miradas de todas las tiendas: quien es de una sola no la pide.
+    if (!this.auth.veTodasLasTiendas()) return;
     this.carga.add(
       forkJoin([gasto$.pipe(catchError(() => of(null))), deuda$.pipe(catchError(() => of(null)))]).subscribe(([g, d]) => {
         if (!g || !d) return;
@@ -329,12 +350,16 @@ export class ClientesPantalla implements OnInit {
     this.router.navigate(['/admin/clientes', id]);
   }
 
-  abonoRegistrado(r: { saldo_nuevo: number }): void {
+  abonoRegistrado(r: { saldo_nuevo: number; movimiento_id: number }): void {
     const c = this.abonando();
-    this.mensaje.set(
+    const texto =
       `Abono registrado${c ? ' a ' + c.nombre : ''}. ` +
-        (r.saldo_nuevo > 0 ? `Le quedan ${pesos(r.saldo_nuevo)} por pagar.` : 'Quedó al día.')
-    );
+      (r.saldo_nuevo > 0 ? `Le quedan ${pesos(r.saldo_nuevo)} por pagar.` : 'Quedó al día.');
+    this.mensaje.set(texto);
+    if (c) {
+      this.ticketAviso.poner(texto, 'Imprimir ticket del abono', () =>
+        this.tickets.imprimirAbonoCuenta(c.cliente_id, r.movimiento_id).subscribe({ error: (e) => this.error.set(this.msg(e)) }));
+    }
     this.cargar();
   }
 

@@ -71,9 +71,38 @@ async function puestosDeUsuario(usuarioId) {
   return res;
 }
 
+// De qué TIENDAS es cada persona (2026-10-15): `todas` o las de `usuario_almacenes`.
+// También se consulta en cada petición que toca ventas, caja o inventario: en
+// memoria, y se tira al guardar a alguien en Personal (vale en el acto).
+const tiendasCache = new Map();
+
+/** `{ todas, ids }` de una persona. Sin la persona: ninguna tienda. */
+async function tiendasDeUsuario(usuarioId) {
+  const id = Number(usuarioId);
+  if (tiendasCache.has(id)) return tiendasCache.get(id);
+  const [[u]] = await pool.query('SELECT todas_las_tiendas FROM usuarios WHERE id = :id', { id });
+  const [rows] = await pool.query(
+    'SELECT almacen_id FROM usuario_almacenes WHERE usuario_id = :id ORDER BY almacen_id',
+    { id }
+  );
+  const res = { todas: !!u && !!Number(u.todas_las_tiendas), ids: rows.map((r) => Number(r.almacen_id)) };
+  tiendasCache.set(id, res);
+  return res;
+}
+
+/** El almacén de la caja de un turno, o null si el turno no existe. */
+async function almacenDeTurno(sesionId) {
+  const [[s]] = await pool.query(
+    'SELECT c.almacen_id FROM sesiones_caja s JOIN cajas c ON c.id = s.caja_id WHERE s.id = :id',
+    { id: Number(sesionId) }
+  );
+  return s ? Number(s.almacen_id) : null;
+}
+
 function invalidar() {
   cache = null;
   puestosCache.clear();
+  tiendasCache.clear();
 }
 
 async function roles() {
@@ -140,4 +169,4 @@ async function clavesRegistradas() {
   return new Set(rows.map((r) => r.clave));
 }
 
-module.exports = { clavesDeRol, puestosDeUsuario, invalidar, roles, asignados, guardar, crearRol, obtenerRol, porNombre, clavesRegistradas };
+module.exports = { clavesDeRol, puestosDeUsuario, tiendasDeUsuario, almacenDeTurno, invalidar, roles, asignados, guardar, crearRol, obtenerRol, porNombre, clavesRegistradas };

@@ -3,7 +3,19 @@
 const service = require('./service');
 const analisis = require('./analisis');
 const lugares = require('./lugares');
+const tickets = require('./tickets');
 const { DIAS_SIN_VENIR } = require('../notificaciones/model');
+const permisos = require('../permisos/service');
+const { pool } = require('../../config/db');
+
+/** El turno con que se cobra tiene que ser de SUS tiendas (2026-10-15). */
+const _cajaDeSusTiendas = (auth, sesionId) => permisos.exigirTurno(auth, sesionId);
+
+/** El ticket de un abono o anticipo cobrado en la caja de OTRA tienda no se reimprime aquí. */
+async function _movimientoDeSusTiendas(auth, tabla, movId) {
+  const [[m]] = await pool.query(`SELECT sesion_caja_id FROM ${tabla} WHERE id = :id`, { id: Number(movId) });
+  if (m?.sesion_caja_id) await permisos.exigirTurno(auth, m.sesion_caja_id);
+}
 const { parsePagination, parseBool } = require('../../utils/query');
 
 // Controladores del dominio clientes. Responden con la forma { data, error }.
@@ -48,6 +60,7 @@ async function listar(req, res, next) {
       sin_lugar: parseBool(req.query.sin_lugar),
       orden: req.query.orden,
       page, limit, offset,
+      almacenes: await permisos.almacenesDe(req.auth),
     });
     res.json({ data, error: null });
   } catch (err) { next(err); }
@@ -58,7 +71,8 @@ async function expediente(req, res, next) {
     // `?pedidos=todos` trae todas sus compras (con tope, por si acaso); sin él,
     // las 20 más recientes.
     const limitePedidos = req.query.pedidos === 'todos' ? 500 : 20;
-    res.json({ data: await service.expediente(Number(req.params.id), { limitePedidos }), error: null });
+    const almacenes = await permisos.almacenesDe(req.auth);
+    res.json({ data: await service.expediente(Number(req.params.id), { limitePedidos, almacenes }), error: null });
   } catch (err) { next(err); }
 }
 
@@ -86,8 +100,27 @@ async function actualizar(req, res, next) {
 
 async function abonar(req, res, next) {
   try {
+    await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
     const data = await service.registrarAbono(Number(req.params.id), req.body, req.auth?.sub);
     res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/** Los datos del ticket de un abono a su cuenta (al registrarlo o para reimprimirlo). */
+async function ticketAbono(req, res, next) {
+  try {
+    await _movimientoDeSusTiendas(req.auth, 'credito_movimientos', req.params.movId);
+    const data = await tickets.abonoCuenta(Number(req.params.id), Number(req.params.movId));
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/** Los datos del ticket de un anticipo (al registrarlo o para reimprimirlo). */
+async function ticketAnticipo(req, res, next) {
+  try {
+    await _movimientoDeSusTiendas(req.auth, 'saldo_favor_movimientos', req.params.movId);
+    const data = await tickets.anticipo(Number(req.params.id), Number(req.params.movId));
+    res.json({ data, error: null });
   } catch (err) { next(err); }
 }
 
@@ -99,9 +132,18 @@ async function aplicarSaldoFavor(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Ajustar a mano su saldo a favor (sumar o quitar, con motivo). */
+async function ajustarSaldoFavor(req, res, next) {
+  try {
+    const data = await service.ajustarSaldoFavor(Number(req.params.id), req.body, req.auth?.sub);
+    res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
 /** Dinero a cuenta, sin nota: le queda a favor. */
 async function recibirAnticipo(req, res, next) {
   try {
+    await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
     const data = await service.recibirAnticipo(Number(req.params.id), req.body, req.auth?.sub);
     res.status(201).json({ data, error: null });
   } catch (err) { next(err); }
@@ -155,5 +197,6 @@ module.exports = {
   analisis: analisisVista,
   registrar, iniciarSesion, perfil,
   listar, expediente, buscar, crearDesdeStaff, actualizar,
-  abonar, ajustar,
+  abonar, ajustar, ajustarSaldoFavor,
+  ticketAbono, ticketAnticipo,
 };

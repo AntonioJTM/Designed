@@ -11,6 +11,8 @@ import { ClientesService } from '../../../core/services/clientes.service';
 import { ClienteParaVenta } from '../../../core/models/clientes.models';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { TicketService } from '../../../core/services/ticket.service';
+import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
+import { Observable } from 'rxjs';
 import { Cotizacion } from '../../../core/models/tienda.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -190,6 +192,8 @@ export class Pos {
    */
   readonly avisoLector = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+  /** El botón de ticket del aviso: un abono o un anticipo recién registrado (2026-10-15). */
+  readonly ticketAviso = new TicketDelAviso(this.mensaje);
   readonly ticket = signal<{
     pedido: Pedido;
     cambio: number;
@@ -1423,11 +1427,18 @@ export class Pos {
   }
 
   /** Dejó dinero a cuenta: su saldo a favor sube y ya lo puede usar en esta venta. */
-  anticipoRegistrado(r: { total: number; saldo_favor: number }): void {
+  anticipoRegistrado(r: { total: number; saldo_favor: number; movimiento_id: number }): void {
     const c = this.clienteSel();
     if (c) this.clienteSel.set({ ...c, saldo_favor: r.saldo_favor });
-    this.mensaje.set(`Anticipo de ${this.dinero(r.total)} registrado. Le quedan ${this.dinero(r.saldo_favor)} a favor.`);
+    const texto = `Anticipo de ${this.dinero(r.total)} registrado. Le quedan ${this.dinero(r.saldo_favor)} a favor.`;
+    this.mensaje.set(texto);
+    if (c) this.ticketAviso.poner(texto, 'Imprimir ticket del anticipo', () => this.imprimirCuenta(this.tickets.imprimirAnticipo(c.id, r.movimiento_id)));
     this.cerrarAnticipo();
+  }
+
+  /** Imprime un ticket de la cuenta del cliente (abono o anticipo); si falla, lo dice. */
+  private imprimirCuenta(imprimir: Observable<void>): void {
+    imprimir.subscribe({ error: (e) => this.error.set(this.msg(e)) });
   }
 
   abrirAbono(): void {
@@ -1488,11 +1499,12 @@ export class Pos {
             saldo,
             credito_disponible: Math.max(0, Math.round((limite - saldo) * 100) / 100),
           });
-          this.mensaje.set(
-            saldo > 0
-              ? `Abono de ${this.dinero(monto)} registrado. Todavía debe ${this.dinero(saldo)}.`
-              : `Abono de ${this.dinero(monto)} registrado. Ya no debe nada.`
-          );
+          const texto = saldo > 0
+            ? `Abono de ${this.dinero(monto)} registrado. Todavía debe ${this.dinero(saldo)}.`
+            : `Abono de ${this.dinero(monto)} registrado. Ya no debe nada.`;
+          this.mensaje.set(texto);
+          this.ticketAviso.poner(texto, 'Imprimir ticket del abono',
+            () => this.imprimirCuenta(this.tickets.imprimirAbonoCuenta(c.id, r.movimiento_id)));
         },
         error: (e) => {
           this.registrandoAbono.set(false);

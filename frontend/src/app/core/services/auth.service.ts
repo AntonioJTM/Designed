@@ -22,6 +22,14 @@ export interface DatosRegistroCliente {
 }
 
 /** ¿Alguno de los puestos de la sesión es el de administrador? Entonces lo puede todo. */
+/**
+ * Las pantallas que suman TODAS las tiendas (2026-10-15): Reportes, Cómo va el
+ * negocio, Nómina y Almacenes (con Listas de precio, que va con su permiso). A
+ * quien es de una sola tienda no se le ofrecen aunque su puesto tenga el
+ * permiso; el servidor también lo detiene (`requireTodasLasTiendas`).
+ */
+export const SOLO_TODAS_LAS_TIENDAS = new Set(['ver:reportes', 'ver:negocio', 'ver:nomina', 'ver:almacenes']);
+
 function esAdminSesion(s: SesionActual | null): boolean {
   if (!s || s.tipo !== 'usuario') return false;
   return s.rol === 'administrador' || (s.puestos ?? []).includes('administrador');
@@ -71,11 +79,29 @@ export class AuthService {
     if (esAdminSesion(s)) return true;
     if (permiso === null) return true;
     if (permiso === 'admin') return false;
+    // Lo que suma TODAS las tiendas no lo ve quien es de una sola (2026-10-15).
+    if (SOLO_TODAS_LAS_TIENDAS.has(permiso) && !this.veTodasLasTiendas()) return false;
     return (s.permisos ?? []).includes(permiso);
   }
 
   esAdmin(): boolean {
     return esAdminSesion(this.sesion());
+  }
+
+  /**
+   * ¿Ve TODAS las tiendas? (2026-10-15) El administrador siempre; los demás,
+   * según Personal. Quien no, solo ve lo de las suyas y no ve Reportes, Cómo va
+   * el negocio, Nómina ni las miradas de Clientes.
+   */
+  veTodasLasTiendas(): boolean {
+    const s = this.sesion();
+    if (!s || s.tipo !== 'usuario') return false;
+    return esAdminSesion(s) || (s.alcance?.todas ?? true);
+  }
+
+  /** Las tiendas de quien no ve todas (vacío si las ve todas). */
+  tiendas(): { id: number; nombre: string }[] {
+    return this.veTodasLasTiendas() ? [] : this.sesion()?.alcance?.almacenes ?? [];
   }
 
   private loginUsuario(correo: string, contrasena: string): Observable<SesionActual> {
@@ -150,6 +176,7 @@ export class AuthService {
       rol: usuario.rol,
       puestos: [usuario.rol, ...(usuario.otros_roles ?? []).map((r) => r.nombre)],
       permisos: usuario.permisos ?? [],
+      alcance: usuario.alcance ?? { todas: true, almacenes: [] },
     };
     this.sesion.set(sesion);
     return sesion;

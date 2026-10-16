@@ -42,6 +42,35 @@ const _sinCorreoNiContrasena = (rol) =>
   new AppError(422, 'PUESTO_SIN_ACCESO',
     `El puesto ${rol.nombre} no entra al sistema: no lleva correo ni contraseña.`);
 
+/**
+ * DE QUÉ TIENDAS ES (2026-10-15). Quien no ve todas lleva al menos una; el
+ * administrador las ve todas siempre. Y nadie da más de lo que tiene: quien
+ * edita a otra persona desde una sola tienda no le puede dar "todas" ni una
+ * tienda que no es suya (`alcance` = las de quien edita; null = todas).
+ * Devuelve `{ todas, tiendas }` listo para guardar, o undefined si no cambia.
+ */
+async function _tiendas(datos, rol, alcance, actual = null) {
+  if (datos.todas_las_tiendas === undefined && datos.tiendas === undefined) {
+    if (actual) return undefined;
+    // Un alta sin decir nada: las mismas que quien la hace.
+    return alcance === null ? { todas: true, tiendas: [] } : { todas: false, tiendas: alcance };
+  }
+  const todas = rol.nombre === 'administrador'
+    ? true
+    : datos.todas_las_tiendas ?? (actual ? !!actual.todas_las_tiendas : false);
+  const tiendas = todas ? [] : [...new Set((datos.tiendas ?? actual?.tiendas?.map((t) => t.id) ?? []).map(Number))];
+  if (!todas && !tiendas.length) {
+    throw new AppError(422, 'FALTA_TIENDA', 'Elige de qué tienda es, o marca «Todas las tiendas».');
+  }
+  if (!(await model.existenAlmacenes(tiendas))) {
+    throw new AppError(422, 'TIENDA_INVALIDA', 'Alguna de esas tiendas no existe.');
+  }
+  if (alcance !== null && (todas || tiendas.some((t) => !alcance.includes(t)))) {
+    throw new AppError(403, 'SOLO_SUS_TIENDAS', 'Solo puedes dar las tiendas que tú ves.');
+  }
+  return { todas, tiendas };
+}
+
 async function _exigirCorreoLibre(correo, salvoId) {
   if (await model.correoEnUso(correo, salvoId)) {
     throw new AppError(409, 'CORREO_EN_USO', 'Ya existe un usuario con ese correo');
@@ -72,13 +101,14 @@ function emitirToken(usuario) {
  * Quien entra al sistema lleva correo y contraseña; el puesto que no entra (el
  * cargador) no lleva ninguno de los dos, y sigue saliendo en Nómina.
  */
-async function crearStaff({ rol_id, nombre, correo, telefono, contrasena, otros_roles }) {
+async function crearStaff({ rol_id, nombre, correo, telefono, contrasena, otros_roles, todas_las_tiendas, tiendas }, alcance = null) {
   const rol = await _rolPrincipal(rol_id);
   const otros = _otros(otros_roles, rol_id);
   await _exigirOtrosRoles(otros, rol);
+  const t = await _tiendas({ todas_las_tiendas, tiendas }, rol, alcance);
   if (!rol.entra_al_sistema) {
     if (correo || contrasena) throw _sinCorreoNiContrasena(rol);
-    const usuario = await model.crear({ rol_id, nombre, telefono, otros_roles: [] });
+    const usuario = await model.crear({ rol_id, nombre, telefono, otros_roles: [], todas_las_tiendas: t.todas, tiendas: t.tiendas });
     permisosModel.invalidar();
     return sanitizar(usuario);
   }
@@ -86,7 +116,9 @@ async function crearStaff({ rol_id, nombre, correo, telefono, contrasena, otros_
   if (!contrasena) throw new AppError(422, 'FALTA_CONTRASENA', 'Falta la contraseña para entrar al sistema.');
   await _exigirCorreoLibre(correo);
   const contrasena_hash = await hashPassword(contrasena);
-  const usuario = await model.crear({ rol_id, nombre, correo, telefono, contrasena_hash, otros_roles: otros });
+  const usuario = await model.crear({
+    rol_id, nombre, correo, telefono, contrasena_hash, otros_roles: otros, todas_las_tiendas: t.todas, tiendas: t.tiendas,
+  });
   permisosModel.invalidar();
   return sanitizar(usuario);
 }
@@ -101,10 +133,11 @@ async function listarStaff(filtros) {
  * revés, el cargador que pasa a un puesto que sí entra necesita correo y
  * contraseña. El correo de quien ya entra no se cambia: es con lo que entra.
  */
-async function actualizarStaff(id, datos) {
+async function actualizarStaff(id, datos, alcance = null) {
   const actual = await model.buscarPorId(id);
   if (!actual) throw new AppError(404, 'NO_ENCONTRADO', 'Usuario no encontrado');
   const rol = await _rolPrincipal(datos.rol_id ?? actual.rol_id);
+  const t = await _tiendas(datos, rol, alcance, actual);
   const cambios = {
     rol_id: datos.rol_id,
     nombre: datos.nombre,
@@ -133,6 +166,10 @@ async function actualizarStaff(id, datos) {
   }
   if (rol.entra_al_sistema && datos.contrasena) {
     cambios.contrasena_hash = await hashPassword(datos.contrasena);
+  }
+  if (t) {
+    cambios.todas_las_tiendas = t.todas;
+    cambios.tiendas = t.tiendas;
   }
   const usuario = await model.actualizar(id, cambios);
   // Sus puestos (o su acceso) pudieron cambiar: lo que puede hacer cambia YA.

@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -117,7 +117,8 @@ router.get('/lugares-entrega', ...soloStaff, controller.lugaresListar);
 router.post('/lugares-entrega', ...soloStaff, validate(lugarSchema), controller.lugaresCrear);
 router.put('/lugares-entrega/:id', ...soloStaff, validate(lugarSchema), controller.lugaresActualizar);
 // Las cinco pestañas de Clientes: frecuencia, deuda, que-compra, cuando, gasto.
-router.get('/analisis/:vista', ...soloStaff, requirePermiso('ver:clientes'), controller.analisis);
+// Suman TODAS las tiendas: solo quien las ve todas (2026-10-15).
+router.get('/analisis/:vista', ...soloStaff, requirePermiso('ver:clientes'), requireTodasLasTiendas, controller.analisis);
 
 router.get('/', ...soloStaff, controller.listar);
 router.post('/', ...soloStaff, validate(expedienteSchema), controller.crearDesdeStaff);
@@ -127,6 +128,8 @@ router.put('/:id', ...soloStaff, validate(editarSchema), controller.actualizar);
 // Crédito. El estado de cuenta viaja dentro del expediente (GET /:id) y la lista
 // de quién debe, en el tablero (GET /analisis/tablero).
 router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), controller.abonar);
+// Los datos de su ticket, al registrarlo o para reimprimirlo (2026-10-15).
+router.get('/:id/abonos/:movId/ticket', ...soloStaff, controller.ticketAbono);
 router.post('/:id/ajustes', ...soloStaff, requirePermiso('hacer:corregir_deuda'), validate(ajusteSchema), controller.ajustar);
 
 // SALDO A FAVOR (2026-10-13): lo que le quedó de una devolución se descuenta de
@@ -135,6 +138,15 @@ const aplicarSaldoSchema = z
   .object({ monto: z.coerce.number().positive().max(99999999).optional() })
   .strict();
 router.post('/:id/saldo-favor/aplicar', ...soloStaff, validate(aplicarSaldoSchema), controller.aplicarSaldoFavor);
+// AJUSTE A MANO del saldo a favor (2026-10-16): sumarle (positivo) o quitarle
+// (negativo), con motivo. Con el permiso del ajuste de la deuda.
+const ajusteSaldoSchema = z
+  .object({
+    monto: z.coerce.number().min(-99999999).max(99999999).refine((n) => n !== 0, 'El ajuste no puede ser cero'),
+    notas: z.string().trim().min(1, 'Escribe el motivo').max(255),
+  })
+  .strict();
+router.post('/:id/saldo-favor/ajuste', ...soloStaff, requirePermiso('hacer:corregir_deuda'), validate(ajusteSaldoSchema), controller.ajustarSaldoFavor);
 
 // ANTICIPO (2026-10-14): dinero a cuenta, sin nota, en efectivo y/o por
 // transferencia; le queda a favor. El efectivo exige el turno que lo recibe.
@@ -148,5 +160,6 @@ const anticipoSchema = z
   })
   .strict();
 router.post('/:id/anticipos', ...soloStaff, validate(anticipoSchema), controller.recibirAnticipo);
+router.get('/:id/anticipos/:movId/ticket', ...soloStaff, controller.ticketAnticipo);
 
 module.exports = router;

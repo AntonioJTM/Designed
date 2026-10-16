@@ -158,6 +158,7 @@ const ck = (n, ok, d) => {
     ck('en efectivo sin turno: 409 FALTA_SESION_CAJA', r.status === 409 && r.error?.code === 'FALTA_SESION_CAJA', r.error?.code);
     r = await api('POST', `/pedidos/${n1.id}/abonos`, { monto: 1000, metodo_pago_id: efectivo.id, sesion_caja_id: sesion.id });
     ck('abona $1,000: le faltan $1,350', r.status === 201 && r.data?.pendiente === 1350 && !r.data?.liquidado, r.error ?? r.data);
+    const pago1 = r.data?.pago_id;
     ck('el efectivo entra al turno como ingreso (al corte de hoy)', JSON.stringify(await caja(sesion.id)) === JSON.stringify(['ingreso:1000']),
       await caja(sesion.id));
     ck('sigue pendiente', (await estado(n1.id)) === 'pendiente/1', await estado(n1.id));
@@ -165,6 +166,16 @@ const ck = (n, ok, d) => {
     ck('no se abona más de lo que falta: 422', r.status === 422 && r.error?.code === 'ABONO_EXCEDE_PENDIENTE', r.error?.code);
     r = await api('POST', `/pedidos/${n1.id}/abonos`, { monto: 1350, metodo_pago_id: transferencia.id, referencia: 'TMPNP folio' });
     ck('con la transferencia queda liquidada', r.status === 201 && r.data?.liquidado === true, r.error ?? r.data);
+    // Los TICKETS de sus abonos (2026-10-15).
+    let tk = await api('GET', `/pedidos/${n1.id}/pagos/${r.data?.pago_id}/ticket`);
+    ck('el ticket del último abono: llevaba $1,000, abonó $1,350 y quedó pagada', tk.status === 200 &&
+      tk.data?.llevaba_pagado === 1000 && tk.data?.monto === 1350 && tk.data?.falta === 0 &&
+      tk.data?.pedido?.de === 'Nota pendiente de pago' && tk.data?.referencia === 'TMPNP folio', tk.error ?? tk.data);
+    tk = await api('GET', `/pedidos/${n1.id}/pagos/${pago1}/ticket`);
+    ck('el del primero, reimpreso: le faltaban $1,350 y hoy ya nada', tk.data?.llevaba_pagado === 0 && tk.data?.monto === 1000 &&
+      tk.data?.falta === 1350 && tk.data?.falta_hoy === 0 && /fectivo/.test(tk.data?.metodo), tk.data);
+    tk = await api('GET', `/pedidos/${n1.id}/pagos/999999999/ticket`);
+    ck('el de un pago que no es de la nota: 404', tk.status === 404, tk.status);
     ck('y PAGADA sola (sigue marcada como nota)', (await estado(n1.id)) === 'pagado/1', await estado(n1.id));
     ck('la transferencia no toca la caja', JSON.stringify(await caja(sesion.id)) === JSON.stringify(['ingreso:1000']), await caja(sesion.id));
     r = await api('GET', '/pedidos/notas-pendientes');

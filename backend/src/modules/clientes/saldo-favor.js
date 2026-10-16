@@ -40,13 +40,16 @@ async function saldoFavor(clienteId, ejecutor = pool, bloquear = false) {
 }
 
 /** Los movimientos del saldo a favor, del más nuevo al más viejo. */
-async function movimientos(clienteId, { limit = 50 } = {}) {
+async function movimientos(clienteId, { limit = 50, almacenes = null } = {}) {
   const [rows] = await pool.query(
     `SELECT m.id, m.tipo, m.monto, m.notas, m.creado_en, m.referencia,
             m.pedido_id, p.numero_pedido, m.devolucion_id, d.folio AS devolucion_folio,
-            mp.nombre AS metodo, u.nombre AS registro
+            mp.nombre AS metodo, u.nombre AS registro,
+            COALESCE(p.almacen_id, cj.almacen_id) AS almacen_id
        FROM saldo_favor_movimientos m
        LEFT JOIN pedidos p      ON p.id = m.pedido_id
+       LEFT JOIN sesiones_caja sc ON sc.id = m.sesion_caja_id
+       LEFT JOIN cajas cj       ON cj.id = sc.caja_id
        LEFT JOIN devoluciones d ON d.id = m.devolucion_id
        LEFT JOIN metodos_pago mp ON mp.id = m.metodo_pago_id
        LEFT JOIN usuarios u     ON u.id = m.usuario_id
@@ -55,7 +58,12 @@ async function movimientos(clienteId, { limit = 50 } = {}) {
       LIMIT :limit`,
     { id: clienteId, limit }
   );
-  return rows;
+  // De OTRA tienda (2026-10-15): el monto sí (su saldo es uno), el folio no.
+  return rows.map(({ almacen_id: almacenId, ...m }) =>
+    !Array.isArray(almacenes) || almacenId == null || almacenes.includes(Number(almacenId))
+      ? m
+      : { ...m, pedido_id: null, numero_pedido: null, devolucion_id: null, devolucion_folio: null,
+          referencia: null, notas: null, registro: null, otra_tienda: true });
 }
 
 async function agregar(conn, {
@@ -115,6 +123,8 @@ async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 
   }
 
   const nota = notas ? String(notas).trim().slice(0, 255) || null : null;
+  // El primer movimiento: con él se pide su ticket (las dos partes salen juntas).
+  let primero = null;
   if (ef > 0) {
     const movId = await agregar(conn, {
       clienteId, tipo: 'anticipo', monto: ef, metodoPagoId: idEfectivo, sesionCajaId, usuarioId,
@@ -126,15 +136,17 @@ async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 
       // `referencia_id` apunta al movimiento del saldo a favor, como el del abono al de crédito.
       { sesion: sesionCajaId, monto: ef, ref: movId, motivo: `Anticipo de ${cli.nombre}` }
     );
+    primero = movId;
   }
   if (tr > 0) {
-    await agregar(conn, {
+    const movId = await agregar(conn, {
       clienteId, tipo: 'anticipo', monto: tr, metodoPagoId: idTransferencia, usuarioId,
       referencia: referencia ? String(referencia).trim().slice(0, 120) || null : null,
       notas: nota ?? 'Anticipo por transferencia',
     });
+    primero = primero ?? movId;
   }
-  return { cliente: cli.nombre, efectivo: ef, transferencia: tr, total: round2(ef + tr) };
+  return { movimiento_id: Number(primero), cliente: cli.nombre, efectivo: ef, transferencia: tr, total: round2(ef + tr) };
 }
 
 /** El método de pago interno con que se asienta lo que paga el saldo a favor. */
@@ -160,6 +172,53 @@ async function usarEnVenta(conn, { clienteId, monto, pedidoId, numeroPedido, usu
   await agregar(conn, {
     clienteId, tipo: 'uso', monto, pedidoId, usuarioId, notas: `Pagó parte de ${numeroPedido}`,
   });
+}
+
+/**
+ * AJUSTE A MANO del saldo a favor (2026-10-16: "que sea ajuste de saldo a favor:
+ * se le puede quitar o agregar"). Como el ajuste de la deuda: con MOTIVO
+ * obligatorio (un saldo que cambia sin explicación no se aclara después) y sin
+ * dejarlo en negativo. Positivo le agrega, negativo le quita. Lo pide quien
+ * tiene «Corregir deuda». Va dentro de la transacción de quien llama.
+ */
+async function ajustarSaldo(conn, { clienteId, monto, motivo, usuarioId = null }) {
+  const m = round2(monto);
+  if (!Number.isFinite(m) || m === 0) throw new AppError(422, 'MONTO_INVALIDO', 'Pon de cuánto es el ajuste.');
+  const texto = String(motivo ?? '').trim();
+  if (!texto) throw new AppError(422, 'FALTA_MOTIVO', 'Escribe el motivo del ajuste.');
+  const tenia = await saldoFavor(clienteId, conn, true);
+  if (round2(tenia + m) < 0) {
+    throw new AppError(409, 'SALDO_FAVOR_INSUFICIENTE',
+      `Tiene $${tenia.toFixed(2)} a favor: no se le pueden quitar $${Math.abs(m).toFixed(2)}.`);
+  }
+  const movimientoId = await agregar(conn, { clienteId, tipo: 'ajuste', monto: m, usuarioId, notas: texto });
+  return { movimiento_id: movimientoId, tenia, saldo_favor: round2(tenia + m) };
+}
+
+/**
+ * Lo que se pagó de una venta con su SALDO A FAVOR, cuánto le QUEDÓ a favor
+ * justo después y cuánto tiene HOY (2026-10-15, para el ticket: "que diga que se
+ * pagó con saldo a favor y cuánto le queda"). Sale del libro HASTA ese uso, así
+ * el ticket reimpreso dice lo mismo que el del día. null si no usó saldo.
+ */
+async function usadoEnVenta(ejecutor, pedidoId) {
+  const [usos] = await ejecutor.query(
+    `SELECT id, cliente_id, monto FROM saldo_favor_movimientos
+      WHERE pedido_id = :id AND tipo IN ('uso', 'aplicado')
+      ORDER BY id`,
+    { id: pedidoId }
+  );
+  if (!usos.length) return null;
+  const clienteId = usos[0].cliente_id;
+  const [libro] = await ejecutor.query(
+    'SELECT tipo, monto FROM saldo_favor_movimientos WHERE cliente_id = :c AND id <= :hasta',
+    { c: clienteId, hasta: usos[usos.length - 1].id }
+  );
+  return {
+    usado: round2(usos.reduce((s, m) => s + Number(m.monto), 0)),
+    quedo: round2(libro.reduce((s, m) => s + (SIGNO[m.tipo] ?? 0) * Number(m.monto), 0)),
+    hoy: await saldoFavor(clienteId, ejecutor),
+  };
 }
 
 /**
@@ -348,6 +407,7 @@ async function deudaTotal(clienteId, ejecutor = pool) {
 }
 
 module.exports = {
-  saldoFavor, movimientos, agregar, metodoSaldoFavor, usarEnVenta, reintegrarDeVenta, aplicarADeuda, deudaTotal,
+  saldoFavor, movimientos, agregar, metodoSaldoFavor, usarEnVenta, usadoEnVenta, reintegrarDeVenta, aplicarADeuda, deudaTotal,
+  ajustarSaldo,
   debeDeVenta, descontarDeVenta, recibirAnticipo,
 };

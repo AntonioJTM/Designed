@@ -36,6 +36,7 @@ describe('Remesas', () => {
     crearProveedor: (nombre: string) => of({ id: 4, nombre }),
     editarDatosCarga: () => of(historial[0]),
     almacenes: () => of([{ id: 1, nombre: 'Bodega', es_matriz: 1, es_punto_venta: 0, activo: 1 }]),
+    misAlmacenes: () => of([{ id: 1, nombre: 'Bodega', es_matriz: 1, es_punto_venta: 0, activo: 1 }]),
     variantesPorTipo: () => of([rojo130, amarillo]),
     remesas: () => of({ items: historial, total: 2, page: 1, limit: 20, paginas: 1 }),
     confirmarRemesa: (b: Record<string, unknown>) => {

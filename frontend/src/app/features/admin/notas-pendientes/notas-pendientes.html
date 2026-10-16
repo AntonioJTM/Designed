@@ -10,7 +10,15 @@
   </header>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+  @if (mensaje()) {
+    <!-- Lo recién registrado trae el botón de su ticket. -->
+    <div class="ok-msg con-accion" role="status">
+      <span>{{ mensaje() }}</span>
+      @if (ticketAviso.actual(); as t) {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+      }
+    </div>
+  }
 
   <div class="kpis">
     <div class="kpi">

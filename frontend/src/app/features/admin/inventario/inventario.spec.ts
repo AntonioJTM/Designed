@@ -212,6 +212,7 @@ describe('Inventario', () => {
 
   const invFalso = {
     almacenes: () => of([]),
+    misAlmacenes: () => of([]),
     resumen: () => of({ almacenes, filas, truncado: false, total_variantes: 4 }),
     stock: (f: Record<string, unknown>) => {
       pedido = f;

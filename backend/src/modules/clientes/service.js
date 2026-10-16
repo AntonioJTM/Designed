@@ -115,18 +115,20 @@ async function listarClientes(filtros) {
  * `limitePedidos`: cuántas compras trae. Por omisión las 20 más recientes; la
  * pantalla pide todas ("Ver las 47 compras") solo cuando se las piden.
  */
-async function expediente(id, { limitePedidos = 20 } = {}) {
+async function expediente(id, { limitePedidos = 20, almacenes = null } = {}) {
   const cliente = await model.obtener(id);
   if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
 
   const [stats, colores, pedidos, credito, habitos, favor, favorMovs, deuda] = await Promise.all([
-    model.estadisticas(id),
-    model.coloresMasComprados(id),
-    model.pedidos(id, { limit: limitePedidos }),
-    model.movimientosCredito(id, { limit: 20 }),
-    model.habitos(id),
+    // Sus compras y su costumbre: las de SUS tiendas (2026-10-15). Lo que debe
+    // y su saldo a favor son uno solo: se ven completos.
+    model.estadisticas(id, almacenes),
+    model.coloresMasComprados(id, 10, almacenes),
+    model.pedidos(id, { limit: limitePedidos, almacenes }),
+    model.movimientosCredito(id, { limit: 20, almacenes }),
+    model.habitos(id, almacenes),
     saldoFavor.saldoFavor(id),
-    saldoFavor.movimientos(id, { limit: 30 }),
+    saldoFavor.movimientos(id, { limit: 30, almacenes }),
     saldoFavor.deudaTotal(id),
   ]);
 
@@ -303,6 +305,15 @@ async function ajustarCredito(id, datos, usuarioId) {
   return estadoDeCuenta(id);
 }
 
+/** Ajustar a mano su SALDO A FAVOR: sumarle o quitarle, con motivo (2026-10-16). */
+async function ajustarSaldoFavor(id, datos, usuarioId) {
+  const cliente = await model.obtener(id);
+  if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
+  return withTransaction((conn) => saldoFavor.ajustarSaldo(conn, {
+    clienteId: id, monto: datos.monto, motivo: datos.notas, usuarioId,
+  }));
+}
+
 /** Un anticipo: dinero a cuenta, sin nota; le queda a favor (saldo-favor.js). */
 async function recibirAnticipo(id, datos, usuarioId) {
   const r = await withTransaction((conn) => saldoFavor.recibirAnticipo(conn, {
@@ -319,6 +330,7 @@ async function recibirAnticipo(id, datos, usuarioId) {
 
 module.exports = {
   aplicarSaldoFavor,
+  ajustarSaldoFavor,
   recibirAnticipo,
   registrar,
   iniciarSesion,

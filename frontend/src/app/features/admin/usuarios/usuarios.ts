@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { UsuariosService } from '../../../core/services/usuarios.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { InventarioService } from '../../../core/services/inventario.service';
 import { ApiError, Rol, Usuario } from '../../../core/models/auth.models';
 import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
 import { UsuarioFormModal } from './usuario-form-modal';
@@ -37,10 +38,20 @@ export function nombrePuesto(rol: string | null | undefined): string {
 export class Usuarios {
   private readonly api = inject(UsuariosService);
   private readonly auth = inject(AuthService);
+  private readonly inventario = inject(InventarioService);
   private readonly fechaPipe = new FechaPipe();
 
   readonly usuarios = signal<Usuario[]>([]);
   readonly roles = signal<Rol[]>([]);
+  /** Las tiendas (almacenes activos), para «Trabaja en». */
+  readonly almacenes = signal<{ id: number; nombre: string }[]>([]);
+  /** Quien ve todas las tiendas puede dar cualquiera (y «Todas»); los demás, solo las suyas. */
+  readonly puedeDarTodas = computed(() => this.auth.veTodasLasTiendas());
+  readonly almacenesAsignables = computed(() => {
+    if (this.puedeDarTodas()) return this.almacenes();
+    const mias = new Set(this.auth.tiendas().map((t) => t.id));
+    return this.almacenes().filter((a) => mias.has(a.id));
+  });
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
@@ -68,6 +79,10 @@ export class Usuarios {
       next: (r) => this.roles.set(r),
       error: (e) => this.error.set(this.msg(e)),
     });
+    this.inventario.almacenes().subscribe({
+      next: (a) => this.almacenes.set(a.filter((x) => !!Number(x.activo ?? 1)).map((x) => ({ id: x.id, nombre: x.nombre }))),
+      error: () => this.almacenes.set([]),
+    });
     this.cargar();
   }
 
@@ -83,6 +98,12 @@ export class Usuarios {
         this.cargando.set(false);
       },
     });
+  }
+
+  /** "Todas" o los nombres de sus tiendas. */
+  tiendasDe(u: Usuario): string {
+    if (u.rol === 'administrador' || u.todas_las_tiendas) return 'Todas';
+    return (u.tiendas ?? []).map((t) => t.nombre).join(', ') || 'Ninguna';
   }
 
   /** Todos sus puestos, el principal primero. */

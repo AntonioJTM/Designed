@@ -2,6 +2,7 @@
 
 const { pool } = require('../../config/db');
 const analisisModel = require('../analisis/model');
+const { filtroAlmacen } = require('../permisos/service');
 
 // Cuándo un pendiente empieza a doler. Van aquí, con nombre, para poder
 // ajustarlos sin buscarlos dentro de una consulta.
@@ -21,7 +22,17 @@ const DIAS_CLIENTE_NUEVO = 15;
  * propósito — lo que importa es que quede pendiente hasta que se resuelva, y una
  * marca de leída solo taparía el pendiente.
  */
-async function pendientes() {
+async function pendientes(almacenes = null) {
+  // CADA QUIEN, SUS TIENDAS (2026-10-15): surte quien es del origen, firma de
+  // recibido quien es del destino, y los mínimos y las notas son de su tienda.
+  // La cobranza y los que dejaron de venir llevan a miradas de Clientes que
+  // solo ve quien ve todas las tiendas: a los demás no se les avisa.
+  const todas = almacenes === null;
+  const fo = filtroAlmacen('t.almacen_origen_id', almacenes);
+  const fd = filtroAlmacen('t.almacen_destino_id', almacenes);
+  const fi = filtroAlmacen('i.almacen_id', almacenes);
+  const fp = filtroAlmacen('p.almacen_id', almacenes);
+
   // Solicitudes esperando que alguien las surta.
   const [porEnviar] = await pool.query(
     `SELECT t.id, t.folio, t.creado_en,
@@ -34,8 +45,9 @@ async function pendientes() {
        JOIN almacenes ao    ON ao.id = t.almacen_origen_id
        JOIN almacenes ad    ON ad.id = t.almacen_destino_id
        LEFT JOIN usuarios u ON u.id = t.usuario_id
-      WHERE t.estado = 'solicitado'
-      ORDER BY t.creado_en`
+      WHERE t.estado = 'solicitado'${fo.sql}
+      ORDER BY t.creado_en`,
+    fo.params
   );
 
   // Ya salieron y nadie ha firmado que llegaron.
@@ -50,14 +62,16 @@ async function pendientes() {
        JOIN almacenes ao     ON ao.id = t.almacen_origen_id
        JOIN almacenes ad     ON ad.id = t.almacen_destino_id
        LEFT JOIN usuarios ue ON ue.id = t.enviado_por
-      WHERE t.estado = 'en_transito'
-      ORDER BY t.enviado_en`
+      WHERE t.estado = 'en_transito'${fd.sql}
+      ORDER BY t.enviado_en`,
+    fd.params
   );
 
   // Existencias bajo su mínimo. Solo cuentan las que TIENEN mínimo capturado.
   const [[stock]] = await pool.query(
     `SELECT COUNT(*) AS n FROM inventario i
-      WHERE i.stock_minimo > 0 AND (i.cantidad - i.cantidad_reservada) <= i.stock_minimo`
+      WHERE i.stock_minimo > 0 AND (i.cantidad - i.cantidad_reservada) <= i.stock_minimo${fi.sql}`,
+    fi.params
   );
 
   // Cobranza: quién debe y lleva mucho sin dar señales.
@@ -66,7 +80,7 @@ async function pendientes() {
   // abonó la semana pasada está pagando, y avisar de él sería mandar a cobrarle
   // a quien no toca. Se listan pocos —los de mayor saldo— porque esto es un
   // aviso, no la pantalla de cobranza.
-  const [cobranza] = await pool.query(
+  const [cobranza] = !todas ? [[]] : await pool.query(
     `SELECT c.id AS cliente_id, c.nombre, c.nombre_comercial, c.telefono,
             s.saldo,
             DATEDIFF(NOW(), COALESCE(ult.ultimo_movimiento, c.creado_en)) AS dias_sin_abonar
@@ -82,7 +96,7 @@ async function pendientes() {
       LIMIT 8`,
     { dias: DIAS_SIN_ABONAR }
   );
-  const [[cobranzaTotal]] = await pool.query(
+  const [[cobranzaTotal]] = !todas ? [[{ n: 0, monto: 0 }]] : await pool.query(
     `SELECT COUNT(*) AS n, COALESCE(SUM(s.saldo), 0) AS monto
        FROM v_clientes_saldo s
        JOIN clientes c ON c.id = s.cliente_id
@@ -100,7 +114,9 @@ async function pendientes() {
   // venir (analisis/model.js → clientesEnfriados), así el número del aviso y la
   // lista que abre son siempre los mismos (lo pidió el usuario el 2026-10-03:
   // "doy clic y no me dice quiénes"). Aquí solo se traen los primeros 8.
-  const frios = await analisisModel.clientesEnfriados({ dias: DIAS_SIN_VENIR, minCompras: 2, limite: 8 });
+  const frios = !todas
+    ? { clientes: [], num_clientes: 0 }
+    : await analisisModel.clientesEnfriados({ dias: DIAS_SIN_VENIR, minCompras: 2, limite: 8 });
 
   // Clientes recién capturados SIN crédito autorizado.
   //
@@ -117,7 +133,7 @@ async function pendientes() {
             -- compra y sigue sin crédito es un caso más claro que uno que
             -- acaban de capturar y no ha vuelto.
             (SELECT COUNT(*) FROM pedidos p
-              WHERE p.cliente_id = c.id AND p.estado NOT IN ('cancelado', 'devuelto')) AS compras
+              WHERE p.cliente_id = c.id AND p.estado NOT IN ('cancelado', 'devuelto')${fp.sql}) AS compras
        FROM clientes c
       WHERE c.activo = 1
         AND c.limite_credito = 0
@@ -125,7 +141,7 @@ async function pendientes() {
         AND DATEDIFF(NOW(), c.creado_en) <= :dias
       ORDER BY c.creado_en DESC
       LIMIT 8`,
-    { dias: DIAS_CLIENTE_NUEVO }
+    { dias: DIAS_CLIENTE_NUEVO, ...fp.params }
   );
 
   // Hilos que no se pueden vender porque no tienen precio. Los crea así la
@@ -152,8 +168,9 @@ async function pendientes() {
                                               WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0)), 0) AS monto,
             DATE_FORMAT(MIN(p.creado_en), '%Y-%m-%d %H:%i:%s') AS desde
        FROM pedidos p
-      WHERE p.nota_pendiente = 1 AND p.estado = 'pendiente'
-        AND NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')`
+      WHERE p.nota_pendiente = 1 AND p.estado = 'pendiente'${fp.sql}
+        AND NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')`,
+    fp.params
   );
 
   return {

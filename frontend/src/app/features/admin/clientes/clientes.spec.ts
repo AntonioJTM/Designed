@@ -85,7 +85,7 @@ describe('ClientesPantalla', () => {
       providers: [
         provideRouter([]),
         { provide: RedisenoService, useValue: apiFalsa },
-        { provide: AuthService, useValue: { puede: () => true } },
+        { provide: AuthService, useValue: { puede: () => true, veTodasLasTiendas: () => true } },
         {
           provide: ClientesService,
           useValue: {

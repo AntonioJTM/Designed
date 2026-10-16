@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
 
 const router = Router();
 
@@ -27,7 +27,8 @@ const actualizarSchema = crearSchema.partial();
 // Consultarlos es abierto (el catálogo público los necesita); configurarlos es
 // de administrador, igual que las cajas y el personal.
 // Lo decide Permisos (antes: solo administradores).
-const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:almacenes')];
+// Dar de alta o cambiar tiendas: solo quien las ve todas (2026-10-15).
+const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:almacenes'), requireTodasLasTiendas];
 
 router.get('/', controller.listar);
 router.get('/tienda-linea', controller.tiendaLinea);

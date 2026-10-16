@@ -35,6 +35,63 @@ async function puestosDe(auth) {
   return activo ? puestos.filter((p) => p.entra_al_sistema) : [];
 }
 
+/**
+ * LAS TIENDAS DE CADA PERSONA (2026-10-15: "si abro una caja en Moroleón no
+ * quiero que vea nada de la otra tienda ni del inventario; solo lo de su tienda
+ * y su almacén"). Devuelve los ids de almacén que puede ver, o `null` si ve
+ * TODAS (el administrador siempre; los demás si así lo dice Personal). Una
+ * lista vacía es "ninguna": no ve nada de ninguna tienda.
+ */
+async function almacenesDe(auth) {
+  if (!auth || auth.tipo !== 'usuario' || !auth.sub) return [];
+  if (await esAdmin(auth)) return null;
+  const { todas, ids } = await model.tiendasDeUsuario(auth.sub);
+  return todas ? null : ids;
+}
+
+/** ¿Ve todas las tiendas? (Reportes, Cómo va el negocio, Nómina y las miradas de Clientes.) */
+async function veTodasLasTiendas(auth) {
+  return (await almacenesDe(auth)) === null;
+}
+
+/** ¿Puede ver ese almacén? `null` (todas) puede cualquiera. */
+function puedeAlmacen(almacenes, almacenId) {
+  return almacenes === null || almacenes.includes(Number(almacenId));
+}
+
+/**
+ * Detiene lo que es de OTRA tienda: 404, como si no existiera (no se dice ni
+ * que existe). Para el detalle de una venta, un turno, un traspaso…
+ */
+function exigirAlmacen(almacenes, almacenId, que = 'Eso') {
+  if (!puedeAlmacen(almacenes, almacenId)) {
+    throw new AppError(404, 'OTRA_TIENDA', `${que} es de otra tienda.`);
+  }
+}
+
+/**
+ * El turno de caja con que se cobra (una venta, un abono, un anticipo) tiene
+ * que ser de una caja de SUS tiendas: 404 si no.
+ */
+async function exigirTurno(auth, sesionId) {
+  if (!(Number(sesionId) > 0)) return;
+  const almacenes = await almacenesDe(auth);
+  if (almacenes === null) return;
+  const almacenId = await model.almacenDeTurno(sesionId);
+  if (almacenId != null) exigirAlmacen(almacenes, almacenId, 'Esa caja');
+}
+
+/**
+ * El pedazo de SQL que deja solo sus tiendas: `AND col IN (…)`, o nada si ve
+ * todas. Con la lista vacía no deja pasar nada. Los parámetros van con
+ * nombre (`:almacenesAlcance`), como en el resto de los modelos.
+ */
+function filtroAlmacen(columna, almacenes) {
+  if (almacenes === null || almacenes === undefined) return { sql: '', params: {} };
+  if (!almacenes.length) return { sql: ' AND 1 = 0', params: {} };
+  return { sql: ` AND ${columna} IN (:almacenesAlcance)`, params: { almacenesAlcance: almacenes } };
+}
+
 /** True si alguno de sus puestos es el de administrador: entonces lo puede todo. */
 async function esAdmin(auth) {
   return (await puestosDe(auth)).some((p) => p.nombre === ADMIN);
@@ -156,6 +213,44 @@ function authOpcional(req) {
   }
 }
 
+/** Los campos que dicen a cómo le sale el hilo a la tienda. */
+const CAMPOS_COSTO = new Set(['costo', 'costo_unitario', 'costo_actualizado_en']);
+
+/** Copia sin los campos del costo, a cualquier profundidad. */
+function quitarCostos(valor) {
+  if (Array.isArray(valor)) return valor.map(quitarCostos);
+  if (!valor || typeof valor !== 'object' || valor instanceof Date || Buffer.isBuffer(valor)) return valor;
+  const limpio = {};
+  for (const [k, v] of Object.entries(valor)) if (!CAMPOS_COSTO.has(k)) limpio[k] = quitarCostos(v);
+  return limpio;
+}
+
+/**
+ * Middleware de un router entero (2026-10-16, revisión de "cada quien, sus
+ * tiendas"): a quien no tiene «Ver costos» ninguna respuesta le lleva el costo,
+ * venga de la ruta que venga. Antes cada ruta tenía que acordarse
+ * (`sinCostosSiNoVe`) y varias se olvidaban: el detalle de la venta traía el
+ * `costo_unitario` de cada línea y cambiar un precio regresaba el `costo`.
+ */
+function sinCostosEnRespuesta(req, res, next) {
+  const json = res.json.bind(res);
+  res.json = (cuerpo) => {
+    veCostos(req)
+      .then((ve) => json(ve ? cuerpo : quitarCostos(cuerpo)))
+      .catch(() => json(quitarCostos(cuerpo)));
+    return res;
+  };
+  next();
+}
+
+/** Mandar un costo sin poder verlo: 403 (la regla del costo, 2026-10-06). */
+async function exigirVerCostos(req, ...valores) {
+  if (valores.every((v) => v === undefined || v === null)) return; // vacío: no captura nada
+  if (!(await veCostos(req))) {
+    throw new AppError(403, 'SIN_PERMISO', 'El costo solo lo capturan administración y contabilidad.');
+  }
+}
+
 /** Quita el costo de una presentación (o de una lista) si quien pregunta no lo puede ver. */
 async function sinCostosSiNoVe(req, variantes) {
   if (await veCostos(req)) return variantes;
@@ -168,4 +263,7 @@ async function sinCostosSiNoVe(req, variantes) {
   return variantes;
 }
 
-module.exports = { authOpcional, puestosDe, esAdmin, clavesDe, puede, matriz, guardar, crearRol, veCostos, sinCostosSiNoVe, SE_LLEVA_COSTO };
+module.exports = {
+  almacenesDe, veTodasLasTiendas, puedeAlmacen, exigirAlmacen, exigirTurno, filtroAlmacen,
+  sinCostosEnRespuesta, exigirVerCostos, quitarCostos,
+  authOpcional, puestosDe, esAdmin, clavesDe, puede, matriz, guardar, crearRol, veCostos, sinCostosSiNoVe, SE_LLEVA_COSTO };

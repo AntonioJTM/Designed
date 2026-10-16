@@ -47,7 +47,8 @@ export class AnticipoModal implements OnInit {
   readonly sesionId = input<number | null>(null);
 
   readonly cerrado = output<void>();
-  readonly registrado = output<{ total: number; saldo_favor: number }>();
+  /** `movimiento_id`: con él se imprime su ticket. */
+  readonly registrado = output<{ total: number; saldo_favor: number; movimiento_id: number }>();
 
   readonly cargando = signal(true);
   readonly guardando = signal(false);
@@ -120,7 +121,7 @@ export class AnticipoModal implements OnInit {
       .subscribe({
         next: (r) => {
           this.guardando.set(false);
-          this.registrado.emit({ total: Number(r.total), saldo_favor: Number(r.saldo_favor) });
+          this.registrado.emit({ total: Number(r.total), saldo_favor: Number(r.saldo_favor), movimiento_id: Number(r.movimiento_id) });
         },
         error: (e) => {
           this.guardando.set(false);

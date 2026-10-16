@@ -61,6 +61,9 @@ CREATE TABLE `usuarios` (
   `telefono` varchar(20) DEFAULT NULL,
   `contrasena_hash` varchar(255) DEFAULT NULL,
   `activo` tinyint(1) NOT NULL DEFAULT 1,
+  -- 1 = ve todas las tiendas; 0 = solo las de `usuario_almacenes`
+  -- (migración 2026-10_tiendas_por_persona.sql). El administrador, todas siempre.
+  `todas_las_tiendas` tinyint(1) NOT NULL DEFAULT 1,
   `ultimo_acceso` datetime DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -80,6 +83,19 @@ CREATE TABLE `usuario_roles` (
   KEY `idx_usuario_roles_rol` (`rol_id`),
   CONSTRAINT `usuario_roles_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
   CONSTRAINT `usuario_roles_rol` FOREIGN KEY (`rol_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: usuario_almacenes ----------
+-- Las tiendas (almacenes) de quien NO ve todas: solo ve ventas, caja e
+-- inventario de ellas (2026-10-15, migración 2026-10_tiendas_por_persona.sql).
+DROP TABLE IF EXISTS `usuario_almacenes`;
+CREATE TABLE `usuario_almacenes` (
+  `usuario_id` bigint(20) unsigned NOT NULL,
+  `almacen_id` smallint(5) unsigned NOT NULL,
+  PRIMARY KEY (`usuario_id`,`almacen_id`),
+  KEY `idx_usuario_almacenes_almacen` (`almacen_id`),
+  CONSTRAINT `usuario_almacenes_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `usuario_almacenes_almacen` FOREIGN KEY (`almacen_id`) REFERENCES `almacenes` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: auditoria ----------

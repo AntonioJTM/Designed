@@ -6,6 +6,7 @@ import { VentasService } from '../../../core/services/ventas.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Pedido } from '../../../core/models/ventas.models';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { TicketService } from '../../../core/services/ticket.service';
 
 /**
  * Lo que importa del detalle del pedido:
@@ -330,6 +331,41 @@ describe('PedidoDetalle', () => {
     expect(c.puedeDevolverEste(p)).toBe(true);
     expect(c.cifrasConDevolucion().at(-1)).toEqual(jasmine.objectContaining({ etiqueta: 'Regresó', valor: 8140 }));
     expect(c.historia().some((h) => h.que.includes('DEV-1-AB12') && h.que.includes('a favor'))).toBe(true);
+  });
+
+  it('con devoluciones hay dos tickets: el de la venta y el de cada devolución', async () => {
+    const dev = {
+      id: 7, folio: 'DEV-7-CD34', total: 2726, aplicado_a_deuda: 0, creado_en: '2026-10-15 00:35:47',
+      cliente_id: 20, cliente: 'Doña Chela', saldo_favor_hoy: 2726,
+      lineas: [{ detalle_id: 11, hilo: 'CAMEL 2/30', como: 'paquete', kg: 18.8, importe: 2726, codigos: ['00621999'] }],
+    };
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, devoluciones: [dev] } as Pedido;
+    const f = await montar();
+    const c = f.componentInstance;
+    const tickets = TestBed.inject(TicketService);
+    const deVenta = spyOn(tickets, 'imprimirPedido').and.returnValue(of(undefined));
+    const deDevolucion = spyOn(tickets, 'imprimirDevolucion').and.returnValue(of(undefined));
+    const el = f.nativeElement as HTMLElement;
+    const boton = (texto: string) =>
+      [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent!.trim() === texto);
+
+    boton('Ticket de venta')!.click();
+    expect(deVenta).toHaveBeenCalled();
+    boton('Ticket de devolución')!.click();
+    expect(deDevolucion).toHaveBeenCalledWith(jasmine.objectContaining({ id: 5 }), jasmine.objectContaining({ folio: 'DEV-7-CD34' }));
+
+    // Recién registrada, su aviso trae el botón de su ticket; otro aviso ya no.
+    c.alDevolver({
+      devolucion_id: 7, folio: 'DEV-7-CD34', pedido_id: 5, numero_pedido: 'POS-1', cliente_id: 20, cliente: 'Doña Chela',
+      total: 2726, kg: 18.8, aplicado_a_deuda: 0, aplicaciones: [], saldo_favor: 2726,
+    });
+    f.detectChanges();
+    expect(c.devolucionDelAviso()?.folio).toBe('DEV-7-CD34');
+    expect(boton('Imprimir ticket de devolución')).toBeTruthy();
+    c.mensaje.set('Se guardó otra cosa.');
+    f.detectChanges();
+    expect(c.devolucionDelAviso()).toBeNull();
+    expect(boton('Imprimir ticket de devolución')).toBeFalsy();
   });
 
   it('al terminar la devolución dice cuánto le quedó a favor', async () => {
