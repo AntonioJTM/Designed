@@ -175,7 +175,7 @@
                       <span class="icono tono-naranja" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.cobro"></path></svg></span>
                       <span class="que">
                         <b>{{ p.cobranza.num_clientes }} {{ p.cobranza.num_clientes === 1 ? 'cliente debe' : 'clientes deben' }} {{ dinero(p.cobranza.monto) }}</b>
-                        <span>{{ p.cobranza.dias }} días o más sin abonar</span>
+                        <span>más de {{ p.cobranza.dias }} días sin abonar</span>
                       </span>
                       <span class="ir" aria-hidden="true">Cobrar ›</span>
                     </button>
@@ -207,7 +207,7 @@
                         <span class="que">
                           <b>{{ c.nombre_comercial || c.nombre }}: falta decidir su crédito</b>
                           <span>
-                            Capturado hace {{ c.dias }} {{ c.dias === 1 ? 'día' : 'días' }}
+                            @if (+c.dias === 0) { Capturado hoy } @else { Capturado hace {{ c.dias }} {{ +c.dias === 1 ? 'día' : 'días' }} }
                             @if (+c.compras > 0) { · ya te compró {{ c.compras }} {{ +c.compras === 1 ? 'vez' : 'veces' }} }
                           </span>
                         </span>

@@ -8,6 +8,7 @@ import { InventarioService } from '../../../core/services/inventario.service';
 import { VentasService } from '../../../core/services/ventas.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { TicketService } from '../../../core/services/ticket.service';
 import { Encargo, Encargos, ModificarPedidoInput, Pedido } from '../../../core/models/ventas.models';
 import { hoyLocal } from '../../../shared/fecha.pipe';
 
@@ -61,6 +62,23 @@ describe('EncargosPantalla', () => {
     expect(fila.textContent).toContain('Entregar y cobrar');
     expect(fila.textContent).not.toContain('Preparar');
     expect((f.nativeElement as HTMLElement).textContent).toContain('Doña Chela');
+  });
+
+  it('al entregarla ofrece su ticket: imprimirlo o mandarlo por WhatsApp, con el cambio (2026-10-17)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    const tickets = TestBed.inject(TicketService);
+    const imprimir = spyOn(tickets, 'imprimir').and.returnValue(of(undefined));
+    const whatsapp = spyOn(tickets, 'whatsapp');
+    c.alEntregar({ id: 1, numero_pedido: 'POS-1-AAAA', estado: 'pagado', cambio: 50 } as unknown as Pedido);
+    f.detectChanges();
+    const aviso = (f.nativeElement as HTMLElement).querySelector('.ok-msg') as HTMLElement;
+    expect(aviso.textContent).toContain('POS-1-AAAA entregada. Su cambio: $50.00.');
+    expect(aviso.textContent).toContain('Imprimir ticket');
+    c.ticketAviso.actual()!.imprimir();
+    c.ticketAviso.actual()!.whatsapp!();
+    expect(imprimir).toHaveBeenCalledWith(1, { cambio: 50 });
+    expect(whatsapp).toHaveBeenCalledWith(1, { cambio: 50 });
   });
 
   it('se filtran por para hoy y atrasados (ya no hay chofer, 2026-10-13)', async () => {

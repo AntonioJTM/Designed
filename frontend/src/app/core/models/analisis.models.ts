@@ -17,13 +17,13 @@ export interface ClienteConSaldo {
   telefono?: string | null;
   limite_credito?: Cifra;
   saldo: Cifra;
-  /** Desde cuándo no mueve su cuenta. Es el dato para decidir a quién llamar. */
+  /** Días desde su último abono (como la caja). Es el dato para decidir a quién llamar. */
   dias_sin_abonar: number;
   ultimo_movimiento?: string | null;
   ultimo_abono?: string | null;
   ultima_compra?: string | null;
   /** Qué tramo de antigüedad le tocó. */
-  tramo?: 'al_dia' | 'un_mes' | 'dos_meses' | 'vencido';
+  tramo?: 'al_dia' | 'atrasado' | 'un_mes' | 'vencido';
 }
 
 export interface TramoCartera {

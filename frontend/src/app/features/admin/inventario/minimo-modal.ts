@@ -50,13 +50,19 @@ export class MinimoModal implements OnInit {
     if (actual > 0) {
       // Se muestra el mínimo tal como está guardado, sin redondear a paquetes.
       this.cantidad = actual;
-    } else if (this.esPaquete() && this.pesoRef()) {
+    } else if (this.esPaquete()) {
+      // Un paquete SIN mínimo abre en paquetes, que es como piensa la tienda
+      // (2026-10-17: abría en kilos porque el peso del renglón no siempre viene;
+      // el real llega con la equivalencia). Si al final no hay peso, vuelve a kilos.
       this.unidad = 'paq';
     }
     if (this.esPaquete()) {
+      const sinPeso = () => {
+        if (this.unidad === 'paq' && this.cantidad == null && !this.pesoRef()) this.unidad = 'kg';
+      };
       this.inv.equivalenciaPaquetes(f.variante_id, f.almacen_id).subscribe({
-        next: (e) => this.equivalencia.set(e),
-        error: () => this.equivalencia.set(null),
+        next: (e) => { this.equivalencia.set(e); sinPeso(); },
+        error: () => { this.equivalencia.set(null); sinPeso(); },
       });
     }
   }

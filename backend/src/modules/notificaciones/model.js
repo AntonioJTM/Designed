@@ -80,38 +80,25 @@ async function pendientes(almacenes = null) {
 
   // Cobranza: quién debe y lleva mucho sin dar señales.
   //
-  // Se mide desde el ÚLTIMO MOVIMIENTO de su cuenta, no desde el cargo: quien
-  // abonó la semana pasada está pagando, y avisar de él sería mandar a cobrarle
-  // a quien no toca. Se listan pocos —los de mayor saldo— porque esto es un
-  // aviso, no la pantalla de cobranza.
-  const [cobranza] = !todas ? [[]] : await pool.query(
-    `SELECT c.id AS cliente_id, c.nombre, c.nombre_comercial, c.telefono,
-            s.saldo,
-            DATEDIFF(NOW(), COALESCE(ult.ultimo_movimiento, c.creado_en)) AS dias_sin_abonar
-       FROM v_clientes_saldo s
-       JOIN clientes c ON c.id = s.cliente_id
-       LEFT JOIN (
-         SELECT cliente_id, MAX(creado_en) AS ultimo_movimiento
-           FROM credito_movimientos GROUP BY cliente_id
-       ) ult ON ult.cliente_id = c.id
-      WHERE s.saldo > 0
-        AND DATEDIFF(NOW(), COALESCE(ult.ultimo_movimiento, c.creado_en)) >= :dias
-      ORDER BY s.saldo DESC
-      LIMIT 8`,
-    { dias: DIAS_SIN_ABONAR }
-  );
-  const [[cobranzaTotal]] = !todas ? [[{ n: 0, monto: 0 }]] : await pool.query(
-    `SELECT COUNT(*) AS n, COALESCE(SUM(s.saldo), 0) AS monto
-       FROM v_clientes_saldo s
-       JOIN clientes c ON c.id = s.cliente_id
-       LEFT JOIN (
-         SELECT cliente_id, MAX(creado_en) AS ultimo_movimiento
-           FROM credito_movimientos GROUP BY cliente_id
-       ) ult ON ult.cliente_id = c.id
-      WHERE s.saldo > 0
-        AND DATEDIFF(NOW(), COALESCE(ult.ultimo_movimiento, c.creado_en)) >= :dias`,
-    { dias: DIAS_SIN_ABONAR }
-  );
+  // Se mide desde su ÚLTIMO ABONO, no desde el cargo: quien abonó la semana
+  // pasada está pagando, y avisar de él sería mandar a cobrarle a quien no toca.
+  // Se listan pocos —los de mayor saldo— porque esto es un aviso, no la
+  // pantalla de cobranza. Sale de la MISMA cartera que Cuánto debe y Cómo va el negocio (2026-10-17):
+  // los mismos días y el mismo plazo que la caja, así el aviso y la lista nunca
+  // se contradicen.
+  const atrasados = !todas ? [] : (await analisisModel.cartera()).clientes
+    .filter((r) => r.dias_sin_abonar > DIAS_SIN_ABONAR);
+  const cobranza = [...atrasados]
+    .sort((a, b) => Number(b.saldo) - Number(a.saldo))
+    .slice(0, 8)
+    .map((r) => ({
+      cliente_id: r.cliente_id, nombre: r.nombre, nombre_comercial: r.nombre_comercial,
+      telefono: r.telefono, saldo: r.saldo, dias_sin_abonar: r.dias_sin_abonar,
+    }));
+  const cobranzaTotal = {
+    n: atrasados.length,
+    monto: Math.round(atrasados.reduce((s, r) => s + Number(r.saldo), 0) * 100) / 100,
+  };
 
   // Clientes que compraban y dejaron de venir: 2 compras o más y DIAS_SIN_VENIR
   // sin aparecer. Sale de la MISMA consulta que la pestaña Clientes → Dejaron de

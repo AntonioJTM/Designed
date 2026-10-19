@@ -99,7 +99,7 @@
                     {{ esEntrada(m) ? '+' : '−' }}{{ abs(m.cantidad) | cantidad: (m.unidad || 'kg') }}
                   </b>
                   @if (m.tipo_presentacion === 'paquete' && m.peso_kg) {
-                    <div class="sub">≈ {{ paquetesDe(m) | cantidad }} paquetes</div>
+                    <div class="sub">≈ {{ paquetesDe(m) | cantidad }} {{ paquetesDe(m) === '1' ? 'paquete' : 'paquetes' }}</div>
                   }
                 </td>
                 <td class="quien">{{ m.usuario || '—' }}</td>

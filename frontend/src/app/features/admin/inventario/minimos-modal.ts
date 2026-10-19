@@ -49,11 +49,11 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
                 </select>
               </label>
               <label class="field">
-                Avisarme cuando queden menos de
+                Avisarme cuando queden
                 <span class="cant">
                   <input type="number" name="paquetes" min="1" max="999" step="1" [(ngModel)]="paquetes"
                          (ngModelChange)="cambio()" [attr.aria-invalid]="!paquetesValidos()" [class.invalido]="!paquetesValidos()" />
-                  <span>paquetes</span>
+                  <span>paquetes o menos</span>
                 </span>
               </label>
               <div class="field completo">
@@ -77,7 +77,7 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
                   <p class="resumen">{{ resumen(r) }}</p>
                   <div class="tabla-scroll">
                     <table class="grid">
-                      <thead><tr><th>Hilo</th><th class="num">Avisa con menos de</th><th>Antes</th></tr></thead>
+                      <thead><tr><th>Hilo</th><th class="num">Avisa con</th><th>Antes</th></tr></thead>
                       <tbody>
                         @for (h of r.renglones; track h.variante_id) {
                           <tr [class.tenue]="!h.cambia">
@@ -187,7 +187,7 @@ export class MinimosModal implements OnInit {
   resumen(r: MinimosResultado): string {
     const partes: string[] = [];
     partes.push(r.cambian
-      ? `Se le pone a ${r.cambian} ${r.cambian === 1 ? 'hilo' : 'hilos'}: avisa cuando le queden menos de ${r.paquetes} ${r.paquetes === 1 ? 'paquete' : 'paquetes'}, en kilos con el peso de sus propios paquetes.`
+      ? `Se le pone a ${r.cambian} ${r.cambian === 1 ? 'hilo' : 'hilos'}: avisa cuando le queden ${r.paquetes} ${r.paquetes === 1 ? 'paquete' : 'paquetes'} o menos, en kilos con el peso de sus propios paquetes.`
       : 'No cambia nada: todos ya tienen ese mínimo.');
     if (r.se_quedan) partes.push(`${r.se_quedan} ya ${r.se_quedan === 1 ? 'tenía su propio mínimo y se queda' : 'tenían su propio mínimo y se quedan'} igual.`);
     if (r.sin_peso) partes.push(`${r.sin_peso} no ${r.sin_peso === 1 ? 'tiene' : 'tienen'} peso: no se puede calcular.`);

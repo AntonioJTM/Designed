@@ -369,7 +369,7 @@
                         {{ etiquetaHilo(l) }} · <span class="muted">no salió (no había)</span>
                       } @else {
                         {{ etiquetaHilo(l) }} · <b>{{ l.cantidad | cantidad: 'kg' }}</b>
-                        @if (recibidoDe(l); as r) { <span class="muted">— {{ r }}</span> }
+                        @if (recibidoDe(l); as r) { <span class="muted">{{ ' — ' + r }}</span> }
                       }
                     </div>
                   }

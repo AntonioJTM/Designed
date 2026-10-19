@@ -343,6 +343,14 @@
             }
           </div>
         }
+        <!-- Una venta a crédito se paga con abonos a su cuenta, no con una captura aquí (2026-10-17). -->
+        @if (depositoComoAbono()) {
+          <p class="muted ayuda deposito-abono">
+            Es una venta a crédito: si el cliente deposita, regístralo como abono a su cuenta en
+            <a [routerLink]="['/admin/clientes', p.cliente_id]">su expediente</a> («Registrar abono», por
+            transferencia). Así baja lo que debe y esta venta se da por pagada sola cuando la cubre.
+          </p>
+        }
       </section>
 
       <section class="card mitad">

@@ -762,10 +762,21 @@ export class PedidoDetalle implements OnDestroy {
         g.estado === 'procesando' ||
         (g.estado === 'completado' && /transferencia/i.test(g.metodo))
     );
+    // Una venta A CRÉDITO se paga con abonos a su cuenta (2026-10-17): aquí solo
+    // se le pega la prueba a una transferencia que ya tenga. Un pago nuevo por
+    // "lo que falta" la dejaba pagada con la deuda todavía en su cuenta.
+    if (this.fiado(p) > 0.004) return hayAQuienPegarla;
     const cobrado = pagos
       .filter((g) => g.estado === 'completado')
       .reduce((s, g) => s + Number(g.monto), 0);
     return hayAQuienPegarla || Number(p.total) - cobrado > 0.004;
+  }
+
+  /** Una venta a crédito que todavía se debe: su depósito va como abono a su cuenta. */
+  depositoComoAbono(): boolean {
+    const p = this.pedido();
+    if (!p || !p.cliente_id || p.estado === 'cancelado' || p.estado === 'devuelto') return false;
+    return this.fiado(p) > 0.004 && Number(p.credito_por_pagar ?? 0) > 0.004 && !this.aceptaComprobante();
   }
 
   /** Un PDF no se puede pintar con `<img>`: se ofrece abrirlo aparte. */

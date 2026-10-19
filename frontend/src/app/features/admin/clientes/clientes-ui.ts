@@ -74,7 +74,7 @@ export const COLOR = {
  * que ya le toca.
  */
 export const ESTADO_RITMO: Record<EstadoRitmo, { texto: string; pill: string; color: string; suave: string }> = {
-  bien: { texto: 'Al corriente', pill: 'azul', color: COLOR.serie1, suave: 'var(--viz-series-1-suave)' },
+  bien: { texto: 'A su ritmo', pill: 'azul', color: COLOR.serie1, suave: 'var(--viz-series-1-suave)' },
   toca: { texto: 'Ya le toca', pill: 'ambar', color: COLOR.ambar, suave: 'var(--punto-aviso-suave)' },
   frio: { texto: 'Se está enfriando', pill: 'naranja', color: COLOR.alerta, suave: 'var(--punto-alerta-suave)' },
   perdido: { texto: 'Dejó de venir', pill: 'gris', color: COLOR.otros, suave: 'var(--borde)' },

@@ -11,7 +11,7 @@ async function listar(filtros) {
 
 async function obtener(id) {
   const cat = await model.obtener(id);
-  if (!cat) throw new AppError(404, 'NO_ENCONTRADO', 'Categoría no encontrada');
+  if (!cat) throw new AppError(404, 'NO_ENCONTRADO', 'Material no encontrado');
   return cat;
 }
 
@@ -58,8 +58,8 @@ async function eliminar(id) {
     throw new AppError(
       409,
       'CATEGORIA_EN_USO',
-      `No se puede eliminar: ${dep.productos} producto(s) usan esta categoría. ` +
-        `Reasígnalos a otra categoría o desactiva esta en lugar de borrarla.`
+      `No se puede eliminar: ${dep.productos} ${dep.productos === 1 ? 'hilo es' : 'hilos son'} de este material. ` +
+        `Cámbialos a otro material o desactiva este en lugar de borrarlo.`
     );
   }
   await model.eliminar(id);

@@ -34,7 +34,7 @@
     <section class="card verde">
       <div class="card-head">
         <div>
-          <h2>Remesa {{ u.folio }} recibida</h2>
+          <h2>Carga {{ u.folio }} recibida</h2>
           <p>Ya está en el inventario. Al escanear uno de estos bultos en caja, se cobra por lo que pesa.</p>
         </div>
         <div class="acciones">
@@ -75,7 +75,7 @@
     @if (paquetes().length === 0) {
       <p class="aviso">
         No hay presentaciones de tipo <b>paquete</b>. Da de alta el producto con la casilla
-        <b>Multipresentación</b> y su presentación de paquete antes de recibir la remesa.
+        <b>Multipresentación</b> y su presentación de paquete antes de cargarle mercancía.
       </p>
     } @else {
       <div class="campos">
@@ -220,7 +220,7 @@
         <div class="alert" role="alert">
           {{ bloqueantes().length }}
           {{ bloqueantes().length === 1 ? 'código ya está registrado' : 'códigos ya están registrados' }},
-          así que no se puede cargar. Si esta remesa ya se recibió antes, revísala en el historial.
+          así que no se puede cargar. Si esta carga ya entró antes, revísala en el historial.
           <ul>
             @for (a of bloqueantes().slice(0, 8); track a.fila) { <li>Renglón {{ a.fila }}: {{ a.aviso }}</li> }
             @if (bloqueantes().length > 8) { <li>… y {{ bloqueantes().length - 8 }} más</li> }
@@ -303,13 +303,13 @@
     @if (sospechosas() > 0) {
       <p class="nota">
         El archivo del proveedor se llama «COLOR CALIBRE.xlsx». Donde el nombre no coincide con el
-        hilo, la remesa pudo haber entrado al producto equivocado — revísalas. Puede ser también que
+        hilo, la carga pudo haber entrado al hilo equivocado — revísalas. Puede ser también que
         el archivo viniera con otro nombre.
       </p>
     }
 
     @if (historial().length === 0) {
-      <p class="vacio">Todavía no se ha recibido ninguna remesa.</p>
+      <p class="vacio">Todavía no ha entrado ninguna carga.</p>
     } @else {
       <div class="tabla-scroll">
         <table class="grid historial">

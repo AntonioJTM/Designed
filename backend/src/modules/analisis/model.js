@@ -18,21 +18,23 @@ const ESTADOS_MUERTOS = "('cancelado', 'devuelto')";
 // ---------------------------------------------------------------------------
 
 /**
- * La cartera por ANTIGÜEDAD. Los rangos son los que usa cualquier cobranza
- * (0-30, 31-60, 61-90, +90) y se miden desde el ÚLTIMO MOVIMIENTO del cliente:
- * si abonó hace una semana, su saldo no es "viejo" aunque el cargo sea de hace
- * meses — está pagando, y tratarlo como moroso sería injusto y llevaría a
- * cobrarle a quien no toca.
+ * La cartera por ANTIGÜEDAD. Los días se miden desde su ÚLTIMO ABONO (o desde
+ * que volvió a deber, si lo había pagado todo): si abonó hace una semana, su
+ * saldo no es "viejo" aunque el cargo sea de hace meses — está pagando. Es la
+ * MISMA cuenta y el MISMO plazo que la caja y la campana (2026-10-17): antes aquí
+ * contaba cualquier movimiento (también un cargo nuevo) y el aviso era a 30 días,
+ * así que un cliente de 16 días salía "al día" aquí y "atrasado" en la caja.
  *
  * `dias_sin_abonar` es lo que de verdad importa para decidir a quién llamar.
  */
-async function cartera({ diasAviso = 30 } = {}) {
+async function cartera({ diasAviso } = {}) {
+  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
+  const { diasSinAbonarDeTodos } = require('../clientes/model');
+  if (diasAviso == null) diasAviso = DIAS_SIN_ABONAR;
   const [rows] = await pool.query(
     `SELECT c.id AS cliente_id, c.codigo, c.nombre, c.nombre_comercial,
             c.telefono, c.limite_credito,
             s.saldo,
-            -- Desde cuándo no da señales de vida en su cuenta.
-            DATEDIFF(NOW(), COALESCE(ult.ultimo_movimiento, c.creado_en)) AS dias_sin_abonar,
             ult.ultimo_movimiento,
             s.ultimo_abono,
             (SELECT MAX(p.creado_en) FROM pedidos p
@@ -43,17 +45,21 @@ async function cartera({ diasAviso = 30 } = {}) {
          SELECT cliente_id, MAX(creado_en) AS ultimo_movimiento
            FROM credito_movimientos GROUP BY cliente_id
        ) ult ON ult.cliente_id = c.id
-      WHERE s.saldo > 0
-      ORDER BY dias_sin_abonar DESC, s.saldo DESC`
+      WHERE s.saldo > 0`
   );
+  const dias = await diasSinAbonarDeTodos();
+  for (const r of rows) r.dias_sin_abonar = dias.get(Number(r.cliente_id)) ?? 0;
+  // Del que más tiempo lleva sin abonar al más reciente; con los mismos días, el que debe más.
+  rows.sort((a, b) => b.dias_sin_abonar - a.dias_sin_abonar || Number(b.saldo) - Number(a.saldo));
 
   // Los tramos se arman aquí y no en SQL: el corte lo decide el negocio y así
-  // se puede cambiar sin tocar la consulta.
+  // se puede cambiar sin tocar la consulta. "Al día" llega hasta el plazo de
+  // la caja y la campana (15 días): pasado eso, la caja ya pregunta antes de fiarle.
   const TRAMOS = [
-    { clave: 'al_dia', etiqueta: 'Al día (0-30 días)', hasta: 30 },
+    { clave: 'al_dia', etiqueta: `Al día (hasta ${DIAS_SIN_ABONAR} días)`, hasta: DIAS_SIN_ABONAR },
+    { clave: 'atrasado', etiqueta: `${DIAS_SIN_ABONAR + 1} a 30 días`, hasta: 30 },
     { clave: 'un_mes', etiqueta: '31 a 60 días', hasta: 60 },
-    { clave: 'dos_meses', etiqueta: '61 a 90 días', hasta: 90 },
-    { clave: 'vencido', etiqueta: 'Más de 90 días', hasta: Infinity },
+    { clave: 'vencido', etiqueta: 'Más de 60 días', hasta: Infinity },
   ];
   const porTramo = TRAMOS.map((t) => ({ ...t, hasta: undefined, monto: 0, clientes: 0 }));
 
@@ -67,7 +73,8 @@ async function cartera({ diasAviso = 30 } = {}) {
   }
 
   const total = Math.round(rows.reduce((s, r) => s + Number(r.saldo), 0) * 100) / 100;
-  const porAvisar = rows.filter((r) => Number(r.dias_sin_abonar) >= diasAviso);
+  // MÁS de N días, como la caja (`atrasado`) y la campana.
+  const porAvisar = rows.filter((r) => Number(r.dias_sin_abonar) > diasAviso);
 
   return {
     total_por_cobrar: total,

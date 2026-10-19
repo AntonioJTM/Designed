@@ -1905,6 +1905,21 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
     let pagoId = pgrows[0]?.id ?? null;
 
     if (!pagoId) {
+      // UNA VENTA A CRÉDITO se paga con abonos a la cuenta del cliente
+      // (2026-10-17): "lo que falta" de esta venta ES lo que se cargó a su
+      // cuenta, así que crear un pago por eso la dejaba "pagada" con la deuda
+      // todavía en su cuenta (el dinero contado dos veces en los papeles). Sí
+      // se le puede pegar la prueba a una transferencia que ya tenga (arriba).
+      const [[fiada]] = await conn.query(
+        "SELECT COUNT(*) AS n FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo'",
+        { id: pedidoId }
+      );
+      if (Number(fiada.n) > 0) {
+        await archivos.borrar(CARPETA_COMPROBANTES, guardado.nombre);
+        throw new AppError(409, 'VENTA_A_CREDITO_USA_ABONOS',
+          `${pedido.numero_pedido} es una venta a crédito: el depósito se registra como abono a su cuenta ` +
+          '(en su expediente, «Registrar abono», por transferencia), para que baje lo que debe.');
+      }
       const cobrado = await _abonado(conn, pedidoId);
       const falta = round2(Number(pedido.total) - cobrado);
       if (falta <= 0.004) {
@@ -2623,7 +2638,7 @@ async function modificarEncargo(pedidoId, datos) {
     const num = pedido.numero_pedido;
     if (!Number(pedido.encargo) || Number(pedido.inventario_descontado) || !PASOS_ENCARGO.includes(pedido.estado)) {
       throw new AppError(409, 'NO_SE_MODIFICA',
-        `${num} no es un pedido en espera (está ${pedido.estado}): ya no se puede modificar.`);
+        `${num} no es una nota en espera (está ${pedido.estado}): ya no se puede modificar.`);
     }
 
     const [lineas] = await conn.query(

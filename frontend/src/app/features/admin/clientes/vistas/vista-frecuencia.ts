@@ -86,7 +86,7 @@ export class VistaFrecuencia {
           : 'hace falta que vuelvan a comprar para medirlo',
         punto: COLOR.acento,
       },
-      { etiqueta: 'Al corriente', valor: String(d.al_corriente), pie: 'vinieron dentro de su ritmo de siempre', punto: COLOR.serie1 },
+      { etiqueta: 'A su ritmo', valor: String(d.al_corriente), pie: 'vinieron dentro de su ritmo de siempre', punto: COLOR.serie1 },
       { etiqueta: 'Ya les toca', valor: String(d.les_toca), pie: 'pasaron su ritmo, todavía no el doble', punto: COLOR.ambar },
       { etiqueta: 'Se están enfriando', valor: String(d.enfriandose), pie: 'llevan más del doble de su ritmo sin venir', punto: COLOR.alerta },
     ];

@@ -16,7 +16,20 @@
   </header>
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
-  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+  @if (mensaje()) {
+    <!-- La recién entregada trae su ticket (2026-10-17). -->
+    <div class="ok-msg con-accion" role="status">
+      <span>{{ mensaje() }}</span>
+      @if (ticketAviso.actual(); as t) {
+        <div class="botones">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+          @if (t.whatsapp) {
+            <app-boton-whatsapp [chico]="true" etiqueta="Mandar ticket por WhatsApp" (mandar)="t.whatsapp()" />
+          }
+        </div>
+      }
+    </div>
+  }
 
   <div class="kpis">
     <div class="kpi">

@@ -169,6 +169,10 @@ describe('Ventana de WhatsApp', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(document.activeElement).toBe(boton(el, 'Listo'));
+    // Ya mandado: el "Listo" lo dice todo; "Le llega a…" y "Cambiar número" ya no (2026-10-17).
+    expect(texto(el)).not.toContain('Le llega a 775');
+    expect(texto(el)).not.toContain('Cambiar número');
+    expect(el.querySelector('input[name=telefono]')).toBeNull();
   });
 
   it('"Cambiar número" enseña el campo con su número y le pone el cursor', async () => {

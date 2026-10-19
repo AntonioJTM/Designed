@@ -46,7 +46,7 @@ describe('Mínimo para varios hilos', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(pedidos[0]).toEqual({ almacen_id: 2, paquetes: 5, solo_sin_minimo: true });
     expect(el.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
-    expect(texto(el)).toContain('Se le pone a 2 hilos: avisa cuando le queden menos de 5 paquetes');
+    expect(texto(el)).toContain('Se le pone a 2 hilos: avisa cuando le queden 5 paquetes o menos');
     expect(texto(el)).toContain('1 ya tenía su propio mínimo y se queda igual.');
     expect(texto(el)).toContain('CAMEL 2/30');
     expect(texto(el)).toContain('94.364 kg');

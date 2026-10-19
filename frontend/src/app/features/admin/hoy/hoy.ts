@@ -70,6 +70,12 @@ export class Hoy {
   readonly vePos = computed(() => this.puede('ver:pos'));
   readonly veCaja = computed(() => this.puede('ver:caja'));
   private readonly veClientes = computed(() => this.puede('ver:clientes'));
+  /**
+   * La cobranza atrasada suma a los clientes de TODAS las tiendas (Cuánto debe
+   * es de quien las ve todas): a quien es de una sola, el servidor la manda en
+   * cero y la cifra diría "nadie debe" sin ser cierto. Se esconde.
+   */
+  private readonly veCobranza = computed(() => this.veClientes() && this.auth.veTodasLasTiendas());
   private readonly veNotas = computed(() => this.puede('ver:notas_pendientes'));
   private readonly veSurtir = computed(() => this.puede('ver:surtir'));
   private readonly veInventario = computed(() => this.puede('ver:inventario'));
@@ -97,14 +103,14 @@ export class Hoy {
         punto: 'var(--viz-series-3)',
       });
     }
-    if (p && this.veClientes()) {
+    if (p && this.veCobranza()) {
       lista.push({
         etiqueta: 'Cobranza atrasada',
         valor: this.pesos(p.cobranza?.monto ?? 0),
         pie:
           (p.cobranza?.num_clientes ?? 0) === 0
-            ? `nadie lleva ${p.cobranza?.dias ?? 30} días sin abonar`
-            : `${p.cobranza.num_clientes} ${p.cobranza.num_clientes === 1 ? 'cliente' : 'clientes'}, ${p.cobranza.dias} días o más sin abonar`,
+            ? `nadie lleva más de ${p.cobranza?.dias ?? 15} días sin abonar`
+            : `${p.cobranza.num_clientes} ${p.cobranza.num_clientes === 1 ? 'cliente' : 'clientes'}, más de ${p.cobranza.dias} días sin abonar`,
         punto: 'var(--punto-alerta)',
       });
     }
@@ -204,7 +210,7 @@ export class Hoy {
         clientes.push({
           icono: ICONO.cobro,
           tono: 'naranja',
-          titulo: `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente lleva' : 'clientes llevan'} ${c.dias} días o más sin abonar · ${this.pesos(c.monto)}`,
+          titulo: `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente lleva' : 'clientes llevan'} más de ${c.dias} días sin abonar · ${this.pesos(c.monto)}`,
           detalle: peor ? `El que más: ${peor.nombre_comercial || peor.nombre}, ${peor.dias_sin_abonar} días` : '',
           accion: 'Cobrar',
           ruta: '/admin/clientes/deuda',
@@ -233,10 +239,12 @@ export class Hoy {
             n.num_clientes === 1
               ? '1 cliente nuevo espera que se decida su crédito'
               : `${n.num_clientes} clientes nuevos esperan que se decida su crédito`,
+          // Son los capturados en los ÚLTIMOS N días (2026-10-17: decía "hace
+          // 15 días o más", al revés).
           detalle:
             n.num_clientes === 1
-              ? `${nombre}, capturado hace ${n.dias} días o más`
-              : `${nombre} y ${n.num_clientes - 1} más · capturados hace ${n.dias} días o más`,
+              ? `${nombre}, ${this.capturado(primero?.dias)}`
+              : `${nombre} y ${n.num_clientes - 1} más · capturados en los últimos ${n.dias} días`,
           accion: 'Decidir',
           // Con uno solo se va directo a él; con varios, al primero (los demás
           // siguen en la campana).
@@ -285,6 +293,12 @@ export class Hoy {
       next: (d) => this.datos.set(d),
       error: (e) => this.error.set(this.msg(e)),
     });
+  }
+
+  /** "capturado hoy", "capturado ayer" o "capturado hace 6 días". */
+  private capturado(dias: number | string | undefined): string {
+    const d = Number(dias ?? 0);
+    return d <= 0 ? 'capturado hoy' : d === 1 ? 'capturado ayer' : `capturado hace ${d} días`;
   }
 
   private puede(permiso: string): boolean {

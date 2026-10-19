@@ -76,9 +76,8 @@ import { numeroWhatsapp } from '../../../shared/ticket/whatsapp';
           }
           @case ('enlazado') {
             <p>
-              Enlazado con <b>{{ w()!.numero }}</b>
-              @if (w()!.nombre) { ({{ w()!.nombre }}) }
-              @if (w()!.desde) { desde el {{ fecha(w()!.desde) }} }.
+              <!-- En una sola expresión: con los @if sueltos quedaba "2026 ." (2026-10-17). -->
+              Enlazado con <b>{{ w()!.numero }}</b>{{ (w()!.nombre ? ' (' + w()!.nombre + ')' : '') + (w()!.desde ? ' desde el ' + fecha(w()!.desde) : '') }}.
               Los tickets le llegan al cliente desde este número.
             </p>
             <form class="prueba" (ngSubmit)="probar()">

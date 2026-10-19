@@ -106,11 +106,14 @@
           </div>
 
           <!-- Lo que antes eran las cifras de arriba: el total se parte en lo que
-               es venta, lo que se descontó y lo que es IVA. -->
+               es venta, lo que se descontó, lo que es IVA y lo de envío (si hubo). -->
           <div class="desglose">
             <span>Sin IVA <b>{{ v.resumen.subtotal | dinero }}</b></span>
             <span>Descuentos <b>{{ v.resumen.descuento | dinero }}</b></span>
             <span>IVA <b>{{ v.resumen.impuestos | dinero }}</b></span>
+            @if (+(v.resumen.envio ?? 0) > 0) {
+              <span>Envío <b>{{ v.resumen.envio | dinero }}</b></span>
+            }
             <span>Total <b>{{ v.resumen.total | dinero }}</b></span>
           </div>
         </section>

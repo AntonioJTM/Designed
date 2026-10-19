@@ -24,7 +24,7 @@ const CATALOGO = [
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:pedidos', nombre: 'Ventas', ayuda: 'Todo lo vendido y su estado' },
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:encargos', nombre: 'Notas en espera', ayuda: 'Notas que el cliente modifica antes de llevárselas; se cobran al entregarlas' },
   { grupo: 'Inicio y Vender', tipo: 'pantalla', clave: 'ver:notas_pendientes', nombre: 'Notas pendientes de pago', ayuda: 'Lo que se llevaron sin pagar: registrar su pago o pasarlo a crédito' },
-  { grupo: 'Clientes', tipo: 'pantalla', clave: 'ver:clientes', nombre: 'Clientes', ayuda: 'Las cinco pestañas y el expediente' },
+  { grupo: 'Clientes', tipo: 'pantalla', clave: 'ver:clientes', nombre: 'Clientes', ayuda: 'La lista de clientes, sus pestañas y el expediente' },
   { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:inventario', nombre: 'Inventario', ayuda: 'Existencias por almacén' },
   { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:remesa', nombre: 'Surtir inventario', ayuda: 'Cargar la lista del proveedor, con su factura y pedimento' },
   { grupo: 'Mercancía', tipo: 'pantalla', clave: 'ver:surtir', nombre: 'Surtir sucursal', ayuda: 'Pedir, enviar y recibir traspasos' },

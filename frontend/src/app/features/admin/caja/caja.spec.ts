@@ -82,6 +82,41 @@ describe('CajaPantalla', () => {
     expect(c.movimientos().at(-1)!.detalle).toBe('POS-1 · Doña Mari');
   });
 
+  /*
+   * LAS CIFRAS SUMAN (2026-10-17): el efectivo de un anticipo, del pago de una
+   * nota o de un ingreso a mano entraba al cajón sin salir en ninguna cifra.
+   */
+  it('las cifras suman "Debería haber": fondo + ventas + abonos y otros ingresos − lo que salió', async () => {
+    const extra = [
+      { id: 5, tipo: 'ingreso', monto: '500.00', referencia_id: 70, motivo: 'Anticipo de Doña Mari', creado_en: '2026-10-02 14:00:00' },
+      { id: 6, tipo: 'ingreso', monto: '200.00', referencia_id: 12, motivo: 'Pago de la nota POS-9', creado_en: '2026-10-02 15:00:00' },
+      { id: 7, tipo: 'ingreso', monto: '50.00', motivo: 'Cambio que trajo el gerente', creado_en: '2026-10-02 16:00:00' },
+    ] as SesionCaja['movimientos'];
+    const original = sesion.movimientos;
+    sesion.movimientos = [...(original ?? []), ...(extra ?? [])];
+    sesion.esperado_actual = 2390;
+    try {
+      const c = (await montar([])).componentInstance;
+      const [haber, ventas, ingresos, salio] = c.kpis();
+      expect(haber.pie).toBe('fondo $500 + lo que entró − lo que salió');
+      expect(ingresos.etiqueta).toBe('Abonos y otros ingresos');
+      expect(ingresos.valor).toContain('1,050');
+      expect(ingresos.pie).toBe('1 abono · 1 anticipo · 1 pago de nota · 1 ingreso a mano, en efectivo');
+      // 500 + 1,000 + 1,050 − 160 = 2,390.
+      const num = (t: string) => Number(t.replace(/[^\d.-]/g, ''));
+      expect(500 + num(ventas.valor) + num(ingresos.valor) - num(salio.valor)).toBe(2390);
+      expect(haber.valor).toContain('2,390');
+      // En la tabla, cada ingreso dice qué fue.
+      const tipos = c.movimientos().map((m) => m.tipo);
+      expect(tipos).toContain('Anticipo');
+      expect(tipos).toContain('Pago de nota');
+      expect(tipos).toContain('Ingreso');
+    } finally {
+      sesion.movimientos = original;
+      sesion.esperado_actual = 1640;
+    }
+  });
+
   it('sin permiso no ofrece sacar o meter efectivo', async () => {
     const sin = await montar([]);
     expect(sin.nativeElement.textContent).not.toContain('Sacar o meter efectivo');
