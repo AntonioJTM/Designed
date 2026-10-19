@@ -2,7 +2,6 @@ import { Component, OnInit, computed, inject, input, output, signal } from '@ang
 import { FormsModule } from '@angular/forms';
 import { Conversion, InventarioService, PreviaDesarme } from '../../../core/services/inventario.service';
 import { Almacen } from '../../../core/models/inventario.models';
-import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
@@ -16,8 +15,13 @@ import { CuandoPipe } from './cuando.pipe';
  * Sigue viviendo en Inventario y NO en el catálogo ni en el POS: decisión del
  * usuario. La acción la hace el mostrador, pero desde esta pantalla.
  *
- * No pide nada al abrir: los almacenes, los conos y las bajadas recientes entran
- * por input, ya cargados por el listado, así que abre armado y de un tamaño.
+ * No pide nada al abrir: los almacenes y las bajadas recientes entran por input,
+ * ya cargados por el listado, así que abre armado y de un tamaño.
+ *
+ * SOLO CON EL CÓDIGO DEL PAQUETE (2026-10-18): se escanea o se escribe a mano en
+ * "Código del paquete". La captura "a mano, sin escanear" (cono + cuántos
+ * paquetes, sin código) se quitó: sacaba kilos sin marcar ningún paquete como
+ * abierto y descuadraba el inventario. El servidor también exige el código.
  */
 @Component({
   selector: 'app-desarme-modal',
@@ -30,8 +34,6 @@ export class DesarmeModal implements OnInit {
   private readonly inv = inject(InventarioService);
 
   readonly almacenes = input<Almacen[]>([]);
-  /** Presentaciones de tipo cono: las que se pueden producir a mano. */
-  readonly conos = input<Variante[]>([]);
   /** Últimas bajadas, para contestar "¿ya lo bajé?" sin salir del modal. */
   readonly conversiones = input<Conversion[]>([]);
 
@@ -61,70 +63,11 @@ export class DesarmeModal implements OnInit {
   destarePorCono: number | null = null;
   motivo = '';
 
-  /** Captura a mano, cuando no hay lector o el bulto no tiene código. */
-  manual = {
-    cono_id: '' as number | '',
-    tienda: '' as number | '',
-    paquetes: 1 as number | null,
-    kg: null as number | null,
-    conos: null as number | null,
-  };
-
   /** Solo las tiendas (almacenes con mostrador): en la bodega no se bajan conos. */
   readonly tiendas = computed(() => this.almacenes().filter((a) => !!Number(a.es_punto_venta)));
 
   /** Solo las últimas: el histórico completo está en el Kardex. */
   readonly ultimas = computed(() => this.conversiones().slice(0, 5));
-
-  /** Cono elegido para desarmar a mano, con los datos de su paquete de origen. */
-  conoSel(): Variante | null {
-    return this.conos().find((c) => c.id === Number(this.manual.cono_id)) ?? null;
-  }
-
-  /**
-   * Lo que va a pasar al desarmar a mano, para confirmarlo antes.
-   *
-   * Es un MÉTODO y no un `computed`: los campos del formulario son propiedades
-   * normales de `ngModel`, no señales, así que un `computed` se calculaba una vez
-   * y se quedaba pegado —teclear otros kilos no movía la vista previa—. Venía así
-   * del código anterior, donde el error no se veía porque esta parte vive dentro
-   * de un `<details>` cerrado.
-   */
-  previaManual(): {
-    kg: number;
-    nominal: number;
-    ajustado: boolean;
-    piezas: number;
-    piezasNominal: number;
-    piezasAjustadas: boolean;
-    paqueteSku?: string | null;
-    conoSku: string;
-    destare: number;
-    kgEnconados: number;
-  } | null {
-    const c = this.conoSel();
-    const n = Number(this.manual.paquetes);
-    if (!c || !n || !c.paquete_peso_kg || !c.piezas_por_origen) return null;
-    // Peso nominal según el paquete, y el real si se ajustó a mano.
-    const nominal = Number(c.paquete_peso_kg) * n;
-    const kg = this.manual.kg != null ? Number(this.manual.kg) : nominal;
-    const piezasNominal = Number(c.piezas_por_origen) * n;
-    const piezas = this.manual.conos != null ? Number(this.manual.conos) : piezasNominal;
-    const destare = this.destareTotal(piezas);
-    return {
-      kg,
-      nominal,
-      ajustado: kg !== nominal,
-      piezas,
-      piezasNominal,
-      // Hay bultos que rinden menos conos que el nominal.
-      piezasAjustadas: piezas !== piezasNominal,
-      paqueteSku: c.paquete_sku,
-      conoSku: c.sku,
-      destare,
-      kgEnconados: Math.round((kg + destare) * 1000) / 1000,
-    };
-  }
 
   /** Destare de todos los conos: lo que pesa un tubo × cuántos conos salen. */
   destareTotal(conos: number | null | undefined): number {
@@ -140,10 +83,6 @@ export class DesarmeModal implements OnInit {
 
   /** Los inputs se leen aquí, no en el constructor: ahí todavía no están puestos. */
   ngOnInit(): void {
-    const primerCono = this.conos()[0];
-    if (primerCono) this.manual.cono_id = primerCono.id;
-    const tienda = this.tiendas()[0];
-    if (tienda) this.manual.tienda = tienda.id;
     // El tubo casi siempre es el mismo: se propone el último destare usado.
     try {
       const d = Number(localStorage.getItem('destare_por_cono'));
@@ -275,47 +214,6 @@ export class DesarmeModal implements OnInit {
           this.motivo = '';
           this.bajando.set(false);
           // El modal NO se cierra: bajar varios paquetes seguidos es lo normal.
-          this.hecho.emit();
-        },
-        error: (e) => {
-          this.error.set(this.msg(e));
-          this.bajando.set(false);
-        },
-      });
-  }
-
-  /** Desarme capturado a mano, sin escanear: usa los nominales del cono. */
-  desarmarManual(): void {
-    const c = this.conoSel();
-    if (!c || !this.manual.tienda || !this.manual.paquetes) {
-      this.error.set('Elige el cono, la tienda y cuántos paquetes vas a desarmar.');
-      return;
-    }
-    this.error.set(null);
-    this.mensaje.set(null);
-    this.bajando.set(true);
-    this.inv
-      .desarmar({
-        cono_variante_id: c.id,
-        almacen_origen_id: Number(this.manual.tienda),
-        almacen_destino_id: Number(this.manual.tienda),
-        paquetes: Number(this.manual.paquetes),
-        kg: this.manual.kg != null ? Number(this.manual.kg) : undefined,
-        conos: this.manual.conos != null ? Number(this.manual.conos) : undefined,
-        destare_por_cono_kg: this.destarePorCono && this.destarePorCono > 0 ? Number(this.destarePorCono) : undefined,
-        motivo: this.motivo.trim() || undefined,
-      })
-      .subscribe({
-        next: (r) => {
-          this.mensaje.set(
-            `Se desarmaron ${r.paquetes} paquete(s): −${r.kg_consumidos} kg de ${r.paquete.sku}, ` +
-              `+${r.kg_enconados ?? r.kg_consumidos} kg de ${r.cono.sku} (${r.piezas_generadas} conos).`
-          );
-          this.recordarDestare();
-          this.manual.kg = null;
-          this.manual.conos = null;
-          this.motivo = '';
-          this.bajando.set(false);
           this.hecho.emit();
         },
         error: (e) => {

@@ -77,23 +77,21 @@ export interface PreviaDesarme {
   existencias: { almacen_id: number; almacen: string; cantidad: string }[];
 }
 
-/** Desarme de paquetes en conos. El peso y los conos por paquete ya están en la variante. */
+/**
+ * Bajar UN paquete a conos, SIEMPRE con su código (2026-10-18): de él salen el
+ * hilo, sus kilos reales y sus conos. Sin código no se puede (se quitó la
+ * captura "a mano, sin escanear", que descuadraba el inventario).
+ */
 export interface DesarmeInput {
-  /** Con `codigo_bulto` no hace falta: se resuelve del bulto. */
-  cono_variante_id?: number;
+  codigo_bulto: string;
   almacen_origen_id: number;
   almacen_destino_id: number;
-  paquetes?: number;
-  /** Kilos reales. Sin esto se usa paquetes × peso nominal del paquete. */
-  kg?: number;
-  /** Conos que rinde de verdad. Sin esto se usan los nominales del cono. */
+  /** Conos que rinde de verdad, si el paquete no lo dice. */
   conos?: number;
   /** Lo que gana de peso el hilo al enconarse (el tubo de cada cono), en total. */
   destare_kg?: number;
   /** O lo que pesa el tubo de UN cono: el servidor lo multiplica por los conos. */
   destare_por_cono_kg?: number;
-  /** Bulto que se desarmó, para dejar el rastro en el kardex. */
-  codigo_bulto?: string;
   motivo?: string;
 }
 

@@ -8,7 +8,7 @@
 
     <div class="modal-body">
       <p class="explica">
-        Escanea el paquete que vas a abrir: el sistema dice cuántos conos trae y, al confirmar, lo
+        Escanea o escribe el código del paquete que vas a abrir: el sistema dice cuántos conos trae y, al confirmar, lo
         deshace —descuenta sus kilos y da entrada a los conos, en la misma tienda—. El cono se vende
         por kilo, al mismo precio; el destare de cada cono se suma.
         <b>Solo en tiendas:</b> si el paquete está en la bodega, primero mándalo con Surtir sucursal.
@@ -26,7 +26,7 @@
         <span class="escaneo">
           <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
                  (keydown.enter)="$event.preventDefault(); escanear()"
-                 placeholder="Escanea el paquete que vas a bajar" />
+                 placeholder="Escanea o escribe el código del paquete" />
           <button type="button" class="btn btn-primary" (click)="escanear()">Leer</button>
         </span>
       </label>
@@ -100,101 +100,12 @@
         </div>
       }
 
-      <!-- 2 · Sin lector: se captura a mano -->
-      @if (!previaBulto() && conos().length > 0) {
-        <details class="a-mano">
-          <summary>Capturar a mano, sin escanear</summary>
-          <div class="campos">
-            <label class="field completo">
-              Cono a producir
-              <select [(ngModel)]="manual.cono_id">
-                @for (c of conos(); track c.id) {
-                  <option [ngValue]="c.id">
-                    {{ c.producto }}{{ c.calibre ? ' ' + c.calibre : '' }}{{ c.material ? ' — ' + c.material : '' }}{{ c.linea ? ' · ' + c.linea : '' }} · {{ c.sku }}
-                  </option>
-                }
-              </select>
-              @if (conoSel(); as c) {
-                <span class="ayuda">
-                  Sale del paquete {{ c.paquete_sku }} de {{ c.paquete_peso_kg | cantidad: 'kg' }} ·
-                  {{ c.piezas_por_origen }} conos por paquete
-                </span>
-              }
-            </label>
-            <label class="field">
-              Paquetes a desarmar
-              <input type="number" step="1" min="1" [(ngModel)]="manual.paquetes" />
-            </label>
-            <label class="field">
-              <span>Kilos reales <span class="muted">(opcional)</span></span>
-              <span class="cant">
-                <input type="number" step="0.001" min="0" [(ngModel)]="manual.kg"
-                       [placeholder]="previaManual() ? (previaManual()!.nominal | cantidad) : 'peso nominal'" />
-                <span>kg</span>
-              </span>
-              <span class="ayuda">Solo si el bulto no pesó lo nominal. Vacío usa el peso del paquete.</span>
-            </label>
-            <label class="field">
-              <span>Conos reales <span class="muted">(opcional)</span></span>
-              <input type="number" step="1" min="1" [(ngModel)]="manual.conos"
-                     [placeholder]="previaManual() ? previaManual()!.piezasNominal + ' conos' : 'los nominales'" />
-              <span class="ayuda">Solo si el bulto rinde menos de lo normal. Vacío usa los nominales.</span>
-            </label>
-            <label class="field">
-              Se abre en la tienda
-              <select [(ngModel)]="manual.tienda">
-                @for (t of tiendas(); track t.id) { <option [ngValue]="t.id">{{ t.nombre }}</option> }
-              </select>
-            </label>
-            <label class="field">
-              <span>Destare por cono <span class="muted">(opcional)</span></span>
-              <span class="cant">
-                <input type="number" step="0.001" min="0" max="1" [(ngModel)]="destarePorCono" placeholder="Ej. 0.035" />
-                <span>kg</span>
-              </span>
-            </label>
-            <label class="field">
-              <span>Motivo <span class="muted">(opcional)</span></span>
-              <input type="text" [(ngModel)]="motivo" placeholder="Ej. Surtido de mostrador" />
-            </label>
-          </div>
-
-          @if (previaManual(); as p) {
-            <div class="previa">
-              <div class="renglon">
-                <span>
-                  <span class="mono">{{ p.paqueteSku }}</span>
-                  @if (p.ajustado) {
-                    <span class="muted"> · ajustado, nominal {{ p.nominal | cantidad: 'kg' }}</span>
-                  }
-                </span>
-                <b class="neg">−{{ p.kg | cantidad: 'kg' }}</b>
-              </div>
-              <div class="renglon">
-                <span>
-                  <span class="mono">{{ p.conoSku }}</span>
-                  @if (p.piezasAjustadas) {
-                    <span class="muted"> · ajustado, nominal {{ p.piezasNominal | cantidad }}</span>
-                  }
-                </span>
-                <b class="pos">+{{ p.piezas | cantidad }} conos · {{ p.kgEnconados | cantidad: 'kg' }}</b>
-              </div>
-              @if (p.destare > 0) {
-                <div class="renglon">
-                  <span class="muted">{{ p.piezas | cantidad }} conos × {{ destarePorCono | cantidad: 'kg' }} de destare</span>
-                  <span class="muted">+{{ p.destare | cantidad: 'kg' }}</span>
-                </div>
-              }
-            </div>
-          }
-
-          <div class="acciones-a-mano">
-            <button type="button" class="btn btn-ghost btn-sm" (click)="desarmarManual()" [disabled]="bajando()">
-              Desarmar sin escanear
-            </button>
-          </div>
-        </details>
-      }
+      <!--
+        "Capturar a mano, sin escanear" SE QUITÓ (2026-10-18, a petición del usuario: "es un
+        peligro y puede descuadrar inventario"): no pedía el número del paquete, así que sacaba
+        kilos sin marcar ningún paquete como abierto. El número se escribe a mano en "Código del
+        paquete", arriba, y es lo mismo que escanearlo.
+      -->
 
       <!-- Las últimas bajadas: contesta "¿ya lo bajé?" sin salir del modal. -->
       @if (ultimas().length > 0) {

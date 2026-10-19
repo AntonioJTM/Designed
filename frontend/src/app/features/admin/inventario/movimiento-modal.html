@@ -107,7 +107,7 @@
 
           @if (unidad === 'paq' && mov.cantidad) {
             <div class="renglon">
-              <span>{{ mov.cantidad | cantidad }} paquetes × {{ pesoRef() | cantidad: 'kg' }}</span>
+              <span>{{ mov.cantidad | cantidad }} {{ +mov.cantidad === 1 ? 'paquete' : 'paquetes' }} × {{ pesoRef() | cantidad: 'kg' }}</span>
               <b>{{ kilos() | cantidad: 'kg' }}</b>
             </div>
           }

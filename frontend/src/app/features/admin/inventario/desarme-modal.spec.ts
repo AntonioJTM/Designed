@@ -80,7 +80,6 @@ describe('DesarmeModal', () => {
 
     const fixture = TestBed.createComponent(DesarmeModal);
     fixture.componentRef.setInput('almacenes', almacenes);
-    fixture.componentRef.setInput('conos', []);
     fixture.componentRef.setInput('conversiones', []);
     fixture.detectChanges();
     return fixture;
@@ -185,53 +184,22 @@ describe('DesarmeModal', () => {
     expect(localStorage.getItem('destare_por_cono')).toBe('0.05');
   });
 
-  it('la previa de la captura a mano reacciona al teclear', async () => {
-    // Venía de un `computed` sobre campos de ngModel, que no son señales: se
-    // calculaba una vez y se quedaba pegado.
-    await TestBed.configureTestingModule({
-      imports: [DesarmeModal],
-      providers: [{ provide: InventarioService, useValue: invFalso }],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(DesarmeModal);
-    fixture.componentRef.setInput('almacenes', almacenes);
-    fixture.componentRef.setInput('conos', [
-      {
-        id: 9,
-        sku: 'NEGRO-CONO',
-        producto: 'NEGRO',
-        tipo_presentacion: 'cono',
-        paquete_sku: 'NEGRO',
-        paquete_peso_kg: '19.197',
-        piezas_por_origen: 12,
-      },
-    ]);
-    fixture.componentRef.setInput('conversiones', []);
-    fixture.detectChanges();
+  it('solo se baja con el codigo del paquete: ya no hay captura a mano (2026-10-18)', async () => {
+    const fixture = await montar();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('details.a-mano')).toBeNull();
+    expect(el.textContent).not.toContain('Capturar a mano');
+    expect(el.textContent).not.toContain('Desarmar sin escanear');
+    // Lo que se manda es el codigo del paquete: ni cono, ni paquetes, ni kilos.
     const c = fixture.componentInstance;
-
-    c.manual.paquetes = 1;
-    expect(c.previaManual()?.kg).toBe(19.197);
-    expect(c.previaManual()?.piezas).toBe(12);
-
-    c.manual.paquetes = 2;
-    expect(c.previaManual()?.kg).toBe(38.394);
-    expect(c.previaManual()?.piezas).toBe(24);
-
-    // Un bulto que rinde menos: los kilos y los conos reales ganan al nominal.
-    c.manual.paquetes = 1;
-    c.manual.kg = 10.75;
-    c.manual.conos = 7;
-    expect(c.previaManual()?.kg).toBe(10.75);
-    expect(c.previaManual()?.ajustado).toBe(true);
-    expect(c.previaManual()?.piezas).toBe(7);
-    expect(c.previaManual()?.piezasAjustadas).toBe(true);
-
-    // Con destare por cono, los 7 conos suman 7 × 0.03 = 0.21 kg.
-    c.destarePorCono = 0.03;
-    expect(c.previaManual()?.destare).toBe(0.21);
-    expect(c.previaManual()?.kgEnconados).toBe(10.96);
-    // A mano también se abre en una tienda.
-    expect(c.manual.tienda).toBe(2);
+    c.codigo = 'B-001';
+    c.escanear();
+    c.bajar();
+    expect(enviado).toBeTruthy();
+    expect(enviado!.codigo_bulto).toBe('B-001');
+    expect(Object.keys(enviado!)).not.toContain('kg');
+    expect(Object.keys(enviado!)).not.toContain('paquetes');
+    expect(Object.keys(enviado!)).not.toContain('cono_variante_id');
   });
 
   it('un código que no existe deja el error y no muestra previa', async () => {
