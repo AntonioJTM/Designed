@@ -13,6 +13,8 @@ import { ModificarPedidoModal } from './modificar-modal';
 import { TicketService } from '../../../core/services/ticket.service';
 import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 type Filtro = 'todos' | 'hoy' | 'atrasados';
 
@@ -80,6 +82,12 @@ export class EncargosPantalla {
 
   constructor() {
     this.cargar();
+    // EN VIVO (2026-10-19, etapa 2): una nota que se guarda, modifica, abona o
+    // entrega en otra caja se ve aquí sin recargar.
+    inject(TiempoRealService)
+      .cambios(['ventas', 'inventario'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.cargar());
   }
 
   cargar(): void {

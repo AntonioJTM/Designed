@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
+const { anotarAlmacen, anotarCompartido } = require('../tiempo-real/contexto');
 
 // Remesas: la lista de empaque del proveedor convertida en bultos + entrada de
 // inventario. Los bultos viven en `variante_codigos` (cada uno con su peso real
@@ -112,6 +113,7 @@ async function _crearRemesaEn(conn, datos, usuarioId, alAvanzar = null) {
      ON DUPLICATE KEY UPDATE cantidad = :nuevo`,
     { v: variante_id, a: almacen_id, nuevo: saldoNuevo }
   );
+  anotarAlmacen(almacen_id);
   await conn.query(
     `INSERT INTO movimientos_inventario
        (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)
@@ -266,6 +268,7 @@ async function crearLista(datos, usuarioId, { catalogo, empatar, avisar = () => 
             `${material.nombre} no tiene el calibre ${h.calibre} (tiene ${calibres.join(', ')}). ` +
             'Agrégalo en Materiales o corrige el archivo.');
         }
+        anotarCompartido('catalogo');
         const [ins] = await conn.query(
           `INSERT INTO productos
              (categoria_id, linea_id, unidad_medida_id, impuesto_id, nombre, descripcion, grosor_calibre,
@@ -289,6 +292,7 @@ async function crearLista(datos, usuarioId, { catalogo, empatar, avisar = () => 
         precio = Number(producto.precio ?? 0);
       } else {
         const sku = await _skuLibre(conn, hilo);
+        anotarCompartido('catalogo');
         const [vins] = await conn.query(
           `INSERT INTO producto_variantes
              (producto_id, sku, codigo_barras, presentacion, tipo_presentacion, peso_kg, modo_precio, precio, activo)

@@ -452,6 +452,7 @@ function metodoHtml(metodo: string | null | undefined, monto: number, referencia
  * EL TICKET DE UN ABONO A SU CUENTA (2026-10-15: "tickets de abono"): cuánto
  * debía, cuánto abonó y con qué, cuánto quedó debiendo y qué ventas fiadas
  * quedaron pagadas con él. Al reimprimirlo después, también cuánto debe hoy.
+ * Si fue A NOTAS (2026-10-19), cada nota con lo que se le abonó y lo que le falta.
  */
 export function armarTicketAbonoCuenta(d: TicketAbonoCuenta, tienda: DatosTienda): string {
   const folio = `AB-${d.id}`;
@@ -463,17 +464,27 @@ export function armarTicketAbonoCuenta(d: TicketAbonoCuenta, tienda: DatosTienda
     d.usuario ? renglon('Lo recibió', esc(d.usuario)) : '',
   ].join('');
   const alCorriente = d.quedo_debiendo <= 0.004;
+  const otras = d.liquidadas_otra_tienda ?? 0;
+  const deOtra = otras ? (otras === 1 ? '1 nota de otra tienda' : `${otras} notas de otra tienda`) : '';
   const liquidadas = d.liquidadas.length
-    ? `<div class="nota">Con este abono ${d.liquidadas.length === 1 ? 'quedó pagada la nota' : 'quedaron pagadas las notas'}:` +
-      `<br><span class="mono">${d.liquidadas.map(esc).join('<br>')}</span></div>`
-    : '';
+    ? `<div class="nota">Con este abono ${d.liquidadas.length + otras === 1 ? 'quedó pagada la nota' : 'quedaron pagadas las notas'}:` +
+      `<br><span class="mono">${d.liquidadas.map(esc).join('<br>')}</span>${deOtra ? `<br>y ${deOtra}` : ''}</div>`
+    : deOtra ? `<div class="nota">Con este abono quedó pagada ${deOtra}.</div>` : '';
   const hoy = Math.abs(d.debe_hoy - d.quedo_debiendo) > 0.004 ? renglon('Hoy debe', esc(dineroTicket(d.debe_hoy))) : '';
+  // A NOTAS (2026-10-19): a cuál fue cada parte y cuánto le quedó faltando.
+  const aNotas = d.a_notas?.length
+    ? d.a_notas.map((n) =>
+      renglon(`<span class="mono">${esc(n.numero_pedido)}</span>`, esc(dineroTicket(n.monto))) +
+      `<div class="nota">${n.le_falta <= 0.004 ? 'Nota pagada completa' : `Le falta ${esc(dineroTicket(n.le_falta))}`}</div>`
+    ).join('')
+    : '';
   return hojaTicket(folio, papelDe(tienda.papelMm), `
   ${cabeceraTienda(tienda)}
   <div class="tipo">Abono</div>
   <div class="datos">${datos}</div>
   <hr class="corte">
-  <div class="resumen">A su cuenta</div>
+  <div class="resumen">${aNotas ? (d.a_notas!.length === 1 ? 'A la nota' : 'A las notas') : 'A su cuenta'}</div>
+  ${aNotas}
   ${renglon('Debía', esc(dineroTicket(d.debia)))}
   <div class="total"><span>ABONÓ</span><span>${esc(dineroTicket(d.monto))}</span></div>
   ${metodoHtml(d.metodo, d.monto, d.referencia)}

@@ -6,6 +6,7 @@ import { ApiResponse } from '../models/auth.models';
 import { Paginado } from '../models/catalogo.models';
 import {
   AbonoInput,
+  NotasCredito,
   AnticipoInput,
   AplicacionSaldoFavor,
   AjusteSaldoFavor,
@@ -126,6 +127,11 @@ export class ClientesService {
    * Registra un abono. Si es en efectivo hace falta `sesion_caja_id`: el dinero
    * tiene que entrar al turno o el corte no cuadra.
    */
+  /** Lo que debe y las notas a crédito que se pueden pagar una por una (2026-10-19). */
+  notasCredito(id: number): Observable<NotasCredito> {
+    return this.http.get<ApiResponse<NotasCredito>>(`${this.base}/${id}/notas-credito`).pipe(map(data));
+  }
+
   abonar(id: number, body: AbonoInput): Observable<{ movimiento_id: number; saldo_nuevo: number }> {
     return this.http
       .post<ApiResponse<{ movimiento_id: number; saldo_nuevo: number }>>(

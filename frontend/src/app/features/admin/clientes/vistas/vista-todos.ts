@@ -2,7 +2,7 @@ import { Component, DestroyRef, OnInit, computed, effect, inject, input, signal,
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subject, Subscription } from 'rxjs';
+import { Subject, Subscription, forkJoin } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import { ClientesService, FiltrosClientes, OrdenClientes } from '../../../../core/services/clientes.service';
 import { Cliente, LugaresEntrega } from '../../../../core/models/clientes.models';
@@ -107,12 +107,15 @@ export class VistaTodos implements OnInit {
   });
 
   constructor() {
-    // Cada vez que la pantalla vuelve a pedir los lugares (al abrir, o después
-    // de dar de alta un cliente) se vuelve a pedir la lista con los filtros de ahora.
+    // Cada vez que la pantalla vuelve a pedir los lugares (al abrir, después de
+    // dar de alta un cliente o con un aviso en vivo) se vuelve a pedir la lista
+    // con los filtros de ahora: la primera vez desde el principio; después, las
+    // páginas que ya se ven, sin regresar a la primera.
     effect(() => {
       this.lugares();
       untracked(() => {
-        this.buscar();
+        if (this.yaCargo) this.refrescar();
+        else this.buscar();
         this.clientes.listar({ activo: false, limit: 1 }).subscribe({
           next: (r) => this.deBaja.set(r.total),
           error: () => this.deBaja.set(null),
@@ -139,14 +142,21 @@ export class VistaTodos implements OnInit {
     this.tecleo$.next();
   }
 
+  /** Ya se trajo la lista una vez (de ahí en adelante se refresca sin regresar arriba). */
+  private yaCargo = false;
+  /** Sube con cada búsqueda o "Ver más": un refresco que llega tarde se tira. */
+  private vuelta = 0;
+
   /** Con los filtros de ahora, desde la primera página. */
   buscar(): void {
     this.carga?.unsubscribe();
+    this.vuelta += 1;
     this.pagina = 1;
     this.cargando.set(true);
     this.error.set(null);
     this.carga = this.clientes.listar(this.filtros(1)).subscribe({
       next: (r) => {
+        this.yaCargo = true;
         this.lista.set(r.items);
         this.total.set(r.total);
         this.cargando.set(false);
@@ -158,7 +168,23 @@ export class VistaTodos implements OnInit {
     });
   }
 
+  /** Las páginas que ya se ven, otra vez y juntas; si se está pidiendo algo, se deja. */
+  private refrescar(): void {
+    if (this.cargando() || this.cargandoMas()) return;
+    const vuelta = this.vuelta;
+    const pedidas = Array.from({ length: this.pagina }, (_, i) => this.clientes.listar(this.filtros(i + 1)));
+    forkJoin(pedidas).subscribe({
+      next: (rs) => {
+        if (vuelta !== this.vuelta || this.cargando() || this.cargandoMas()) return;
+        this.lista.set(rs.flatMap((r) => r.items));
+        this.total.set(rs[rs.length - 1]?.total ?? 0);
+      },
+      error: () => {},
+    });
+  }
+
   verMas(): void {
+    this.vuelta += 1;
     const pagina = this.pagina + 1;
     this.cargandoMas.set(true);
     this.clientes.listar(this.filtros(pagina)).subscribe({

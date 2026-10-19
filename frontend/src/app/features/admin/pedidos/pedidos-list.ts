@@ -10,6 +10,9 @@ import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { etiquetaEstado, tonoEstado } from './estados';
 import { FolioPipe } from '../../../shared/folio.pipe';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
+import { forkJoin } from 'rxjs';
 
 /** Una cifra de arriba de la pantalla. */
 interface Kpi {
@@ -69,6 +72,8 @@ export class PedidosList {
   readonly cajas = signal<Caja[]>([]);
 
   private pagina = 1;
+  /** Sube con cada búsqueda o "Ver más": un refresco en vivo que llega tarde se tira. */
+  private vuelta = 0;
 
   // Filtros. Son campos con ngModel: lo que dependa de ellos se lee con
   // MÉTODOS, nunca con computed().
@@ -101,6 +106,42 @@ export class PedidosList {
       next: (c) => this.cajas.set(c),
       error: () => this.cajas.set([]),
     });
+    // EN VIVO (2026-10-19, etapa 2): lo que se vende, cancela o devuelve en otra
+    // caja aparece aquí sin recargar (solo lo de sus tiendas). También un abono a
+    // la cuenta del cliente: cambia el "falta $X" de sus ventas a crédito.
+    inject(TiempoRealService)
+      .cambios(['ventas', 'clientes'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.refrescarEnVivo());
+  }
+
+  /**
+   * Las cifras de arriba y la lista con las páginas que ya se cargaron con "Ver
+   * más" (se vuelven a pedir todas y se reemplazan juntas). Si se está pidiendo
+   * algo, se deja: ya llega.
+   */
+  private refrescarEnVivo(): void {
+    this.rediseno.resumenPedidos().subscribe({
+      next: (r) => this.kpis.set(this.armarKpis(r)),
+      error: () => {},
+    });
+    if (this.cargando() || this.cargandoMas()) return;
+    const vuelta = this.vuelta;
+    const paginas = this.pagina;
+    const pedidas = [];
+    for (let p = 1; p <= paginas; p++) {
+      this.pagina = p;
+      pedidas.push(this.pedir());
+    }
+    this.pagina = paginas;
+    forkJoin(pedidas).subscribe({
+      next: (ps) => {
+        if (vuelta !== this.vuelta || this.cargando() || this.cargandoMas()) return;
+        this.pedidos.set(ps.flatMap((p) => p.items));
+        this.total.set(ps[ps.length - 1]?.total ?? 0);
+      },
+      error: () => {},
+    });
   }
 
   private armarKpis(r: ResumenPedidos): Kpi[] {
@@ -130,6 +171,7 @@ export class PedidosList {
 
   /** Vuelve a pedir la lista desde la primera página. */
   buscar(): void {
+    this.vuelta += 1;
     this.pagina = 1;
     this.cargando.set(true);
     this.error.set(null);
@@ -154,6 +196,7 @@ export class PedidosList {
 
   /** Las siguientes 50. Antes solo se veían las primeras, sin forma de pasar. */
   verMas(): void {
+    this.vuelta += 1;
     this.pagina += 1;
     this.cargandoMas.set(true);
     this.pedir().subscribe({

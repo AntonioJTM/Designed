@@ -642,6 +642,30 @@ tienda-hilos/
   dos al mismo tiempo el índice deja pasar una. La llave cambia al registrar y se conserva si el
   servidor rechaza. Igual "Abrir turno": `caja/model.js → abrirSesion` revisa y abre en UNA
   transacción con la caja bloqueada (antes un doble clic abría dos turnos).
+- **EL SISTEMA EN TIEMPO REAL** (2026-10-19, las tres etapas). Las pantallas abiertas se ponen al día
+  solas cuando otro guarda algo. Son eventos del servidor (`GET /api/v1/tiempo-real`, módulo
+  `tiempo-real/`): lo que escribe y sale bien avisa QUÉ TIPO de cosa cambió (`tipos.js →
+  tiposDeRuta`, por el prefijo de la ruta) y cada pantalla vuelve a pedir lo suyo con sus
+  endpoints de siempre; el aviso NUNCA lleva datos (así se respetan las tiendas y el costo). En la
+  pantalla, `TiempoRealService.cambios([tipos])` (junta los avisos seguidos; con `fetch` y el
+  token en el encabezado, nunca en la dirección). Una pantalla nueva que deba ponerse al día se
+  suscribe ahí con `takeUntilDestroyed`, sin tocar lo que se esté tecleando. Un endpoint nuevo que
+  escribe queda cubierto por su prefijo; si cambia otra cosa, se agrega en `tipos.js`. Al apagar,
+  `server.js` cierra las conexiones (`cerrarTodas`): sin eso cada despliegue esperaba 90 s.
+  `cambios(tipos, pausaMs)` recarga a más tardar `pausaMs` después del PRIMER aviso (`auditTime`,
+  no `debounceTime`: esperar silencio dejaba sin recargar una pantalla pesada en una tienda con
+  fila); las pesadas usan 2 a 3 s. Una recarga en vivo es CALLADA (sin "Cargando…" ni vaciar
+  cifras), conserva las páginas de "Ver más" y se tira si llega después de un cambio de filtro.
+  **Cada aviso le llega solo a quien ve esa tienda** (`almacenes.js`: las pistas de la petición,
+  antes y después de guardar; `routes.js → tiposPara`), más lo que la petición tocó POR DENTRO
+  (`contexto.js`, AsyncLocalStorage): el kardex anota su tienda con `anotarAlmacen` y el crédito,
+  el saldo a favor y un hilo o presentación nueva anotan lo COMPARTIDO (`anotarCompartido`:
+  'clientes' / 'catalogo'), que le llega a todas. Una escritura nueva al kardex, al crédito o al
+  saldo a favor lleva su anotación. Sin poder saber la tienda, solo a quien ve todas; quien ya no
+  tiene acceso o cuya sesión venció pierde la conexión. Etapa 1: campana, Hoy, Caja, Punto de
+  venta e Inventario; etapa 2: Surtir sucursal, Notas en espera, Notas pendientes y Ventas (lista y
+  detalle, que no se recarga con un panel abierto); etapa 3: Clientes (pestañas, Dónde entrego y
+  expediente), Cómo va el negocio y Reportes.
 - **A dónde lleva cada aviso sale de UN lugar** (`core/avisos.ts → DESTINO_AVISO`): la campana y
   Hoy lo usan, con el mismo filtro ("en su mínimo" → Inventario `?ver=minimo`, que Inventario lee
   del enlace). Un aviso nuevo agrega ahí su destino.
@@ -763,6 +787,22 @@ tienda-hilos/
   crédito no se borra, se corrige, igual que el kardex. Es IDEMPOTENTE —revierte el NETO de los
   movimientos del pedido— así que cancelar dos veces no perdona la deuda dos veces. Reactivar la
   repone.
+- **ABONO A NOTAS (2026-10-19)**: "quiero hacer el abono a las notas, no en general; y también así
+  como está, abono a cuenta" (usuario). La ventana de Abonar (`clientes/abono-modal`, en el
+  expediente, Cuánto debe y "Abonar a esta nota" del detalle de la venta) tiene "A su cuenta" (de la
+  más vieja a la más nueva, como siempre) o "A notas" (varias, cada una con su monto). Es un `abono`
+  CON `pedido_id` (`POST /clientes/:id/abonos` con `a_notas`): en `repartirAbonos` cuenta como lo
+  PAGADO de esa nota (así lo leen la comisión, la liquidación y el "falta $X") y, si la nota se
+  cancela, pasa a la cuenta (paga lo más viejo o queda a favor). Qué notas se escogen lo dice
+  `notasPorPagar` (`GET /clientes/:id/notas-credito`): las de sus tiendas y, si el cliente TAMBIÉN
+  COMPRA en una de ellas, las de las otras (decisión del usuario); se revisa otra vez al abonar
+  (`_partesANotas`: 404 `NOTA_NO_ENCONTRADA`, 422 `ABONO_EXCEDE_NOTA` / `NOTA_REPETIDA`). Las partes
+  llevan la misma hora y un solo ticket. Cancelar o reactivar una fiada (`ajusteDeCancelacion`) mira
+  su DEUDA, sin lo abonado: reactivar ya regresa la deuda (antes no), solo como pendiente (409
+  `VENTA_FIADA_SIN_PAGAR`) y nunca si dejaría debiendo otra nota ya pagada (409
+  `REACTIVAR_DESTAPA_NOTAS`). "También compra aquí" = una venta que se llevó la mercancía en una de
+  sus tiendas. El ticket del abono se ve con la regla del expediente (tienda de la nota o de la caja;
+  si no, 404) y no nombra notas que no se ven ("y 1 nota de otra tienda").
 - **Lo FIADO se da por PAGADO solo, al abonar** (2026-10-06: "pedí a crédito, lo aboné y la venta
   seguía pendiente"). El abono va a la CUENTA, pero `clientes/model.js → aplicarAbonos` lo reparte
   de lo MÁS ANTIGUO a lo más nuevo (FIFO) entre lo que debe cada venta, y

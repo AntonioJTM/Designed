@@ -32,14 +32,22 @@ describe('AbonoModal', () => {
           : { id: 88, caja_id: 4, caja: 'Caja 1', estado: 'abierta' }
       ),
   };
+  const NOTAS = [
+    { pedido_id: 1, numero_pedido: 'POS-1-AAAA', creado_en: '2026-10-01 10:00:00', almacen_id: 1, almacen: 'Tienda principal',
+      otra_tienda: false, fiado: 500, pagado: 0, por_pagar: 500 },
+    { pedido_id: 10, numero_pedido: 'POS-10-BBBB', creado_en: '2026-10-10 10:00:00', almacen_id: 2, almacen: 'Moroleón',
+      otra_tienda: true, fiado: 500, pagado: 0, por_pagar: 500 },
+  ];
   const clientesFalso = {
-    abonar: (_id: number, b: { monto: number }) => {
-      enviados.push(b);
-      return of({ movimiento_id: 1, saldo_nuevo: 1000 - b.monto });
+    notasCredito: () => of({ saldo: 1000, notas: NOTAS, ocultas: 0 }),
+    abonar: (_id: number, b: { monto?: number; a_notas?: { monto: number }[] }) => {
+      enviados.push(b as never);
+      const m = b.monto ?? (b.a_notas ?? []).reduce((s, x) => s + x.monto, 0);
+      return of({ movimiento_id: 1, saldo_nuevo: 1000 - m });
     },
   };
 
-  async function montar() {
+  async function montar(nota: number | null = null) {
     await TestBed.configureTestingModule({
       imports: [AbonoModal],
       providers: [
@@ -51,6 +59,7 @@ describe('AbonoModal', () => {
     f.componentRef.setInput('clienteId', 7);
     f.componentRef.setInput('nombre', 'Doña Chela');
     f.componentRef.setInput('saldo', 1000);
+    if (nota != null) f.componentRef.setInput('nota', nota);
     f.detectChanges();
     // Los turnos se buscan con una promesa: se deja que termine.
     await new Promise((r) => setTimeout(r));
@@ -141,6 +150,42 @@ describe('AbonoModal', () => {
     c.registrar();
     expect(enviados).toEqual([{ monto: 400, metodo_pago_id: 1, sesion_caja_id: 88, referencia: undefined } as never]);
     expect(registrados).toEqual([600]);
+  });
+
+  it('A NOTAS (2026-10-19): manda lo de cada nota marcada, y no más de lo que debe cada una', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    c.modo = 'notas';
+    c.marcar(c.filas[1], true);
+    expect(c.filas[1].monto).toBe(500); // de entrada, lo que debe
+    c.filas[1].monto = 600;
+    c.metodoId = 3;
+    c.registrar();
+    expect(enviados).toEqual([]);
+    expect(c.error()).toContain('POS-10-BBBB');
+    c.filas[1].monto = 300;
+    expect(c.quedaDebiendo()).toEqual({ queda: 700 });
+    c.registrar();
+    expect(enviados[0]).toEqual({ a_notas: [{ pedido_id: 10, monto: 300 }], metodo_pago_id: 3, sesion_caja_id: undefined,
+      referencia: undefined } as never);
+  });
+
+  it('A NOTAS sin marcar ninguna no manda nada', async () => {
+    const c = (await montar()).componentInstance;
+    c.modo = 'notas';
+    c.metodoId = 3;
+    c.registrar();
+    expect(enviados).toEqual([]);
+    expect(c.error()).toContain('Marca las notas');
+  });
+
+  it('desde el detalle de una venta abre en A notas con esa nota marcada', async () => {
+    const f = await montar(10);
+    const c = f.componentInstance;
+    expect(c.modo).toBe('notas');
+    expect(c.filas.find((x) => x.elegida)?.nota.pedido_id).toBe(10);
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('Moroleón'); // la de otra tienda dice cuál
   });
 
   it('por transferencia no manda turno', async () => {

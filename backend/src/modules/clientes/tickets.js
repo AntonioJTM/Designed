@@ -13,7 +13,7 @@
 
 const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
-const { repartirAbonos, SIGNO_CREDITO } = require('./model');
+const { repartirAbonos, SIGNO_CREDITO, foliosVisibles } = require('./model');
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 /** El saldo a favor: lo que suma y lo que resta cada tipo (como en saldo-favor.js). */
@@ -32,11 +32,16 @@ async function _cliente(clienteId) {
 /**
  * Un ABONO A SU CUENTA de crédito: cuánto abonó y con qué, cuánto debía antes,
  * cuánto quedó debiendo, cuánto debe hoy y qué ventas fiadas quedaron pagadas
- * con él (el abono paga primero lo más antiguo).
+ * con él (el abono a la cuenta paga primero lo más antiguo).
+ *
+ * Un abono A NOTAS (2026-10-19) son varios movimientos de la misma persona en
+ * el mismo momento, uno por nota: van en UN ticket (como el anticipo), con lo
+ * que se le abonó a cada nota y lo que le falta (`a_notas`).
  */
-async function abonoCuenta(clienteId, movId) {
+async function abonoCuenta(clienteId, movId, { almacenes = null } = {}) {
   const [[m]] = await pool.query(
     `SELECT m.id, m.tipo, m.monto, m.referencia, m.notas, m.creado_en,
+            m.pedido_id, m.usuario_id, m.metodo_pago_id, m.sesion_caja_id,
             mp.nombre AS metodo, u.nombre AS usuario, cj.nombre AS caja
        FROM credito_movimientos m
        LEFT JOIN metodos_pago mp  ON mp.id = m.metodo_pago_id
@@ -54,9 +59,24 @@ async function abonoCuenta(clienteId, movId) {
       WHERE cliente_id = :cli ORDER BY creado_en, id`,
     { cli: clienteId }
   );
-  const i = movs.findIndex((x) => Number(x.id) === Number(movId));
+  // Las partes del mismo abono a notas: mismo momento, persona, método y caja.
+  let partes = [m];
+  if (m.pedido_id != null) {
+    [partes] = await pool.query(
+      `SELECT m.id, m.monto, m.pedido_id, p.numero_pedido
+         FROM credito_movimientos m JOIN pedidos p ON p.id = m.pedido_id
+        WHERE m.cliente_id = :cli AND m.tipo = 'abono' AND m.creado_en = :creado
+          AND m.usuario_id <=> :usuario AND m.metodo_pago_id <=> :metodo AND m.sesion_caja_id <=> :sesion
+        ORDER BY m.id`,
+      { cli: clienteId, creado: m.creado_en, usuario: m.usuario_id, metodo: m.metodo_pago_id, sesion: m.sesion_caja_id }
+    );
+  }
+  const ids = new Set(partes.map((p) => Number(p.id)));
+  const i = movs.findIndex((x) => ids.has(Number(x.id)));
+  let ultimo = i;
+  movs.forEach((x, j) => { if (ids.has(Number(x.id))) ultimo = j; });
   const antes = movs.slice(0, i);
-  const hasta = movs.slice(0, i + 1);
+  const hasta = movs.slice(0, ultimo + 1);
   const saldo = (lista) => round2(lista.reduce((s, x) => s + (SIGNO_CREDITO[x.tipo] ?? 0) * Number(x.monto), 0));
 
   // Las ventas fiadas que ESTE abono terminó de pagar.
@@ -64,17 +84,27 @@ async function abonoCuenta(clienteId, movId) {
   const pagadasCon = repartirAbonos(hasta)
     .filter((d) => d.pedidoId && d.porPagar <= 0.004 && (debianAntes.get(d.pedidoId) ?? 0) > 0.004)
     .map((d) => d.pedidoId);
-  let liquidadas = [];
-  if (pagadasCon.length) {
-    const [ps] = await pool.query('SELECT numero_pedido FROM pedidos WHERE id IN (:ids) ORDER BY id', { ids: pagadasCon });
-    liquidadas = ps.map((p) => p.numero_pedido);
+  // Las de otra tienda que el cliente no comparte con la suya, solo cuántas.
+  const { folios: liquidadas, otras } = await foliosVisibles(pool, clienteId, almacenes, pagadasCon);
+
+  // A cada nota, lo que se le abonó y lo que le faltó después.
+  let aNotas = [];
+  if (m.pedido_id != null) {
+    const despues = new Map(repartirAbonos(hasta).filter((d) => d.pedidoId).map((d) => [d.pedidoId, d.porPagar]));
+    aNotas = partes.map((p) => ({
+      numero_pedido: p.numero_pedido,
+      monto: round2(p.monto),
+      le_falta: round2(despues.get(Number(p.pedido_id)) ?? 0),
+    }));
   }
 
   return {
-    id: Number(m.id),
+    id: Number(partes[0].id),
     cliente,
     fecha: m.creado_en,
-    monto: round2(m.monto),
+    monto: round2(partes.reduce((s, p) => s + Number(p.monto), 0)),
+    a_notas: aNotas,
+    liquidadas_otra_tienda: otras,
     metodo: m.metodo,
     referencia: m.referencia,
     notas: m.notas,

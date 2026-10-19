@@ -31,6 +31,8 @@ import {
   serieDiaria,
   sumarDias,
 } from '../reportes/periodos';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /** Una cifra de arriba: el dato que muchos van a ser lo único que lean. */
 interface Kpi {
@@ -129,8 +131,45 @@ export class Tablero implements OnInit {
   private readonly desdeSemanas = iso(sumarDias(inicioSemana(this.hoy), -7 * (SEMANAS - 1)));
   private readonly hoyIso = iso(this.hoy);
 
+  constructor() {
+    // EN VIVO (2026-10-19, etapa 3): lo vendido, la cobranza y el hilo parado se
+    // ponen al día solos. Son las cuentas más pesadas del sistema: se juntan los
+    // avisos de 3 segundos.
+    inject(TiempoRealService)
+      .cambios(['ventas', 'clientes', 'inventario'], 3000)
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.refrescarEnVivo());
+  }
+
   ngOnInit(): void {
     this.cargar();
+  }
+
+  /**
+   * Un aviso en vivo: todo otra vez sin vaciar las cifras ni decir "Actualizando…".
+   * Si mientras tanto se elige otro periodo, lo que llega tarde se tira (los turnos).
+   */
+  private refrescarEnVivo(): void {
+    if (this.cargando()) return;
+    const tTablero = ++this.turnoTablero;
+    const tVentas = ++this.turnoVentas;
+    const p = this.periodo();
+    forkJoin([
+      this.analisis.tablero({ limite: 50, desde: p.desde, hasta: p.hasta }),
+      this.reportes.ventas(p.desde, p.hasta),
+      this.reportes.ventas(p.antes.desde, p.antes.hasta),
+      this.reportes.ventas(this.desdeSemanas, this.hoyIso),
+    ]).subscribe({
+      next: ([d, v, a, s]) => {
+        if (tTablero === this.turnoTablero) this.datos.set(d);
+        if (tVentas === this.turnoVentas) {
+          this.ventas.set(v);
+          this.ventasAntes.set(a);
+        }
+        this.ventasSemanas.set(s);
+      },
+      error: () => {},
+    });
   }
 
   /** Todo de nuevo (botón "Actualizar"). */

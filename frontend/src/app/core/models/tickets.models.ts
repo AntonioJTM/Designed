@@ -30,8 +30,12 @@ export interface TicketAbonoCuenta {
   debia: number;
   quedo_debiendo: number;
   debe_hoy: number;
-  /** Las ventas fiadas que este abono terminó de pagar. */
+  /** Las ventas fiadas que este abono terminó de pagar (las que se pueden nombrar aquí). */
   liquidadas: string[];
+  /** Las de otra tienda que también pagó: solo cuántas. */
+  liquidadas_otra_tienda?: number;
+  /** Si fue A NOTAS (2026-10-19): a cuál, cuánto y cuánto le faltó después. */
+  a_notas?: { numero_pedido: string; monto: number; le_falta: number }[];
 }
 
 /** Un ANTICIPO: dinero a cuenta, sin nota (`GET /clientes/:id/anticipos/:mov/ticket`). */

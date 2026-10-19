@@ -18,6 +18,16 @@
                               (mandar)="whatsappDevolucion(d)" />
         </div>
       }
+      <!-- Tras un abono a esta nota (2026-10-19), su ticket. -->
+      @if (ticketAviso.actual(); as t) {
+        <div class="botones">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+          @if (t.whatsapp) {
+            <app-boton-whatsapp [chico]="true" [etiqueta]="t.etiqueta.replace('Imprimir ', 'Mandar por WhatsApp el ')"
+                                (mandar)="t.whatsapp()" />
+          }
+        </div>
+      }
     </div>
   }
 
@@ -54,6 +64,10 @@
           }
           @if (esNotaPendiente(p) && p.estado === 'pendiente' && fiado(p) <= 0 && veNotas()) {
             <a class="btn btn-ghost" routerLink="/admin/notas-pendientes">Registrar su pago</a>
+          }
+          @if (abonaANota(p)) {
+            <!-- Una venta a crédito que todavía se debe: el abono va a ESTA nota (2026-10-19). -->
+            <button type="button" class="btn btn-ghost" (click)="abonando.set(true)">Abonar a esta nota</button>
           }
           @if (puedeDevolverEste(p)) {
             <!-- Lo que regresa queda A FAVOR del cliente; no sale dinero (2026-10-13). -->
@@ -346,9 +360,8 @@
         <!-- Una venta a crédito se paga con abonos a su cuenta, no con una captura aquí (2026-10-17). -->
         @if (depositoComoAbono()) {
           <p class="muted ayuda deposito-abono">
-            Es una venta a crédito: si el cliente deposita, regístralo como abono a su cuenta en
-            <a [routerLink]="['/admin/clientes', p.cliente_id]">su expediente</a> («Registrar abono», por
-            transferencia). Así baja lo que debe y esta venta se da por pagada sola cuando la cubre.
+            Es una venta a crédito: si el cliente deposita, regístralo con «Abonar a esta nota» (arriba), por
+            transferencia. Así baja lo que debe esta nota y se da por pagada sola cuando la cubre.
           </p>
         }
       </section>
@@ -386,6 +399,10 @@
   }
 </div>
 
+@if (abonando() && pedido(); as p) {
+  <app-abono-modal [clienteId]="p.cliente_id!" [nombre]="p.cliente || 'Cliente'" [nota]="p.id"
+                   (cerrado)="abonando.set(false)" (registrado)="abonoRegistrado($event)" />
+}
 @if (devolviendo() && pedido(); as p) {
   <app-devolucion-modal [pedidoId]="p.id" [numero]="p.numero_pedido"
                         (hecho)="alDevolver($event)" (cerrado)="devolviendo.set(false)" />

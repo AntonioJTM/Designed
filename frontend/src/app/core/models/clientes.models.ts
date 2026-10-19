@@ -266,9 +266,34 @@ export interface ClienteParaVenta {
   atrasado?: boolean;
 }
 
-/** Un abono del cliente. */
+/**
+ * Una nota a crédito que todavía debe y que esta persona puede pagar
+ * (`GET /clientes/:id/notas-credito`). `otra_tienda`: es de una tienda que no es
+ * suya (se ven si el cliente también le compra a la suya).
+ */
+export interface NotaCredito {
+  pedido_id: number;
+  numero_pedido: string;
+  creado_en: string;
+  almacen_id: number | null;
+  almacen: string | null;
+  otra_tienda: boolean;
+  fiado: number;
+  pagado: number;
+  por_pagar: number;
+}
+
+/** Lo que debe en total y sus notas a crédito; `ocultas`, las de otras tiendas que no puede ver. */
+export interface NotasCredito {
+  saldo: number;
+  notas: NotaCredito[];
+  ocultas: number;
+}
+
+/** Un abono del cliente: a la cuenta (`monto`) o A NOTAS (`a_notas`, 2026-10-19). */
 export interface AbonoInput {
-  monto: number;
+  monto?: number;
+  a_notas?: { pedido_id: number; monto: number }[];
   metodo_pago_id?: number;
   /** Obligatoria si el abono es en efectivo: el dinero entra al turno. */
   sesion_caja_id?: number;

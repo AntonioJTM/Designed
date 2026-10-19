@@ -26,6 +26,7 @@ const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const saldoFavor = require('../clientes/saldo-favor');
 const variantesService = require('../variantes/service');
+const { anotarAlmacen } = require('../tiempo-real/contexto');
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
@@ -330,6 +331,7 @@ async function registrar(pedidoId, datos, usuarioId) {
          ON DUPLICATE KEY UPDATE cantidad = cantidad + :cant`,
         { v: f.variante_id, a: almacenId, cant: f.cantidad }
       );
+      anotarAlmacen(almacenId);
       await conn.query(
         `INSERT INTO movimientos_inventario
            (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)

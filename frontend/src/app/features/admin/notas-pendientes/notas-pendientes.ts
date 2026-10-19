@@ -13,6 +13,8 @@ import { FolioPipe } from '../../../shared/folio.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { PagoNotaModal } from './pago-nota-modal';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /**
  * NOTAS PENDIENTES DE PAGO (2026-10-13): "si no me pagan ese día el ticket, que
@@ -60,6 +62,12 @@ export class NotasPendientesPantalla {
 
   constructor() {
     this.cargar();
+    // EN VIVO (2026-10-19, etapa 2): un pago o un paso a crédito hecho en otra
+    // computadora quita o cambia la nota aquí sin recargar.
+    inject(TiempoRealService)
+      .cambios(['ventas', 'clientes', 'caja'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.cargar());
   }
 
   cargar(): void {

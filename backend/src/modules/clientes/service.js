@@ -4,7 +4,7 @@ const model = require('./model');
 const saldoFavor = require('./saldo-favor');
 const lugares = require('./lugares');
 const { hoyLocal } = require('../../utils/fechas');
-const { withTransaction } = require('../../config/db');
+const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const { hashPassword, verificarPassword } = require('../../utils/password');
 const { firmarToken } = require('../../utils/jwt');
@@ -254,9 +254,12 @@ async function estadoDeCuenta(id, filtros = {}) {
  * el corte no cuadraría —entra dinero que no es una venta— y el cajero
  * aparecería con un sobrante que nadie sabe explicar.
  */
-async function registrarAbono(id, datos, usuarioId) {
+async function registrarAbono(id, datos, usuarioId, opciones = {}) {
   const cliente = await model.obtener(id);
   if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
+  // A NOTAS: cada una se revisa contra lo que debe ESA nota, con la cuenta
+  // bloqueada (`model.registrarAbono`).
+  if (datos.a_notas) return model.registrarAbono(id, datos, usuarioId, opciones);
 
   const monto = Math.round(Number(datos.monto) * 100) / 100;
   if (!Number.isFinite(monto) || monto <= 0) {
@@ -275,7 +278,15 @@ async function registrarAbono(id, datos, usuarioId) {
       `El abono ($${monto.toFixed(2)}) es mayor a lo que debe ($${saldoActual.toFixed(2)}).`);
   }
 
-  return model.registrarAbono(id, { ...datos, monto }, usuarioId);
+  return model.registrarAbono(id, { ...datos, monto }, usuarioId, opciones);
+}
+
+/** Lo que debe en total y las notas a crédito que se pueden pagar una por una. */
+async function notasCredito(id, almacenes) {
+  const cliente = await model.obtener(id);
+  if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
+  const { notas, ocultas } = await model.notasPorPagar(pool, id, almacenes);
+  return { saldo: Number(cliente.saldo), notas, ocultas };
 }
 
 /** Corrección manual del saldo. Positivo lo sube, negativo lo baja. */
@@ -341,6 +352,7 @@ async function recibirAnticipo(id, datos, usuarioId) {
 }
 
 module.exports = {
+  notasCredito,
   aplicarSaldoFavor,
   ajustarSaldoFavor,
   loQueLleva,

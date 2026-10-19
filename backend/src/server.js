@@ -29,11 +29,18 @@ async function main() {
   const cerrar = (senal) => {
     console.log(`\n[http] Recibida señal ${senal}, cerrando...`);
     whatsapp.detener();
+    // Las conexiones en vivo no se cierran solas (el latido las mantiene): sin
+    // esto, cada despliegue esperaba 90 s a que systemd matara el proceso, con
+    // la caja sin servicio (2026-10-19). Las pantallas se vuelven a conectar.
+    require('./modules/tiempo-real/routes').cerrarTodas();
     server.close(async () => {
       await pool.end();
       console.log('[http] Servidor y pool cerrados. Adiós.');
       process.exit(0);
     });
+    server.closeIdleConnections?.();
+    // Por si algo se queda colgado: a los 5 s se sale de todos modos.
+    setTimeout(() => process.exit(0), 5000).unref();
   };
 
   process.on('SIGINT', () => cerrar('SIGINT'));

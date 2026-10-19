@@ -2,6 +2,7 @@
 
 const { pool, withTransaction } = require('../../config/db');
 const { porPalabras } = require('../../utils/query');
+const { anotarAlmacen, anotarCompartido } = require('../tiempo-real/contexto');
 
 // Acceso a datos de `producto_variantes`. Es el SKU real que se vende e
 // inventaría; el inventario/carrito/pedidos SIEMPRE apuntan aquí, no a productos.
@@ -248,6 +249,7 @@ async function agregarBultoConEntrada(varianteId, datos, usuarioId) {
        ON DUPLICATE KEY UPDATE cantidad = cantidad + :kg`,
       { v: varianteId, a: almacen_id, kg: peso_kg }
     );
+    anotarAlmacen(almacen_id);
     await conn.query(
       `INSERT INTO movimientos_inventario
          (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)
@@ -307,6 +309,7 @@ async function quitarBultoConSalida(bulto, usuarioId) {
       'UPDATE inventario SET cantidad = cantidad - :kg WHERE variante_id = :v AND almacen_id = :a',
       { v: vc.variante_id, a: vc.almacen_id, kg }
     );
+    anotarAlmacen(vc.almacen_id);
     await conn.query(
       `INSERT INTO movimientos_inventario
          (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)
@@ -356,6 +359,7 @@ async function eliminarCodigo(id) {
 }
 
 async function crear(datos) {
+  anotarCompartido('catalogo');
   const [r] = await pool.query(
     `INSERT INTO producto_variantes
        (producto_id, sku, codigo_barras, presentacion, lote,
