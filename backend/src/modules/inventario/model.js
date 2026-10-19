@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { pool, withTransaction } = require('../../config/db');
+const { recalcularPesoCono } = require('./peso-cono');
 const { porPalabras } = require('../../utils/query');
 const { AppError, enOtraTienda } = require('../../middlewares/error');
 const { filtroAlmacen } = require('../permisos/service');
@@ -798,6 +799,11 @@ async function desarmar(datos, usuarioId) {
             (datos.destare_por_cono_kg != null ? ` (${round3(datos.destare_por_cono_kg)} kg por cono)` : '')
           : ''),
     });
+
+    // EL PESO DE UN CONO se rehace con esta bajada (2026-10-19): lo que pesaron
+    // sus conos —el paquete escaneado más su destare— entre cuántos salieron,
+    // con todas las bajadas. Con él se sabe cuántos conos hay (peso-cono.js).
+    await recalcularPesoCono(conn, cono_variante_id);
 
     return {
       conversion_id: conv.insertId,

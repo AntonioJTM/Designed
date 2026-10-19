@@ -12,6 +12,8 @@ export interface HiloAPesar {
   precio: number;
   unidad?: string;
   aqui?: { cantidad: number; paquetes: number | null };
+  /** El peso real de un cono (con su tubo), para decir cuántos conos hay. */
+  peso_kg?: string | number | null;
 }
 
 /**

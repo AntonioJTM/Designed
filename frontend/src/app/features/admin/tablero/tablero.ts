@@ -228,7 +228,7 @@ export class Tablero implements OnInit {
         pie: !m ? '…'
           : m.venta_analizada > 0
             ? `margen de ${this.pct(m.margen_pct)} sobre la venta`
-            : 'falta capturar el precio de compra en las remesas',
+            : 'falta capturar el precio de compra en las cargas',
         punto: 'var(--viz-series-3)',
       });
     }

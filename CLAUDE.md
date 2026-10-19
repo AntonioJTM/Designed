@@ -467,8 +467,15 @@ tienda-hilos/
   distinto—. `kg_consumidos` no cambia: del paquete sale su peso real y eso
   es lo que se descuenta. El destare solo dice cuánto pesó el resultado
   (`kg_enconados = kg_consumidos + destare_kg`) y queda escrito en las dos patas del kardex.
-  NO cambia el precio del cono (que es el del paquete, por kilo) ni su `peso_kg`, que queda como
-  referencia de cuánto pesa un cono.
+  NO cambia el precio del cono (que es el del paquete, por kilo).
+- **EL PESO DE UN CONO SALE DE SUS BAJADAS** (2026-10-19: "la cantidad de conos se conoce cuando
+  escaneas el paquete… ya solo se le suma el destare"). `producto_variantes.peso_kg` del cono =
+  (kilos de los paquetes escaneados + su destare) ÷ conos que salieron, con TODAS sus bajadas
+  (`inventario/peso-cono.js`); lo rehace cada bajada en su transacción y guardar el cono no lo
+  pisa. Con él Inventario y la caja dicen cuántos conos hay (`shared/conos.ts → textoConos`,
+  "≈ 8 conos", entero). NO se teclea cuántos conos se venden: se cuenta por peso. Antes era el
+  peso del Excel ÷ los conos del PRIMER paquete, sin tubo. `scripts/recalcular-peso-conos.js`
+  pone al día los de antes.
 - **SOLO SE BAJA CON EL CÓDIGO DEL PAQUETE** (2026-10-18: "es un peligro y puede descuadrar
   inventario", usuario). Se QUITÓ la captura "a mano, sin escanear" (cono + cuántos paquetes +
   kilos, sin código): sacaba kilos sin marcar ningún paquete como abierto. "A mano" para la tienda

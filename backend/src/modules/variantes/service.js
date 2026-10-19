@@ -133,8 +133,12 @@ async function _resolverPresentacion(datos, actual = null, producto = null) {
 
   return {
     tipo_presentacion: 'cono',
-    // Peso de un cono: el del paquete repartido entre las piezas que salen.
-    peso_kg: round3(Number(paquete.peso_kg) / Number(piezas)),
+    // Peso de un cono: al nacer, el del paquete repartido entre las piezas que
+    // salen; después lo rehace CADA BAJADA con lo que de verdad pesaron sus conos
+    // (inventario/peso-cono.js, 2026-10-19). Guardar el cono no lo pisa.
+    peso_kg: actual?.peso_kg != null && Number(actual.peso_kg) > 0
+      ? actual.peso_kg
+      : round3(Number(paquete.peso_kg) / Number(piezas)),
     origen_variante_id: origenId,
     piezas_por_origen: piezas,
     modo_precio: modo,

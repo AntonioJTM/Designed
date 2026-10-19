@@ -26,16 +26,22 @@
   · Una MIGRACIÓN nueva se aplica en LAS DOS bases.
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
-POR DECIDIR CON EL USUARIO (entrada 73)
-  · El destare de la única bajada real de hitex (A-ALECRICO 2/30, 15-oct) se
-    capturó en 0.8 kg POR CONO (800 g por tubo): entraron 29.1 kg de conos de
-    un paquete de 19.5 kg, pero los 4 conos vendidos pesaron 6.4 kg (1.6 c/u).
-    Si los 8 que quedan pesan lo mismo, hay ~12.8 kg y el sistema dice 22.7.
-    Se le pidió pesar los que quedan; si cuadra, se corrige con Ajuste.
-  · "Peso de un cono" no lleva el destare: también lo usa Inventario para el
-    "≈ N conos" (22.7 ÷ 1.604 = ≈ 14.2 conos donde hay 8).
+POR DECIDIR CON EL USUARIO (entradas 73 y 75)
+  · Commit: lo del 17 y 18 ya se commiteó (último: 7a80990, por fuera de esta
+    sesión). Quedan 11 archivos: lo de la entrada 75 y los cambios de otra
+    sesión en verificar-sistema.js, revisor-general.md y las skills verificar.
+    No se hace commit hasta que el usuario lo pida.
+  (La bajada de A-ALECRICO 2/30 con 0.8 kg de destare era PRUEBA del usuario:
+  "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  CUÁNTOS CONOS HAY: el peso de un cono sale de sus bajadas (2026-10-19,
+  entrada 76; DESPLEGADO en 20261019-085304; en hitex solo cambió el peso del
+  cono de prueba, con respaldo).
+  Antes:
+  MENSAJES QUE NOMBRABAN COSAS QUE NO EXISTEN Y PALABRAS VIEJAS (2026-10-19,
+  entrada 75; DESPLEGADO en 20261019-084047, sin cambios en la base).
+  Antes:
   EL VERIFICADOR EN 0 HALLAZGOS: palabras viejas y plurales (2026-10-18,
   entrada 74; DESPLEGADO en 20261018-204258, sin cambios en la base).
   Antes:
@@ -686,6 +692,83 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (76) · Cuántos conos hay: el peso de un cono sale de lo que pesaron al bajarlos
+-------------------------------------------------------------------------------
+
+"Si me gusta la mejora, vamos a hacerlo así para que sepa cuántos conos hay"
+(usuario). Primero se le propuso contarlos por piezas, pero al revisarlo la
+caja, las notas en espera y las devoluciones guardan cuántos conos solo si se
+teclea, y Ajuste / merma nunca: el conteo exacto obligaba a pedirlo en todos
+lados. El usuario lo descartó: "la cantidad de conos se conoce cuando escaneas
+el paquete, te dice cuántos conos trae y cuánto pesa; ya solo se le suma el
+destare… yo no tengo que poner cuántos conos". Eso se hizo.
+
+ANTES
+  El peso de un cono se fijaba UNA vez, en la primera bajada: peso del paquete
+  del Excel ÷ conos de ESE paquete, sin el tubo, y no cambiaba. Si el primero
+  era de los de 7 conos, Inventario decía "≈ 36 conos" donde había 65. En la
+  base de pruebas había conos de "22.575 kg por cono" (AMARILLO-CONO).
+
+AHORA
+  · `inventario/peso-cono.js → pesoPorCono`: lo que pesaron los conos al
+    bajarlos —kilos del paquete escaneado + su destare— entre cuántos salieron,
+    juntando TODAS las bajadas de ese cono. `recalcularPesoCono` lo guarda en
+    `producto_variantes.peso_kg` del cono, en la MISMA transacción de cada
+    bajada (`inventario/model.js → desarmar`). peso-cono.test.js (3 pruebas).
+  · Guardar algo de un cono (la casilla Activa, el precio) ya no le pisa el peso
+    con el del paquete ÷ conos (`variantes/service.js`, rama del cono).
+  · `shared/conos.ts → textoConos(kg, peso)`: "≈ 8 conos" (entero, o "menos de
+    1 cono"). Lo usan Inventario (la equivalencia del renglón de conos) y la
+    caja al buscar ("≈ 8 conos · 13.3 kg" en vez de "13.3 kg enconados").
+    Lleva "≈": se cuenta por peso.
+  · Presentaciones: "Peso de un cono" dice "lo que pesaron al bajarlos, con su
+    tubo".
+  · `scripts/recalcular-peso-conos.js --base X [--confirmar]` pone al día los
+    conos de antes. En hitex (respaldo:
+    /root/respaldos/hitex_antes_peso_conos_20261019-085341.sql.gz) solo cambió
+    el cono de prueba A-ALECRICO-2-30-CONO: 1.604 → 2.425 kg ((19.5 + 9.6) ÷
+    12); ahora dice "≈ 9 conos" de 22.7 kg (la venta de prueba se llevó 4 de
+    1.6 kg, menos de lo que pesaban con el destare de prueba de 0.8). La base
+    de pruebas NO se tocó (en seco: 18 conos cambiarían).
+  Pruebas: backend 33/33, pantallas 495/495, compila, verificar-sistema.js 0
+  hallazgos (1635 comprobaciones).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (75) · Mensajes que mandaban a algo que no existe, y "fiar" en mensajes del servidor
+-------------------------------------------------------------------------------
+
+De la revisión /verificar del 2026-10-18. El usuario aprobó los puntos 3 y 4
+de "Lo importante" y "todo" lo menor (menos el commit, que se le explicó y no
+se hizo). Del punto 1 dijo que la bajada de A-ALECRICO 2/30 (destare 0.8 kg
+por cono) fue una PRUEBA suya: no es real y no se toca. Sin cambios en la base.
+
+  · El permiso se nombra como en la pantalla Permisos: pedidos/controller.js
+    arma "Tu puesto no tiene permiso para «…»" con el nombre del catálogo
+    (`sinPermiso(clave)` con permisos/catalogo.js → NOMBRE). Decía «Fiar», que
+    en Permisos se llama «Vender a crédito».
+  · "Se modifica en Pedidos" → "se modifica en Notas en espera y se entrega con
+    «Entregar» («Entregar y cobrar» si le falta pagar)" (PEDIDO_EN_ESPERA).
+  · El aviso de paquete sin peso (BULTO_SIN_PESO, de la entrada 73) decía
+    "captúraselo en Presentaciones", donde el peso de un bulto no se edita: ahora
+    dice que se quite (✕ en sus bultos) y se capture otra vez con «Agregar
+    bulto a mano», con su peso. En hitex no hay paquetes sin peso.
+  · "Fiar" fuera de los mensajes del servidor (pedidos/model.js): a QUIÉN se
+    le da (crédito), "Se quiere dejar a crédito $X…" (dos), la nota en espera
+    "se da a crédito al ENTREGARLA", la nota pendiente "ni se da a crédito", y
+    "cóbralos o déjalos a crédito para entregarla". En pantalla: el aviso de
+    cuenta atrasada de la caja ("antes de darle más a crédito", pos.ts) y "en
+    las cargas" en Cómo va el negocio (tablero.ts).
+  · Los dos mensajes de apartados que mandaban a la pantalla Apartados (quitada
+    el 2026-10-13) ahora dicen que un apartado de antes se cancela en Ventas y
+    se hace la venta en el punto de venta. En hitex no hay apartados.
+  · Se quitaron `abonarApartado` y `entregarApartado` de ventas.service.ts: ya no
+    los llamaba nadie.
+  Pruebas: backend 30/30, pantallas 492/492, compila, verificar-sistema.js 0
+  hallazgos (1622 comprobaciones).
 
 
 -------------------------------------------------------------------------------
