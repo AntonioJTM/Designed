@@ -381,6 +381,20 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         throw new AppError(422, 'CREDITO_MAYOR_AL_TOTAL',
           `Se quiere fiar $${aCredito.toFixed(2)} de una venta de $${total.toFixed(2)}.`);
       }
+      // CUENTA ATRASADA (2026-10-16: "no fiarle a ciegas cuando trae cuenta
+      // vencida"): si debe y lleva más de DIAS_SIN_ABONAR días sin abonar, no se
+      // le fía sin que la caja lo confirme (`fiar_con_atraso`). Es un candado con
+      // llave: la caja lo pregunta y la tienda decide.
+      if (datos.fiar_con_atraso !== true) {
+        const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
+        const dias = await clientesModel.diasSinAbonar(datos.cliente_id, conn);
+        if (dias != null && dias > DIAS_SIN_ABONAR) {
+          throw new AppError(409, 'CREDITO_ATRASADO',
+            `Debe y lleva ${dias} días sin abonar (el plazo es de ${DIAS_SIN_ABONAR}). ` +
+            'Pídele un abono, o confirma en la caja que se le da a crédito de todos modos.',
+            { dias, plazo: DIAS_SIN_ABONAR });
+        }
+      }
     }
 
     // Lo que paga con su SALDO A FAVOR (2026-10-13): lo que le quedó de una
@@ -692,10 +706,16 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       }
       // Un billete que fue todo cambio no es un pago.
       if (monto <= 0) continue;
+      // Lo que ENTREGÓ en efectivo, solo informativo (2026-10-16): la venta lo
+      // dice al abrirla ("recibió $2,300, cambio $50"); se asienta lo cobrado.
       await conn.query(
-        `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
-         VALUES (:pedido_id, :metodo_pago_id, :monto, 'completado', :ref)`,
-        { pedido_id: pedidoId, metodo_pago_id: p.metodo_pago_id, monto, ref: p.referencia_transaccion ?? null }
+        `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, recibido, estado, referencia_transaccion)
+         VALUES (:pedido_id, :metodo_pago_id, :monto, :recibido, 'completado', :ref)`,
+        {
+          pedido_id: pedidoId, metodo_pago_id: p.metodo_pago_id, monto,
+          recibido: esEfectivo[p.metodo_pago_id] ? round2(Number(p.monto)) : null,
+          ref: p.referencia_transaccion ?? null,
+        }
       );
       if (!esEfectivo[p.metodo_pago_id]) noEfectivo = round2(noEfectivo + monto);
     }
@@ -821,6 +841,8 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
 async function _obtenerConn(ejecutor, id) {
   const [prows] = await ejecutor.query(
     `SELECT p.*, c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial,
+            -- Su WhatsApp, para mandarle el ticket (2026-10-16).
+            c.telefono AS cliente_telefono, c.telefono_alt AS cliente_telefono_alt,
             u.nombre AS usuario, a.nombre AS almacen, cj.nombre AS caja
        FROM pedidos p
        LEFT JOIN clientes c ON c.id = p.cliente_id
@@ -899,7 +921,7 @@ async function _obtenerConn(ejecutor, id) {
   // comprobante, cómo se llamaba y quién lo subió; el archivo se pide aparte,
   // por un endpoint autenticado.
   const [pagos] = await ejecutor.query(
-    `SELECT pg.id, pg.metodo_pago_id, mp.nombre AS metodo, pg.monto, pg.estado,
+    `SELECT pg.id, pg.metodo_pago_id, mp.nombre AS metodo, pg.monto, pg.recibido, pg.estado,
             pg.referencia_transaccion, pg.creado_en,
             (pg.comprobante_archivo IS NOT NULL) AS tiene_comprobante,
             pg.comprobante_nombre, pg.comprobante_tipo, pg.comprobante_subido_en,
@@ -969,18 +991,43 @@ function _deSusTiendas(where, params, almacenes, columna = 'p.almacen_id') {
   params.almacenesAlcance = almacenes;
 }
 
-async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, limit, offset, almacenes }) {
+/**
+ * LA SITUACIÓN de una venta en la lista (2026-10-16, "el estatus: emitida,
+ * cancelada, devolución o devolución parcial —que no te regresa todo—"). La
+ * devolución es la de saldo a favor (`devoluciones`) o el estado viejo
+ * 'devuelto'. Completa cuando lo que regresó cubre lo vendido (sin el envío).
+ */
+const SQL_DEVUELTO = '(SELECT COALESCE(SUM(dv.total), 0) FROM devoluciones dv WHERE dv.pedido_id = p.id)';
+const SITUACIONES = {
+  emitidas: `p.estado NOT IN ('cancelado', 'devuelto') AND NOT EXISTS (SELECT 1 FROM devoluciones dv WHERE dv.pedido_id = p.id)`,
+  canceladas: "p.estado = 'cancelado'",
+  con_devolucion: "(p.estado = 'devuelto' OR EXISTS (SELECT 1 FROM devoluciones dv WHERE dv.pedido_id = p.id))",
+};
+
+function situacionDe(r) {
+  if (r.estado === 'cancelado') return 'cancelada';
+  if (r.estado === 'devuelto') return 'devolucion';
+  const devuelto = Number(r.devuelto_total ?? 0);
+  if (devuelto > 0.004) {
+    return devuelto >= Number(r.total) - Number(r.costo_envio ?? 0) - 0.01 ? 'devolucion' : 'devolucion_parcial';
+  }
+  return 'emitida';
+}
+
+async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde, hasta, limit, offset, almacenes }) {
   const where = [];
   const params = {};
   if (canal) { where.push('p.canal = :canal'); params.canal = canal; }
   if (estado) { where.push('p.estado = :estado'); params.estado = estado; }
+  if (situacion && SITUACIONES[situacion]) where.push(SITUACIONES[situacion]);
   if (cliente_id !== undefined) { where.push('p.cliente_id = :cliente_id'); params.cliente_id = cliente_id; }
   // Rediseño 2026-10 (pantalla Pedidos): buscar por folio o por cliente —por su
   // nombre o por como le dicen—, por caja y por rango de fechas. `hasta` es
   // INCLUSIVO para quien lo teclea (el día completo), por eso se compara contra
   // el día siguiente.
   if (q) {
-    where.push('(p.numero_pedido LIKE :q OR c.nombre LIKE :q OR c.nombre_comercial LIKE :q)');
+    // También por su NÚMERO de cliente (C-0001).
+    where.push('(p.numero_pedido LIKE :q OR c.nombre LIKE :q OR c.nombre_comercial LIKE :q OR c.codigo LIKE :q)');
     params.q = `%${q}%`;
   }
   if (caja_id) { where.push('sc.caja_id = :caja_id'); params.caja_id = caja_id; }
@@ -993,15 +1040,18 @@ async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, lim
   const joins = `LEFT JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN usuarios u ON u.id = p.usuario_id
        LEFT JOIN sesiones_caja sc ON sc.id = p.sesion_caja_id
-       LEFT JOIN cajas cj ON cj.id = sc.caja_id`;
+       LEFT JOIN cajas cj ON cj.id = sc.caja_id
+       LEFT JOIN almacenes alm ON alm.id = p.almacen_id`;
 
   // `pagado` es lo COBRADO (pagos completados). Con él la pantalla dice cuánto
   // falta de cada venta sin pedir el detalle de cada una.
   const [rows] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.canal, p.encargo, p.nota_pendiente, p.metodo_entrega, p.estado, p.total, p.creado_en,
-            p.inventario_descontado, p.cliente_id,
-            c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial,
-            u.nombre AS usuario, cj.nombre AS caja,
+            p.inventario_descontado, p.cliente_id, p.costo_envio,
+            c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial, c.codigo AS cliente_codigo,
+            u.nombre AS usuario, cj.nombre AS caja, alm.nombre AS almacen,
+            ${SQL_DEVUELTO} AS devuelto_total,
+            EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo') AS fiada,
             (SELECT COALESCE(SUM(pg.monto), 0) FROM pagos pg
               WHERE pg.pedido_id = p.id AND pg.estado = 'completado') AS pagado
        FROM pedidos p
@@ -1035,6 +1085,12 @@ async function listar({ canal, estado, cliente_id, q, caja_id, desde, hasta, lim
     r.hilos = [];
     const pagado = Number(r.pagado) + (pagadoConAbonos.get(Number(r.id)) ?? 0);
     r.falta = INACTIVOS.includes(r.estado) ? 0 : Math.max(0, round2(Number(r.total) - pagado));
+    // DE CONTADO: se pagó ese mismo día, no a crédito, como nota pendiente de
+    // pago, apartado ni nota en espera (esas se pagan después o en partes).
+    r.contado = !Number(r.fiada) && !Number(r.nota_pendiente) && !Number(r.encargo) && r.estado !== 'apartado';
+    r.fiada = !!Number(r.fiada);
+    r.devuelto_total = round2(Number(r.devuelto_total ?? 0));
+    r.situacion = situacionDe(r);
   }
   if (rows.length) {
     const [lineas] = await pool.query(
@@ -2870,9 +2926,13 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
     }
     if (monto <= 0) continue;
     await conn.query(
-      `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
-       VALUES (:pedido, :metodo, :monto, 'completado', :ref)`,
-      { pedido: pedido.id, metodo: p.metodo_pago_id, monto, ref: p.referencia_transaccion ?? null }
+      `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, recibido, estado, referencia_transaccion)
+       VALUES (:pedido, :metodo, :monto, :recibido, 'completado', :ref)`,
+      {
+        pedido: pedido.id, metodo: p.metodo_pago_id, monto,
+        recibido: esEfectivo[p.metodo_pago_id] ? round2(Number(p.monto)) : null,
+        ref: p.referencia_transaccion ?? null,
+      }
     );
     if (esEfectivo[p.metodo_pago_id]) efectivo = round2(efectivo + monto);
   }

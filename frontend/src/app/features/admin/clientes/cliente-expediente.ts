@@ -37,6 +37,7 @@ import {
   sumarDias,
   ultimosMeses,
 } from './clientes-ui';
+import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 
 type Pestana = 'resumen' | 'frecuencia' | 'deuda' | 'que' | 'cuando' | 'gasto';
 
@@ -65,7 +66,7 @@ const PESTANAS: { clave: Pestana; etiqueta: string }[] = [
  */
 @Component({
   selector: 'app-cliente-expediente',
-  imports: [FolioPipe, RouterLink, CantidadPipe, DineroPipe, ClienteFormModal, AbonoModal, AjusteModal, AjusteFavorModal, LineaVisitas, TablaCompras, SaldoFavor, AnticipoModal],
+  imports: [BotonWhatsapp, FolioPipe, RouterLink, CantidadPipe, DineroPipe, ClienteFormModal, AbonoModal, AjusteModal, AjusteFavorModal, LineaVisitas, TablaCompras, SaldoFavor, AnticipoModal],
   templateUrl: './cliente-expediente.html',
   styles: `
     .cabeza-cliente { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; border-radius: 12px; padding: 24px; }
@@ -469,7 +470,10 @@ export class ClienteExpediente implements OnInit {
     const texto = `Abono registrado. ${r.saldo_nuevo > 0 ? `Le quedan ${pesos(r.saldo_nuevo)} por pagar.` : 'Quedó al día.'}`;
     this.mensaje.set(texto);
     const id = this.exp()?.id;
-    if (id) this.ticketAviso.poner(texto, 'Imprimir ticket del abono', () => this.imprimirAbono(r.movimiento_id));
+    if (id) {
+      this.ticketAviso.poner(texto, 'Imprimir ticket del abono', () => this.imprimirAbono(r.movimiento_id),
+        () => this.whatsappAbono(r.movimiento_id));
+    }
     this.cargar();
   }
 
@@ -481,7 +485,8 @@ export class ClienteExpediente implements OnInit {
     const id = this.exp()?.id;
     if (id) {
       this.ticketAviso.poner(texto, 'Imprimir ticket del anticipo', () =>
-        this.tickets.imprimirAnticipo(id, r.movimiento_id).subscribe({ error: (e) => this.error.set(this.msg(e)) }));
+        this.tickets.imprimirAnticipo(id, r.movimiento_id).subscribe({ error: (e) => this.error.set(this.msg(e)) }),
+        () => this.tickets.whatsappAnticipo(id, r.movimiento_id));
     }
     this.cargar();
   }
@@ -491,6 +496,12 @@ export class ClienteExpediente implements OnInit {
     const id = this.exp()?.id;
     if (!id) return;
     this.tickets.imprimirAbonoCuenta(id, movimientoId).subscribe({ error: (e) => this.error.set(this.msg(e)) });
+  }
+
+  /** El mismo ticket del abono, en PDF por WhatsApp (2026-10-16). */
+  whatsappAbono(movimientoId: number): void {
+    const id = this.exp()?.id;
+    if (id) this.tickets.whatsappAbonoCuenta(id, movimientoId);
   }
 
   /** Se descontó su saldo a favor de lo que debía. */

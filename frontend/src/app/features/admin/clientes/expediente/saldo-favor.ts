@@ -12,6 +12,7 @@ import { ApiError } from '../../../../core/models/auth.models';
 import { DineroPipe } from '../../../../shared/dinero.pipe';
 import { FolioPipe } from '../../../../shared/folio.pipe';
 import { fechaCorta, pesos } from '../clientes-ui';
+import { BotonWhatsapp } from '../../../../shared/ticket/boton-whatsapp';
 
 const ETIQUETA: Record<MovimientoSaldoFavor['tipo'], string> = {
   devolucion: 'Regresó mercancía',
@@ -35,7 +36,7 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
  */
 @Component({
   selector: 'app-saldo-favor',
-  imports: [RouterLink, DineroPipe, FolioPipe],
+  imports: [BotonWhatsapp, RouterLink, DineroPipe, FolioPipe],
   template: `
     <section class="card">
       <div class="card-head">
@@ -108,6 +109,8 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
                     @if (m.tipo === 'anticipo' && !m.otra_tienda) {
                       <button type="button" class="btn btn-ghost btn-sm" (click)="ticketAnticipo(m)"
                               [attr.aria-label]="'Ticket del anticipo del ' + fechaCorta(m.creado_en)">Ticket</button>
+                      <app-boton-whatsapp [chico]="true" (mandar)="whatsappAnticipo(m)"
+                                          [etiqueta]="'Mandar por WhatsApp el ticket del anticipo del ' + fechaCorta(m.creado_en)" />
                     }
                   </td>
                 </tr>
@@ -165,6 +168,11 @@ export class SaldoFavor {
   monto(m: MovimientoSaldoFavor): string {
     const n = this.efecto(m);
     return (n < 0 ? '−' : '+') + pesos(Math.abs(n)).replace('-', '');
+  }
+
+  /** El mismo ticket del anticipo, en PDF por WhatsApp (2026-10-16). */
+  whatsappAnticipo(m: MovimientoSaldoFavor): void {
+    this.tickets.whatsappAnticipo(this.clienteId(), m.id);
   }
 
   /** El ticket de un anticipo de su historial (sale igual que el día que lo dejó). */

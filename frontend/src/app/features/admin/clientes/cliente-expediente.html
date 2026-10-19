@@ -11,7 +11,13 @@
     <div class="ok-msg con-accion" role="status">
       <span>{{ mensaje() }}</span>
       @if (ticketAviso.actual(); as t) {
-        <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+        <div class="botones">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+          @if (t.whatsapp) {
+            <app-boton-whatsapp [chico]="true" [etiqueta]="t.etiqueta.replace('Imprimir ', 'Mandar por WhatsApp el ')"
+                                (mandar)="t.whatsapp()" />
+          }
+        </div>
       }
     </div>
   }
@@ -359,6 +365,8 @@
                         @if (m.tipo === 'abono' && !m.otra_tienda) {
                           <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirAbono(m.id)"
                                   [attr.aria-label]="'Ticket del abono del ' + fechaCorta(m.creado_en)">Ticket</button>
+                          <app-boton-whatsapp [chico]="true" (mandar)="whatsappAbono(m.id)"
+                                              [etiqueta]="'Mandar por WhatsApp el ticket del abono del ' + fechaCorta(m.creado_en)" />
                         }
                       </td>
                     </tr>

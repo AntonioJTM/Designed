@@ -443,6 +443,33 @@ export interface DatosCargaEnvio {
 }
 
 /** Cuántos paquetes son X kilos, con los pesos reales de la bodega. */
+/** El mínimo para VARIOS hilos de un almacén, en paquetes (2026-10-16): vista previa o lo guardado. */
+export interface MinimosResultado {
+  almacen_id: number;
+  paquetes: number;
+  solo_sin_minimo: boolean;
+  guardado: boolean;
+  /** A cuántos se les pone (o se les puso). */
+  cambian: number;
+  /** Los que ya tenían su propio mínimo y se respetan. */
+  se_quedan: number;
+  /** Sin paquetes con peso ni peso en el catálogo: no se puede calcular. */
+  sin_peso: number;
+  renglones: {
+    variante_id: number;
+    producto: string;
+    calibre: string | null;
+    sku: string;
+    tenia_kg: number;
+    kg: number;
+    peso_paquete: number;
+    peso_estimado: boolean;
+    sin_peso: boolean;
+    cambia: boolean;
+    se_queda: boolean;
+  }[];
+}
+
 export interface EquivalenciaPaquetes {
   sku: string;
   producto: string;
@@ -1017,6 +1044,13 @@ export class InventarioService {
     if (variante_id) params = params.set('variante_id', variante_id);
     return this.http
       .get<ApiResponse<Paginado<Conversion>>>(`${this.base}/inventario/conversiones`, { params })
+      .pipe(map(data));
+  }
+
+  /** Mínimo para varios hilos de un almacén: sin `guardar` solo dice lo que haría. */
+  minimos(body: { almacen_id: number; paquetes: number; solo_sin_minimo?: boolean; guardar?: boolean }): Observable<MinimosResultado> {
+    return this.http
+      .post<ApiResponse<MinimosResultado>>(`${this.base}/inventario/configuracion/minimos`, body)
       .pipe(map(data));
   }
 

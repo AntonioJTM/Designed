@@ -10,9 +10,12 @@ import { Signal, computed, signal } from '@angular/core';
  * declarar `mensaje`), `this.ticketAviso.poner(texto, 'Imprimir ticket de abono',
  * () => …)` junto con `this.mensaje.set(texto)`, y en la plantilla el botón con
  * `ticketAviso.actual()` dentro de `.ok-msg.con-accion`.
+ *
+ * Desde el 2026-10-16 también lo MANDA POR WHATSAPP: el cuarto argumento de
+ * `poner` y, en la plantilla, `<app-boton-whatsapp>` junto al de imprimir.
  */
 export class TicketDelAviso {
-  private readonly ultimo = signal<{ texto: string; etiqueta: string; imprimir: () => void } | null>(null);
+  private readonly ultimo = signal<{ texto: string; etiqueta: string; imprimir: () => void; whatsapp?: () => void } | null>(null);
 
   constructor(private readonly mensaje: Signal<string | null>) {}
 
@@ -22,7 +25,7 @@ export class TicketDelAviso {
     return u && this.mensaje() === u.texto ? u : null;
   });
 
-  poner(texto: string, etiqueta: string, imprimir: () => void): void {
-    this.ultimo.set({ texto, etiqueta, imprimir });
+  poner(texto: string, etiqueta: string, imprimir: () => void, whatsapp?: () => void): void {
+    this.ultimo.set({ texto, etiqueta, imprimir, whatsapp });
   }
 }

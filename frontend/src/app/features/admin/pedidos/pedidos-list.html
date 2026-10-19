@@ -2,7 +2,7 @@
   <header class="page-head">
     <div>
       <h1>Ventas</h1>
-      <p class="sub">Todo lo vendido en el mostrador, con su estado y lo que falta por cobrar.</p>
+      <p class="sub">Cada nota de venta: a quién, cómo quedó, de qué almacén salió y quién la hizo. Ábrela para ver cómo se pagó.</p>
     </div>
   </header>
 
@@ -27,7 +27,7 @@
           <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
         </svg>
         <input type="search" [(ngModel)]="q" name="q" (ngModelChange)="buscarAlTeclear()"
-               placeholder="Folio o cliente" autocomplete="off" />
+               placeholder="Folio, cliente o su número (C-0001)" autocomplete="off" />
       </span>
     </label>
     <!--
@@ -43,17 +43,14 @@
       </select>
     </label>
     -->
+    <!-- La situación de la venta (2026-10-16): emitidas, con devolución o canceladas. -->
     <label class="field">
-      Estado
-      <select [(ngModel)]="estado" name="estado" (ngModelChange)="buscar()">
-        <option value="">Todos</option>
-        <option value="pagado">Pagado</option>
-        <option value="pendiente">Pendiente · a crédito</option>
-        <option value="apartado">Apartado</option>
-        <option value="en_preparacion">Pedido · en espera</option>
-        <option value="entregado">Entregado</option>
-        <option value="cancelado">Cancelado</option>
-        <option value="devuelto">Devuelto</option>
+      Estatus
+      <select [(ngModel)]="situacion" name="situacion" (ngModelChange)="buscar()">
+        <option value="">Todas</option>
+        <option value="emitidas">Emitidas</option>
+        <option value="con_devolucion">Con devolución</option>
+        <option value="canceladas">Canceladas</option>
       </select>
     </label>
     @if (cajas().length > 1) {
@@ -65,6 +62,16 @@
         </select>
       </label>
     }
+    <!-- Atajos de fechas; o de un día a otro con Desde / Hasta. -->
+    <div class="field periodos">
+      <span>Periodo</span>
+      <div class="seg" role="radiogroup" aria-label="Periodo">
+        <button type="button" role="radio" [class.on]="periodo() === 'hoy'" [attr.aria-checked]="periodo() === 'hoy'" (click)="ponerPeriodo('hoy')">Hoy</button>
+        <button type="button" role="radio" [class.on]="periodo() === 'semana'" [attr.aria-checked]="periodo() === 'semana'" (click)="ponerPeriodo('semana')">7 días</button>
+        <button type="button" role="radio" [class.on]="periodo() === 'mes'" [attr.aria-checked]="periodo() === 'mes'" (click)="ponerPeriodo('mes')">Este mes</button>
+        <button type="button" role="radio" [class.on]="periodo() === 'todo'" [attr.aria-checked]="periodo() === 'todo'" (click)="ponerPeriodo('todo')">Todo</button>
+      </div>
+    </div>
     <label class="field">
       Desde
       <input type="date" [(ngModel)]="desde" name="desde" (ngModelChange)="buscar()" />
@@ -92,11 +99,14 @@
       <p class="vacio">No hay ventas con esos filtros.</p>
     } @else if (!cargando()) {
       <div class="tabla-scroll">
+        <!-- Las notas de venta (2026-10-16): clave, cliente con su número, estatus,
+             cuándo se elaboró (con la hora), si fue de contado, de qué almacén salió,
+             quién la elaboró y el importe. Cómo se pagó y el cambio, al abrirla. -->
         <table class="grid" style="min-width: 880px">
           <thead>
             <tr>
-              <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Atendió</th><th>Qué se llevó</th>
-              <th class="num">Total</th><th class="num">Falta</th><th>Estado</th>
+              <th>Clave</th><th>Cliente</th><th>Estatus</th><th>Elaborada</th><th>Contado</th>
+              <th>Almacén</th><th>Elaboró</th><th class="num">Importe</th>
               <th><span class="oculto">Acciones</span></th>
             </tr>
           </thead>
@@ -104,17 +114,35 @@
             @for (p of pedidos(); track p.id) {
               <tr>
                 <td class="folio"><a [routerLink]="['/admin/ventas', p.id]" [title]="p.numero_pedido">{{ p.numero_pedido | folio }}</a></td>
-                <td class="num" style="text-align: left; white-space: nowrap">{{ cuando(p.creado_en) }}</td>
-                <td class="cliente">{{ cliente(p) }}</td>
-                <td class="tenue">{{ p.usuario || '—' }}</td>
-                <td class="tenue" [attr.title]="(p.hilos ?? []).join(', ')">{{ queSeLlevo(p) }}</td>
-                <td class="num"><b>{{ p.total | dinero }}</b></td>
-                <!-- Lo que no se ha cobrado de esta venta. En una fiada es lo que
-                     se cargó a la cuenta: los abonos van a la cuenta, no a la venta. -->
-                <td class="num">
-                  @if ((p.falta ?? 0) > 0) { <span class="falta">{{ p.falta | dinero }}</span> }
+                <td class="cliente">
+                  {{ cliente(p) }}
+                  @if (p.cliente_codigo) { <span class="num-cli">{{ p.cliente_codigo }}</span> }
                 </td>
-                <td><span [class]="'pill ' + tonoEstado(p.estado)">{{ etiquetaEstado(p.estado, p.canal, p.encargo, p.nota_pendiente) }}</span></td>
+                <td>
+                  @if (situacionDe(p); as s) { <span [class]="'pill ' + s.tono">{{ s.texto }}</span> }
+                </td>
+                <td class="num" style="text-align: left; white-space: nowrap">{{ cuando(p.creado_en) }}</td>
+                <td>
+                  @if (contadoDe(p); as ct) {
+                    @if (ct.si) { Sí } @else {
+                      <span class="no-contado">No</span>
+                      @if (ct.porque || ct.falta !== null) {
+                        <!-- Cuánto falta, para no abrir cada venta (2026-10-16). -->
+                        <span class="porque">
+                          {{ ct.porque }}
+                          @if (ct.falta !== null) {
+                            @if (ct.porque) { · }
+                            @if (ct.falta > 0.004) { <span class="debe">falta {{ ct.falta | dinero }}</span> }
+                            @else { ya liquidada }
+                          }
+                        </span>
+                      }
+                    }
+                  }
+                </td>
+                <td class="tenue">{{ p.almacen || '—' }}</td>
+                <td class="tenue">{{ p.usuario || '—' }}</td>
+                <td class="num"><b>{{ p.total | dinero }}</b></td>
                 <td class="acciones"><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/ventas', p.id]">Ver</a></td>
               </tr>
             }

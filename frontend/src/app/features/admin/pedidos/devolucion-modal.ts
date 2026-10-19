@@ -38,7 +38,7 @@ const r3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
   selector: 'app-devolucion-modal',
   imports: [FormsModule, CantidadPipe, DineroPipe, FolioPipe],
   templateUrl: './devolucion-modal.html',
-  styleUrl: './devolucion-modal.scss',
+  styleUrls: ['./devolucion-modal.scss', './devolucion-reparto.scss'],
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class DevolucionModal implements OnInit, OnDestroy {
@@ -280,6 +280,35 @@ export class DevolucionModal implements OnInit, OnDestroy {
   descuentaDeOtras(): number {
     const sobra = r2(this.total() - this.descuentaDeEsta());
     return this.destino === 'deuda' ? r2(Math.min(sobra, this.otrasDeudas())) : 0;
+  }
+
+  /**
+   * ANTES → DESPUÉS (2026-10-16): cómo se reparte lo que regresa, renglón por
+   * renglón, con lo que hay hoy y cómo queda. Primero baja lo que debe ESTA nota;
+   * lo que sobre baja lo demás que debe (si así se eligió) o se le queda a favor.
+   * No sale dinero de la caja. Método: lee campos de ngModel.
+   */
+  reparto(): { que: string; antes: number; despues: number }[] {
+    const p = this.previa();
+    if (!p) return [];
+    const filas: { que: string; antes: number; despues: number }[] = [];
+    if (this.debeEsta() > 0.004) {
+      filas.push({ que: 'Lo que debe esta nota', antes: this.debeEsta(), despues: r2(this.debeEsta() - this.descuentaDeEsta()) });
+    }
+    if (this.hayCliente() && this.otrasDeudas() > 0.004) {
+      filas.push({ que: 'Lo demás que debe', antes: this.otrasDeudas(), despues: r2(this.otrasDeudas() - this.descuentaDeOtras()) });
+    }
+    if (this.hayCliente()) {
+      filas.push({ que: 'Su saldo a favor', antes: r2(Number(p.saldo_favor)), despues: this.quedaAFavor() });
+    }
+    return filas;
+  }
+
+  /** "−$800.00" / "+$800.00" / "sin cambio": lo que se movió en un renglón. */
+  cambioReparto(f: { antes: number; despues: number }): string {
+    const d = r2(f.despues - f.antes);
+    if (Math.abs(d) < 0.005) return 'sin cambio';
+    return `${d < 0 ? '−' : '+'}${this.dinero(Math.abs(d))}`;
   }
 
   /** Lo que le queda a favor después de esta devolución. */

@@ -5,6 +5,7 @@ import { CuentaBancaria, OpcionConfiguracion } from '../../../core/models/tienda
 import { ApiError } from '../../../core/models/auth.models';
 import { CuentaBancariaModal, clabeLegible } from './cuenta-bancaria-modal';
 import { armarPrueba, imprimirTicket } from '../../../shared/ticket/ticket';
+import { WhatsappTiendaComponent } from './whatsapp-tienda';
 
 /** Cómo se dibuja un campo conocido. Los desconocidos usan su descripción. */
 interface Campo {
@@ -55,7 +56,7 @@ interface Grupo {
  */
 @Component({
   selector: 'app-configuracion',
-  imports: [FormsModule, CuentaBancariaModal],
+  imports: [FormsModule, CuentaBancariaModal, WhatsappTiendaComponent],
   templateUrl: './configuracion.html',
   styles: `
     .campos { display: flex; flex-wrap: wrap; gap: 16px; }

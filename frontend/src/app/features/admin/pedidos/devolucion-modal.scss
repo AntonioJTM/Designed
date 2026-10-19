@@ -39,11 +39,4 @@
 .destino { border: 0; padding: 0; margin: 16px 0 0; min-width: 0; }
 .destino legend { padding: 0; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500; }
 .notas { margin-top: 16px; }
-.resumen {
-  display: flex; flex-wrap: wrap; gap: 12px 28px; margin-top: 16px; padding: 12px 14px;
-  border-radius: 10px; background: var(--superficie-2);
-}
-.resumen div { display: flex; flex-direction: column; }
-.resumen span { font-size: 0.75rem; color: var(--tinta-3); }
-.resumen b { font-size: 1.125rem; font-variant-numeric: tabular-nums; }
-.resumen .queda { color: var(--ok-t); }
+// El resumen de abajo: devolucion-reparto.scss (antes → después, 2026-10-16).

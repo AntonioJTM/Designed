@@ -8,7 +8,7 @@ import { CatalogoService } from '../../../core/services/catalogo.service';
 import { TipoCliente } from '../../../core/models/catalogo.models';
 import { Caja, ItemCarrito, MetodoPago, Pedido, SesionCaja } from '../../../core/models/ventas.models';
 import { ClientesService } from '../../../core/services/clientes.service';
-import { ClienteParaVenta } from '../../../core/models/clientes.models';
+import { ClienteParaVenta, ColorComprado } from '../../../core/models/clientes.models';
 import { TiendaService } from '../../../core/services/tienda.service';
 import { TicketService } from '../../../core/services/ticket.service';
 import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
@@ -21,6 +21,7 @@ import { ConfirmacionService } from '../../../core/services/confirmacion.service
 import { HiloAPesar, PesarModal } from './pesar-modal';
 import { paqueteFueraDeAqui } from '../../../shared/paquete-aqui';
 import { AnticipoModal } from '../clientes/anticipo-modal';
+import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 
 /** Un hilo de la búsqueda con sus presentaciones (paquete y cono) juntas. */
 interface HiloEncontrado {
@@ -83,8 +84,8 @@ export type ModoVenta = 'cobrar' | 'credito' | 'espera' | 'pendiente';
 @Component({
   selector: 'app-pos',
   host: { '(document:keydown.escape)': 'alEscape()', '(document:keydown)': 'alTeclear($event)' },
-  imports: [FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal, AnticipoModal],
-  styleUrls: ['./pos.scss', './pos-bultos.scss', './pos-busqueda.scss'],
+  imports: [BotonWhatsapp, FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal, AnticipoModal],
+  styleUrls: ['./pos.scss', './pos-bultos.scss', './pos-busqueda.scss', './pos-cliente.scss'],
   templateUrl: './pos.html',
 })
 export class Pos {
@@ -128,6 +129,12 @@ export class Pos {
   // su historial —qué colores se lleva, cuánto compra— y se le puede fiar.
   readonly clienteSel = signal<ClienteParaVenta | null>(null);
   readonly resultadosCliente = signal<ClienteParaVenta[]>([]);
+  /**
+   * LO QUE SIEMPRE LLEVA (2026-10-16): sus 5 hilos más comprados en esta tienda
+   * (por `producto_id`), como botones al elegirlo: buscarlo o pesar sus conos de
+   * un clic, sin teclear el color y el calibre.
+   */
+  readonly loQueLleva = signal<ColorComprado[]>([]);
   readonly buscandoCliente = signal(false);
   qCliente = '';
   /**
@@ -846,7 +853,69 @@ export class Pos {
     this.tipoClienteSel.set(c.tipo_cliente_id ?? this.publicoId);
     this.error.set(null);
     this.cargarApartadoCliente(c.id);
+    this.loQueLleva.set([]);
+    this.clientesSvc.loQueLleva(c.id).subscribe({
+      // Solo si sigue siendo el mismo cliente (pudieron cambiarlo mientras llegaba).
+      next: (hs) => { if (this.clienteSel()?.id === c.id) this.loQueLleva.set(hs); },
+      error: () => {},
+    });
     this.enfocarLector();
+  }
+
+  /** "ROJO 2/30": el hilo con su calibre, como se busca y como se nombra. */
+  nombreHiloCliente(h: ColorComprado): string {
+    return `${h.color}${h.calibre ? ' ' + h.calibre : ''}`;
+  }
+
+  /** Lo que dice el botón al pasarle encima: cuánto se ha llevado de ese hilo. */
+  detalleHiloCliente(h: ColorComprado): string {
+    const veces = Number(h.veces);
+    return `Se ha llevado ${Number(h.kilos).toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg ` +
+      `en ${veces} ${veces === 1 ? 'compra' : 'compras'}`;
+  }
+
+  /** Un clic en uno de sus hilos: se busca ese hilo, con lo que hay aquí. */
+  buscarHiloCliente(h: ColorComprado): void {
+    this.qVar = this.nombreHiloCliente(h);
+    this.avisoLector.set(null);
+    this.buscar();
+  }
+
+  /**
+   * "Conos" de uno de sus hilos: abre DIRECTO la báscula de sus conos (la gente
+   * dice "vengo por 6 conos de tal color"). Si en esta tienda no hay conos de
+   * ese hilo, se enseña lo que sí hay y se dice por qué.
+   */
+  conosHiloCliente(h: ColorComprado): void {
+    const nombre = this.nombreHiloCliente(h);
+    this.qVar = nombre;
+    this.avisoLector.set(null);
+    this.inv.buscarVariantes(nombre, this.cajaActual()?.almacen_id).subscribe({
+      next: (vs) => {
+        const cono = vs.find((v) => Number(v.producto_id) === Number(h.producto_id) && v.tipo_presentacion === 'cono'
+          && v.activo !== false && (v.activo as unknown) !== 0);
+        if (cono && Number(cono.aqui?.cantidad ?? 0) > 0) {
+          this.agregar({
+            id: cono.id,
+            producto_id: cono.producto_id,
+            sku: cono.sku,
+            producto: this.nombreHilo(cono),
+            presentacion: cono.presentacion,
+            tipo: cono.tipo_presentacion,
+            precio: Number(cono.precio_oferta ?? cono.precio),
+            unidad: cono.unidad,
+            aqui: cono.aqui,
+          } as HiloAPesar & { producto_id: number });
+          return;
+        }
+        // Sin conos aquí: lo que hay de ese hilo, y por qué no se abrió la báscula.
+        this.buscar();
+        this.avisoLector.set(cono
+          ? `No hay conos de ${nombre} en esta tienda. Bájalos en Inventario o véndele el paquete.`
+          : `${nombre} todavía no tiene conos: se bajan en Inventario. Aquí está lo que hay del hilo.`);
+      },
+      error: (e) => this.error.set(this.msg(e)),
+    });
   }
 
   /**
@@ -872,6 +941,8 @@ export class Pos {
           saldo: c.saldo ?? 0,
           credito_disponible: c.credito_disponible ?? 0,
           saldo_favor: c.saldo_favor ?? 0,
+          dias_sin_abonar: c.dias_sin_abonar ?? null,
+          atrasado: !!c.atrasado,
         });
       },
       error: () => {},
@@ -974,6 +1045,7 @@ export class Pos {
    */
   quitarCliente(): void {
     this.clienteSel.set(null);
+    this.loQueLleva.set([]);
     this.usarSaldo = false;
     this.saldoAUsar = null;
     this.apartadoCliente.set(null);
@@ -1088,6 +1160,58 @@ export class Pos {
     return Math.max(0, Math.round((this.total() - this.fiadoActual() - this.saldoActual()) * 100) / 100);
   }
 
+  /**
+   * EL CINTILLO DEL MODO (2026-10-16): una línea, arriba de lo que se captura,
+   * que dice qué pasa con la MERCANCÍA y con el DINERO en el modo elegido (y a
+   * crédito, cuánto crédito libre le quedará). Su color dice lo mismo que el
+   * resto del sistema: verde se cobra, ámbar queda por pagar, azul se aparta y
+   * rojo si la cuenta viene atrasada. Método, no `computed`: lee campos de
+   * ngModel (lo que va a crédito, lo que deja, su saldo a favor).
+   */
+  cintillo(): { tono: 'cobrar' | 'credito' | 'espera' | 'pendiente' | 'atrasado'; texto: string } {
+    const m = this.modo();
+    if (m === 'credito') {
+      const fiado = this.fiadoActual();
+      const libre = Math.max(0, Math.round((this.creditoDisponible() - fiado) * 100) / 100);
+      const hoy = this.aPagarHoy();
+      const c = this.clienteSel();
+      const atraso = c?.atrasado ? ` Ojo: lleva ${c.dias_sin_abonar} días sin abonar.` : '';
+      return {
+        tono: c?.atrasado ? 'atrasado' : 'credito',
+        texto: `Se lleva la mercancía hoy y ${this.dinero(fiado)} van a su cuenta` +
+          (hoy > 0 ? `; paga ${this.dinero(hoy)} hoy` : '') +
+          `. Le quedarán ${this.dinero(libre)} de crédito libre.${atraso}`,
+      };
+    }
+    if (m === 'espera') {
+      const deja = Number(this.anticipo ?? 0);
+      return {
+        tono: 'espera',
+        texto: 'La mercancía se aparta y no sale del inventario; no sale ticket. ' +
+          (deja > 0 ? `Deja ${this.dinero(deja)} hoy` : 'Hoy no paga nada') + ' y el resto se cobra al entregarla.',
+      };
+    }
+    if (m === 'pendiente') {
+      return {
+        tono: 'pendiente',
+        texto: 'Se lleva la mercancía con su ticket. Hoy no entra dinero ni usa su crédito: paga después, en Notas pendientes de pago.',
+      };
+    }
+    const saldo = this.saldoActual();
+    const hoy = this.aPagarHoy();
+    if (this.carrito().length === 0) {
+      return { tono: 'cobrar', texto: 'La mercancía sale hoy y se cobra completa.' };
+    }
+    if (saldo > 0 && hoy <= 0) {
+      return { tono: 'cobrar', texto: `La mercancía sale hoy y se paga toda con su saldo a favor (${this.dinero(saldo)}).` };
+    }
+    return {
+      tono: 'cobrar',
+      texto: `La mercancía sale hoy y se cobran ${this.dinero(hoy)}` +
+        (saldo > 0 ? `, más ${this.dinero(saldo)} de su saldo a favor` : '') + '.',
+    };
+  }
+
   /** El texto del botón grande: dice exactamente lo que va a pasar. */
   textoBoton(): string {
     if (this.pidiendo()) {
@@ -1111,7 +1235,7 @@ export class Pos {
     return `Cobrar ${this.dinero(this.total())}`;
   }
 
-  cobrar(): void {
+  async cobrar(): Promise<void> {
     const s = this.sesion();
     if (!s || this.carrito().length === 0) {
       this.error.set('Agrega productos para poder cobrar.');
@@ -1156,6 +1280,21 @@ export class Pos {
     if (fiado > this.creditoDisponible() + 0.001) {
       this.error.set(`Solo le quedan ${this.dinero(this.creditoDisponible())} de crédito.`);
       return;
+    }
+    // CUENTA ATRASADA (2026-10-16): no se le fía a ciegas. Se pregunta, con lo que
+    // debe y los días; el servidor también lo detiene si no se confirmó.
+    let fiarConAtraso = false;
+    const cli = this.clienteSel();
+    if (fiado > 0 && cli?.atrasado) {
+      const si = await this.confirmacion.pedir({
+        titulo: '¿Darle a crédito con la cuenta atrasada?',
+        mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y lleva ` +
+          `${cli.dias_sin_abonar} días sin abonar. Lo sano es pedirle un abono antes de fiarle más.`,
+        aceptar: 'Darle a crédito de todos modos',
+        peligro: true,
+      });
+      if (!si) return;
+      fiarConAtraso = true;
     }
     const saldo = this.saldoActual();
     if (saldo > this.saldoFavorCliente() + 0.001) {
@@ -1213,6 +1352,7 @@ export class Pos {
         // Si se identificó al cliente, la venta queda en su historial.
         cliente_id: this.clienteSel()?.id,
         a_credito: fiado > 0 ? fiado : undefined,
+        fiar_con_atraso: fiarConAtraso || undefined,
         saldo_favor: saldo > 0 ? saldo : undefined,
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
@@ -1426,13 +1566,23 @@ export class Pos {
     this.enfocarLector();
   }
 
+  /** El mismo ticket, en PDF por WhatsApp (2026-10-16): con el cambio, que no se guarda. */
+  whatsappTicket(): void {
+    const t = this.ticket();
+    if (t) this.tickets.whatsapp(t.pedido.id, { cambio: t.cambio });
+  }
+
   /** Dejó dinero a cuenta: su saldo a favor sube y ya lo puede usar en esta venta. */
   anticipoRegistrado(r: { total: number; saldo_favor: number; movimiento_id: number }): void {
     const c = this.clienteSel();
     if (c) this.clienteSel.set({ ...c, saldo_favor: r.saldo_favor });
     const texto = `Anticipo de ${this.dinero(r.total)} registrado. Le quedan ${this.dinero(r.saldo_favor)} a favor.`;
     this.mensaje.set(texto);
-    if (c) this.ticketAviso.poner(texto, 'Imprimir ticket del anticipo', () => this.imprimirCuenta(this.tickets.imprimirAnticipo(c.id, r.movimiento_id)));
+    if (c) {
+      this.ticketAviso.poner(texto, 'Imprimir ticket del anticipo',
+        () => this.imprimirCuenta(this.tickets.imprimirAnticipo(c.id, r.movimiento_id)),
+        () => this.tickets.whatsappAnticipo(c.id, r.movimiento_id));
+    }
     this.cerrarAnticipo();
   }
 
@@ -1498,13 +1648,17 @@ export class Pos {
             ...c,
             saldo,
             credito_disponible: Math.max(0, Math.round((limite - saldo) * 100) / 100),
+            // Acaba de abonar: ya no está atrasado.
+            dias_sin_abonar: saldo > 0 ? 0 : null,
+            atrasado: false,
           });
           const texto = saldo > 0
             ? `Abono de ${this.dinero(monto)} registrado. Todavía debe ${this.dinero(saldo)}.`
             : `Abono de ${this.dinero(monto)} registrado. Ya no debe nada.`;
           this.mensaje.set(texto);
           this.ticketAviso.poner(texto, 'Imprimir ticket del abono',
-            () => this.imprimirCuenta(this.tickets.imprimirAbonoCuenta(c.id, r.movimiento_id)));
+            () => this.imprimirCuenta(this.tickets.imprimirAbonoCuenta(c.id, r.movimiento_id)),
+            () => this.tickets.whatsappAbonoCuenta(c.id, r.movimiento_id));
         },
         error: (e) => {
           this.registrandoAbono.set(false);

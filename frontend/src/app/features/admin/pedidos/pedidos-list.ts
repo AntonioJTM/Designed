@@ -46,6 +46,11 @@ function haceDias(dias: number): string {
     .kpi-valor { font-size: 1.75rem; }
     td.folio a { font-family: var(--mono); font-size: 0.8125rem; text-decoration: none; white-space: nowrap; }
     td.cliente { font-weight: 500; }
+    td.cliente .num-cli { display: block; font-family: var(--mono); font-size: 0.75rem; font-weight: 400; color: var(--tinta-3); }
+    td .no-contado { color: var(--aviso-t); }
+    td .porque { display: block; font-size: 0.75rem; color: var(--tinta-3); }
+    td .porque .debe { color: var(--aviso-t); font-weight: 600; }
+    .periodos { flex: 0 0 auto; }
     td.tenue { color: var(--tinta-2); }
     td .falta { color: var(--alerta-t); }
     .mas { display: flex; justify-content: center; padding-top: 14px; }
@@ -74,6 +79,8 @@ export class PedidosList {
    */
   canal: CanalVenta | '' = '';
   estado: EstadoPedido | '' = '';
+  /** Emitidas, con devolución o canceladas (2026-10-16). Vacío = todas. */
+  situacion: 'emitidas' | 'canceladas' | 'con_devolucion' | '' = '';
   q = '';
   cajaId: number | '' = '';
   desde = haceDias(6);
@@ -167,6 +174,7 @@ export class PedidosList {
     return this.ventas.listarPedidos({
       canal: this.canal || undefined,
       estado: this.estado || undefined,
+      situacion: this.situacion || undefined,
       q: this.q.trim() || undefined,
       caja_id: this.cajaId ? Number(this.cajaId) : undefined,
       desde: this.desde || undefined,
@@ -175,10 +183,59 @@ export class PedidosList {
     });
   }
 
+  // ---- Atajos de fechas (2026-10-16): hoy, la semana, el mes o todo ----
+
+  /** Cuál atajo está puesto (para pintarlo elegido); null si son fechas a mano. */
+  periodo(): 'hoy' | 'semana' | 'mes' | 'todo' | null {
+    const hoy = hoyLocal();
+    if (!this.desde && !this.hasta) return 'todo';
+    if (this.hasta !== hoy) return null;
+    if (this.desde === hoy) return 'hoy';
+    if (this.desde === haceDias(6)) return 'semana';
+    if (this.desde === hoy.slice(0, 8) + '01') return 'mes';
+    return null;
+  }
+
+  ponerPeriodo(p: 'hoy' | 'semana' | 'mes' | 'todo'): void {
+    const hoy = hoyLocal();
+    this.desde = p === 'todo' ? '' : p === 'hoy' ? hoy : p === 'semana' ? haceDias(6) : hoy.slice(0, 8) + '01';
+    this.hasta = p === 'todo' ? '' : hoy;
+    this.buscar();
+  }
+
+  /** "Emitida", "Cancelada", "Devolución" o "Devolución parcial", con su color. */
+  situacionDe(p: Pedido): { texto: string; tono: string } {
+    switch (p.situacion) {
+      case 'cancelada': return { texto: 'Cancelada', tono: 'rojo' };
+      case 'devolucion': return { texto: 'Devolución', tono: 'ambar' };
+      case 'devolucion_parcial': return { texto: 'Devolución parcial', tono: 'ambar' };
+      default: return { texto: 'Emitida', tono: 'azul' };
+    }
+  }
+
+  /** "Sí", o "No" con por qué: a crédito, pendiente de pago, en espera o apartado. */
+  /**
+   * De contado: Sí, o No y por qué. Y cuando es No, CUÁNTO FALTA (2026-10-16: "ve
+   * tres que dicen No · a crédito y tiene que abrir cada una para saber si ya la
+   * pagaron"): "falta $1,200.00" o "ya liquidada". Lo que falta es el mismo que
+   * calcula el servidor (en una fiada, con sus abonos repartidos de lo más
+   * antiguo a lo más nuevo). Una cancelada no debe nada: solo dice por qué.
+   */
+  contadoDe(p: Pedido): { si: boolean; porque: string; falta: number | null } {
+    if (p.contado) return { si: true, porque: '', falta: null };
+    const porque = p.fiada ? 'a crédito'
+      : Number(p.nota_pendiente) ? 'pendiente de pago'
+      : Number(p.encargo) ? 'en espera'
+      : p.estado === 'apartado' ? 'apartado' : '';
+    const viva = p.estado !== 'cancelado' && p.estado !== 'devuelto';
+    return { si: false, porque, falta: viva ? Math.max(0, Number(p.falta ?? 0)) : null };
+  }
+
   /** El título de la tabla dice qué periodo se está viendo. Método: lee ngModel. */
   tituloLista(): string {
-    if (!this.desde && !this.hasta) return 'Todas las ventas';
-    if (this.desde === haceDias(6) && this.hasta === hoyLocal()) return 'Ventas de la semana';
+    const titulos = { todo: 'Todas las ventas', hoy: 'Ventas de hoy', semana: 'Ventas de los últimos 7 días', mes: 'Ventas de este mes' };
+    const p = this.periodo();
+    if (p) return titulos[p];
     const f = (s: string) => (s ? s.split('-').reverse().slice(0, 2).join('/') : '…');
     return `Ventas del ${f(this.desde)} al ${f(this.hasta)}`;
   }

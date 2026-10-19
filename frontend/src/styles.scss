@@ -67,6 +67,9 @@
   --velo-claro: #FFFFFFE0;
   /* La barra de desplazamiento de la página y de las tablas. */
   --desplazamiento: #C5CAD3;
+  /* El ícono de WhatsApp (2026-10-16, mandar el ticket): su verde oscuro, que sí se
+     lee sobre blanco (el verde claro de la marca no llega a 3:1). */
+  --whatsapp: #128C7E;
   --fuente: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -402,6 +405,8 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
    devolución, abono, anticipo, pago de una nota (`shared/ticket/ticket-del-aviso.ts`). */
 .ok-msg.con-accion { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .ok-msg.con-accion > span { flex: 1 1 18rem; min-width: 0; }
+/* Imprimir y mandar por WhatsApp, juntos (2026-10-16). */
+.ok-msg.con-accion > .botones { display: flex; flex-wrap: wrap; gap: 8px; }
 .aviso { background: var(--aviso-f); color: var(--aviso-t); padding: 12px 14px; border-radius: 8px; font-size: 0.875rem; border: 0; }
 .nota-info { background: var(--info-f); color: var(--info-t); padding: 12px 16px; border-radius: 10px; font-size: 0.875rem; display: flex; align-items: center; gap: 12px; }
 .muted { color: var(--tinta-3); }

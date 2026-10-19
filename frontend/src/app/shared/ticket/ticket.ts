@@ -156,6 +156,11 @@ export function llevaTicket(p: Pedido): boolean {
   return tipoDeTicket(p, fiadoDe(p)) !== null;
 }
 
+/** Qué dice el ticket de este pedido ("Venta", "A crédito", "Venta cancelada"…); null si no lleva. */
+export function tipoTicket(p: Pedido): string | null {
+  return tipoDeTicket(p, fiadoDe(p));
+}
+
 export const SIN_TICKET = 'Una nota en espera no lleva ticket: todavía se puede modificar. Sale al entregarla.';
 
 const renglon = (izq: string, der: string, clase = '') =>
@@ -195,7 +200,12 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
   const tipo = tipoDeTicket(p, fiado);
   if (tipo === null) throw new Error(SIN_TICKET);
   const notaPendiente = tipo === 'Nota pendiente de pago';
-  const cambio = Number(extras.cambio ?? 0);
+  // El cambio: el que pasa la caja al cobrar o, al reimprimir, el que se guardó
+  // con el pago en efectivo (desde el 2026-10-16: recibido − cobrado).
+  const efectivoGuardado = cobrado.find((g) => /efectivo/i.test(g.metodo) && g.recibido != null);
+  const cambio = extras.cambio != null
+    ? Number(extras.cambio)
+    : efectivoGuardado ? Math.max(0, Math.round((Number(efectivoGuardado.recibido) - Number(efectivoGuardado.monto)) * 100) / 100) : 0;
 
   const kilos = lineas.reduce((s, d) => s + Number(d.cantidad), 0);
   const paquetes = lineas.reduce((s, d) => s + (d.bultos?.length ?? 0), 0);
@@ -210,13 +220,13 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
     ? renglon('Recibido', esc(dineroTicket(Number(efectivo.monto) + cambio))) + renglon('Cambio', esc(dineroTicket(cambio)), 'fuerte')
     : '';
 
-  // Si pagó con su saldo a favor: cuánto le QUEDÓ (si aún le queda) y, al
-  // reimprimirlo después, cuánto tiene hoy si ya cambió (2026-10-15).
+  // Si pagó con su saldo a favor: cuánto le QUEDÓ (si aún le queda) y, en un
+  // recuadro, cuánto tiene HOY. El recuadro va SIEMPRE, como en el de devolución
+  // y el de anticipo (2026-10-16, el usuario eligió que todos se vean igual).
   const sf = notaPendiente ? null : p.saldo_favor_usado;
   const favor = sf
     ? (Number(sf.quedo) > 0.004 ? renglon('Le queda a favor', esc(dineroTicket(sf.quedo)), 'fuerte') : '') +
-      (Math.abs(Number(sf.hoy) - Number(sf.quedo)) > 0.004
-        ? `<div class="aviso">Su saldo a favor hoy<b>${esc(dineroTicket(sf.hoy))}</b></div>` : '')
+      `<div class="aviso">Su saldo a favor hoy<b>${esc(dineroTicket(sf.hoy))}</b></div>`
     : '';
 
   // Lo que queda pendiente, según qué fue.
@@ -315,7 +325,8 @@ function hojaTicket(titulo: string, papel: Papel, cuerpo: string): string {
   @page { margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; padding: 0; background: #fff; }
-  body { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: ${px(12)}; line-height: 1.3;
+  /* También en .t: el PDF para WhatsApp dibuja solo el ticket, sin su body (ticket-pdf.ts). */
+  body, .t { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: ${px(12)}; line-height: 1.3;
     font-variant-numeric: tabular-nums; }
   .t { width: ${papel.ticketMm}mm; margin: 0 0 0 1mm; padding: 2mm 0 3mm; }
   .tienda { text-align: center; }
@@ -479,8 +490,9 @@ export function armarTicketAbonoCuenta(d: TicketAbonoCuenta, tienda: DatosTienda
 
 /**
  * EL TICKET DE UN ANTICIPO (2026-10-15): lo que dejó a cuenta —efectivo y/o
- * transferencia—, cuánto tenía a favor, con cuánto quedó y su saldo a favor de
- * hoy. Dice que se usa en sus próximas compras y que no aparta mercancía.
+ * transferencia—, cuánto tenía a favor, con cuánto quedó y, SIEMPRE en su
+ * recuadro, su saldo a favor de hoy (2026-10-16: todos los tickets de saldo a
+ * favor iguales). Dice que se usa en sus próximas compras y que no aparta mercancía.
  */
 export function armarTicketAnticipo(d: TicketAnticipo, tienda: DatosTienda): string {
   const folio = `AN-${d.id}`;
@@ -500,8 +512,7 @@ export function armarTicketAnticipo(d: TicketAnticipo, tienda: DatosTienda): str
   <div class="total"><span>A CUENTA</span><span>${esc(dineroTicket(d.total))}</span></div>
   ${d.tenia_a_favor > 0.004 ? renglon('Ya tenía a favor', esc(dineroTicket(d.tenia_a_favor))) : ''}
   ${renglon('Le quedó a favor', esc(dineroTicket(d.quedo_a_favor)), 'fuerte')}
-  ${Math.abs(d.a_favor_hoy - d.quedo_a_favor) > 0.004
-    ? `<div class="aviso">Su saldo a favor hoy<b>${esc(dineroTicket(d.a_favor_hoy))}</b></div>` : ''}
+  <div class="aviso">Su saldo a favor hoy<b>${esc(dineroTicket(d.a_favor_hoy))}</b></div>
   ${d.notas ? `<div class="nota">Nota: ${esc(d.notas)}</div>` : ''}
   <div class="nota">Se usa en sus próximas compras. No aparta mercancía.</div>
   <div class="gracias">¡Gracias!</div>

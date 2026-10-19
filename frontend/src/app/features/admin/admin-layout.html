@@ -84,6 +84,23 @@
 
           @if (pendientes(); as p) {
             <div class="avisos-cuerpo">
+              <!-- El WhatsApp de la tienda se desconectó (2026-10-16): arriba, porque los tickets ya no salen solos. -->
+              @if (veConfig() && p.whatsapp; as w) {
+                <div class="avisos-grupo">
+                  <h3>Sistema</h3>
+                  <button type="button" class="aviso-fila" (click)="irA('/admin/configuracion')">
+                    <span class="icono tono-naranja" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.chat"></path></svg></span>
+                    <span class="que">
+                      <b>{{ w.motivo === 'sesion_cerrada' ? 'El WhatsApp de la tienda se desconectó' : 'El WhatsApp de la tienda no se puede conectar' }}</b>
+                      <span>
+                        @if (w.desde) { Desde {{ cuando(w.desde) }} · }
+                        {{ w.motivo === 'sesion_cerrada' ? 'los tickets se mandan a mano hasta volver a enlazarlo' : 'sigue intentando; los tickets se mandan a mano mientras' }}
+                      </span>
+                    </span>
+                    <span class="ir" aria-hidden="true">{{ w.motivo === 'sesion_cerrada' ? 'Enlazar ›' : 'Ver ›' }}</span>
+                  </button>
+                </div>
+              }
               @if ((veMercancia() && (p.traspasos_por_enviar.length > 0 || p.traspasos_por_recibir.length > 0))
                    || (veInventario() && p.alertas_stock > 0)
                    || (veCatalogo() && (p.sin_precio?.num ?? 0) > 0)) {

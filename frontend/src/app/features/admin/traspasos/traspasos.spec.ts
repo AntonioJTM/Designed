@@ -403,6 +403,36 @@ describe('Traspasos', () => {
    * sola tienda pide para la suya y no ve cuánto hay en la matriz; si no hay
    * tantos, le mandan los que tengan. Surtir le toca a la matriz.
    */
+  /*
+   * LA BARRA DE CADA HILO (2026-10-16): cuántos paquetes van de los pedidos;
+   * por enviar, los escaneados; en camino, los que salieron. Verde completa.
+   */
+  it('por enviar: la barra dice cuántos van escaneados de los pedidos y sus kilos', async () => {
+    const linea = { ...enTransito.lineas[0], paquetes: 8, paquetes_solicitados: 8, cantidad: 152.4,
+      guardados: [{ codigo: 'A', peso_kg: '19.05', variante_id: 10 }, { codigo: 'B', peso_kg: '19.10', variante_id: 10 },
+        { codigo: 'C', peso_kg: '18.95', variante_id: 10 }] };
+    const solicitud = { ...enTransito, id: 81, folio: 'TRA-81', estado: 'solicitado', lineas: [linea] } as Traspaso;
+    historial = [solicitud];
+    const fixture = await montarFixture();
+    const c = fixture.componentInstance;
+    expect(c.avanceLinea(solicitud, linea)).toEqual({ van: 3, de: 8, kg: 57.1, pct: 38, completo: false });
+    const el = (fixture.nativeElement as HTMLElement).querySelector('.avance-linea')!;
+    expect(el.classList.contains('completo')).toBe(false);
+    expect(el.textContent!.replace(/\s+/g, ' ')).toContain('3 de 8 paquetes · 57.1 kg');
+    expect(el.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')).toBe('3');
+  });
+
+  it('en camino: los que salieron; completa va en verde', async () => {
+    historial = [enTransito];
+    const fixture = await montarFixture();
+    const c = fixture.componentInstance;
+    const a = c.avanceLinea(enTransito, enTransito.lineas[0])!;
+    expect(a.completo).toBe(true);
+    expect(a.van).toBe(a.de);
+    const el = (fixture.nativeElement as HTMLElement).querySelector('.avance-linea')!;
+    expect(el.classList.contains('completo')).toBe(true);
+  });
+
   it('quien solo es de la MATRIZ surte: manda a cualquier tienda y no pide a ciegas', async () => {
     todasLasTiendas = false;
     almacenesActuales = [

@@ -76,7 +76,7 @@ const HISTORIAL = 100;
   selector: 'app-traspasos',
   imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe, EnvioModal],
   templateUrl: './traspasos.html',
-  styleUrl: './traspasos.scss',
+  styleUrls: ['./traspasos.scss', './traspasos-avance.scss'],
   // Los dos modales (acuse y cancelación) se cierran con Escape, nunca al
   // tocar el fondo: se perdería lo capturado.
   host: { '(document:keydown.escape)': 'alEscape()' },
@@ -711,6 +711,36 @@ export class Traspasos {
 
   /** Lo recibido de una línea ya cerrada, para el historial. */
   /** Un hilo que se pidió y no salió: no había. */
+  /**
+   * LA BARRA DE CADA HILO (2026-10-16): cuántos paquetes van de los que se
+   * pidieron, con sus kilos. Por enviar, los ESCANEADOS y guardados a medio
+   * surtir; en camino, los que SALIERON. null en una línea en kilos (sin
+   * paquetes) o que no salió (eso ya lo dice el renglón).
+   */
+  avanceLinea(t: Traspaso, l: TraspasoLinea): { van: number; de: number; kg: number; pct: number; completo: boolean } | null {
+    if (this.noSalio(l)) return null;
+    const pedidos = l.paquetes_solicitados ?? l.paquetes;
+    const de = Math.round(Number(pedidos ?? 0));
+    if (!(de > 0)) return null;
+    let van: number;
+    let kg: number;
+    if (t.estado === 'solicitado') {
+      const g = l.guardados ?? [];
+      van = g.length;
+      kg = g.reduce((s, b) => s + Number(b.peso_kg ?? 0), 0);
+    } else {
+      van = Math.round(Number(l.paquetes ?? 0));
+      kg = Number(l.cantidad ?? 0);
+    }
+    return {
+      van,
+      de,
+      kg: Math.round(kg * 1000) / 1000,
+      pct: Math.min(100, Math.round((van / de) * 100)),
+      completo: van >= de,
+    };
+  }
+
   noSalio(l: TraspasoLinea): boolean {
     return l.paquetes_solicitados != null && Number(l.cantidad) === 0;
   }

@@ -123,6 +123,8 @@ router.get('/analisis/:vista', ...soloStaff, requirePermiso('ver:clientes'), req
 router.get('/', ...soloStaff, controller.listar);
 router.post('/', ...soloStaff, validate(expedienteSchema), controller.crearDesdeStaff);
 router.get('/:id', ...soloStaff, controller.expediente);
+// "Lo que siempre lleva" (2026-10-16): sus 5 hilos más comprados, para la caja.
+router.get('/:id/lo-que-lleva', ...soloStaff, controller.loQueLleva);
 router.put('/:id', ...soloStaff, validate(editarSchema), controller.actualizar);
 
 // Crédito. El estado de cuenta viaja dentro del expediente (GET /:id) y la lista

@@ -97,6 +97,8 @@ async function listar(req, res, next) {
     const data = await service.listar({
       canal: req.query.canal,
       estado: req.query.estado,
+      // emitidas / canceladas / con_devolucion (2026-10-16).
+      situacion: req.query.situacion,
       cliente_id: req.query.cliente_id ? Number(req.query.cliente_id) : undefined,
       q: q || undefined,
       caja_id: Number(req.query.caja_id) > 0 ? Number(req.query.caja_id) : undefined,

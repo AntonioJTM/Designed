@@ -34,6 +34,7 @@ import { VistaLugares } from './vistas/vista-lugares';
 import { VistaTodos } from './vistas/vista-todos';
 import { LugaresEntrega } from '../../../core/models/clientes.models';
 import { ClientesEnfriados } from '../../../core/models/analisis.models';
+import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 
 /**
  * Las miradas que suman las compras de TODAS las tiendas (2026-10-15): solo las
@@ -74,7 +75,7 @@ const PESTANAS: { vista: VistaClientes; etiqueta: string; d: string }[] = [
  */
 @Component({
   selector: 'app-clientes',
-  imports: [
+  imports: [BotonWhatsapp, 
     FormsModule, RouterLink, ClienteFormModal, AbonoModal,
     VistaFrecuencia, VistaDejaron, VistaDeuda, VistaQueCompra, VistaCuando, VistaGasto, VistaLugares, VistaTodos,
   ],
@@ -358,7 +359,8 @@ export class ClientesPantalla implements OnInit {
     this.mensaje.set(texto);
     if (c) {
       this.ticketAviso.poner(texto, 'Imprimir ticket del abono', () =>
-        this.tickets.imprimirAbonoCuenta(c.cliente_id, r.movimiento_id).subscribe({ error: (e) => this.error.set(this.msg(e)) }));
+        this.tickets.imprimirAbonoCuenta(c.cliente_id, r.movimiento_id).subscribe({ error: (e) => this.error.set(this.msg(e)) }),
+        () => this.tickets.whatsappAbonoCuenta(c.cliente_id, r.movimiento_id));
     }
     this.cargar();
   }

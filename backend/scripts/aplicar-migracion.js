@@ -6,9 +6,10 @@
  *   node scripts/aplicar-migracion.js ../db/migrations/2026-09_algo.sql
  *   node --env-file=.env.produccion scripts/aplicar-migracion.js <archivo>
  *
- * Antes de escribir nada dice A QUÉ BASE va y espera confirmación, porque la
- * base del servidor se llama IGUAL que la local ("desarrollo") y lo único que
- * las distingue es el host. Con `--si` no pregunta (para usarlo en un script).
+ * Antes de escribir nada dice A QUÉ BASE va y espera confirmación ("si"; a la
+ * base REAL, `hitex`, hay que escribir "hitex"). Desde el 2026-10-16 el `.env`
+ * local apunta a `hitex`; para la de pruebas: DB_NAME=desarrollo node scripts/…
+ * Con `--si` no pregunta (para usarlo en un script).
  *
  * NO lleva registro de lo aplicado: quién está y quién falta lo dice
  * `estado-migraciones.js` mirando la estructura real de la base, que es la
@@ -52,12 +53,17 @@ const readline = require('node:readline/promises');
   console.log(`  Base    : ${donde.db}`);
   console.log(`  Servidor: ${donde.h}  (${process.env.DB_HOST})`);
   if (esRemota) console.log('\n  ⚠  Es una base REMOTA. Asegúrate de tener respaldo.');
+  // Desde el 2026-10-16 el .env local apunta a la base REAL: aplicarle algo pide
+  // escribir su nombre, no un "si" que se teclea por costumbre.
+  const esReal = donde.db === 'hitex';
+  if (esReal) console.log('  ⚠  Es la base REAL de la tienda (hitex): primero el respaldo en el servidor.');
 
   if (!sinPreguntar) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const r = (await rl.question('\n  ¿Aplicar? (escribe "si"): ')).trim().toLowerCase();
+    const palabra = esReal ? 'hitex' : 'si';
+    const r = (await rl.question(`\n  ¿Aplicar? (escribe "${palabra}"): `)).trim().toLowerCase();
     rl.close();
-    if (r !== 'si') {
+    if (r !== palabra) {
       console.log('  Cancelado. No se tocó nada.');
       await c.end();
       process.exit(1);

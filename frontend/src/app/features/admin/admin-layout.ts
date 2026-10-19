@@ -66,6 +66,8 @@ export class AdminLayout implements AfterViewInit {
   readonly veClientes = computed(() => { this.sesion(); return this.auth.puede('ver:clientes'); });
   readonly veNotas = computed(() => { this.sesion(); return this.auth.puede('ver:notas_pendientes'); });
   readonly veHoy = computed(() => { this.sesion(); return this.auth.puede('ver:hoy'); });
+  /** El aviso del WhatsApp de la tienda: lo atiende quien entra a Configuración. */
+  readonly veConfig = computed(() => { this.sesion(); return this.auth.puede('ver:config'); });
 
   /** Los trazos de los iconos del panel de avisos (los mismos de Hoy). */
   readonly ICONO = {
@@ -75,6 +77,8 @@ export class AdminLayout implements AfterViewInit {
     nota: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
     cobro: 'M3 7h18v11H3z M3 11h18 M7 15h4',
     gente: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5',
+    // Un globo de chat, con su colita (el WhatsApp de la tienda).
+    chat: 'M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.6-4.2A8.5 8.5 0 1 1 20.5 11.5z',
   };
 
   /** El globo cuenta solo lo que este puesto puede atender. */
@@ -82,6 +86,7 @@ export class AdminLayout implements AfterViewInit {
     const p = this.pendientes();
     if (!p) return 0;
     let n = 0;
+    if (this.veConfig() && p.whatsapp) n += 1;
     if (this.veMercancia()) n += p.traspasos_por_enviar.length + p.traspasos_por_recibir.length;
     if (this.veInventario() && p.alertas_stock > 0) n += 1;
     if (this.veCatalogo() && (p.sin_precio?.num ?? 0) > 0) n += 1;
