@@ -282,7 +282,7 @@
             @if (saldo() < 0) {
               <!-- Se le canceló una venta fiada que ya había abonado: paga lo próximo que se le fíe. -->
               <div><span class="muted">A su favor</span><span class="grande">{{ -saldo() | dinero }}</span>
-                <span class="muted">paga lo próximo que se le fíe</span>
+                <span class="muted">paga lo próximo que compre a crédito</span>
               </div>
             } @else {
               <div><span class="muted">Debe</span><span class="grande">{{ saldo() | dinero }}</span>
@@ -291,7 +291,7 @@
             }
             @if (limite() > 0) {
               <div><span class="muted">Le queda de crédito</span><span class="grande" style="font-size: 1.375rem">{{ disponible() | dinero }}</span></div>
-              <div><span class="muted">Se le fía hasta</span><span class="grande" style="font-size: 1.375rem">{{ limite() | dinero }}</span></div>
+              <div><span class="muted">Crédito hasta</span><span class="grande" style="font-size: 1.375rem">{{ limite() | dinero }}</span></div>
             }
             @if (ultimoAbono(); as u) {
               <div><span class="muted">Último abono</span><span class="grande" style="font-size: 1.375rem">{{ u.fecha }}</span>

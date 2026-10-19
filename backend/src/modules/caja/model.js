@@ -94,16 +94,30 @@ async function sesionAbiertaDeCaja(caja_id) {
   return id ? obtenerSesion(id) : null;
 }
 
+/**
+ * Abre el turno de una caja. Revisar "¿ya hay uno abierto?" y abrirlo van en UNA
+ * transacción con la fila de la caja bloqueada (2026-10-19): con doble clic en
+ * "Abrir turno" las dos peticiones pasaban la revisión al mismo tiempo y la caja
+ * quedaba con DOS turnos abiertos, que se repartían el efectivo.
+ */
 async function abrirSesion({ caja_id, usuario_id, monto_inicial }) {
-  if (await _idSesionAbierta(caja_id)) {
-    throw new AppError(409, 'CAJA_YA_ABIERTA', 'Esa caja ya tiene una sesión abierta');
-  }
-  const [r] = await pool.query(
-    `INSERT INTO sesiones_caja (caja_id, usuario_id, monto_inicial)
-     VALUES (:caja_id, :usuario_id, :monto_inicial)`,
-    { caja_id, usuario_id, monto_inicial }
-  );
-  return obtenerSesion(r.insertId);
+  const id = await withTransaction(async (conn) => {
+    await conn.query('SELECT id FROM cajas WHERE id = :caja_id FOR UPDATE', { caja_id });
+    const [[abierta]] = await conn.query(
+      "SELECT id FROM sesiones_caja WHERE caja_id = :caja_id AND estado = 'abierta' LIMIT 1",
+      { caja_id }
+    );
+    if (abierta) {
+      throw new AppError(409, 'CAJA_YA_ABIERTA', 'Esa caja ya tiene un turno abierto.');
+    }
+    const [r] = await conn.query(
+      `INSERT INTO sesiones_caja (caja_id, usuario_id, monto_inicial)
+       VALUES (:caja_id, :usuario_id, :monto_inicial)`,
+      { caja_id, usuario_id, monto_inicial }
+    );
+    return r.insertId;
+  });
+  return obtenerSesion(id);
 }
 
 /** Suma con signo de los movimientos de la sesión. */

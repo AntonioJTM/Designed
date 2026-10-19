@@ -6,6 +6,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { NotificacionesService } from '../../core/services/notificaciones.service';
 import { MENU } from '../../core/navegacion';
 import { fechaRelativa } from '../../shared/fecha.pipe';
+import { DESTINO_AVISO, urlDe } from '../../core/avisos';
 import { CantidadPipe } from '../../shared/cantidad.pipe';
 
 /**
@@ -241,6 +242,10 @@ export class AdminLayout implements AfterViewInit {
   }
 
   /** Al tocar un pendiente se va a su pantalla y se cierra el panel. */
+  /** A dónde lleva cada aviso: los mismos destinos que Hoy (`core/avisos.ts`). */
+  readonly destino = DESTINO_AVISO;
+  readonly url = urlDe;
+
   irA(ruta: string): void {
     this.abierto.set(false);
     this.router.navigateByUrl(ruta);

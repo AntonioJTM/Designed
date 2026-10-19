@@ -56,6 +56,17 @@ export class AbonoModal implements OnInit {
   readonly turnos = signal<SesionCaja[]>([]);
 
   monto: number | null = null;
+
+  /**
+   * Cómo queda su cuenta con lo que se está tecleando (2026-10-19). Es un MÉTODO
+   * y no un `computed`: `monto` es ngModel, no señal. null si el monto no sirve.
+   */
+  quedaDebiendo(): { queda: number } | null {
+    const m = Number(this.monto ?? 0);
+    const debe = Number(this.saldo());
+    if (!(m > 0) || m > debe + 0.001) return null;
+    return { queda: Math.round((debe - m) * 100) / 100 };
+  }
   metodoId: number | null = null;
   turnoId: number | null = null;
   referencia = '';

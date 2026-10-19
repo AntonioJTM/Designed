@@ -19,6 +19,16 @@
           <p class="muted">
             <b style="color: var(--tinta)">{{ nombre() }}</b> debe {{ saldo() | dinero }}.
           </p>
+          <!-- Antes → después, en vivo (2026-10-19): cómo queda su cuenta con este abono. -->
+          @if (quedaDebiendo(); as q) {
+            <p class="queda" role="status">
+              @if (q.queda <= 0.004) {
+                Con este abono queda <b>al corriente</b>: ya no debe nada.
+              } @else {
+                Debe {{ saldo() | dinero }} → <b>quedará debiendo {{ q.queda | dinero }}</b>.
+              }
+            </p>
+          }
           @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
           <div class="form-grid">

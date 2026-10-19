@@ -252,7 +252,7 @@ export class ClienteExpediente implements OnInit {
       valor: pesos(this.saldo()),
       pie:
         this.limite() <= 0 ? (this.saldo() > 0 ? 'sin crédito autorizado' : 'no tiene crédito autorizado')
-        : this.saldo() <= 0 ? `sin deuda · se le fía hasta ${pesos(this.limite())}`
+        : this.saldo() <= 0 ? `sin deuda · crédito hasta ${pesos(this.limite())}`
         : uso !== null && uso >= 100 ? 'ya llegó a su límite'
         : `usa el ${uso}% de su crédito`,
       tinta: uso !== null && uso >= 85 ? alerta : normal,
@@ -428,7 +428,7 @@ export class ClienteExpediente implements OnInit {
   readonly fraseCuenta = computed(() => {
     const u = this.ultimoAbono();
     const base = this.limite() > 0
-      ? `Se le fía hasta ${pesos(this.limite())}.`
+      ? `Tiene crédito hasta ${pesos(this.limite())}.`
       : 'No tiene crédito autorizado: el límite se le pone en Editar.';
     if (!u) return base;
     return `${base} Último abono: ${u.fecha}, ${u.hace === 0 ? 'hoy' : 'hace ' + plural(u.hace, 'día', 'días')}.`;

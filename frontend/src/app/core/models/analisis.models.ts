@@ -149,4 +149,6 @@ export interface Tablero {
   clientes_enfriados: ClientesEnfriados;
   hilo_muerto: HiloMuerto | null;
   margen: Margen | null;
+  /** Lo que la tienda les guarda a sus clientes (2026-10-19); quiénes, en Clientes › Cuánto debe. */
+  a_favor?: { total: number; num_clientes: number };
 }

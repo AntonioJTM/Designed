@@ -136,8 +136,8 @@
             </label>
           </div>
           <div class="acciones" style="margin-top: 16px">
-            <button type="button" class="btn btn-primary" (click)="abrirTurno()" [disabled]="!caja()?.activo">
-              Abrir turno
+            <button type="button" class="btn btn-primary" (click)="abrirTurno()" [disabled]="!caja()?.activo || abriendo()">
+              {{ abriendo() ? 'Abriendo…' : 'Abrir turno' }}
             </button>
             @if (caja() && !caja()!.activo) {
               <span class="muted">Esta caja está desactivada.</span>

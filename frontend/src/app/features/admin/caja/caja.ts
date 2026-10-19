@@ -98,6 +98,8 @@ export class CajaPantalla {
   readonly ultimoCorte = signal<SesionCaja | null>(null);
   readonly movAbierto = signal(false);
   readonly cerrando = signal(false);
+  /** Mientras se abre el turno: el botón se apaga (con doble clic se abrían dos; 2026-10-19). */
+  readonly abriendo = signal(false);
 
   montoInicial: number | null = 0;
   montoFinal: number | null = null;
@@ -240,16 +242,21 @@ export class CajaPantalla {
 
   abrirTurno(): void {
     const id = this.cajaSel();
-    if (!id) return;
+    if (!id || this.abriendo()) return;
     this.error.set(null);
+    this.abriendo.set(true);
     this.ventas.abrirSesion(id, Number(this.montoInicial ?? 0)).subscribe({
       next: (s) => {
+        this.abriendo.set(false);
         this.sesion.set(s);
         this.ultimoCorte.set(null);
         this.mensaje.set(`Turno abierto en ${s.caja ?? 'la caja'}. Ya se puede cobrar en Punto de venta.`);
         this.cargarCajas(false);
       },
-      error: (e) => this.error.set(this.msg(e)),
+      error: (e) => {
+        this.abriendo.set(false);
+        this.error.set(this.msg(e));
+      },
     });
   }
 

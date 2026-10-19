@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { Inventario } from './inventario';
 import { InventarioService } from '../../../core/services/inventario.service';
@@ -249,6 +249,22 @@ describe('Inventario', () => {
   beforeEach(() => {
     permisos = null;
     pedido = null;
+  });
+
+  it('el aviso "N en su mínimo" abre la tabla ya filtrada (?ver=minimo, 2026-10-19)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [Inventario],
+      providers: [
+        { provide: InventarioService, useValue: invFalso },
+        { provide: AuthService, useValue: authFalso },
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { queryParamMap: of(convertToParamMap({ ver: 'minimo' })) } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Inventario);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.vista).toBe('minimo');
+    expect(pedido?.['bajo_stock']).toBe(true);
   });
   afterEach(() => TestBed.resetTestingModule());
 

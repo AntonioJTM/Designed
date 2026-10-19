@@ -23,6 +23,7 @@
 const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const clientesModel = require('./model');
+const { aFavorDe } = require('./a-favor');
 
 const SIGNO = { devolucion: 1, anticipo: 1, uso: -1, aplicado: -1, reintegro: 1, ajuste: 1 };
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -406,7 +407,43 @@ async function deudaTotal(clienteId, ejecutor = pool) {
   return { credito: round2(credito), notas, total: round2(credito + notas) };
 }
 
+/**
+ * QUIÉN TIENE SALDO A FAVOR, cuánto y desde cuándo (2026-10-19): lo que la
+ * tienda les guarda (anticipos y lo que regresaron). Del que más tiene al que
+ * menos. Es de todos los clientes (el cliente es compartido entre tiendas).
+ */
+async function aFavorDeClientes() {
+  const [movs] = await pool.query(
+    `SELECT cliente_id, tipo, monto, DATE_FORMAT(creado_en, '%Y-%m-%d') AS dia
+       FROM saldo_favor_movimientos ORDER BY cliente_id, creado_en, id`
+  );
+  const porCliente = new Map();
+  for (const mv of movs) {
+    if (!porCliente.has(mv.cliente_id)) porCliente.set(mv.cliente_id, []);
+    porCliente.get(mv.cliente_id).push(mv);
+  }
+  const con = [];
+  for (const [id, lista] of porCliente) {
+    const r = aFavorDe(lista);
+    if (r.saldo > 0) con.push({ cliente_id: Number(id), saldo: r.saldo, desde: r.desde, ultimo_movimiento: r.ultimo });
+  }
+  if (con.length) {
+    const [cl] = await pool.query(
+      `SELECT id, codigo, nombre, nombre_comercial, telefono FROM clientes WHERE id IN (:ids)`,
+      { ids: con.map((c) => c.cliente_id) }
+    );
+    const datos = new Map(cl.map((c) => [Number(c.id), c]));
+    for (const c of con) {
+      const d = datos.get(c.cliente_id) ?? {};
+      Object.assign(c, { codigo: d.codigo ?? null, nombre: d.nombre ?? '', nombre_comercial: d.nombre_comercial ?? null, telefono: d.telefono ?? null });
+    }
+  }
+  con.sort((a, b) => b.saldo - a.saldo);
+  return { total: round2(con.reduce((s, c) => s + c.saldo, 0)), num_clientes: con.length, clientes: con };
+}
+
 module.exports = {
+  aFavorDeClientes,
   saldoFavor, movimientos, agregar, metodoSaldoFavor, usarEnVenta, usadoEnVenta, reintegrarDeVenta, aplicarADeuda, deudaTotal,
   ajustarSaldo,
   debeDeVenta, descontarDeVenta, recibirAnticipo,

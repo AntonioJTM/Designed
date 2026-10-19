@@ -43,6 +43,9 @@ const pagoSchema = z.object({
 const crearSchema = z
   .object({
     canal: z.enum(['tienda_linea', 'punto_venta']),
+    // Llave de un solo uso de la caja: la misma venta no se registra dos veces
+    // (doble clic o la red que reintenta; 2026-10-19).
+    clave_cobro: z.string().uuid().optional(),
     // Cómo llega la mercancía. El mostrador siempre es 'recoger'; online lo
     // elige el cliente y 'envio' exige dirección.
     metodo_entrega: z.enum(['recoger', 'envio']).optional(),
@@ -94,6 +97,7 @@ const crearSchema = z
 // Lo mismo, pero para pedir el desglose sin comprometer nada. No lleva pagos:
 // cotizar no cobra.
 const cotizarSchema = crearSchema.omit({
+  clave_cobro: true,
   pagos: true, metodo_pago_id: true, a_credito: true, apartado: true, pendiente_pago: true, saldo_favor: true,
   fiar_con_atraso: true,
 });

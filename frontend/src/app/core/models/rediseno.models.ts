@@ -76,6 +76,24 @@ export interface Deuda {
   credito_usado: number;
   credito_autorizado: number;
   cobrado_mes: { monto: number; abonos: number };
+  /** Lo que la tienda les guarda: anticipos y lo que regresaron (2026-10-19). */
+  a_favor?: AFavorClientes;
+}
+
+/** Quién tiene saldo a favor, cuánto y desde cuándo. */
+export interface AFavorClientes {
+  total: number;
+  num_clientes: number;
+  clientes: {
+    cliente_id: number;
+    codigo: string | null;
+    nombre: string;
+    nombre_comercial: string | null;
+    telefono: string | null;
+    saldo: number;
+    desde: string | null;
+    ultimo_movimiento: string | null;
+  }[];
 }
 
 export interface HiloComprado {

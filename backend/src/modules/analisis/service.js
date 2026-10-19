@@ -55,7 +55,13 @@ async function tablero(q = {}) {
   const [cob, frios, muerto, marg] = await Promise.all([
     cobranza(q), clientesEnfriados(q), hiloMuerto({ ...q, dias: q.dias_parado }), margen(q),
   ]);
-  return { cobranza: cob, clientes_enfriados: frios, hilo_muerto: muerto, margen: marg };
+  // Lo que la tienda les guarda a sus clientes (2026-10-19): la cifra; quiénes
+  // y desde cuándo, en Clientes › Cuánto debe.
+  const aFavor = await require('../clientes/saldo-favor').aFavorDeClientes();
+  return {
+    cobranza: cob, clientes_enfriados: frios, hilo_muerto: muerto, margen: marg,
+    a_favor: { total: aFavor.total, num_clientes: aFavor.num_clientes },
+  };
 }
 
 module.exports = { cobranza, clientesEnfriados, hiloMuerto, margen, tablero };

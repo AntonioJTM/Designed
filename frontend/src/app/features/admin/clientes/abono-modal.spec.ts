@@ -93,6 +93,20 @@ describe('AbonoModal', () => {
     expect(c.error()).toContain('Elige a qué caja');
   });
 
+  it('dice cómo queda su cuenta con el abono: antes → después (2026-10-19)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    c.monto = 400;
+    expect(c.quedaDebiendo()).toEqual({ queda: 600 });
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('quedará debiendo $600.00');
+    c.monto = 1000;
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('queda al corriente');
+    c.monto = 1500;
+    expect(c.quedaDebiendo()).toBeNull();
+  });
+
   it('propone abonar todo lo que debe', async () => {
     const f = await montar();
     expect(f.componentInstance.monto).toBe(1000);

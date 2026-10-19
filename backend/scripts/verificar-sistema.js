@@ -487,12 +487,31 @@ function verificarModulosEnCodigo() {
   const notifModel = leer('backend/src/modules/notificaciones/model.js');
   const hoyRoutes = leer('backend/src/modules/hoy/routes.js');
   const hoyTs = sinComentariosJs(leer('frontend/src/app/features/admin/hoy/hoy.ts'));
+  const adminLayoutHtml = leer('frontend/src/app/features/admin/admin-layout.html');
+  const invTs = leer('frontend/src/app/features/admin/inventario/inventario.ts');
+  // Desde el 2026-10-19 la campana y Hoy toman sus destinos de core/avisos.ts.
+  const avisosTs = leer('frontend/src/app/core/avisos.ts');
+  const destinoMinimoCompartido =
+    /existenciasBajas:\s*\{\s*ruta:\s*'\/admin\/inventario',\s*query:\s*\{\s*(?:ver|vista):\s*'minimo'\s*\}/.test(avisosTs) &&
+    adminLayoutHtml.includes('destino.existenciasBajas') &&
+    hoyTs.includes('DESTINO_AVISO.existenciasBajas');
   revisar('modulos', notifModel.includes('DIAS_SIN_ABONAR') && notifModel.includes('DIAS_SIN_VENIR') && notifModel.includes('DIAS_CLIENTE_NUEVO'), 'Los umbrales de avisos (DIAS_SIN_ABONAR, DIAS_SIN_VENIR, DIAS_CLIENTE_NUEVO) deben tener nombre en notificaciones/model.js.', 'IMPORTANTE', M01);
   revisar('modulos', notifModel.includes('filtroAlmacen') && hoyRoutes.includes('almacenesDe'), 'Hoy y la campana deben filtrar los pendientes por las tiendas del usuario.', 'GRAVE', M01);
   // Coherencia entre texto y condición: cliente nuevo es de los últimos 15 días (nunca "hace 15 días o más")
   revisar('modulos', !/hace\s+\d+\s+d[ií]as\s+o\s+m[aá]s/i.test(hoyTs), 'En Hoy (hoy.ts), el aviso de cliente nuevo sin crédito no debe decir "hace 15 días o más" (es al revés: capturado en los últimos 15 días).', 'IMPORTANTE', M01);
   // Quien trabaja en una sola tienda no debe ver la tarjeta global "Cobranza atrasada" en $0
   revisar('modulos', hoyTs.includes('veTodasLasTiendas') || hoyTs.includes('todas_las_tiendas'), 'En Hoy (hoy.ts), "Cobranza atrasada" es de toda la cartera y debe ocultarse a quien solo trabaja en una tienda.', 'IMPORTANTE', M01);
+  // Operatividad en Avisos: el aviso de presentaciones en su mínimo en Hoy y Campana debe abrir Inventario ya filtrado en "minimo"
+  revisar(
+    'modulos',
+    (destinoMinimoCompartido ||
+      (/inventario\?(?:ver|vista)=minimo/.test(adminLayoutHtml) &&
+        /query:\s*\{\s*(?:ver|vista):\s*'minimo'\s*\}/.test(hoyTs))) &&
+      invTs.includes('ActivatedRoute'),
+    'En Hoy (hoy.ts) y en la Campana (admin-layout.html), el aviso de presentaciones en su mínimo debe abrir Inventario ya filtrado (?ver=minimo) y Inventario (inventario.ts) debe leer ese parámetro.',
+    'IMPORTANTE',
+    M01
+  );
 
   // MÓDULO 02 · Punto de venta (POS) y Tickets
   const M02 = '02 · Punto de venta (POS) y Tickets';
@@ -510,16 +529,42 @@ function verificarModulosEnCodigo() {
   // Operatividad en POS: cálculo de cambio en vivo, lo que siempre lleva el cliente y envío con un solo Enter en WhatsApp
   revisar('modulos', posTs.includes('cambio') && posTs.includes('ColorComprado') && waTicketTs.includes('Aprieta Enter para mandarlo'), 'Operatividad POS: debe mostrar el cambio en vivo al cobrar en efectivo, sugerir los hilos frecuentes del cliente y permitir mandar el WhatsApp con un solo Enter.', 'IMPORTANTE', M02);
   revisar('modulos', posHtml.includes('autocomplete="off"'), 'Operatividad POS: el lector de código de barras debe tener autocomplete="off" para que el navegador no estorbe con sugerencias encima.', 'IMPORTANTE', M02);
+  // Candado anti-doble clic en el botón "Cobrar" de la caja y un solo botón azul principal en la vista
+  revisar(
+    'modulos',
+    /btn-cobrar[\s\S]{0,160}\[disabled\]="[^"]*(?:cobrando|guardando)\(\)/.test(posHtml) && /(?:cobrando|guardando)\s*=\s*signal\(false\)/.test(posTs),
+    'En Punto de venta (pos.html / pos.ts), el botón "Cobrar" debe bloquearse mientras registra la venta (cobrando()) para evitar ventas duplicadas por doble clic.',
+    'GRAVE',
+    M02
+  );
+  revisar(
+    'modulos',
+    !/class="btn btn-primary[^"]*"\s*\(click\)="escanearOBuscar\(\)"/.test(posHtml),
+    'En Punto de venta (pos.html), el botón "Buscar" junto al lector debe ser secundario (btn-ghost), dejando "Cobrar" como único botón azul principal.',
+    'AVISO',
+    M02
+  );
 
   // MÓDULO 03 · Caja y Cortes de turno
   const M03 = '03 · Caja y Cortes de turno';
   const cajaModel = leer('backend/src/modules/caja/model.js');
   const cajaRoutes = leer('backend/src/modules/caja/routes.js');
   const cajaTs = leer('frontend/src/app/features/admin/caja/caja.ts');
+  const cajaHtml = leer('frontend/src/app/features/admin/caja/caja.html');
   revisar('modulos', cajaModel.includes('SIGNO_CAJA') && cajaModel.includes('EFECTIVO_INSUFICIENTE'), 'El módulo de Caja debe calcular con SIGNO_CAJA e impedir retiros mayores al efectivo del cajón (EFECTIVO_INSUFICIENTE).', 'GRAVE', M03);
   revisar('modulos', cajaRoutes.includes('hacer:mover_efectivo'), 'Sacar o meter efectivo en Caja debe exigir el permiso "hacer:mover_efectivo" en el servidor.', 'GRAVE', M03);
   // Identidad matemática de Caja: las tarjetas de arriba deben incluir todos los ingresos que no son venta (abonos, anticipos, pagos de nota, entregas, ingresos) para cuadrar con "Debería haber"
   revisar('modulos', cajaTs.includes('claseIngreso') && cajaTs.includes('anticipo') && cajaTs.includes('nota'), 'En Caja (caja.ts), las cifras de arriba deben sumar todos los ingresos al cajón (abonos, anticipos, pagos de nota, entregas e ingresos a mano) para cuadrar con "Debería haber".', 'GRAVE', M03);
+  // Candado anti-doble turno en Caja (pantalla + transacción FOR UPDATE en servidor)
+  revisar(
+    'modulos',
+    /\(click\)="abrirTurno\(\)"[^>]*\[disabled\]="[^"]*abriendo\(\)/.test(cajaHtml) &&
+      /abriendo\s*=\s*signal\(false\)/.test(cajaTs) &&
+      /async function abrirSesion[\s\S]{0,400}FOR UPDATE/i.test(cajaModel),
+    'En Caja (caja.html, caja.ts y caja/model.js), "Abrir turno" debe bloquear el botón mientras abre (abriendo()) y bloquear la caja con FOR UPDATE en el servidor para impedir dos turnos abiertos en la misma caja.',
+    'GRAVE',
+    M03
+  );
 
   // MÓDULO 04 · Ventas, Devoluciones, Notas en espera y Pendientes
   const M04 = '04 · Ventas, Devoluciones, Notas en espera y Pendientes';
@@ -551,6 +596,7 @@ function verificarModulosEnCodigo() {
   const anaService = leer('backend/src/modules/analisis/service.js');
   const tableroTs = sinComentariosJs(leer('frontend/src/app/features/admin/tablero/tablero.ts'));
   const vistaDeudaTs = sinComentariosJs(leer('frontend/src/app/features/admin/clientes/vistas/vista-deuda.ts'));
+  const abonoModalHtml = leer('frontend/src/app/features/admin/clientes/abono-modal.html');
   const adminRoutesTs = leer('frontend/src/app/features/admin/admin.routes.ts');
   revisar('modulos', cliModel.includes('asignarCodigo') && cliModel.includes('repartirAbonos') && cliModel.includes('liquidarVentasACredito'), 'El CRM de Clientes debe asignar código automático (C-0001), repartir abonos por antigüedad (FIFO) y liquidar ventas a crédito cubiertas.', 'GRAVE', M05);
   revisar('modulos', cliSaldo.includes('recibirAnticipo') && cliSaldo.includes('ajustarSaldo') && cliSaldo.includes('SALDO_FAVOR_INSUFICIENTE'), 'El libro de saldo a favor debe soportar anticipos, ajustes con motivo y nunca permitir saldo negativo.', 'GRAVE', M05);
@@ -570,6 +616,14 @@ function verificarModulosEnCodigo() {
     M05
   );
   revisar('modulos', !/d[oó]nde\s+fiar/i.test(vistaDeudaTs), 'En Clientes › Cuánto debe no debe quedar la palabra vieja "dónde fiar".', 'AVISO', M05);
+  // Operatividad en Abono: mostrar vista previa "Antes -> Después" (cómo queda la deuda tras el abono)
+  revisar(
+    'modulos',
+    /quedar[aá]\s+debiendo|queda\s+saldad|restante/i.test(abonoModalHtml),
+    'En Registrar un abono (abono-modal.html), debe mostrarse en vivo cómo quedará la deuda después del abono ("Debe $X → quedará debiendo $Y").',
+    'AVISO',
+    M05
+  );
 
   // MÓDULO 06 · Inventario, Detalle por hilo, Conos y Kardex
   const M06 = '06 · Inventario, Detalle por hilo, Conos y Kardex';
@@ -589,8 +643,22 @@ function verificarModulosEnCodigo() {
   revisar('modulos', !/menos de\b/i.test(minModalHtml) && !/menos de\b/i.test(minModalTs) && !/menos de\b/i.test(minsModalTs), 'El stock mínimo avisa al llegar al número o menos (<=); las ventanas de mínimo deben decir "N paquetes o menos", nunca "menos de N".', 'IMPORTANTE', M06);
   // Kardex: distinguir el faltante (merma) y la cancelación de un traspaso del envío normal
   revisar('modulos', invService.includes('Faltante del traspaso') && invService.includes('se canceló el traspaso'), 'En el Kardex (inventario/service.js → _describir), el faltante de un envío debe rotularse como "Faltante del traspaso…" y la cancelación como "Regresó: se canceló el traspaso…", no como un traspaso normal.', 'IMPORTANTE', M06);
-  // Operatividad en Inventario: vista previa antes de confirmar ajuste/merma/mínimo y lector limpio en conos
+  // Operatividad en Inventario: vista previa antes de confirmar ajuste/merma/mínimo, lector limpio en conos, un solo botón primario y mensaje de merma en palabras de tienda
   revisar('modulos', movModalHtml.includes('saldoResultante') && minModalHtml.includes('previa') && desarmeModalHtml.includes('autocomplete="off"'), 'Operatividad en Inventario: Ajuste/merma y Stock mínimo deben mostrar vista previa del resultado antes de guardar, y Bajar conos debe tener lector con autocomplete="off".', 'IMPORTANTE', M06);
+  revisar(
+    'modulos',
+    !/class="btn btn-primary[^"]*"\s*\(click\)="escanear\(\)"/.test(desarmeModalHtml),
+    'En Bajar conos (desarme-modal.html), el botón "Leer" junto al lector debe ser secundario (btn-ghost), dejando "Bajar a mostrador" como único botón azul principal.',
+    'AVISO',
+    M06
+  );
+  revisar(
+    'modulos',
+    !invModel.includes('Existencias insuficientes: hay ${actual}, se intenta descontar'),
+    'En inventario/model.js (registrarMovimiento), el mensaje de STOCK_INSUFICIENTE debe hablar en palabras de tienda (indicando almacén, hilo y kg).',
+    'AVISO',
+    M06
+  );
 
   // MÓDULO 07 · Surtir inventario (Cargas .xlsx) y Proveedores
   const M07 = '07 · Surtir inventario (Cargas .xlsx) y Proveedores';

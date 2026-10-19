@@ -302,7 +302,7 @@
                 <input #lector type="text" [(ngModel)]="qVar" name="qvar" (keyup.enter)="escanearOBuscar()"
                        placeholder="00811389  ·  rojo 2/30" autocomplete="off" />
               </span>
-              <button type="button" class="btn btn-primary btn-lg" (click)="escanearOBuscar()">Buscar</button>
+              <button type="button" class="btn btn-ghost btn-lg" (click)="escanearOBuscar()">Buscar</button>
             </div>
           </label>
           <!-- Lo que no se pudo agregar se dice AQUÍ, junto al lector, que es donde se mira al escanear. -->
@@ -605,9 +605,14 @@
           }
         }
 
+        <!-- Se apaga desde el primer clic hasta que el servidor contesta: una venta, una vez (2026-10-19). -->
         <button type="button" class="btn btn-primary btn-bloque btn-cobrar" (click)="cobrar()"
-                [disabled]="carrito().length === 0">
-          {{ textoBoton() }}
+                [disabled]="carrito().length === 0 || cobrando()" [attr.aria-busy]="cobrando()">
+          @if (cobrando()) {
+            <span class="spinner" aria-hidden="true"></span> Registrando…
+          } @else {
+            {{ textoBoton() }}
+          }
         </button>
         @if (!notaPendiente() && !pidiendo() && esEfectivoSel() && aPagarHoy() > 0) {
           <p class="ayuda centro">Se guarda lo cobrado, no el billete.</p>

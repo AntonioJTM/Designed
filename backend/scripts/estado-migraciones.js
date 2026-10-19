@@ -104,6 +104,7 @@ const MIGRACIONES = [
   ['2026-10_tiendas_por_persona', 'usuarios.todas_las_tiendas'],
   ['2026-10_tiendas_por_persona (tiendas)', 'usuario_almacenes'],
   ['2026-10_efectivo_recibido', 'pagos.recibido'],
+  ['2026-10_clave_cobro', 'pedidos.clave_cobro'],
 ];
 
 (async () => {

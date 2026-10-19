@@ -35,6 +35,11 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  OPERATIVIDAD: COBRAR Y ABRIR TURNO UNA SOLA VEZ, AVISOS FILTRADOS, SALDO A
+  FAVOR VISIBLE (2026-10-19, entrada 77; DESPLEGADO en 20261019-094012;
+  migración 2026-10_clave_cobro en LAS DOS bases, respaldo
+  /root/respaldos/hitex_antes_clave_cobro_20261019-093538.sql.gz).
+  Antes:
   CUÁNTOS CONOS HAY: el peso de un cono sale de sus bajadas (2026-10-19,
   entrada 76; DESPLEGADO en 20261019-085304; en hitex solo cambió el peso del
   cono de prueba, con respaldo).
@@ -692,6 +697,75 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (77) · Operatividad: cobrar y abrir turno una sola vez, avisos filtrados y lo que se les guarda a los clientes
+-------------------------------------------------------------------------------
+
+"Vamos a solucionar todo como dices" (usuario, sobre la revisión /verificar con
+los 6 pilares de operatividad). Se aplicó todo: lo importante, lo menor y los
+dos bloques de propuestas.
+
+LO IMPORTANTE
+  1. COBRAR UNA SOLA VEZ. "Cobrar" solo se apagaba con el carrito vacío y
+     cobrar() no tenía freno: con la red lenta, dos clics registraban DOS
+     ventas (en conos o kilos sueltos el servidor aceptaba las dos).
+     · Pantalla (pos.ts): `cobrando` se prende desde el primer clic y se suelta
+       al contestar el servidor; el botón dice "Registrando…" con su spinner y
+       `aria-busy`. Lo que no pasa una validación lo suelta EN EL ACTO (se
+       separó `prepararCobro`/`continuarCobro`: solo la pregunta de la cuenta
+       atrasada espera). Vale para Cobrar, Nota en espera y Nota pendiente.
+     · Servidor: llave de un solo uso `clave_cobro` (UUID que manda la caja;
+       `pedidos.clave_cobro` con índice ÚNICO, migración
+       2026-10_clave_cobro.sql). `crearPedido` (pedidos/model.js) contesta la
+       venta que ya existe con esa llave y, si dos llegan al mismo tiempo, el
+       índice deja pasar una y la otra se revierte y contesta la buena
+       (ER_DUP_ENTRY que nombra clave_cobro). La caja cambia de llave al
+       registrar; si el servidor rechaza, la conserva. `nuevaClave()` arma la
+       llave con getRandomValues si no hay crypto.randomUUID (página por http).
+     · Comprobado: dos UPDATE con la misma llave en una transacción de la base
+       de pruebas → ER_DUP_ENTRY que nombra clave_cobro; se deshizo (0 llaves).
+  2. UN SOLO TURNO ABIERTO POR CAJA. abrirSesion (caja/model.js) revisa y abre
+     en UNA transacción con la fila de la caja bloqueada (FOR UPDATE): con
+     doble clic se podían abrir dos turnos. La pantalla (caja.ts) apaga "Abrir
+     turno" mientras abre ("Abriendo…").
+  3. AVISOS QUE LLEVAN FILTRADO. `core/avisos.ts` (DESTINO_AVISO + urlDe) es
+     de donde la campana y Hoy sacan a dónde lleva cada aviso. "N
+     presentaciones en su mínimo" abre Inventario con `?ver=minimo` (como el
+     expediente usa ?ver=deuda) e Inventario lo lee del enlace (también si ya
+     estaba abierto). CORRECCIÓN a la revisión: en Hoy, "hilos sin precio" SÍ
+     llevaba su filtro (`query` estaba en el renglón siguiente y no se vio).
+     · La regla nueva del verificador (que exigía el texto en hoy.ts y
+       admin-layout.html) reconoce ahora los destinos compartidos.
+MENORES
+  · Abono: "Debe $1,000 → quedará debiendo $600" / "queda al corriente", en
+    vivo (abono-modal, quedaDebiendo()).
+  · Un solo azul por vista: "Buscar" (caja) y "Leer" (Bajar conos) pasan a
+    gris: el Enter hace lo mismo.
+  · Merma sin existencias: "En «Bodega principal» hay 1527.5 kg de MARINO
+    OSCURO 1/30: no se pueden sacar 1547.5 kg. Si contaste otra cantidad, usa
+    «Ajuste» con lo que contaste." (inventario/model.js; probado en la base de
+    pruebas: rechaza y el saldo no se mueve).
+  · Las guías del verificador ya no fijan el número de comprobaciones.
+  · "Fía" en pantalla (el verificador no lo detecta): expediente ("Crédito
+    hasta", "paga lo próximo que compre a crédito"), alta de cliente ("Hasta
+    cuánto se le da a crédito"), Cuánto debe ("Cuando se dé una venta a
+    crédito"). Y Cuánto debe decía "se cuenta desde el último movimiento": desde
+    el 17 es desde el último ABONO.
+PROPUESTA A4 · LO QUE LA TIENDA LES GUARDA
+  · `clientes/a-favor.js → aFavorDe` (pura, con a-favor.test.js: 4 pruebas) y
+    `saldo-favor.js → aFavorDeClientes`: quién tiene saldo a favor, cuánto,
+    desde cuándo (la última vez que pasó de cero a tener) y su último
+    movimiento. Clientes › Cuánto debe trae la tarjeta "Lo que tienen a su
+    favor" (tabla) y Cómo va el negocio la cifra "A favor de clientes" con
+    "ver quiénes". En hitex hoy: $17,500.00 de 2 clientes.
+PRUEBAS
+  Backend 37/37, pantallas 501/501 (nuevas: dos clics mandan una venta y la
+  llave cambia; rechazo conserva la llave; abono antes → después; Inventario
+  abre filtrado; destinos de avisos), compila, verificar-sistema.js 0
+  hallazgos (1660 comprobaciones), estado-migraciones al día en las dos bases.
+  Despliegues 20261019-093834 y 20261019-094012 (el respaldo de la llave).
 
 
 -------------------------------------------------------------------------------

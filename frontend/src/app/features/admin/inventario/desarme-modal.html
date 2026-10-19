@@ -27,7 +27,7 @@
           <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
                  (keydown.enter)="$event.preventDefault(); escanear()"
                  placeholder="Escanea o escribe el código del paquete" />
-          <button type="button" class="btn btn-primary" (click)="escanear()">Leer</button>
+          <button type="button" class="btn btn-ghost" (click)="escanear()">Leer</button>
         </span>
       </label>
 
