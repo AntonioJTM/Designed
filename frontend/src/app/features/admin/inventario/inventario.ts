@@ -12,6 +12,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { Almacen, StockItem } from '../../../core/models/inventario.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
+import { textoConos } from '../../../shared/conos';
 import { CuandoPipe } from './cuando.pipe';
 import { DesarmeModal } from './desarme-modal';
 import { MovimientoModal } from './movimiento-modal';
@@ -427,10 +428,11 @@ export class Inventario {
     const peso = Number(s.peso_kg ?? 0);
     const kg = Number(s.cantidad);
     if (!peso || kg <= 0) return '';
+    // Los conos se cuentan enteros, con el peso REAL de uno (2026-10-19).
+    if (s.tipo_presentacion === 'cono') return textoConos(kg, peso);
     const n = Math.round((kg / peso) * 10) / 10;
     const texto = n.toLocaleString('es-MX', { maximumFractionDigits: 1 });
     if (s.tipo_presentacion === 'paquete') return `≈ ${texto} ${n === 1 ? 'paquete' : 'paquetes'}`;
-    if (s.tipo_presentacion === 'cono') return `≈ ${texto} ${n === 1 ? 'cono' : 'conos'}`;
     return '';
   }
 

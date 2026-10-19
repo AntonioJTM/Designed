@@ -20,6 +20,7 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { HiloAPesar, PesarModal } from './pesar-modal';
 import { paqueteFueraDeAqui } from '../../../shared/paquete-aqui';
+import { textoConos } from '../../../shared/conos';
 import { AnticipoModal } from '../clientes/anticipo-modal';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 
@@ -634,6 +635,7 @@ export class Pos {
               precio: Number(v.precio_oferta ?? v.precio),
               unidad: v.unidad,
               aqui: v.aqui,
+              peso_kg: v.peso_kg,
             }));
         this.resultados.set(encontrados);
         // Sin nada que enseñar, se dice; lo escrito se queda seleccionado para
@@ -654,7 +656,11 @@ export class Pos {
     const kg = Number(a.cantidad);
     if (kg <= 0) return 'no hay aquí';
     const kilos = `${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`;
-    if (r.tipo === 'cono') return `${kilos} enconados`;
+    // Cuántos conos hay aquí, con el peso real de uno (2026-10-19).
+    if (r.tipo === 'cono') {
+      const conos = textoConos(kg, r.peso_kg);
+      return conos ? `${conos} · ${kilos}` : `${kilos} enconados`;
+    }
     if (a.paquetes) return `${a.paquetes.toLocaleString('es-MX')} ${a.paquetes === 1 ? 'paquete' : 'paquetes'} · ${kilos}`;
     return kilos;
   }
@@ -905,6 +911,7 @@ export class Pos {
             precio: Number(cono.precio_oferta ?? cono.precio),
             unidad: cono.unidad,
             aqui: cono.aqui,
+            peso_kg: cono.peso_kg,
           } as HiloAPesar & { producto_id: number });
           return;
         }
@@ -1289,7 +1296,7 @@ export class Pos {
       const si = await this.confirmacion.pedir({
         titulo: '¿Darle a crédito con la cuenta atrasada?',
         mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y lleva ` +
-          `${cli.dias_sin_abonar} días sin abonar. Lo sano es pedirle un abono antes de fiarle más.`,
+          `${cli.dias_sin_abonar} días sin abonar. Lo sano es pedirle un abono antes de darle más a crédito.`,
         aceptar: 'Darle a crédito de todos modos',
         peligro: true,
       });

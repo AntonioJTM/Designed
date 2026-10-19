@@ -235,7 +235,8 @@ async function desarmar(datos, usuarioId, almacenes = null) {
   const pesoBulto = Number(previa.bulto.peso_kg);
   if (!(pesoBulto > 0)) {
     throw new AppError(422, 'BULTO_SIN_PESO',
-      `El paquete ${previa.bulto.codigo} no tiene peso registrado: captúraselo en Presentaciones antes de abrirlo.`);
+      `El paquete ${previa.bulto.codigo} no tiene peso registrado, así que no se sabe cuántos kilos sacar. ` +
+        'En Presentaciones de su hilo quítalo (✕ en sus bultos) y vuelve a capturarlo con «Agregar bulto a mano», con su peso.');
   }
   const conos = datos.conos ?? previa.conos_a_generar;
   if (!conos) {

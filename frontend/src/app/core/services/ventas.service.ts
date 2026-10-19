@@ -261,29 +261,6 @@ export class VentasService {
   }
 
   /**
-   * Abona a un apartado. En efectivo hace falta `sesion_caja_id`: el dinero
-   * entra al turno o el corte no cuadra.
-   */
-  abonarApartado(
-    pedidoId: number,
-    body: { monto: number; metodo_pago_id: number; sesion_caja_id?: number; referencia?: string }
-  ): Observable<ResultadoAbono> {
-    return this.http
-      .post<ApiResponse<ResultadoAbono>>(`${this.base}/pedidos/${pedidoId}/abonos`, body)
-      .pipe(map(data));
-  }
-
-  /**
-   * Entrega la mercancía del apartado: AQUÍ se descuenta del inventario.
-   * Exige que esté liquidado; lo valida el servidor.
-   */
-  entregarApartado(pedidoId: number): Observable<Pedido> {
-    return this.http
-      .post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/entregar`, {})
-      .pipe(map(data));
-  }
-
-  /**
    * MODIFICA un pedido en espera: lo que lleva (la lista completa: lo que no
    * venga se quita) y la entrega. Devuelve el pedido con su total nuevo.
    */

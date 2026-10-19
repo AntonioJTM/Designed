@@ -373,13 +373,13 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
     if (aCredito > 0) {
       if (!datos.cliente_id) {
         throw new AppError(422, 'FALTA_CLIENTE',
-          'Para vender a crédito hay que decir a QUIÉN se le fía.');
+          'Para vender a crédito hay que decir a QUIÉN se le da.');
       }
       // Fiar más de lo que vale la venta dejaría un cargo que no corresponde
       // a nada.
       if (aCredito > total + 0.0001) {
         throw new AppError(422, 'CREDITO_MAYOR_AL_TOTAL',
-          `Se quiere fiar $${aCredito.toFixed(2)} de una venta de $${total.toFixed(2)}.`);
+          `Se quiere dejar a crédito $${aCredito.toFixed(2)} de una venta de $${total.toFixed(2)}.`);
       }
       // CUENTA ATRASADA (2026-10-16: "no fiarle a ciegas cuando trae cuenta
       // vencida"): si debe y lleva más de DIAS_SIN_ABONAR días sin abonar, no se
@@ -480,7 +480,7 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       }
       if (aCredito > 0) {
         throw new AppError(422, 'PEDIDO_A_CREDITO',
-          'Un pedido se fía al ENTREGARLO, no al tomarlo: ahora solo se registra lo que deja pagado.');
+          'Una nota en espera se da a crédito al ENTREGARLA, no al guardarla: ahora solo se registra lo que deja pagado.');
       }
       if (!datos.cliente_id) {
         throw new AppError(422, 'PEDIDO_SIN_CLIENTE',
@@ -1160,8 +1160,8 @@ function _validarCaminoApartado(pedido, estado) {
       ? new AppError(409, 'REACTIVAR_COMO_APARTADO',
         `${num} era un apartado: se reactiva como "apartado", que vuelve a guardar la mercancía.`)
       : new AppError(409, 'APARTADO_SE_ENTREGA',
-        `${num} es un apartado: se entrega desde Apartados, que exige que esté liquidado ` +
-        'y descuenta el inventario.');
+        `${num} es un apartado de antes: los apartados ya no se entregan en el sistema. ` +
+        'Cancélalo en Ventas (se libera la mercancía) y haz la venta en el punto de venta.');
   }
 }
 
@@ -1203,7 +1203,8 @@ function _validarCaminoEncargo(pedido, estado) {
   // espera, se modifica y se entrega cobrando.
   if (estado === 'listo' || estado === 'enviado') {
     throw new AppError(409, 'PEDIDO_EN_ESPERA',
-      `${num} está en espera: se modifica en Pedidos y se entrega con «Entregar y cobrar».`);
+      `${num} es una nota en espera: se modifica en Notas en espera y se entrega con «Entregar» ` +
+        '(«Entregar y cobrar» si le falta pagar).');
   }
   throw new AppError(409, 'PEDIDO_SE_ENTREGA',
     `${num} es un pedido: se entrega desde Pedidos, que cobra lo que falte y lo descuenta del inventario.`);
@@ -1877,8 +1878,8 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
     if (pedido.estado === 'apartado') {
       await archivos.borrar(CARPETA_COMPROBANTES, guardado.nombre);
       throw new AppError(409, 'APARTADO_USA_ABONOS',
-        `${pedido.numero_pedido} es un apartado: registra el depósito como un abono en ` +
-        'Apartados, con el método Transferencia, para que cuente contra lo que falta.');
+        `${pedido.numero_pedido} es un apartado de antes: no se le sube captura. Los apartados ` +
+        'ya no se manejan en el sistema: cancélalo en Ventas y haz la venta en el punto de venta.');
     }
 
     // A qué pago se le pega la captura, por orden de preferencia:
@@ -2339,7 +2340,7 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
     const comoNota = datos.pendiente_pago === true && esEncargo && pendiente > 0.004;
     if (datos.pendiente_pago === true && (datos.pagos?.length || Number(datos.a_credito ?? 0) > 0)) {
       throw new AppError(422, 'NOTA_PENDIENTE_COMBINADA',
-        'Como nota pendiente de pago no se cobra ni se fía nada ahora: el pago se registra después.');
+        'Como nota pendiente de pago no se cobra ni se da a crédito nada ahora: el pago se registra después.');
     }
     if (!esEncargo && pendiente > 0.0001) {
       throw new AppError(409, 'APARTADO_NO_LIQUIDADO',
@@ -2888,11 +2889,11 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
 
   if (aCredito > pendiente + 0.0001) {
     throw new AppError(422, 'CREDITO_MAYOR_AL_TOTAL',
-      `Se quiere fiar $${aCredito.toFixed(2)} y solo faltan $${pendiente.toFixed(2)}.`);
+      `Se quiere dejar a crédito $${aCredito.toFixed(2)} y solo faltan $${pendiente.toFixed(2)}.`);
   }
   if (pagado + aCredito + 0.0001 < pendiente) {
     throw new AppError(409, 'PAGO_INSUFICIENTE',
-      `Faltan $${round2(pendiente - pagado - aCredito).toFixed(2)} de ${num}: cóbralos o fíalos para entregarlo.`);
+      `Faltan $${round2(pendiente - pagado - aCredito).toFixed(2)} de ${num}: cóbralos o déjalos a crédito para entregarla.`);
   }
 
   // Qué es efectivo, y cuánto cambio hay que dar (solo del efectivo).

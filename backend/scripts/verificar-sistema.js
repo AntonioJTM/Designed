@@ -407,6 +407,54 @@ function verificarPantallasYPermisos() {
         `En "${rel}" hay un plural fijo ("1 solicitudes" o "1 paquetes") que no cambia a singular cuando el número es 1.`,
         'AVISO'
       );
+
+      // OPERATIVIDAD DE USUARIO EN PLANTILLAS:
+      const htmlSinCom = texto
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/@if\s*\(\s*modal\(\)\s*===\s*'imagen'\s*\)\s*\{[\s\S]*?\n\}/g, '');
+
+      // 1. Ningún botón de envío (<button type="submit">) debe quedar sin [disabled] (evita doble clic / doble cobro)
+      const botonesSubmit = htmlSinCom.match(/<button\b[^>]*type="submit"[^>]*>/gi) || [];
+      for (const btn of botonesSubmit) {
+        revisar(
+          'pantallas',
+          btn.includes('[disabled]'),
+          `En "${rel}" hay un botón <button type="submit"> sin [disabled] para bloquear doble clic mientras guarda.`,
+          'IMPORTANTE'
+        );
+      }
+
+      // 2. Ningún <input type="number"> debe permitir capturar negativos sin min= o [min]=
+      const inputsNumero = htmlSinCom.match(/<input\b[^>]*type="number"[^>]*>/gi) || [];
+      for (const inp of inputsNumero) {
+        revisar(
+          'pantallas',
+          /\bmin=/.test(inp) || /\[min\]=/.test(inp),
+          `En "${rel}" hay un campo numérico (<input type="number">) sin límite mínimo (min="0"), lo que permitiría capturar negativos por error de dedo.`,
+          'IMPORTANTE'
+        );
+      }
+
+      // 3. Ningún fondo de ventana modal (.modal-overlay) debe cerrarse al hacer clic afuera por accidente (pérdida de captura)
+      const overlays = htmlSinCom.match(/<div\b[^>]*class="[^"]*\bmodal-overlay\b[^"]*"[^>]*>/gi) || [];
+      for (const ov of overlays) {
+        revisar(
+          'pantallas',
+          !/\(click\)\s*=/.test(ov),
+          `En "${rel}" la ventana modal se cierra al tocar el fondo (.modal-overlay con (click)), lo que hace perder lo capturado por un clic accidental.`,
+          'IMPORTANTE'
+        );
+      }
+
+      // 4. Toda ventana modal (role="dialog") debe tener botón de cierre visible (.modal-cerrar) con aria-label="Cerrar"
+      if (/class="[^"]*\bmodal\b[^"]*"[^>]*role="dialog"/.test(htmlSinCom)) {
+        revisar(
+          'pantallas',
+          htmlSinCom.includes('modal-cerrar') && /aria-label="Cerrar"/.test(htmlSinCom),
+          `En "${rel}" hay una ventana modal sin botón de cierre accesible (.modal-cerrar con aria-label="Cerrar").`,
+          'IMPORTANTE'
+        );
+      }
     }
   }
 }
@@ -431,7 +479,7 @@ function textoVisibleHtml(html) {
 // ============================================================================
 // 3. AUDITORÍA ESTRICTA MÓDULO POR MÓDULO EN EL CÓDIGO (LOS 12 MÓDULOS)
 //    Incluye coherencia entre pantallas, ecuaciones que deben cuadrar,
-//    promesas de mensajes contra controles reales y flujos completos.
+//    promesas de mensajes contra controles reales y OPERATIVIDAD DE USUARIO.
 // ============================================================================
 function verificarModulosEnCodigo() {
   // MÓDULO 01 · Hoy y Campana de avisos
@@ -449,6 +497,7 @@ function verificarModulosEnCodigo() {
   // MÓDULO 02 · Punto de venta (POS) y Tickets
   const M02 = '02 · Punto de venta (POS) y Tickets';
   const posTs = leer('frontend/src/app/features/admin/pos/pos.ts');
+  const posHtml = leer('frontend/src/app/features/admin/pos/pos.html');
   const ticketTs = leer('frontend/src/app/shared/ticket/ticket.ts');
   const waTicketTs = leer('frontend/src/app/shared/ticket/whatsapp-ticket.ts');
   revisar('modulos', posTs.includes('enfocarLector') && posTs.includes('alTeclear'), 'El Punto de venta debe mantener siempre el foco en el lector de código de barras (enfocarLector / alTeclear).', 'GRAVE', M02);
@@ -458,6 +507,9 @@ function verificarModulosEnCodigo() {
   }
   revisar('modulos', !/@page\s*\{[^}]*\bsize\s*:/.test(ticketTs), 'El ticket térmico NO debe poner `size:` dentro de `@page` (Chrome lo encoge a la mitad del rollo de 3 m).', 'GRAVE', M02);
   revisar('modulos', waTicketTs.includes("hecho() === 'enviado'") && !/\}\}\s+\./.test(waTicketTs), 'En whatsapp-ticket.ts, después de mandar el ticket deben ocultarse "Le llega a…" y "Cambiar número" (hecho() === \'enviado\').', 'IMPORTANTE', M02);
+  // Operatividad en POS: cálculo de cambio en vivo, lo que siempre lleva el cliente y envío con un solo Enter en WhatsApp
+  revisar('modulos', posTs.includes('cambio') && posTs.includes('ColorComprado') && waTicketTs.includes('Aprieta Enter para mandarlo'), 'Operatividad POS: debe mostrar el cambio en vivo al cobrar en efectivo, sugerir los hilos frecuentes del cliente y permitir mandar el WhatsApp con un solo Enter.', 'IMPORTANTE', M02);
+  revisar('modulos', posHtml.includes('autocomplete="off"'), 'Operatividad POS: el lector de código de barras debe tener autocomplete="off" para que el navegador no estorbe con sugerencias encima.', 'IMPORTANTE', M02);
 
   // MÓDULO 03 · Caja y Cortes de turno
   const M03 = '03 · Caja y Cortes de turno';
@@ -475,6 +527,9 @@ function verificarModulosEnCodigo() {
   const pedRoutes = leer('backend/src/modules/pedidos/routes.js');
   const devJs = leer('backend/src/modules/pedidos/devoluciones.js');
   const pedDetTs = leer('frontend/src/app/features/admin/pedidos/pedido-detalle.ts');
+  const devModalTs = leer('frontend/src/app/features/admin/pedidos/devolucion-modal.ts');
+  const devModalHtml = leer('frontend/src/app/features/admin/pedidos/devolucion-modal.html');
+  const modModalHtml = leer('frontend/src/app/features/admin/encargos/modificar-modal.html');
   const encargosTs = leer('frontend/src/app/features/admin/encargos/encargos.ts');
   const encargosHtml = leer('frontend/src/app/features/admin/encargos/encargos.html');
   revisar('modulos', pedRoutes.includes('sinCostosEnRespuesta'), 'El router de pedidos debe filtrar costos con sinCostosEnRespuesta.', 'GRAVE', M04);
@@ -484,6 +539,8 @@ function verificarModulosEnCodigo() {
   revisar('modulos', pedModel.includes('VENTA_A_CREDITO_USA_ABONOS') && pedDetTs.includes('depositoComoAbono'), 'Una venta a crédito que todavía se debe NO debe permitir "Subir captura" en el pedido (el depósito se registra como abono a su cuenta).', 'GRAVE', M04);
   // Al entregar una nota en espera, debe ofrecerse tanto Imprimir ticket como Mandar por WhatsApp
   revisar('modulos', encargosTs.includes('ticketAviso') && encargosHtml.includes('app-boton-whatsapp'), 'Al entregar una nota en espera (encargos), se debe ofrecer imprimir el ticket y mandarlo por WhatsApp.', 'IMPORTANTE', M04);
+  // Operatividad en Devoluciones y Modificar nota: lector enfocado al abrir (no en la X) y vista previa "antes -> después"
+  revisar('modulos', devModalTs.includes("viewChild<ElementRef<HTMLInputElement>>('lector')") && devModalHtml.includes('autocomplete="off"') && modModalHtml.includes('autocomplete="off"'), 'Operatividad en Devolución y Modificar nota: el lector debe abrir con el foco en el campo de escaneo (nunca en la X) y con autocomplete="off".', 'IMPORTANTE', M04);
 
   // MÓDULO 05 · CRM Clientes, Expediente, Crédito y Saldo a favor
   const M05 = '05 · CRM Clientes, Expediente, Crédito y Saldo a favor';
@@ -523,6 +580,8 @@ function verificarModulosEnCodigo() {
   const minModalHtml = leer('frontend/src/app/features/admin/inventario/minimo-modal.html').replace(/<!--[\s\S]*?-->/g, '');
   const minModalTs = sinComentariosJs(leer('frontend/src/app/features/admin/inventario/minimo-modal.ts'));
   const minsModalTs = sinComentariosJs(leer('frontend/src/app/features/admin/inventario/minimos-modal.ts'));
+  const movModalHtml = leer('frontend/src/app/features/admin/inventario/movimiento-modal.html');
+  const desarmeModalHtml = leer('frontend/src/app/features/admin/inventario/desarme-modal.html');
   revisar('modulos', invRoutes.includes('sinCostosEnRespuesta'), 'El router de inventario debe filtrar costos con sinCostosEnRespuesta.', 'GRAVE', M06);
   revisar('modulos', invModel.includes('COND_ALERTA') && invModel.includes('SOLO_EN_TIENDA') && invModel.includes('destare_por_cono_kg'), 'Inventario debe exigir stock_minimo > 0 para alertas (COND_ALERTA), permitir bajar conos solo en tiendas (SOLO_EN_TIENDA) y soportar destare por cono.', 'GRAVE', M06);
   revisar('modulos', hiloJs.includes('detalleHilo') && hiloJs.includes('bultosDeLote'), 'El detalle de un hilo en Inventario debe exponer saldos por almacén, lotes y paquetes uno por uno.', 'IMPORTANTE', M06);
@@ -530,6 +589,8 @@ function verificarModulosEnCodigo() {
   revisar('modulos', !/menos de\b/i.test(minModalHtml) && !/menos de\b/i.test(minModalTs) && !/menos de\b/i.test(minsModalTs), 'El stock mínimo avisa al llegar al número o menos (<=); las ventanas de mínimo deben decir "N paquetes o menos", nunca "menos de N".', 'IMPORTANTE', M06);
   // Kardex: distinguir el faltante (merma) y la cancelación de un traspaso del envío normal
   revisar('modulos', invService.includes('Faltante del traspaso') && invService.includes('se canceló el traspaso'), 'En el Kardex (inventario/service.js → _describir), el faltante de un envío debe rotularse como "Faltante del traspaso…" y la cancelación como "Regresó: se canceló el traspaso…", no como un traspaso normal.', 'IMPORTANTE', M06);
+  // Operatividad en Inventario: vista previa antes de confirmar ajuste/merma/mínimo y lector limpio en conos
+  revisar('modulos', movModalHtml.includes('saldoResultante') && minModalHtml.includes('previa') && desarmeModalHtml.includes('autocomplete="off"'), 'Operatividad en Inventario: Ajuste/merma y Stock mínimo deben mostrar vista previa del resultado antes de guardar, y Bajar conos debe tener lector con autocomplete="off".', 'IMPORTANTE', M06);
 
   // MÓDULO 07 · Surtir inventario (Cargas .xlsx) y Proveedores
   const M07 = '07 · Surtir inventario (Cargas .xlsx) y Proveedores';
@@ -542,8 +603,12 @@ function verificarModulosEnCodigo() {
 
   // MÓDULO 08 · Surtir sucursal (Traspasos con escaneo)
   const M08 = '08 · Surtir sucursal (Traspasos con escaneo)';
+  const envioModalHtml = leer('frontend/src/app/features/admin/traspasos/envio-modal.html');
+  const traspasosHtml = leer('frontend/src/app/features/admin/traspasos/traspasos.html');
   revisar('modulos', invModel.includes('SIN_ESCANEAR') && invModel.includes('guardarEscaneos') && invModel.includes('_traerAlOrigen'), 'Surtir sucursal debe exigir escanear paquetes al enviar (SIN_ESCANEAR), permitir guardar escaneos a medias y pasar con sus kilos los paquetes encontrados en otro almacén.', 'GRAVE', M08);
   revisar('modulos', !invRoutes.includes('/transferencias'), 'No debe existir la ruta vieja /transferencias que movía kilos sin mover paquetes; todo va por /traspasos.', 'GRAVE', M08);
+  // Operatividad en Surtir sucursal: lector de envío con autocomplete="off" y barra de avance por hilo
+  revisar('modulos', envioModalHtml.includes('autocomplete="off"') && traspasosHtml.includes('avance-barra'), 'Operatividad en Surtir sucursal: el modal de envío debe tener lector con autocomplete="off" y mostrar barra de avance de paquetes por hilo.', 'IMPORTANTE', M08);
 
   // MÓDULO 09 · Catálogo (Hilos, Presentaciones, Materiales, Precios)
   const M09 = '09 · Catálogo (Hilos, Presentaciones, Materiales, Precios)';
@@ -554,6 +619,7 @@ function verificarModulosEnCodigo() {
   const varService = leer('backend/src/modules/variantes/service.js');
   const presHtml = leer('frontend/src/app/features/admin/productos/producto-presentaciones.html');
   const presTs = leer('frontend/src/app/features/admin/productos/producto-presentaciones.ts');
+  const prodFormHtml = leer('frontend/src/app/features/admin/productos/producto-form-modal.html');
   const catTs = sinComentariosJs(leer('frontend/src/app/features/admin/categorias/categorias.ts'));
   revisar('modulos', prodModel.includes('eliminarSiVacio') && prodService.includes('PRODUCTO_CON_MOVIMIENTOS'), 'Un producto solo debe poder eliminarse si no tiene paquetes, cargas, ventas ni movimientos (eliminarSiVacio / PRODUCTO_CON_MOVIMIENTOS).', 'GRAVE', M09);
   revisar('modulos', varRoutes.includes('sinCostosEnRespuesta') && varCtrl.includes('_bultosDeSusTiendas'), 'Presentaciones debe ocultar el costo a quien no lo ve y filtrar los bultos a las tiendas del usuario (_bultosDeSusTiendas).', 'GRAVE', M09);
@@ -571,6 +637,8 @@ function verificarModulosEnCodigo() {
   const presHtmlSinComentarios = presHtml.replace(/<!--[\s\S]*?-->/g, '');
   revisar('modulos', !/>\s*Im[aá]genes\s*</.test(presHtmlSinComentarios), 'En Presentaciones sigue visible la tarjeta "Imágenes" que solo servía para la tienda en línea apagada.', 'AVISO', M09);
   revisar('modulos', !/\bcategoría/i.test(catTs), 'En Materiales (categorias.ts), los mensajes al usuario deben decir "material", nunca "categoría".', 'AVISO', M09);
+  // Operatividad en Catálogo: captura continua ("Capturar otro color") y captura continua de bultos a mano sin cerrar el modal
+  revisar('modulos', prodFormHtml.includes('Capturar otro color') && presHtml.includes('avisoBulto'), 'Operatividad en Catálogo: el alta de producto debe ofrecer "Capturar otro color" sin cerrar y "Agregar bulto a mano" debe permitir escanear varios bultos seguidos.', 'IMPORTANTE', M09);
 
   // MÓDULO 10 · Cómo va el negocio (Tablero) y Reportes
   const M10 = '10 · Cómo va el negocio (Tablero) y Reportes';

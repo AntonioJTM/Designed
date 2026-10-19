@@ -5,7 +5,15 @@ const tickets = require('./tickets');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisos = require('../permisos/service');
+const { NOMBRE: NOMBRE_PERMISO } = require('../permisos/catalogo');
 const { pool } = require('../../config/db');
+
+/**
+ * "Tu puesto no tiene permiso para «Vender a crédito»…", con el nombre que se ve
+ * en la pantalla Permisos (2026-10-19: decía «Fiar», que ahí no existe).
+ */
+const sinPermiso = (clave) =>
+  `Tu puesto no tiene permiso para «${NOMBRE_PERMISO[clave] ?? clave}». Pídeselo al administrador.`;
 
 /**
  * CADA QUIEN, SUS TIENDAS (2026-10-15): una venta de otra tienda no se ve ni se
@@ -60,7 +68,7 @@ async function crear(req, res, next) {
     // tampoco puede mandarlo a mano.
     if (req.auth?.tipo === 'usuario' && Number(req.body.a_credito ?? 0) > 0
         && !(await permisos.puede(req.auth, 'hacer:fiar'))) {
-      throw new AppError(403, 'SIN_PERMISO', 'Tu puesto no tiene permiso para «Fiar». Pídeselo al administrador.');
+      throw new AppError(403, 'SIN_PERMISO', sinPermiso('hacer:fiar'));
     }
     // Una venta POS solo la registra el personal (staff).
     if (req.body.canal === 'punto_venta' && req.auth?.tipo !== 'usuario') {
@@ -127,8 +135,7 @@ async function cambiarEstado(req, res, next) {
   try {
     if (['cancelado', 'devuelto'].includes(req.body.estado)
         && !(await permisos.puede(req.auth, 'hacer:cancelar_venta'))) {
-      throw new AppError(403, 'SIN_PERMISO',
-        'Tu puesto no tiene permiso para «Cancelar o devolver una venta». Pídeselo al administrador.');
+      throw new AppError(403, 'SIN_PERMISO', sinPermiso('hacer:cancelar_venta'));
     }
     // El usuario queda en el kardex del movimiento que repone o vuelve a
     // descontar la mercancía.
@@ -209,7 +216,7 @@ async function entregarApartado(req, res, next) {
   try {
     // Fiar lo que falta de un pedido al entregarlo es fiar: pide su permiso.
     if (Number(req.body?.a_credito ?? 0) > 0 && !(await permisos.puede(req.auth, 'hacer:fiar'))) {
-      throw new AppError(403, 'SIN_PERMISO', 'Tu puesto no tiene permiso para «Fiar». Pídeselo al administrador.');
+      throw new AppError(403, 'SIN_PERMISO', sinPermiso('hacer:fiar'));
     }
     await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
     const data = await service.entregarApartado(Number(req.params.id), req.auth?.sub, req.body ?? {});
