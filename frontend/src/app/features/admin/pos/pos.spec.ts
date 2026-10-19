@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { Pos, pareceCodigo } from './pos';
 import { VentasService } from '../../../core/services/ventas.service';
 import { InventarioService } from '../../../core/services/inventario.service';
@@ -451,6 +451,49 @@ describe('Pos', () => {
       { metodo_pago_id: 3, monto: 132 },
       { metodo_pago_id: 1, monto: 500 },
     ]);
+  });
+
+  it('dos clics en Cobrar mandan UNA venta, con su llave de un solo uso (2026-10-19)', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.metodoSel = 1;
+    const respuestaServidor = new Subject<unknown>();
+    const enviados: { clave_cobro?: string }[] = [];
+    spyOn(ventasFalso, 'crearPedido').and.callFake(((body: { clave_cobro?: string }) => {
+      enviados.push(body);
+      return respuestaServidor;
+    }) as never);
+    c.cobrar();
+    c.cobrar();
+    expect(enviados.length).toBe(1);
+    expect(c.cobrando()).toBe(true);
+    const primera = enviados[0].clave_cobro;
+    expect(primera).toMatch(/^[0-9a-f-]{36}$/);
+    respuestaServidor.next({ id: 1, numero_pedido: 'POS-1', estado: 'pagado', total: '432.00', cambio: 68 });
+    respuestaServidor.complete();
+    expect(c.cobrando()).toBe(false);
+    // La siguiente venta lleva OTRA llave.
+    llenarCarrito(c);
+    c.cobrar();
+    expect(enviados.length).toBe(2);
+    expect(enviados[1].clave_cobro).not.toBe(primera);
+  });
+
+  it('si el servidor rechaza la venta se suelta Cobrar y se conserva la llave', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.metodoSel = 1;
+    const claves: (string | undefined)[] = [];
+    spyOn(ventasFalso, 'crearPedido').and.callFake(((body: { clave_cobro?: string }) => {
+      claves.push(body.clave_cobro);
+      return throwError(() => ({ error: { error: { message: 'No hay existencias' } } }));
+    }) as never);
+    c.cobrar();
+    expect(c.cobrando()).toBe(false);
+    expect(c.error()).toContain('No hay existencias');
+    c.cobrar();
+    expect(claves.length).toBe(2);
+    expect(claves[1]).toBe(claves[0]);
   });
 
   it('parte y parte: la transferencia no puede pasar del total (no da cambio)', async () => {

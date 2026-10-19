@@ -271,6 +271,17 @@
             {{ d.cobranza.num_vencidos }} {{ d.cobranza.num_vencidos === 1 ? 'cliente' : 'clientes' }}
           </small>
         </div>
+        <!-- Lo que la tienda les guarda (anticipos y lo que regresaron), 2026-10-19. -->
+        @if (d.a_favor && d.a_favor.num_clientes > 0) {
+          <div>
+            <span>A favor de clientes</span>
+            <b>{{ pesos(d.a_favor.total) }}</b>
+            <small>
+              <a routerLink="/admin/clientes/deuda">{{ d.a_favor.num_clientes }}
+                {{ d.a_favor.num_clientes === 1 ? 'cliente' : 'clientes' }} · ver quiénes</a>
+            </small>
+          </div>
+        }
       </div>
 
       @if (d.cobranza.total_por_cobrar > 0) {

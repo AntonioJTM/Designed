@@ -10,7 +10,7 @@ El usuario pidió `/verificar`. Quiere una **auditoría estricta módulo por mó
 
 ## Pasos a seguir
 
-1. **Corre el verificador automático profundo sobre `hitex` (1,611 comprobaciones):**
+1. **Corre el verificador automático profundo sobre `hitex` (más de 1,600 comprobaciones; el número exacto lo dice el propio script):**
    Desde `backend/`:
    ```bash
    node scripts/verificar-sistema.js
@@ -55,7 +55,7 @@ El usuario pidió `/verificar`. Quiere una **auditoría estricta módulo por mó
    - **Pilar 6 · Diseño UI/UX operativo (`DESIGN.md`):** un solo botón azul primario por vista, `tabular-nums`, códigos en `IBM Plex Mono`, botones táctiles $\ge 44\text{ px}$ y `.tabla-scroll` en tablas anchas.
 
 5. **Entrega el reporte en español sencillo con esta estructura:**
-   - **Veredicto general** (las 1,611 comprobaciones automáticas y el estado de `hitex`).
+   - **Veredicto general** (cuántas comprobaciones automáticas pasaron y el estado de `hitex`).
    - **Tabla de estado de los 12 módulos** (`✓` o `✖`).
    - **Hallazgos encontrados**, separados en:
      - **Lo importante** (fallas donde el dinero, la deuda, el inventario, los plazos, un botón prometido o la operatividad del usuario fallan), y

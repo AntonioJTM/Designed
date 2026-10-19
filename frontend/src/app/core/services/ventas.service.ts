@@ -52,6 +52,8 @@ export interface PagoPedido {
 }
 export interface CrearPedidoInput {
   canal: CanalVenta;
+  /** Llave de un solo uso de la caja: la misma venta no se registra dos veces. */
+  clave_cobro?: string;
   /** Cómo llega la mercancía. El mostrador siempre es 'recoger'. */
   metodo_entrega?: MetodoEntrega;
   /** Obligatoria cuando la entrega es 'envio'. */

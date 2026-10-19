@@ -635,6 +635,16 @@ tienda-hilos/
   La dirección se valida SIEMPRE contra el cliente del pedido, venga de donde venga (422
   `DIRECCION_INVALIDA`): un id ajeno filtrado por el panel también mandaría el paquete a la casa
   equivocada.
+- **UNA VENTA SE REGISTRA UNA SOLA VEZ** (2026-10-19). La caja apaga "Cobrar" desde el primer
+  clic hasta que el servidor contesta (`pos.ts → cobrando`, "Registrando…") y manda una llave de
+  un solo uso `clave_cobro` (UUID; `pedidos.clave_cobro` ÚNICO, migración
+  `2026-10_clave_cobro.sql`): `crearPedido` contesta la venta que ya existe con esa llave, y con
+  dos al mismo tiempo el índice deja pasar una. La llave cambia al registrar y se conserva si el
+  servidor rechaza. Igual "Abrir turno": `caja/model.js → abrirSesion` revisa y abre en UNA
+  transacción con la caja bloqueada (antes un doble clic abría dos turnos).
+- **A dónde lleva cada aviso sale de UN lugar** (`core/avisos.ts → DESTINO_AVISO`): la campana y
+  Hoy lo usan, con el mismo filtro ("en su mínimo" → Inventario `?ver=minimo`, que Inventario lee
+  del enlace). Un aviso nuevo agrega ahí su destino.
 - **El total lo calcula `_cotizar`, y lo calcula UNA sola vez.** `pedidos/model.js → _cotizar`
   arma detalle, impuestos, cupón, envío y total; `crearPedido` la llama con `bloquear: true`
   (FOR UPDATE sobre inventario, bultos y cupón) y `POST /pedidos/cotizacion` con `false`, que

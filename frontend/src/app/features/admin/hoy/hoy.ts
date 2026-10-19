@@ -6,6 +6,7 @@ import { RedisenoService } from '../../../core/services/rediseno.service';
 import { Hoy as DatosHoy } from '../../../core/models/rediseno.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { fechaRelativa } from '../../../shared/fecha.pipe';
+import { DESTINO_AVISO } from '../../../core/avisos';
 import { folioCorto } from '../../../shared/folio.pipe';
 
 /** Un renglón de la lista de pendientes: qué espera, a quién y a dónde ir. */
@@ -143,7 +144,7 @@ export class Hoy {
           titulo: `${t.almacen_destino} pide ${n} ${n === 1 ? 'hilo' : 'hilos'} · ${this.kg(t.kg)}`,
           detalle: `Solicitud ${folioCorto(t.folio)}, ${this.cuando(t.creado_en)} · falta enviarla`,
           accion: 'Surtir',
-          ruta: '/admin/traspasos',
+          ...DESTINO_AVISO.traspasos,
         });
       }
       for (const t of p.traspasos_por_recibir) {
@@ -153,7 +154,7 @@ export class Hoy {
           titulo: `Va en camino un envío a ${t.almacen_destino} · ${this.kg(t.kg)}`,
           detalle: `Salió ${this.cuando(t.enviado_en)} · falta que confirmen que llegó`,
           accion: 'Ver',
-          ruta: '/admin/traspasos',
+          ...DESTINO_AVISO.traspasos,
         });
       }
     }
@@ -167,7 +168,7 @@ export class Hoy {
             : `${p.alertas_stock} presentaciones están en su mínimo o debajo`,
         detalle: 'Revisa cuáles en Inventario: ahí se ve en qué almacén falta',
         accion: 'Ver inventario',
-        ruta: '/admin/inventario',
+        ...DESTINO_AVISO.existenciasBajas,
       });
     }
     // Los hilos que entraron con la lista del proveedor llegan sin precio.
@@ -181,8 +182,7 @@ export class Hoy {
         titulo: sinPrecio === 1 ? '1 hilo no tiene precio' : `${sinPrecio} hilos no tienen precio`,
         detalle: `${nombres.join(', ')}${resto > 0 ? ` y ${resto} más` : ''} · no se pueden vender hasta ponérselo`,
         accion: 'Poner precio',
-        ruta: '/admin/productos',
-        query: { falta: 'precio' },
+        ...DESTINO_AVISO.sinPrecio,
       });
     }
 
@@ -199,7 +199,7 @@ export class Hoy {
           ? `La más vieja salió ${this.cuando(p.notas_pendientes.desde)} · se cobra o se pasa a crédito`
           : 'Se cobran o se pasan a crédito',
         accion: 'Cobrar',
-        ruta: '/admin/notas-pendientes',
+        ...DESTINO_AVISO.notasPendientes,
       });
     }
 
@@ -213,7 +213,7 @@ export class Hoy {
           titulo: `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente lleva' : 'clientes llevan'} más de ${c.dias} días sin abonar · ${this.pesos(c.monto)}`,
           detalle: peor ? `El que más: ${peor.nombre_comercial || peor.nombre}, ${peor.dias_sin_abonar} días` : '',
           accion: 'Cobrar',
-          ruta: '/admin/clientes/deuda',
+          ...DESTINO_AVISO.cobranza,
         });
       }
       const e = p.enfriados;
@@ -225,7 +225,7 @@ export class Hoy {
             e.num_clientes === 1 ? '1 cliente dejó de venir' : `${e.num_clientes} clientes dejaron de venir`,
           detalle: `Llevan ${e.dias} días o más sin comprar · vale la pena llamarles`,
           accion: 'Ver quiénes',
-          ruta: '/admin/clientes/dejaron',
+          ...DESTINO_AVISO.dejaronDeVenir,
         });
       }
       const n = p.nuevos_sin_credito;

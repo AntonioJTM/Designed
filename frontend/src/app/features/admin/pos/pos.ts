@@ -82,6 +82,20 @@ export type ModoVenta = 'cobrar' | 'credito' | 'espera' | 'pendiente';
  * del cobro y el corte quedaba escondido debajo del carrito. La administración
  * de cajas también se fue para allá.
  */
+/**
+ * Llave de un solo uso para cada venta (2026-10-19). `crypto.randomUUID` solo
+ * existe en páginas seguras (https); si algún día la caja se abre por http, se
+ * arma igual con `getRandomValues`, que sí existe, en vez de dejar de cargar.
+ */
+function nuevaClave(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 @Component({
   selector: 'app-pos',
   host: { '(document:keydown.escape)': 'alEscape()', '(document:keydown)': 'alTeclear($event)' },
@@ -261,6 +275,10 @@ export class Pos {
   /** La cotización completa: subtotal, IVA y el precio de cada línea según la lista. */
   readonly cotizacion = signal<Cotizacion | null>(null);
   readonly cotizando = signal(false);
+  /** Mientras se registra una venta: "Cobrar" se apaga (2026-10-19). */
+  readonly cobrando = signal(false);
+  /** La llave de un solo uso de la venta en curso; cambia al registrarla. */
+  private claveCobro = nuevaClave();
   /**
    * Por qué no se pudo cotizar, cuando es algo que el cajero tiene que saber
    * ANTES de cobrar: "ROJO 2/30 está agotado", "quedan 80 para vender". Antes
@@ -1242,81 +1260,112 @@ export class Pos {
     return `Cobrar ${this.dinero(this.total())}`;
   }
 
-  async cobrar(): Promise<void> {
+  /**
+   * COBRAR UNA SOLA VEZ (2026-10-19). El botón se apaga desde el primer clic y
+   * hasta que el servidor contesta: un segundo clic no hace nada. Antes, con la
+   * red lenta, dos clics registraban DOS ventas (el doble de kilos fuera y el
+   * doble de efectivo esperado en el corte). Además cada venta lleva su llave de
+   * un solo uso (`clave_cobro`): si llega dos veces, el servidor contesta la que
+   * ya registró. El candado va ANTES de las validaciones, así ni la pregunta de
+   * "¿darle a crédito?" se abre dos veces.
+   */
+  cobrar(): Promise<void> {
+    if (this.cobrando()) return Promise.resolve();
+    this.cobrando.set(true);
+    const r = this.prepararCobro();
+    // Lo que no pasa una validación suelta el botón EN EL ACTO (se corrige y se
+    // vuelve a apretar); solo la pregunta de la cuenta atrasada hace esperar.
+    if (r === true) return Promise.resolve();
+    if (r === false) {
+      this.cobrando.set(false);
+      return Promise.resolve();
+    }
+    return r.then(
+      (enviada) => { if (!enviada) this.cobrando.set(false); },
+      (e) => { this.cobrando.set(false); throw e; }
+    );
+  }
+
+  /** Revisa y manda la venta: true si se mandó, false si algo no pasó (y lo dice). */
+  private prepararCobro(): boolean | Promise<boolean> {
     const s = this.sesion();
     if (!s || this.carrito().length === 0) {
       this.error.set('Agrega productos para poder cobrar.');
-      return;
+      return false;
     }
     // --- Nota en espera: se aparta la mercancía; lo que falte se cobra al entregar ---
     if (this.pidiendo()) {
       if (!this.clienteSel()) {
         this.error.set('Para guardar una nota en espera hay que decir de quién es: busca al cliente arriba.');
-        return;
+        return false;
       }
       const deja = Number(this.anticipo ?? 0);
       if (deja > this.total() + 0.001) {
         this.error.set(`Lo que deja (${this.dinero(deja)}) es más que la nota (${this.dinero(this.total())}).`);
-        return;
+        return false;
       }
       if (deja > 0 && !this.metodoSel) {
         this.error.set('Elige con qué deja el pago.');
-        return;
+        return false;
       }
       this.error.set(null);
       this.tomarPedido(s, deja);
-      return;
+      return true;
     }
 
     // --- Nota pendiente de pago: se lleva la mercancía; el pago, después ---
     if (this.notaPendiente()) {
       if (!this.clienteSel()) {
         this.error.set('Para dar una nota pendiente de pago hay que decir de quién es: busca al cliente arriba.');
-        return;
+        return false;
       }
       this.error.set(null);
       this.darNotaPendiente(s);
-      return;
+      return true;
     }
 
     const fiado = this.fiadoActual();
     if (fiado > 0 && !this.clienteSel()) {
       this.error.set('Para vender a crédito hay que decir a quién: busca al cliente arriba.');
-      return;
+      return false;
     }
     if (fiado > this.creditoDisponible() + 0.001) {
       this.error.set(`Solo le quedan ${this.dinero(this.creditoDisponible())} de crédito.`);
-      return;
+      return false;
     }
     // CUENTA ATRASADA (2026-10-16): no se le fía a ciegas. Se pregunta, con lo que
     // debe y los días; el servidor también lo detiene si no se confirmó.
-    let fiarConAtraso = false;
     const cli = this.clienteSel();
     if (fiado > 0 && cli?.atrasado) {
-      const si = await this.confirmacion.pedir({
-        titulo: '¿Darle a crédito con la cuenta atrasada?',
-        mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y lleva ` +
-          `${cli.dias_sin_abonar} días sin abonar. Lo sano es pedirle un abono antes de darle más a crédito.`,
-        aceptar: 'Darle a crédito de todos modos',
-        peligro: true,
-      });
-      if (!si) return;
-      fiarConAtraso = true;
+      return this.confirmacion
+        .pedir({
+          titulo: '¿Darle a crédito con la cuenta atrasada?',
+          mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y lleva ` +
+            `${cli.dias_sin_abonar} días sin abonar. Lo sano es pedirle un abono antes de darle más a crédito.`,
+          aceptar: 'Darle a crédito de todos modos',
+          peligro: true,
+        })
+        .then((si) => (si ? this.continuarCobro(s, fiado, true) : false));
     }
+    return this.continuarCobro(s, fiado, false);
+  }
+
+  /** El resto del cobro, ya decidido si se le da a crédito con la cuenta atrasada. */
+  private continuarCobro(s: SesionCaja, fiado: number, fiarConAtraso: boolean): boolean {
     const saldo = this.saldoActual();
     if (saldo > this.saldoFavorCliente() + 0.001) {
       this.error.set(`Solo tiene ${this.dinero(this.saldoFavorCliente())} a favor.`);
-      return;
+      return false;
     }
     if (saldo + fiado > this.total() + 0.001) {
       this.error.set(`Su saldo a favor${fiado > 0 ? ' más lo que va a crédito' : ''} pasa del total (${this.dinero(this.total())}).`);
-      return;
+      return false;
     }
     // Con la venta completa a crédito no hace falta método de pago: no entra
     // dinero. Si paga algo hoy, sí.
     if (this.aPagarHoy() > 0 && !this.metodoSel) {
       this.error.set('Elige con qué está pagando lo de hoy.');
-      return;
+      return false;
     }
     const aPagar = this.aPagarHoy();
     // Con transferencia se cobra justo. En efectivo, lo que el cliente entrega;
@@ -1326,11 +1375,11 @@ export class Pos {
     if (this.esMixto() && aPagar > 0) {
       if (!(transf > 0)) {
         this.error.set('Pon cuánto paga por transferencia.');
-        return;
+        return false;
       }
       if (transf > aPagar + 0.001) {
         this.error.set(`Por transferencia son a lo más ${this.dinero(aPagar)}: la transferencia no da cambio.`);
-        return;
+        return false;
       }
     }
     const enEfectivo = this.aCobrarEnEfectivo();
@@ -1339,7 +1388,7 @@ export class Pos {
       this.error.set(
         `Faltan ${this.dinero(enEfectivo - recibido)}: recibió ${this.dinero(recibido)} en efectivo y son ${this.dinero(enEfectivo)}.`
       );
-      return;
+      return false;
     }
     this.error.set(null);
     const pagos = aPagar <= 0
@@ -1354,6 +1403,7 @@ export class Pos {
     this.ventas
       .crearPedido({
         canal: 'punto_venta',
+        clave_cobro: this.claveCobro,
         sesion_caja_id: s.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         // Si se identificó al cliente, la venta queda en su historial.
@@ -1375,6 +1425,7 @@ export class Pos {
       })
       .subscribe({
         next: (pedido) => {
+          this.ventaRegistrada();
           // El cambio lo calcula el servidor contra el total con que de verdad
           // se cobró; el de la pantalla pudo ser el estimado.
           const cambio = Number(pedido.cambio ?? Math.max(0, recibido - enEfectivo));
@@ -1387,8 +1438,21 @@ export class Pos {
           });
           this.limpiarVenta();
         },
-        error: (e) => this.error.set(this.msg(e)),
+        error: (e) => this.ventaFallida(e),
       });
+    return true;
+  }
+
+  /** La venta quedó: se suelta "Cobrar" y la siguiente lleva otra llave. */
+  private ventaRegistrada(): void {
+    this.cobrando.set(false);
+    this.claveCobro = nuevaClave();
+  }
+
+  /** No quedó: se suelta "Cobrar" y se dice por qué. La llave se queda (no se registró nada). */
+  private ventaFallida(e: unknown): void {
+    this.cobrando.set(false);
+    this.error.set(this.msg(e));
   }
 
   /** Deja la caja lista para el siguiente cliente, con el lector esperando. */
@@ -1506,6 +1570,7 @@ export class Pos {
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         encargo: true,
+        clave_cobro: this.claveCobro,
         metodo_entrega: 'recoger',
         entrega_para: this.paraCuando || undefined,
         notas: this.notasPedido.trim() || undefined,
@@ -1519,10 +1584,11 @@ export class Pos {
       })
       .subscribe({
         next: (pedido) => {
+          this.ventaRegistrada();
           this.ticket.set({ pedido, cambio: 0, pagadoHoy: deja, fiado: 0 });
           this.limpiarVenta();
         },
-        error: (e) => this.error.set(this.msg(e)),
+        error: (e) => this.ventaFallida(e),
       });
   }
 
@@ -1546,6 +1612,7 @@ export class Pos {
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         pendiente_pago: true,
+        clave_cobro: this.claveCobro,
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
           cantidad: i.cantidad,
@@ -1555,10 +1622,11 @@ export class Pos {
       })
       .subscribe({
         next: (pedido) => {
+          this.ventaRegistrada();
           this.ticket.set({ pedido, cambio: 0, pagadoHoy: 0, fiado: 0 });
           this.limpiarVenta();
         },
-        error: (e) => this.error.set(this.msg(e)),
+        error: (e) => this.ventaFallida(e),
       });
   }
 

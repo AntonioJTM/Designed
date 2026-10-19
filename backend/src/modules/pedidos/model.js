@@ -339,7 +339,44 @@ async function _cotizar(conn, datos, { bloquear = false, esCliente = false } = {
   };
 }
 
-async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
+/**
+ * UNA VENTA SE REGISTRA UNA SOLA VEZ (2026-10-19). La caja manda una llave de
+ * un solo uso (`clave_cobro`) con cada venta: si llega dos veces —doble clic, o
+ * la red que la reintenta— no se crea otra, se contesta la que ya quedó. Sin
+ * esto, dos clics en "Cobrar" registraban dos ventas: el doble de kilos fuera
+ * del inventario y el doble de efectivo esperado en el corte.
+ */
+async function crearPedido(datos, usuarioId, opciones = {}) {
+  if (datos.clave_cobro) {
+    const previo = await _pedidoDeClave(datos.clave_cobro);
+    if (previo) return previo;
+  }
+  try {
+    return await _crearPedido(datos, usuarioId, opciones);
+  } catch (err) {
+    // Dos peticiones con la misma llave al mismo tiempo: el índice único deja
+    // pasar una; la otra se revierte completa y contesta la que sí quedó.
+    if (datos.clave_cobro && err?.code === 'ER_DUP_ENTRY' && /clave_cobro/.test(String(err.sqlMessage ?? err.message))) {
+      const previo = await _pedidoDeClave(datos.clave_cobro);
+      if (previo) return previo;
+    }
+    throw err;
+  }
+}
+
+/** La venta que ya se registró con esa llave, como la contesta `crearPedido`, o null. */
+async function _pedidoDeClave(clave) {
+  const [[fila]] = await pool.query('SELECT id FROM pedidos WHERE clave_cobro = :clave LIMIT 1', { clave });
+  if (!fila) return null;
+  const pedido = await _obtenerConn(pool, fila.id);
+  // El cambio no se guarda, pero sí lo que entregó (`pagos.recibido`).
+  pedido.cambio = Math.round((pedido.pagos ?? []).reduce(
+    (s, g) => s + Math.max(0, Number(g.recibido ?? 0) - Number(g.monto ?? 0)), 0) * 100) / 100;
+  pedido.repetido = true;
+  return pedido;
+}
+
+async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
   // Un apartado desde la tienda en línea se rechaza ANTES de cotizar: si no,
   // la cotización revisaba primero las existencias del almacén en línea y el
   // error decía "no hay" en vez de lo que de verdad pasa.
@@ -573,17 +610,18 @@ async function crearPedido(datos, usuarioId, { esCliente = false } = {}) {
     const numero = generarNumero(datos.canal);
     const [pr] = await conn.query(
       `INSERT INTO pedidos
-         (numero_pedido, canal, encargo, nota_pendiente, metodo_entrega, cliente_id, tipo_cliente_id, usuario_id,
+         (numero_pedido, clave_cobro, canal, encargo, nota_pendiente, metodo_entrega, cliente_id, tipo_cliente_id, usuario_id,
           sesion_caja_id, almacen_id,
           direccion_envio_id, entrega_direccion, entrega_para, cupon_id, estado, inventario_descontado,
           subtotal, descuento, impuestos, costo_envio, total, notas)
        VALUES
-         (:numero, :canal, :encargo, :nota_pendiente, :metodo_entrega, :cliente_id, :tipo_cliente_id, :usuario_id,
+         (:numero, :clave_cobro, :canal, :encargo, :nota_pendiente, :metodo_entrega, :cliente_id, :tipo_cliente_id, :usuario_id,
           :sesion_caja_id, :almacen_id,
           :direccion_envio_id, :entrega_direccion, :entrega_para, :cupon_id, :estado, :inventario_descontado,
           :subtotal, :descuento, :impuestos, :costo_envio, :total, :notas)`,
       {
         numero,
+        clave_cobro: datos.clave_cobro ?? null,
         canal: datos.canal,
         encargo: esEncargo ? 1 : 0,
         nota_pendiente: esNotaPendiente ? 1 : 0,

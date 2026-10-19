@@ -10,7 +10,7 @@
 
 @if (datos().num_clientes === 0) {
   <section class="card">
-    <p class="vacio">Nadie te debe nada. Cuando se fíe una venta, aquí aparece quién y desde cuándo.</p>
+    <p class="vacio">Nadie te debe nada. Cuando se dé una venta a crédito, aquí aparece quién y desde cuándo.</p>
   </section>
 } @else {
   <!-- ==================================================== Desde cuándo te deben -->
@@ -19,8 +19,8 @@
       <div>
         <h2>Desde cuándo te deben</h2>
         <p>
-          Se cuenta desde el último movimiento de su cuenta, no desde la venta: quien abonó la semana
-          pasada está pagando.
+          Se cuenta desde su último abono, no desde la venta: quien abonó la semana pasada está
+          pagando, y quien sigue comprando a crédito sin abonar no se renueva con cada compra.
         </p>
       </div>
     </div>
@@ -143,4 +143,52 @@
       </table>
     </div>
   </section>
+}
+
+<!-- ===================================================== Lo que tienen a su favor -->
+<!-- Lo que la tienda les guarda: anticipos y lo que regresaron (2026-10-19). Es de
+     todos los clientes; se usa al cobrarles o se descuenta de lo que deben. -->
+@if (datos().a_favor; as af) {
+  @if (af.num_clientes > 0) {
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Lo que tienen a su favor · {{ af.total | dinero }}</h2>
+          <p>
+            {{ af.num_clientes }} {{ af.num_clientes === 1 ? 'cliente tiene' : 'clientes tienen' }} saldo a favor:
+            anticipos y lo que regresaron. Se usa al cobrarles o se descuenta de lo que deben.
+          </p>
+        </div>
+      </div>
+      <div class="tabla-scroll">
+        <table class="grid" style="min-width: 720px">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th class="num">A su favor</th>
+              <th>Lo tiene desde</th>
+              <th>Último movimiento</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of af.clientes; track c.cliente_id) {
+              <tr>
+                <td>
+                  <div style="font-weight: 500">{{ c.nombre }}</div>
+                  <div class="mono muted">{{ c.codigo || '—' }}{{ c.telefono ? ' · ' + c.telefono : '' }}</div>
+                </td>
+                <td class="num" style="font-weight: 600">{{ c.saldo | dinero }}</td>
+                <td style="white-space: nowrap">{{ c.desde ? fechaCorta(c.desde) : '—' }}</td>
+                <td style="white-space: nowrap">{{ c.ultimo_movimiento ? fechaCorta(c.ultimo_movimiento) : '—' }}</td>
+                <td class="acciones">
+                  <a class="btn btn-ghost btn-sm" [routerLink]="['/admin/clientes', c.cliente_id]" [queryParams]="{ ver: 'deuda' }">Ver</a>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
 }

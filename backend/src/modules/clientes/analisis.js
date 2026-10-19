@@ -167,6 +167,8 @@ async function deuda() {
   );
   return {
     ...cartera,
+    // Lo que la tienda les guarda: anticipos y lo que regresaron (2026-10-19).
+    a_favor: await require('./saldo-favor').aFavorDeClientes(),
     credito_usado: r2(credito.usado),
     credito_autorizado: r2(credito.autorizado),
     cobrado_mes: { monto: r2(cobrado.monto), abonos: Number(cobrado.abonos) },

@@ -13,7 +13,7 @@ Eres el **auditor estricto módulo por módulo**, **evaluador de Operatividad de
 
 ---
 
-## Paso 1 · Ejecuta el verificador estricto automático (1,611 comprobaciones en `hitex`)
+## Paso 1 · Ejecuta el verificador estricto automático (más de 1,600 comprobaciones en `hitex`; el número exacto lo dice el script)
 
 Corre siempre desde `backend/`:
 1. `node scripts/verificar-sistema.js` (revisa la base `hitex`, el código de los 12 módulos, las reglas de `DESIGN.md`, las ecuaciones de pantalla, los plazos cruzados, el diccionario de palabras prohibidas y los candados de **Operatividad de Usuario**).
@@ -85,7 +85,7 @@ Evalúa cada pantalla preguntándote: **"¿Cómo se siente operar esta pantalla 
 
 Responde **siempre en español sencillo**, como se habla en la tienda, usando enlaces clicables a los archivos (`[archivo](file:///ruta)`):
 
-1. **Veredicto general en un renglón:** resultado de las 1,611 comprobaciones automáticas y estado de la base **`hitex`**.
+1. **Veredicto general en un renglón:** resultado de las comprobaciones automáticas (cuántas, según el script) y estado de la base **`hitex`**.
 2. **Estado módulo por módulo (los 12 módulos):** lista o tabla con `✓` o `✖` en cada uno de los 12 módulos.
 3. **Lo importante y los detalles menores encontrados (si algo falla en lógica, operatividad de usuario, cifras, textos o base `hitex`):**
    - Separa **"Lo importante"** (fallas de dinero, deuda, inventario, plazos, promesas sin botón o bloqueos de operatividad) de **"Menores"** (palabras viejas, plurales, textos o detalles visuales), indicando `archivo:línea` y un ejemplo real.

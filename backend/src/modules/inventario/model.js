@@ -440,8 +440,18 @@ async function registrarMovimiento(datos, usuarioId) {
 
     const nuevo = actual + delta;
     if (nuevo < 0) {
+      // Dice de qué hilo, dónde y qué hacer (2026-10-19); antes: "hay 12.5, se
+      // intenta descontar 20", sin unidad ni hilo.
+      const [[d]] = await conn.query(
+        `SELECT p.nombre, p.grosor_calibre AS calibre, a.nombre AS almacen
+           FROM producto_variantes pv JOIN productos p ON p.id = pv.producto_id, almacenes a
+          WHERE pv.id = :variante_id AND a.id = :almacen_id`,
+        { variante_id, almacen_id }
+      );
+      const hilo = d ? `${d.nombre}${d.calibre ? ' ' + d.calibre : ''}` : 'ese hilo';
       throw new AppError(409, 'STOCK_INSUFICIENTE',
-        `Existencias insuficientes: hay ${actual}, se intenta descontar ${Math.abs(delta)}`);
+        `En «${d?.almacen ?? 'ese almacén'}» hay ${round3(actual)} kg de ${hilo}: no se pueden sacar ` +
+        `${round3(Math.abs(delta))} kg. Si contaste otra cantidad, usa «Ajuste» con lo que contaste.`);
     }
 
     await _aplicarSaldo(conn, variante_id, almacen_id, nuevo);

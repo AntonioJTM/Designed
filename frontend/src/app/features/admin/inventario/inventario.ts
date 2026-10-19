@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   Conversion,
   InventarioService,
@@ -159,7 +160,16 @@ export class Inventario {
       next: (a) => this.almacenes.set(a.filter((x) => x.activo)),
       error: (e) => this.error.set(this.msg(e)),
     });
-    this.cargarStock();
+    // El aviso "N en su mínimo" llega con ?ver=minimo (2026-10-19): la tabla
+    // abre ya filtrada. También si se toca estando ya en Inventario (la pantalla
+    // no se vuelve a crear, solo cambia la dirección). Con esto se carga la tabla.
+    inject(ActivatedRoute)
+      .queryParamMap.pipe(takeUntilDestroyed())
+      .subscribe((q) => {
+        const v = q.get('ver');
+        if (v === 'minimo' || v === 'apartado') this.vista = v;
+        this.cargarStock();
+      });
     this.cargarResumen();
     if (this.puedeBajarConos()) this.cargarConversiones();
   }
