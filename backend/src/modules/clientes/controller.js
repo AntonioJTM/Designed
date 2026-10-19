@@ -11,12 +11,40 @@ const { pool } = require('../../config/db');
 /** El turno con que se cobra tiene que ser de SUS tiendas (2026-10-15). */
 const _cajaDeSusTiendas = (auth, sesionId) => permisos.exigirTurno(auth, sesionId);
 
-/** El ticket de un abono o anticipo cobrado en la caja de OTRA tienda no se reimprime aquí. */
+/**
+ * El ticket de un ABONO se ve con la misma regla que el expediente (2026-10-19):
+ * es de la tienda de su nota y de la caja que lo cobró; si no es de ninguna de
+ * las suyas, no existe para quien pregunta. Sin nota ni caja (transferencia a la
+ * cuenta) no es de ninguna tienda y se ve completo (decisión del usuario,
+ * 2026-10-16). Antes solo se miraba la caja y una transferencia A UNA NOTA de
+ * otra tienda salía completa.
+ */
+async function _abonoDeSusTiendas(auth, movId) {
+  const almacenes = await permisos.almacenesDe(auth);
+  if (almacenes === null) return null;
+  const [[m]] = await pool.query(
+    `SELECT p.almacen_id AS de_nota, cj.almacen_id AS de_caja
+       FROM credito_movimientos m
+       LEFT JOIN pedidos p       ON p.id = m.pedido_id
+       LEFT JOIN sesiones_caja s ON s.id = m.sesion_caja_id
+       LEFT JOIN cajas cj        ON cj.id = s.caja_id
+      WHERE m.id = :id`,
+    { id: Number(movId) }
+  );
+  const suyas = [m?.de_nota, m?.de_caja].filter((a) => a != null).map(Number);
+  if (suyas.length && !suyas.some((a) => almacenes.includes(a))) {
+    throw new AppError(404, 'OTRA_TIENDA', 'Ese abono no es de tus tiendas.');
+  }
+  return almacenes;
+}
+
+/** El ticket de un anticipo cobrado en la caja de OTRA tienda no se reimprime aquí. */
 async function _movimientoDeSusTiendas(auth, tabla, movId) {
   const [[m]] = await pool.query(`SELECT sesion_caja_id FROM ${tabla} WHERE id = :id`, { id: Number(movId) });
   if (m?.sesion_caja_id) await permisos.exigirTurno(auth, m.sesion_caja_id);
 }
 const { parsePagination, parseBool } = require('../../utils/query');
+const { AppError } = require('../../middlewares/error');
 
 // Controladores del dominio clientes. Responden con la forma { data, error }.
 
@@ -113,16 +141,26 @@ async function actualizar(req, res, next) {
 async function abonar(req, res, next) {
   try {
     await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
-    const data = await service.registrarAbono(Number(req.params.id), req.body, req.auth?.sub);
+    const data = await service.registrarAbono(Number(req.params.id), req.body, req.auth?.sub, {
+      almacenes: await permisos.almacenesDe(req.auth),
+    });
     res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/** Las notas a crédito que esta persona puede pagar una por una, y lo que debe en total. */
+async function notasCredito(req, res, next) {
+  try {
+    const data = await service.notasCredito(Number(req.params.id), await permisos.almacenesDe(req.auth));
+    res.json({ data, error: null });
   } catch (err) { next(err); }
 }
 
 /** Los datos del ticket de un abono a su cuenta (al registrarlo o para reimprimirlo). */
 async function ticketAbono(req, res, next) {
   try {
-    await _movimientoDeSusTiendas(req.auth, 'credito_movimientos', req.params.movId);
-    const data = await tickets.abonoCuenta(Number(req.params.id), Number(req.params.movId));
+    const almacenes = await _abonoDeSusTiendas(req.auth, req.params.movId);
+    const data = await tickets.abonoCuenta(Number(req.params.id), Number(req.params.movId), { almacenes });
     res.json({ data, error: null });
   } catch (err) { next(err); }
 }
@@ -203,6 +241,7 @@ async function lugaresActualizar(req, res, next) {
 }
 
 module.exports = {
+  notasCredito,
   lugaresListar, lugaresCrear, lugaresActualizar,
   aplicarSaldoFavor,
   recibirAnticipo,

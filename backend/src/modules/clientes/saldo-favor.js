@@ -24,6 +24,7 @@ const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const clientesModel = require('./model');
 const { aFavorDe } = require('./a-favor');
+const { anotarCompartido } = require('../tiempo-real/contexto');
 
 const SIGNO = { devolucion: 1, anticipo: 1, uso: -1, aplicado: -1, reintegro: 1, ajuste: 1 };
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -71,6 +72,7 @@ async function agregar(conn, {
   clienteId, tipo, monto, pedidoId = null, devolucionId = null, usuarioId = null, notas = null,
   metodoPagoId = null, sesionCajaId = null, referencia = null,
 }) {
+  anotarCompartido('clientes');
   const [r] = await conn.query(
     `INSERT INTO saldo_favor_movimientos
        (cliente_id, tipo, monto, pedido_id, devolucion_id, metodo_pago_id, sesion_caja_id, referencia, usuario_id, notas)

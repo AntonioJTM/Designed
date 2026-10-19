@@ -8,6 +8,8 @@ import { ApiError } from '../../../core/models/auth.models';
 import { fechaRelativa } from '../../../shared/fecha.pipe';
 import { DESTINO_AVISO } from '../../../core/avisos';
 import { folioCorto } from '../../../shared/folio.pipe';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /** Un renglón de la lista de pendientes: qué espera, a quién y a dónde ir. */
 interface Pendiente {
@@ -285,6 +287,11 @@ export class Hoy {
     // no esperar a la siguiente vuelta.
     this.notif.iniciar();
     this.cargar();
+    // EN VIVO (2026-10-19): lo vendido, los cajones y los pendientes al momento.
+    inject(TiempoRealService)
+      .cambios(['ventas', 'caja', 'inventario', 'traspasos', 'clientes', 'avisos'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.cargar());
   }
 
   cargar(): void {

@@ -38,6 +38,8 @@ import {
   ultimosMeses,
 } from './clientes-ui';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 type Pestana = 'resumen' | 'frecuencia' | 'deuda' | 'que' | 'cuando' | 'gasto';
 
@@ -146,6 +148,16 @@ export class ClienteExpediente implements OnInit {
 
   private id = 0;
 
+  constructor() {
+    // EN VIVO (2026-10-19, etapa 3): un abono, una venta o un anticipo de este
+    // cliente hechos en otra computadora se ven aquí (su deuda total y su saldo a
+    // favor, también si fueron en otra tienda). Nunca con una ventana abierta.
+    inject(TiempoRealService)
+      .cambios(['clientes', 'ventas'], 1500)
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.refrescarEnVivo());
+  }
+
   ngOnInit(): void {
     this.id = Number(this.route.snapshot.paramMap.get('id'));
     // `?ver=deuda` abre directo esa mirada: las pestañas de Clientes mandan aquí
@@ -169,6 +181,20 @@ export class ClienteExpediente implements OnInit {
         this.cargandoTodas.set(false);
       },
     });
+  }
+
+  private refrescarEnVivo(): void {
+    if (!this.id || this.cargando() || this.ventanaAbierta()) return;
+    this.clientes.expediente(this.id, this.todas()).subscribe({
+      next: (e) => {
+        if (!this.ventanaAbierta()) this.exp.set(e);
+      },
+      error: () => {},
+    });
+  }
+
+  private ventanaAbierta(): boolean {
+    return this.editando() || this.abonando() || this.ajustando() || this.ajustandoFavor() || this.recibiendo();
   }
 
   elegir(p: Pestana): void {
@@ -319,13 +345,17 @@ export class ClienteExpediente implements OnInit {
     return (n < 0 ? '−' : '+') + pesos(Math.abs(n)).replace('-', '');
   }
 
-  etiquetaMovimiento(tipo: string): string {
-    return tipo === 'cargo' ? 'Se llevó a crédito' : tipo === 'abono' ? 'Abonó' : 'Ajuste';
+  /** Un abono con nota (2026-10-19) fue A ESA NOTA, no a la cuenta. */
+  etiquetaMovimiento(tipo: string, aNota = false): string {
+    return tipo === 'cargo' ? 'Se llevó a crédito' : tipo === 'abono' ? (aNota ? 'Abonó a la nota' : 'Abonó') : 'Ajuste';
   }
 
   /** "· efectivo", "· POS-A1F3": lo que aclara el movimiento en una línea. */
   conMovimiento(m: MovimientoCredito): string {
-    if (m.tipo === 'abono') return m.metodo_pago ? `· ${m.metodo_pago.toLowerCase()}` : '';
+    if (m.tipo === 'abono') {
+      const nota = m.numero_pedido ? `· ${folioCorto(m.numero_pedido)} ` : '';
+      return nota + (m.metodo_pago ? `· ${m.metodo_pago.toLowerCase()}` : '');
+    }
     if (m.tipo === 'cargo') return m.numero_pedido ? `· ${folioCorto(m.numero_pedido)}` : '';
     return m.notas ? `· ${m.notas}` : '';
   }

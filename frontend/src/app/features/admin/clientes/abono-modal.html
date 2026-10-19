@@ -17,30 +17,81 @@
         }
         <div class="columna" style="gap: 16px">
           <p class="muted">
-            <b style="color: var(--tinta)">{{ nombre() }}</b> debe {{ saldo() | dinero }}.
+            <b style="color: var(--tinta)">{{ nombre() }}</b> debe {{ debe() | dinero }}.
           </p>
+
+          <!-- A su cuenta o a notas (2026-10-19). Sin notas que escoger, solo a la cuenta. -->
+          @if (!filas.length && ocultas()) {
+            <p class="nota-info">
+              Sus notas a crédito son de otra tienda donde no compra aquí: el abono va a su cuenta y paga
+              primero la más vieja.
+            </p>
+          }
+          @if (filas.length) {
+            <div class="seg" role="radiogroup" aria-label="A qué va el abono">
+              <label [class.on]="modo === 'cuenta'">
+                <input type="radio" name="modo" value="cuenta" [(ngModel)]="modo" />
+                A su cuenta
+                <span class="muted">paga primero la nota más vieja</span>
+              </label>
+              <label [class.on]="modo === 'notas'">
+                <input type="radio" name="modo" value="notas" [(ngModel)]="modo" />
+                A notas
+                <span class="muted">a las que él diga</span>
+              </label>
+            </div>
+          }
+
           <!-- Antes → después, en vivo (2026-10-19): cómo queda su cuenta con este abono. -->
           @if (quedaDebiendo(); as q) {
             <p class="queda" role="status">
               @if (q.queda <= 0.004) {
                 Con este abono queda <b>al corriente</b>: ya no debe nada.
               } @else {
-                Debe {{ saldo() | dinero }} → <b>quedará debiendo {{ q.queda | dinero }}</b>.
+                Debe {{ debe() | dinero }} → <b>quedará debiendo {{ q.queda | dinero }}</b>.
               }
             </p>
           }
           @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
+          @if (modo === 'notas') {
+            <div class="notas-abono" role="group" aria-label="Notas que paga">
+              @for (f of filas; track f.nota.pedido_id) {
+                <div class="nota-abono" [class.on]="f.elegida">
+                  <label class="marca">
+                    <input type="checkbox" [ngModel]="f.elegida" (ngModelChange)="marcar(f, $event)"
+                           [name]="'nota-' + f.nota.pedido_id" />
+                    <span>
+                      <span class="folio" [title]="f.nota.numero_pedido">{{ f.nota.numero_pedido | folio }}</span>
+                      <span class="muted"> · {{ f.nota.creado_en | fecha: true }}</span>
+                      @if (f.nota.otra_tienda) { <span class="muted"> · {{ f.nota.almacen || 'otra tienda' }}</span> }
+                      <br />
+                      <span class="debe">debe {{ f.nota.por_pagar | dinero }}</span>
+                    </span>
+                  </label>
+                  <span class="moneda">
+                    <span aria-hidden="true">$</span>
+                    <input type="number" min="0.01" step="0.01" [max]="f.nota.por_pagar"
+                           [(ngModel)]="f.monto" [name]="'monto-' + f.nota.pedido_id" [disabled]="!f.elegida"
+                           [attr.aria-label]="'Cuánto abona a la nota ' + f.nota.numero_pedido" />
+                  </span>
+                </div>
+              }
+            </div>
+          }
+
           <div class="form-grid">
-            <label class="field">
-              Cuánto abona
-              <span class="moneda">
-                <span aria-hidden="true">$</span>
-                <input type="number" min="0.01" step="0.01" [(ngModel)]="monto" name="monto" />
-              </span>
-              <span class="ayuda">No se puede abonar más de lo que debe.</span>
-            </label>
-            <label class="field">
+            @if (modo === 'cuenta') {
+              <label class="field">
+                Cuánto abona
+                <span class="moneda">
+                  <span aria-hidden="true">$</span>
+                  <input type="number" min="0.01" step="0.01" [(ngModel)]="monto" name="monto" />
+                </span>
+                <span class="ayuda">No se puede abonar más de lo que debe.</span>
+              </label>
+            }
+            <label class="field" [class.full]="modo === 'notas'">
               Con qué paga
               <select [(ngModel)]="metodoId" name="metodo">
                 <option [ngValue]="null">Elige…</option>
@@ -88,7 +139,7 @@
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
         <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando()">
-          {{ guardando() ? 'Registrando…' : 'Registrar el abono' }}
+          {{ guardando() ? 'Registrando…' : modo === 'notas' ? 'Abonar ' + (montoAbono() | dinero) : 'Registrar el abono' }}
         </button>
       </div>
     </form>

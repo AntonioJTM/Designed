@@ -23,6 +23,8 @@ import { paqueteFueraDeAqui } from '../../../shared/paquete-aqui';
 import { textoConos } from '../../../shared/conos';
 import { AnticipoModal } from '../clientes/anticipo-modal';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /** Un hilo de la búsqueda con sus presentaciones (paquete y cono) juntas. */
 interface HiloEncontrado {
@@ -307,6 +309,14 @@ export class Pos {
   referenciaAbono = '';
 
   constructor() {
+    // EN VIVO (2026-10-19): si otra caja vende o alguien baja conos, lo que hay
+    // "aquí" en la búsqueda se pone al día; si cierran el turno en Caja, se ve;
+    // y la cuenta del cliente elegido (lo que debe, su saldo a favor) también.
+    // Nunca toca el carrito ni lo que se está tecleando, ni mientras se cobra.
+    const vivo = inject(TiempoRealService);
+    vivo.cambios(['inventario', 'ventas', 'catalogo']).pipe(takeUntilDestroyed()).subscribe(() => this.refrescarBusqueda());
+    vivo.cambios(['caja']).pipe(takeUntilDestroyed()).subscribe(() => this.refrescarTurno());
+    vivo.cambios(['clientes', 'ventas']).pipe(takeUntilDestroyed()).subscribe(() => this.refrescarCliente());
     // Cada vez que cambia el carrito (o la lista de precios) se pide el total
     // real. Va en un `effect` y no en cada punto donde se toca el carrito:
     // son cinco sitios distintos y era cuestión de tiempo que alguno se
@@ -641,6 +651,7 @@ export class Pos {
     // Con el almacén de la caja: cada presentación dice cuánto hay AQUÍ.
     this.inv.buscarVariantes(q, this.cajaActual()?.almacen_id).subscribe({
       next: (vs) => {
+        this.ultimaBusqueda = q;
         const encontrados = vs
             .filter((v) => v.activo !== false && (v.activo as unknown) !== 0)
             .map((v) => ({
@@ -664,6 +675,68 @@ export class Pos {
         }
       },
       error: (e) => this.error.set(this.msg(e)),
+    });
+  }
+
+  /** La última búsqueda que se enseñó, para ponerla al día en vivo. */
+  private ultimaBusqueda = '';
+
+  /** Vuelve a pedir lo que hay "aquí" de lo que se está viendo, sin borrar nada. */
+  private refrescarBusqueda(): void {
+    const q = this.ultimaBusqueda;
+    if (!q || this.resultados().length === 0 || this.cobrando()) return;
+    this.inv.buscarVariantes(q, this.cajaActual()?.almacen_id).subscribe({
+      next: (vs) => {
+        if (q !== this.ultimaBusqueda) return; // ya se buscó otra cosa
+        const aqui = new Map(vs.map((v) => [v.id, v]));
+        this.resultados.update((rs) =>
+          rs.map((r) => {
+            const v = aqui.get(r.id);
+            return v ? { ...r, aqui: v.aqui, peso_kg: v.peso_kg, precio: Number(v.precio_oferta ?? v.precio) } : r;
+          })
+        );
+      },
+      error: () => {},
+    });
+  }
+
+  /** Si cerraron el turno en Caja (u otra computadora lo abrió), se sabe aquí. */
+  private refrescarTurno(): void {
+    if (!this.cajaSel || this.cobrando()) return;
+    const caja = Number(this.cajaSel);
+    this.ventas.sesionAbierta(caja).subscribe({
+      next: (s) => {
+        // Si mientras llegaba se cambió de caja, esta respuesta ya no sirve.
+        if (Number(this.cajaSel) !== caja) return;
+        this.sesion.set(s && s.estado === 'abierta' ? s : null);
+      },
+      error: () => {},
+    });
+  }
+
+  /** Lo que debe, su crédito libre y su saldo a favor, al día (otra caja le cobró o le abonó). */
+  private refrescarCliente(): void {
+    const c = this.clienteSel();
+    if (!c || this.cobrando()) return;
+    // Con la búsqueda ligera de la caja, por su número (C-0001): trae lo que debe,
+    // su crédito libre, su saldo a favor y sus días sin abonar, y nada más. El
+    // expediente completo eran 8 consultas por cada aviso (revisión de tiendas).
+    if (!c.codigo) return;
+    this.clientesSvc.buscar(c.codigo).subscribe({
+      next: (lista) => {
+        const e = lista.find((x) => x.id === c.id);
+        if (!e || this.clienteSel()?.id !== c.id) return; // ya se eligió a otro
+        this.clienteSel.set({
+          ...c,
+          limite_credito: e.limite_credito,
+          saldo: e.saldo ?? 0,
+          credito_disponible: e.credito_disponible ?? 0,
+          saldo_favor: e.saldo_favor ?? 0,
+          dias_sin_abonar: e.dias_sin_abonar ?? null,
+          atrasado: !!e.atrasado,
+        });
+      },
+      error: () => {},
     });
   }
 

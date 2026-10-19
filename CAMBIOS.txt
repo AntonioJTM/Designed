@@ -26,6 +26,12 @@
   · Una MIGRACIÓN nueva se aplica en LAS DOS bases.
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
+POR DECIDIR CON EL USUARIO (entradas 79 y 80)
+  · Anotado, sin hacer: un tope de conexiones en vivo por persona (hoy cada
+    pestaña abierta es una) y que cambiar "Trabaja en" en Personal avise a esa
+    persona (deja de recibir los avisos de la tienda que le quitan al momento,
+    pero su pantalla abierta conserva lo que ya tenía hasta recargar).
+
 POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   · Commit: lo del 17 y 18 ya se commiteó (último: 7a80990, por fuera de esta
     sesión). Quedan 11 archivos: lo de la entrada 75 y los cambios de otra
@@ -35,6 +41,24 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  ABONO A NOTAS: el abono a crédito va a la cuenta (de la más vieja a la más
+  nueva, como siempre) o a las notas que diga el cliente, varias a la vez; y
+  reactivar una venta a crédito ya regresa su deuda (2026-10-19, entrada 81;
+  DESPLEGADO en 20261019-125116, sin cambios en la base).
+  Antes:
+  TIEMPO REAL, ETAPA 3 (la última): Clientes (sus pestañas, Dónde entrego y el
+  expediente), Cómo va el negocio y Reportes se ponen al día solos (2026-10-19,
+  entrada 80; DESPLEGADO en 20261019-120037, sin cambios en la base).
+  Antes:
+  TIEMPO REAL, ETAPA 2 Y EL AVISO POR TIENDA: Surtir sucursal, Notas en espera,
+  Notas pendientes y Ventas (lista y detalle) se ponen al día solos, y cada
+  aviso le llega solo a quien ve esa tienda (2026-10-19, entrada 79; DESPLEGADO
+  en 20261019-113934, sin cambios en la base).
+  Antes:
+  TIEMPO REAL, ETAPA 1: Caja, Punto de venta, Inventario, Hoy y la campana se
+  ponen al día solos (2026-10-19, entrada 78; DESPLEGADO en 20261019-105634,
+  sin cambios en la base).
+  Antes:
   OPERATIVIDAD: COBRAR Y ABRIR TURNO UNA SOLA VEZ, AVISOS FILTRADOS, SALDO A
   FAVOR VISIBLE (2026-10-19, entrada 77; DESPLEGADO en 20261019-094012;
   migración 2026-10_clave_cobro en LAS DOS bases, respaldo
@@ -697,6 +721,274 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (81) · Abono a notas: el abono a crédito a la cuenta o a las notas que diga el cliente
+-------------------------------------------------------------------------------
+
+"Que los abonos a créditos sean a los tickets: realizo compras, en un ticket la
+saco a crédito y tengo más crédito en otros tickets; quiero hacer el abono a las
+notas, no en general… y también así como está, abono a cuenta" (usuario).
+Eligió: varias notas en un abono, desde la ventana de Abonar Y desde el detalle
+de la venta, y cada quien las notas de sus tiendas, más las de otras tiendas si
+el cliente TAMBIÉN COMPRA en la suya. DESPLEGADO en 20261019-125116; sin cambios en la
+base (`credito_movimientos.pedido_id` ya existía; en hitex no había ningún abono
+ligado a una nota).
+
+EJEMPLO
+  Notas del 1 ($1,000), del 5 ($800) y del 10 ($500): debe $2,300. "Te pago la
+  del 10" → a notas, la del 10 con $500: queda PAGADA y las otras dos siguen
+  igual. A la cuenta, los $500 habrían ido a la del 1, como siempre.
+
+CÓMO QUEDÓ (backend/src/modules/clientes/model.js)
+  · El abono a una nota es un `abono` CON `pedido_id`. En `repartirAbonos` es
+    lo PAGADO de esa nota (no baja lo que debía): de ahí salen igual el "falta
+    $X" de Ventas, el detalle, `liquidarVentasACredito`, la devolución que se
+    descuenta de su nota y la COMISIÓN (nomina/comisiones.js lee `pagado`; si
+    solo bajara la deuda, la venta quedaría pagada y su comisión nunca).
+  · Lo abonado a una nota que ya no lo debe (se canceló) pasa a la cuenta: paga
+    lo más viejo o le queda a favor. Nunca se pierde.
+  · `notasPorPagar` (GET /clientes/:id/notas-credito) y `_partesANotas` (al
+    abonar, con la cuenta bloqueada): las de sus tiendas y, si el cliente tiene
+    una venta vigente en alguna de ellas, también las de las otras (con su
+    tienda); si no, ninguna (`ocultas` lo cuenta). 404 NOTA_NO_ENCONTRADA, 422
+    ABONO_EXCEDE_NOTA y NOTA_REPETIDA. `POST /clientes/:id/abonos` acepta
+    `a_notas: [{pedido_id, monto}]` en lugar de `monto`: un movimiento por
+    nota con la MISMA hora y, en efectivo, un ingreso de caja por nota ("Abono
+    de X a la nota POS-…").
+  · El ticket del abono (`tickets.js`) junta las partes (como el anticipo) y
+    dice cada nota con su monto y lo que le falta, o "Nota pagada completa".
+  · En el expediente, un abono a una nota se ve completo si es de la tienda de
+    la nota O de la caja que lo cobró; dice "Abonó a la nota" con su folio. En
+    el detalle de una venta, "abonos a su cuenta" ya no lista los que fueron a
+    otras notas, y su historia dice "abonó $X a esta nota".
+
+UNA FALLA QUE YA ESTABA (y se arregló en el mismo cambio)
+  Reactivar una venta a crédito cancelada NO regresaba la deuda: cancelar deja
+  la nota en 0 (cargo + ajuste) y reactivar solo reponía "si el neto era
+  negativo". La mercancía volvía a salir y la deuda no. Ahora
+  `ajusteDeCancelacion` mira la DEUDA (cargo y ajustes, sin lo abonado):
+  cancelar la deja en 0 y reactivar la regresa a lo cargado; los dos, una sola
+  vez. No había prueba de ese camino.
+
+LAS PANTALLAS
+  · Abonar (`clientes/abono-modal`): "A su cuenta / A notas" (si hay notas que
+    escoger): cada nota con su folio, fecha, tienda si es de otra, lo que debe
+    y cuánto se le abona (al marcarla, lo que debe); "Abonar $X" y el antes →
+    después. Sin notas que pueda escoger, lo dice. Desde el detalle de una venta
+    a crédito que se debe, "Abonar a esta nota" abre ya con ella marcada; el
+    aviso trae su ticket y WhatsApp.
+
+LA REVISIÓN (agente revisor-tiendas) Y SUS ARREGLOS
+  · GRAVE: el ticket de un abono solo revisaba la CAJA; una transferencia a una
+    nota de otra tienda salía completa (folio, quién, referencia) pidiéndola por
+    su id. Ahora `controller.js → _abonoDeSusTiendas` usa la regla del
+    expediente (tienda de la nota o de la caja; sin ninguna, se ve): si no, 404
+    OTRA_TIENDA. También arregló que un abono cobrado en otra caja a una nota
+    suya diera 404.
+  · Reactivar una fiada (efecto de que ahora sí regresa la deuda),
+    `pedidos/model.js → _revisarReactivarFiada`, con lo ya ajustado y dentro de
+    la transacción: como "Pagado" debiéndose, 409 VENTA_FIADA_SIN_PAGAR (se
+    reactiva como pendiente y se paga sola si su cuenta la cubre; el selector
+    del detalle ya solo ofrece Pendiente); y si al cancelarla lo que tenía
+    abonado pagó OTRA nota que ya está pagada (y su comisión pudo pagarse en
+    una nómina cerrada), 409 REACTIVAR_DESTAPA_NOTAS: se hace la venta de nuevo.
+  · "También compra aquí" exige una venta que se llevó la mercancía
+    (`inventario_descontado`): una nota en espera hecha y cancelada ya no abre
+    las notas de la otra tienda (`compraEnSusTiendas`).
+  · El ticket y la respuesta del abono ya no NOMBRAN notas que la persona no
+    puede ver: "y 1 nota de otra tienda" (`foliosVisibles`). Pasaba desde el
+    2026-10-15.
+  · El renglón "en otra tienda" del expediente ya no lleva su turno de caja.
+  · Se revisó en hitex: ninguna fiada quedó viva con la deuda en $0 por la falla
+    de reactivar.
+  Anotado, sin tocar: el ticket junta las partes por mismo segundo, persona,
+    método y caja (como el anticipo); dos abonos idénticos en el mismo segundo
+    saldrían en uno. El botón se apaga al registrar.
+
+PRUEBAS
+  Backend 63/63 (abono-a-notas.test.js: 8, con el ejemplo del usuario, la
+  cancelación y la reactivación), pantallas 507/507 (3 nuevas de la ventana),
+  verificar-sistema.js 0 hallazgos. Contra la base de pruebas, TODO dentro de
+  una transacción que se deshizo al final (y cada transacción interna con su
+  SAVEPOINT, como la base): 35 comprobaciones — qué notas ve cada tienda, la
+  del 10 pagada, lo que no se deja, varias notas en efectivo con dos ingresos
+  de caja y UN ticket, el expediente de Moroleón, cancelar (sus $500 pagan la
+  del 1), reactivar (la deuda vuelve), el ticket de otra tienda (404), la nota
+  en espera, los folios que no se nombran y los dos 409 de reactivar. En
+  Chrome: la ventana en escritorio y celular (390 px) y el botón del detalle,
+  sin guardar nada.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (80) · Tiempo real, etapa 3: Clientes, Cómo va el negocio y Reportes
+-------------------------------------------------------------------------------
+
+"Vamos con etapa 3" (usuario). Con esto, todo lo que eligió ("todo, por
+etapas") está en vivo. DESPLEGADO en 20261019-120037; sin cambios en la base ni en el
+servidor (los avisos ya llegaban; faltaban las pantallas).
+
+LAS PANTALLAS
+  · Clientes (`clientes.ts`, tipos clientes y ventas, se juntan 2 s): la
+    pestaña que se ve se vuelve a pedir CALLADA (`cargar(true)`: sin
+    "Cargando…" ni borrar un error), nunca con Nuevo cliente o un abono
+    abiertos. Todos los clientes (`vista-todos.ts`) ya no regresa a la primera
+    página cuando llegan los lugares: la primera vez busca y después refresca
+    las páginas que ya se ven (`refrescar`, con `vuelta` contra una búsqueda o
+    "Ver más" a medio camino) — también al dar de alta un cliente. Dónde entrego
+    (`vista-lugares.ts`) refresca la lista del lugar elegido sin vaciarla (no con
+    "Corregir el nombre" abierto).
+  · Expediente (clientes y ventas, 1.5 s): su deuda total, su saldo a favor y sus
+    compras, también lo que pasó en otra tienda con su cuenta. Nunca con Editar,
+    Abonar, Ajustar, Ajustar saldo a favor o Recibir anticipo abiertos.
+  · Cómo va el negocio (ventas, clientes e inventario, 3 s): todo de una vez
+    sin vaciar las cifras ni decir "Actualizando…"; si mientras tanto se elige
+    otro periodo, lo que llega tarde se tira (los turnos de siempre).
+  · Reportes (ventas, caja e inventario, 3 s): ventas, cortes, más vendidos,
+    por reabastecer y la venta por color de la pestaña abierta, con las fechas
+    que están EN PANTALLA, no las que se estén tecleando.
+
+UN CAMBIO EN EL SERVICIO DE LA PANTALLA
+  `TiempoRealService.cambios` juntaba los avisos esperando SILENCIO
+  (`debounceTime`): con 3 s de pausa y una venta cada 2 s, Cómo va el negocio no
+  se recargaría nunca. Ahora recarga a más tardar N ms después del PRIMER aviso
+  (`auditTime`): junta igual y no se queda esperando. Prueba nueva: diez avisos
+  cada 300 ms con 1 s de pausa recargan al menos dos veces (antes, cero).
+
+PRUEBAS
+  Pantallas 504/504, compila, backend 55/55, verificar-sistema.js 0 hallazgos.
+  En Chrome con la base de pruebas, "otra computadora" guardó algo que no
+  cambia nada y Todos los clientes, Frecuencia, el expediente de C-0002, Cómo va
+  el negocio y Reportes volvieron a pedir lo suyo solos (1 → 2); la base quedó
+  igual.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (79) · Tiempo real: el aviso respeta las tiendas, y etapa 2 (Surtir sucursal, Notas y Ventas)
+-------------------------------------------------------------------------------
+
+"Si, hazlo y sigue con etapa 2" (usuario, a la pregunta de filtrar el aviso en
+vivo por tienda). DESPLEGADO en 20261019-113934; sin cambios en la base.
+
+EL AVISO, POR TIENDA (backend/src/modules/tiempo-real/)
+  · `almacenes.js`: de qué tienda es lo que se guardó. Pistas de la petición
+    (almacen_id, almacen_origen_id, almacen_destino_id, sesion_caja_id, caja_id
+    y los ids de /pedidos/:id, /caja/sesiones/:id, /caja/cajas/:id,
+    /inventario/traspasos/:id, /remesas/:id, /variantes/codigos/:id, también
+    con diagonal al final o codificados) resueltas en la base. Lo que se borra
+    o una caja que cambia de tienda se averigua ANTES de guardar.
+  · `contexto.js` (AsyncLocalStorage): lo que la petición tocó POR DENTRO. El
+    kardex anota su tienda (`_insertarMovimiento` de inventario y las entradas y
+    salidas de ventas, devoluciones, cargas y bultos): así se avisa la tercera
+    tienda de un "paquete encontrado en otro almacén" al surtir. El crédito y el
+    saldo a favor anotan "clientes", y un hilo o una presentación nueva
+    "catalogo": lo que TODAS las tiendas ven, que les llega a todas (no delata
+    nada que no se vea al recargar). Ejemplo de la revisión: C-0007 debe una
+    venta a crédito de Moroleón (falta $1,200); la paga en Tienda Principal y
+    Ventas de Moroleón ya no se queda diciendo "falta $1,200.00".
+  · `routes.js → tiposPara`: lo de su tienda completo; lo de otra, solo lo
+    compartido; si no se pudo saber la tienda (falló la base), solo a quien ve
+    todas. La conexión se revisa en cada aviso: quien queda dado de baja, "Sin
+    acceso" o cargador la pierde, y también al vencer su sesión; sin acceso ni
+    se abre (403). El latido ya no escribe sobre una conexión cerrada y al
+    apagar se limpian.
+
+ETAPA 2 (las pantallas)
+  · Surtir sucursal (traspasos, inventario): Pendientes e historial.
+  · Notas en espera (ventas, inventario) y Notas pendientes de pago (ventas,
+    clientes, caja): solo enseñan "Cargando…" si no hay nada, así no parpadean;
+    las ventanas de entregar, modificar y pagar guardan su copia.
+  · Ventas (ventas, clientes): las cifras y las páginas ya cargadas con "Ver
+    más", sin regresar a la primera; un refresco que llega después de cambiar
+    un filtro se tira (`vuelta`).
+  · Detalle de una venta (ventas, clientes): nunca con la cancelación, la
+    devolución o la subida del comprobante abiertas, y respeta el estado elegido
+    en el selector sin aplicar.
+
+LA REVISIÓN (agente revisor-tiendas)
+  Nada grave: el aviso sigue sin datos y las pantallas recargan con sus
+  endpoints de siempre. Lo importante (avisos que el filtro cortaba de más: lo
+  que cae en otra tienda de rebote y lo compartido del cliente) y los menores
+  (bulto a mano sin almacén, tercera tienda al surtir, caja que cambia de
+  tienda, diagonal al final, fallar cerrado, conexión de quien ya no entra,
+  latido, consulta antes del token, carrera de Ventas) se arreglaron como se
+  dice arriba. Quedó anotado lo de "Trabaja en" (ver arriba).
+
+PRUEBAS
+  Backend 55/55 (nuevas: contexto.test.js, routes.test.js y más casos en
+  almacenes.test.js), pantallas 503/503, compila, verificar-sistema.js 0
+  hallazgos. La libreta sigue a la petición a través de mysql2 y de una
+  transacción sin mezclarse con otra al mismo tiempo (base de pruebas, solo
+  lecturas). En vivo, servidor local con la base de pruebas: un cajero marcado
+  un momento SOLO en tienda moroleon no recibió el mínimo de Tienda principal y
+  sí el de Moroleón y el del cliente; alguien sin acceso recibió 403; la base
+  quedó idéntica (suma de control). En Chrome, las cinco pantallas de la etapa
+  2 volvieron a pedir su lista solas cuando "otra computadora" guardó algo que
+  no cambia nada (1 → 2), y la base quedó igual.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (78) · El sistema en tiempo real, etapa 1: Caja, Punto de venta, Inventario, Hoy y la campana
+-------------------------------------------------------------------------------
+
+"Quiero que todo el sistema funcione en tiempo real con sockets para que todo
+cuadre bien" (usuario). Se le explicó antes que los números YA cuadran (el
+servidor revisa existencias, paquetes, crédito y caja con candado al guardar):
+lo que faltaba es que las pantallas abiertas se enteren de lo que guardan
+otros. Hasta hoy solo la campana se actualizaba sola (cada minuto); las demás
+pantallas cargaban al abrirse. Eligió "todo, por etapas"; esta es la 1.
+
+CÓMO FUNCIONA
+  · Eventos del servidor (SSE): un socket de una vía, servidor → pantallas.
+    Sin librerías nuevas ni cambios en nginx (el `X-Accel-Buffering: no` y un
+    latido cada 25 s, porque nginx corta a los 60 s sin movimiento).
+    `GET /api/v1/tiempo-real` (staff), módulo backend/src/modules/tiempo-real/.
+  · AVISOS, NO DATOS: `bus.js → avisarAlTerminar` (al principio de /api/v1)
+    avisa, cuando una petición que escribe sale bien, qué TIPO de cosa cambió
+    según su ruta (`tipos.js → tiposDeRuta`: ventas, inventario, caja,
+    clientes, traspasos, catalogo, almacenes, avisos). Cada pantalla vuelve a
+    pedir lo suyo con sus endpoints de siempre, así cada quien sigue viendo
+    solo sus tiendas y nadie recibe costos. Un endpoint nuevo que escribe queda
+    cubierto por su prefijo. No avisan: cotizar, las vistas previas (también
+    "Mínimo para varios" sin guardar), entrar, WhatsApp, nómina y personal.
+  · La pantalla (`core/services/tiempo-real.service.ts`): fetch con el token en
+    el encabezado (no EventSource: el token iría en la dirección y quedaría en
+    las bitácoras de nginx); vuelve a conectar sola (2 s… 30 s) y al volver
+    avisa "cambió todo". Cada pestaña tiene su `X-Pestana` (el interceptor lo
+    manda en todo): el servidor no le avisa a la conexión lo que ella misma
+    guardó, y el origen de nadie se reparte.
+  · Etapa 1: la campana (al momento; el minuto queda de respaldo), Hoy, Caja
+    (el turno y la lista de cajas, sin tocar el efectivo contado que se esté
+    tecleando), Punto de venta (lo que hay "aquí" en la búsqueda, el turno y la
+    cuenta del cliente elegido; nunca el carrito, y nada mientras cobra) e
+    Inventario (sin regresar a la página 1 si se cargaron más con "Ver más").
+
+LA REVISIÓN (agente revisor-tiendas) Y SUS ARREGLOS
+  Nada grave de tiendas ni de costos. Se arregló:
+  · IMPORTANTE: con conexiones en vivo, `server.close()` esperaba para siempre
+    y cada despliegue dejaba la caja sin servicio hasta 90 s (TimeoutStopSec de
+    systemd). server.js ahora las cierra (`tiempo-real/routes.js →
+    cerrarTodas`) y sale a los 5 s a más tardar. Comprobado: con una conexión
+    abierta el servidor cierra en 2 ms; con el apagado de antes, a los 5 s
+    seguía sin cerrar.
+  · Una respuesta tardía ya no deja el turno de la caja anterior (pos.ts y
+    caja.ts comparan la caja al llegar la respuesta).
+  · La cuenta del cliente en la caja se refresca con la búsqueda ligera por su
+    número, no con el expediente completo (8 consultas por aviso).
+  · `X-Pestana` se valida (letras y números, 8 a 40) y ya no se reparte.
+  · La campana suelta lo en vivo al salir.
+  Quedó POR DECIDIR (ver arriba): filtrar el aviso por tienda. Y anotado: un
+  tope de conexiones por persona (hoy cada pestaña abierta es una).
+
+PRUEBAS
+  Backend 43/43 (tipos.test.js: 6), pantallas 503/503 (tiempo-real: el lector
+  de eventos y que avisa solo lo que importa, junto y no lo propio), compila,
+  verificar-sistema.js 0 hallazgos (1640). En vivo: servidor local con la base
+  de pruebas y Chrome sin ventana; con Inventario abierto, "otra computadora"
+  guardó un mínimo con los MISMOS valores (la base quedó igual) y la página
+  volvió a pedir sus existencias sola (1 → 2). En producción la ruta responde
+  401 sin sesión.
 
 
 -------------------------------------------------------------------------------

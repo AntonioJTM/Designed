@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { map } from 'rxjs';
+import { Subscription, map } from 'rxjs';
+import { TiempoRealService } from './tiempo-real.service';
 import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
 
@@ -119,10 +120,17 @@ export class NotificacionesService {
 
   readonly pendientes = signal<Pendientes | null>(null);
   private reloj: ReturnType<typeof setInterval> | null = null;
+  private readonly tiempoReal = inject(TiempoRealService);
+  private enVivo: Subscription | null = null;
 
   /** Arranca el sondeo. Idempotente: llamarlo dos veces no duplica el reloj. */
   iniciar(): void {
     this.refrescar();
+    // EN VIVO (2026-10-19): cuando alguien guarda algo que cambia los avisos, la
+    // campana se pone al día en un par de segundos. El minuto queda de respaldo.
+    this.enVivo ??= this.tiempoReal
+      .cambios(['avisos', 'inventario', 'ventas', 'caja', 'traspasos', 'clientes', 'catalogo'], 800)
+      .subscribe(() => this.refrescar());
     if (this.reloj) return;
     this.reloj = setInterval(() => this.refrescar(), NotificacionesService.CADA_MS);
   }
@@ -130,6 +138,8 @@ export class NotificacionesService {
   detener(): void {
     if (this.reloj) clearInterval(this.reloj);
     this.reloj = null;
+    this.enVivo?.unsubscribe();
+    this.enVivo = null;
   }
 
   refrescar(): void {

@@ -4,6 +4,7 @@ const { filtroAlmacen } = require('../permisos/service');
 const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const { hoyLocal } = require('../../utils/fechas');
+const { anotarCompartido } = require('../tiempo-real/contexto');
 
 // Acceso a datos de la tabla `clientes`.
 //
@@ -545,9 +546,16 @@ async function saldo(clienteId, ejecutor = pool, bloquear = false) {
  * quién lo registró. `otra_tienda` lo marca para la pantalla.
  */
 function _deOtraTienda(m, almacenes) {
-  const { almacen_id: almacenId, ...resto } = m;
-  if (!Array.isArray(almacenes) || almacenId == null || almacenes.includes(Number(almacenId))) return resto;
-  return { ...resto, pedido_id: null, numero_pedido: null, referencia: null, notas: null, registro: null, otra_tienda: true };
+  // Un abono A UNA NOTA (2026-10-19) tiene dos tiendas: la de la nota y la de la
+  // caja que lo cobró. Se ve completo en cualquiera de las dos: la cajera de
+  // Moroleón que cobró una nota de Principal no lo ve "en otra tienda".
+  const { almacen_id: almacenId, almacen_caja: almacenCaja, ...resto } = m;
+  const suyas = [almacenId, almacenCaja].filter((a) => a != null).map(Number);
+  if (!Array.isArray(almacenes) || !suyas.length || suyas.some((a) => almacenes.includes(a))) return resto;
+  return {
+    ...resto, pedido_id: null, numero_pedido: null, referencia: null, notas: null, registro: null,
+    sesion_caja_id: null, otra_tienda: true,
+  };
 }
 
 /** Los movimientos de crédito de un cliente, con el saldo corriente. */
@@ -557,7 +565,7 @@ async function movimientosCredito(clienteId, { limit = 50, offset = 0, almacenes
             m.pedido_id, p.numero_pedido,
             m.metodo_pago_id, mp.nombre AS metodo_pago,
             m.sesion_caja_id, u.nombre AS registro,
-            COALESCE(p.almacen_id, cj.almacen_id) AS almacen_id
+            COALESCE(p.almacen_id, cj.almacen_id) AS almacen_id, cj.almacen_id AS almacen_caja
        FROM credito_movimientos m
        LEFT JOIN pedidos p       ON p.id = m.pedido_id
        LEFT JOIN sesiones_caja sc ON sc.id = m.sesion_caja_id
@@ -582,13 +590,14 @@ async function movimientosCredito(clienteId, { limit = 50, offset = 0, almacenes
  * deuda no queda.
  */
 async function agregarMovimiento(datos, ejecutor = pool) {
+  anotarCompartido('clientes');
   const [r] = await ejecutor.query(
     `INSERT INTO credito_movimientos
        (cliente_id, tipo, monto, pedido_id, metodo_pago_id, sesion_caja_id,
-        referencia, notas, usuario_id)
+        referencia, notas, usuario_id, creado_en)
      VALUES
        (:cliente_id, :tipo, :monto, :pedido_id, :metodo_pago_id, :sesion_caja_id,
-        :referencia, :notas, :usuario_id)`,
+        :referencia, :notas, :usuario_id, COALESCE(:creado_en, CURRENT_TIMESTAMP))`,
     {
       pedido_id: null,
       metodo_pago_id: null,
@@ -596,6 +605,9 @@ async function agregarMovimiento(datos, ejecutor = pool) {
       referencia: null,
       notas: null,
       usuario_id: null,
+      // Las partes de un abono a varias notas llevan la MISMA hora: así su
+      // ticket las junta (como las del anticipo).
+      creado_en: null,
       ...datos,
     }
   );
@@ -614,11 +626,16 @@ async function agregarMovimiento(datos, ejecutor = pool) {
  * Los demás métodos (transferencia, tarjeta) no pasan por el cajón, así que
  * solo bajan el saldo.
  */
-async function registrarAbono(clienteId, datos, usuarioId) {
+async function registrarAbono(clienteId, datos, usuarioId, { almacenes = null } = {}) {
   return withTransaction(async (conn) => {
     // Se revalida el saldo con las filas bloqueadas: entre que la pantalla lo
     // leyó y el cajero confirmó, pudo entrar otro abono o una venta a crédito.
     const saldoActual = await saldo(clienteId, conn, true);
+    // A NOTAS (2026-10-19): cada una con lo que paga, hasta lo que debe ESA nota
+    // (con lo que ya le tocó de los abonos a la cuenta). Solo las que esta
+    // persona puede escoger (`notasPorPagar`).
+    const aNotas = await _partesANotas(conn, clienteId, datos.a_notas, almacenes);
+    if (aNotas) datos = { ...datos, monto: Math.round(aNotas.reduce((s, x) => s + x.monto, 0) * 100) / 100 };
     if (saldoActual <= 0) {
       throw new AppError(409, 'SIN_DEUDA', 'Ese cliente ya no tiene saldo pendiente.');
     }
@@ -666,37 +683,52 @@ async function registrarAbono(clienteId, datos, usuarioId) {
       sesionId = null;
     }
 
-    const movId = await agregarMovimiento({
-      cliente_id: clienteId,
-      tipo: 'abono',
-      monto: datos.monto,
-      metodo_pago_id: datos.metodo_pago_id ?? null,
-      sesion_caja_id: sesionId,
-      referencia: datos.referencia ?? null,
-      notas: datos.notas ?? null,
-      usuario_id: usuarioId ?? null,
-    }, conn);
+    // A la cuenta, un movimiento sin nota; a notas, uno por nota (ligado a ella),
+    // todos con la misma hora.
+    const [[{ ahora }]] = await conn.query("SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS ahora");
+    const partes = aNotas ?? [{ pedidoId: null, numero: null, monto: Number(datos.monto) }];
+    const [[cli]] = await conn.query('SELECT nombre FROM clientes WHERE id = :id', { id: clienteId });
+    const movimientos = [];
+    for (const parte of partes) {
+      const movId = await agregarMovimiento({
+        cliente_id: clienteId,
+        tipo: 'abono',
+        monto: parte.monto,
+        pedido_id: parte.pedidoId,
+        metodo_pago_id: datos.metodo_pago_id ?? null,
+        sesion_caja_id: sesionId,
+        referencia: datos.referencia ?? null,
+        notas: datos.notas ?? null,
+        usuario_id: usuarioId ?? null,
+        creado_en: ahora,
+      }, conn);
+      movimientos.push(movId);
 
-    if (esEfectivo) {
-      const [[cli]] = await conn.query('SELECT nombre FROM clientes WHERE id = :id', { id: clienteId });
-      await conn.query(
-        `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
-         VALUES (:sesion, 'ingreso', :monto, :ref, :motivo)`,
-        {
-          sesion: sesionId,
-          monto: datos.monto,
-          // `referencia_id` apunta al movimiento de crédito, no al cliente:
-          // así desde el corte se puede llegar al abono exacto.
-          ref: movId,
-          motivo: `Abono de ${cli ? cli.nombre : 'cliente'}`,
-        }
-      );
+      if (esEfectivo) {
+        await conn.query(
+          `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
+           VALUES (:sesion, 'ingreso', :monto, :ref, :motivo)`,
+          {
+            sesion: sesionId,
+            monto: parte.monto,
+            // `referencia_id` apunta al movimiento de crédito, no al cliente:
+            // así desde el corte se puede llegar al abono exacto.
+            ref: movId,
+            motivo: `Abono de ${cli ? cli.nombre : 'cliente'}${parte.numero ? ` a la nota ${parte.numero}` : ''}`,
+          }
+        );
+      }
     }
 
-    // Las ventas fiadas que este abono termina de pagar pasan a 'pagado'.
-    const liquidadas = await liquidarVentasACredito(conn, clienteId);
+    // Las ventas fiadas que este abono termina de pagar pasan a 'pagado'. Se
+    // dicen las que esta persona puede ver; las de otra tienda, solo cuántas.
+    const pagadas = await liquidarVentasACredito(conn, clienteId, { ids: true });
+    const { folios: liquidadas, otras } = await foliosVisibles(conn, clienteId, almacenes, pagadas);
 
-    return { movimiento_id: movId, saldo_nuevo: await saldo(clienteId, conn), liquidadas };
+    return {
+      movimiento_id: movimientos[0], movimientos, saldo_nuevo: await saldo(clienteId, conn),
+      liquidadas, liquidadas_otra_tienda: otras,
+    };
   });
 }
 
@@ -727,42 +759,166 @@ async function aplicarAbonos(ejecutor, clienteId) {
  * (la comisión se paga la semana en que se liquida).
  */
 function repartirAbonos(movs) {
+  const r2 = (n) => Math.round(n * 100) / 100;
   // Lo que debe cada venta, en el orden de su primer movimiento.
   const porPedido = new Map();
   const deudas = [];
+  const deLaVenta = (pedidoId) => {
+    let d = porPedido.get(pedidoId);
+    if (!d) {
+      d = { pedidoId: Number(pedidoId), monto: 0, directo: 0 };
+      porPedido.set(pedidoId, d);
+      deudas.push(d);
+    }
+    return d;
+  };
   let pago = 0;
   for (const m of movs) {
     const firmado = SIGNO_CREDITO[m.tipo] * Number(m.monto);
-    if (m.pedido_id != null) {
-      const d = porPedido.get(m.pedido_id);
-      if (d) d.monto += firmado;
-      else {
-        const nueva = { pedidoId: Number(m.pedido_id), monto: firmado };
-        porPedido.set(m.pedido_id, nueva);
-        deudas.push(nueva);
-      }
+    if (m.pedido_id != null && m.tipo === 'abono') {
+      // ABONO A ESA NOTA (2026-10-19): es lo pagado de ella, no baja lo que debía.
+      deLaVenta(m.pedido_id).directo += Number(m.monto);
+    } else if (m.pedido_id != null) {
+      deLaVenta(m.pedido_id).monto += firmado;
     } else if (firmado > 0) {
-      deudas.push({ pedidoId: null, monto: firmado });
+      deudas.push({ pedidoId: null, monto: firmado, directo: 0 });
     } else {
       pago += -firmado;
     }
   }
 
+  // Lo abonado a una nota que ya no lo debe (se canceló) pasa a la cuenta: paga
+  // lo más antiguo, o le queda a favor. Nunca se pierde.
   for (const d of deudas) {
-    d.monto = Math.max(0, Math.round(d.monto * 100) / 100);
-    const aplica = Math.min(d.monto, Math.max(0, Math.round(pago * 100) / 100));
-    d.pagado = aplica;
-    d.porPagar = Math.round((d.monto - aplica) * 100) / 100;
+    d.monto = Math.max(0, r2(d.monto));
+    const directo = r2(d.directo);
+    d.directo = Math.min(d.monto, directo);
+    pago += directo - d.directo;
+  }
+  for (const d of deudas) {
+    const aplica = Math.min(r2(d.monto - d.directo), Math.max(0, r2(pago)));
+    d.pagado = r2(d.directo + aplica);
+    d.porPagar = r2(d.monto - d.pagado);
     pago -= aplica;
   }
-  return deudas;
+  return deudas.map(({ directo, ...d }) => d);
+}
+
+/**
+ * LAS NOTAS A CRÉDITO QUE SE PUEDEN PAGAR (2026-10-19: "quiero hacer el abono a
+ * las notas, no en general; y también así como está, abono a cuenta"). Las que
+ * todavía deben algo, de la más vieja a la más nueva, con lo que debe cada una
+ * con la misma cuenta que la da por pagada.
+ *
+ * CADA QUIEN, SUS TIENDAS, con el detalle que pidió el usuario: quien no ve todas
+ * ve las de sus tiendas y, si el cliente TAMBIÉN COMPRA AQUÍ (tiene una venta
+ * vigente en alguna de sus tiendas), también las de las otras, con su tienda
+ * (`otra_tienda`). Si nunca le ha comprado, ninguna: le queda el abono a la
+ * cuenta. `ocultas` dice cuántas no puede ver (para explicarlo).
+ */
+async function notasPorPagar(ejecutor, clienteId, almacenes = null) {
+  const deben = (await aplicarAbonos(ejecutor, clienteId)).filter((d) => d.pedidoId != null && d.porPagar > 0.004);
+  if (!deben.length) return { notas: [], ocultas: 0 };
+  const [ps] = await ejecutor.query(
+    `SELECT p.id, p.numero_pedido, DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS creado_en,
+            p.almacen_id, a.nombre AS almacen, p.total
+       FROM pedidos p LEFT JOIN almacenes a ON a.id = p.almacen_id
+      WHERE p.id IN (:ids) AND p.cliente_id = :cli AND p.estado NOT IN ('cancelado', 'devuelto')`,
+    { ids: deben.map((d) => d.pedidoId), cli: clienteId }
+  );
+  const porId = new Map(ps.map((p) => [Number(p.id), p]));
+  const compraAqui = await compraEnSusTiendas(ejecutor, clienteId, almacenes);
+  const todas = deben
+    .filter((d) => porId.has(d.pedidoId))
+    .map((d) => {
+      const p = porId.get(d.pedidoId);
+      const otra = Array.isArray(almacenes) && !almacenes.includes(Number(p.almacen_id));
+      return {
+        pedido_id: d.pedidoId,
+        numero_pedido: p.numero_pedido,
+        creado_en: p.creado_en,
+        almacen_id: p.almacen_id == null ? null : Number(p.almacen_id),
+        almacen: p.almacen,
+        otra_tienda: otra,
+        fiado: d.monto,
+        pagado: d.pagado,
+        por_pagar: d.porPagar,
+      };
+    });
+  const notas = compraAqui ? todas : [];
+  return { notas, ocultas: todas.length - notas.length };
+}
+
+/**
+ * ¿El cliente TAMBIÉN COMPRA en alguna de estas tiendas? Una venta vigente que
+ * se llevó la mercancía (`inventario_descontado`): una nota en espera o un
+ * apartado no cuentan, o con hacer una y cancelarla se verían las notas de la
+ * otra tienda. Quien ve todas (null), siempre.
+ */
+async function compraEnSusTiendas(ejecutor, clienteId, almacenes) {
+  if (!Array.isArray(almacenes)) return true;
+  if (!almacenes.length) return false;
+  const [[c]] = await ejecutor.query(
+    `SELECT EXISTS (SELECT 1 FROM pedidos WHERE cliente_id = :cli AND almacen_id IN (:alm)
+                      AND estado NOT IN ('cancelado', 'devuelto') AND inventario_descontado = 1) AS si`,
+    { cli: clienteId, alm: almacenes }
+  );
+  return Boolean(Number(c.si));
+}
+
+/**
+ * De unas notas del cliente, los FOLIOS que esta persona puede ver (las de sus
+ * tiendas, o todas si el cliente también le compra a la suya) y cuántas no:
+ * el ticket y la respuesta del abono dicen "y 1 nota de otra tienda".
+ */
+async function foliosVisibles(ejecutor, clienteId, almacenes, pedidoIds) {
+  if (!pedidoIds.length) return { folios: [], otras: 0 };
+  const [ps] = await ejecutor.query(
+    'SELECT id, numero_pedido, almacen_id FROM pedidos WHERE id IN (:ids) ORDER BY id',
+    { ids: pedidoIds }
+  );
+  if (await compraEnSusTiendas(ejecutor, clienteId, almacenes)) {
+    return { folios: ps.map((p) => p.numero_pedido), otras: 0 };
+  }
+  const suyas = ps.filter((p) => almacenes.includes(Number(p.almacen_id)));
+  return { folios: suyas.map((p) => p.numero_pedido), otras: ps.length - suyas.length };
+}
+
+/**
+ * Las partes de un abono A NOTAS, revisadas con la cuenta bloqueada: cada nota
+ * una vez, de las que esta persona puede escoger, y no más de lo que debe.
+ * null si el abono es a la cuenta.
+ */
+async function _partesANotas(conn, clienteId, aNotas, almacenes) {
+  if (!Array.isArray(aNotas) || !aNotas.length) return null;
+  const { notas } = await notasPorPagar(conn, clienteId, almacenes);
+  const porId = new Map(notas.map((n) => [n.pedido_id, n]));
+  const vistas = new Set();
+  return aNotas.map((x) => {
+    const id = Number(x.pedido_id);
+    const monto = Math.round(Number(x.monto) * 100) / 100;
+    if (vistas.has(id)) throw new AppError(422, 'NOTA_REPETIDA', 'Una nota viene dos veces en el abono.');
+    vistas.add(id);
+    const n = porId.get(id);
+    if (!n) {
+      throw new AppError(404, 'NOTA_NO_ENCONTRADA',
+        'Esa nota ya no debe nada o no es de las que puedes cobrar aquí: haz el abono a la cuenta.');
+    }
+    if (!(monto > 0)) throw new AppError(422, 'MONTO_INVALIDO', `Pon cuánto abona a la nota ${n.numero_pedido}.`);
+    if (monto > n.por_pagar + 0.001) {
+      throw new AppError(422, 'ABONO_EXCEDE_NOTA',
+        `A la nota ${n.numero_pedido} le faltan $${n.por_pagar.toFixed(2)}: no se le puede abonar ` +
+        `$${monto.toFixed(2)}.`);
+    }
+    return { pedidoId: id, numero: n.numero_pedido, monto };
+  });
 }
 
 /**
  * Da por PAGADAS las ventas a crédito que los abonos ya cubren.
  *
- * El crédito es un libro de la CUENTA, no venta por venta: el abono no dice a
- * qué venta va. Pero una venta fiada nace 'pendiente' y sin esto se quedaba así
+ * El crédito es un libro de la CUENTA, no venta por venta: el abono a la cuenta
+ * no dice a qué venta va (el abono A UNA NOTA sí, desde el 2026-10-19). Pero una venta fiada nace 'pendiente' y sin esto se quedaba así
  * para siempre, aunque el cliente ya hubiera pagado todo (lo vio el usuario el
  * 2026-10-06: "lo aboné y la venta aún seguía pendiente").
  *
@@ -775,7 +931,7 @@ function repartirAbonos(movs) {
  * Va DENTRO de la transacción del abono (o del ajuste). Devuelve los folios que
  * quedaron pagados.
  */
-async function liquidarVentasACredito(conn, clienteId) {
+async function liquidarVentasACredito(conn, clienteId, { ids = false } = {}) {
   const cubiertas = (await aplicarAbonos(conn, clienteId))
     .filter((d) => d.pedidoId != null && d.monto > 0 && d.porPagar === 0)
     .map((d) => d.pedidoId);
@@ -791,7 +947,7 @@ async function liquidarVentasACredito(conn, clienteId) {
     "UPDATE pedidos SET estado = 'pagado' WHERE id IN (:ids)",
     { ids: pendientes.map((p) => p.id) }
   );
-  return pendientes.map((p) => p.numero_pedido);
+  return ids ? pendientes.map((p) => Number(p.id)) : pendientes.map((p) => p.numero_pedido);
 }
 
 /**
@@ -849,47 +1005,44 @@ async function cargarVentaACredito(conn, { clienteId, monto, pedidoId, numeroPed
  */
 async function ajustarCreditoPorPedido(conn, { pedidoId, numeroPedido, usuarioId, revertir }) {
   const [rows] = await conn.query(
-    `SELECT tipo, monto FROM credito_movimientos
+    `SELECT cliente_id, tipo, monto FROM credito_movimientos
       WHERE pedido_id = :id FOR UPDATE`,
     { id: pedidoId }
   );
-  if (rows.length === 0) return null; // No fue una venta a crédito.
-
-  const neto = Math.round(
-    rows.reduce((s, m) => s + SIGNO_CREDITO[m.tipo] * Number(m.monto), 0) * 100
-  ) / 100;
-
-  if (revertir) {
-    // Ya está en cero: se canceló antes y no hay nada que perdonar.
-    if (neto <= 0) return null;
-    return agregarMovimiento({
-      cliente_id: (await conn.query(
-        'SELECT cliente_id FROM credito_movimientos WHERE pedido_id = :id LIMIT 1',
-        { id: pedidoId }
-      ))[0][0].cliente_id,
-      tipo: 'ajuste',
-      monto: -neto,
-      pedido_id: pedidoId,
-      notas: `Cancelación de ${numeroPedido}: se quita la deuda`,
-      usuario_id: usuarioId ?? null,
-    }, conn);
-  }
-
-  // Reactivar: la deuda vuelve. Se repone lo que se perdonó, no el cargo
-  // original, por si entretanto hubo abonos parciales sobre ese pedido.
-  if (neto >= 0) return null;
-  const [[{ cliente_id }]] = await conn.query(
-    'SELECT cliente_id FROM credito_movimientos WHERE pedido_id = :id LIMIT 1',
-    { id: pedidoId }
-  );
+  const cambio = ajusteDeCancelacion(rows, revertir);
+  if (cambio === null) return null;
   return agregarMovimiento({
-    cliente_id,
+    cliente_id: rows[0].cliente_id,
     tipo: 'ajuste',
-    monto: -neto,
+    monto: cambio,
     pedido_id: pedidoId,
-    notas: `Reactivación de ${numeroPedido}: vuelve la deuda`,
+    notas: revertir
+      ? `Cancelación de ${numeroPedido}: se quita la deuda`
+      : `Reactivación de ${numeroPedido}: vuelve la deuda`,
     usuario_id: usuarioId ?? null,
   }, conn);
+}
+
+/**
+ * Cuánto ajustar la nota al cancelarla o reactivarla, o null si nada. Sin base:
+ * se prueba sola.
+ *
+ * Se mira su DEUDA —el cargo y sus ajustes—, no lo que se le abonó: lo abonado a
+ * esa nota (2026-10-19) no se perdona ni se pierde, pasa a la cuenta del
+ * cliente (`repartirAbonos`). Cancelar deja la deuda en 0, y es idempotente:
+ * cancelar dos veces no perdona dos veces. Reactivar la regresa a lo que se
+ * cargó (una venta con devoluciones no se cancela completa, así que su cargo es
+ * lo que debía). Antes se miraba el neto y reactivar no reponía nada: cancelar
+ * lo dejaba en 0 y la deuda solo volvía "si era negativa".
+ */
+function ajusteDeCancelacion(movs, revertir) {
+  if (!movs.some((m) => m.tipo === 'cargo')) return null; // No fue una venta a crédito.
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const deuda = r2(movs.filter((m) => m.tipo !== 'abono').reduce((s, m) => s + SIGNO_CREDITO[m.tipo] * Number(m.monto), 0));
+  const cargos = r2(movs.filter((m) => m.tipo === 'cargo').reduce((s, m) => s + Number(m.monto), 0));
+  const cambio = r2((revertir ? 0 : cargos) - deuda);
+  if (revertir ? cambio >= -0.004 : cambio <= 0.004) return null;
+  return cambio;
 }
 
 /**
@@ -1030,6 +1183,9 @@ module.exports = {
   registrarAbono,
   cargarVentaACredito,
   ajustarCreditoPorPedido,
+  ajusteDeCancelacion,
+  notasPorPagar,
+  foliosVisibles,
   liquidarVentasACredito,
   aplicarAbonos,
   repartirAbonos,

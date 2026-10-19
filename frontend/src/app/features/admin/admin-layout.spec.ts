@@ -1,9 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { NEVER, of } from 'rxjs';
 import { AdminLayout } from './admin-layout';
 import { AuthService } from '../../core/services/auth.service';
+import { TiempoRealService } from '../../core/services/tiempo-real.service';
 import { NotificacionesService, Pendientes } from '../../core/services/notificaciones.service';
 
 /**
@@ -26,6 +27,8 @@ describe('Campana · WhatsApp de la tienda desconectado', () => {
       imports: [AdminLayout],
       providers: [
         provideRouter([]),
+        // Sin conexión en vivo de verdad en las pruebas.
+        { provide: TiempoRealService, useValue: { iniciar: () => {}, detener: () => {}, cambios: () => NEVER, pestana: 'prueba' } },
         {
           provide: AuthService,
           useValue: {

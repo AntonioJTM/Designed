@@ -21,6 +21,8 @@ import { MinimoModal } from './minimo-modal';
 import { HiloModal } from './hilo-modal';
 import { FolioPipe } from '../../../shared/folio.pipe';
 import { MinimosModal } from './minimos-modal';
+import { forkJoin } from 'rxjs';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /** Un hilo (color + calibre) con sus renglones de existencias juntos. */
 interface GrupoHilo {
@@ -172,6 +174,12 @@ export class Inventario {
       });
     this.cargarResumen();
     if (this.puedeBajarConos()) this.cargarConversiones();
+    // EN VIVO (2026-10-19): lo que se vende, se carga, se baja a conos o se
+    // traspasa en otra computadora se ve aquí sin recargar.
+    inject(TiempoRealService)
+      .cambios(['inventario', 'catalogo', 'almacenes'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.refrescarEnVivo());
   }
 
   cargarResumen(): void {
@@ -492,6 +500,34 @@ export class Inventario {
     this.cargarStock();
     this.cargarResumen();
     if (this.puedeBajarConos()) this.cargarConversiones();
+  }
+
+  /**
+   * Lo que cambió en otra computadora, sin perder el lugar (revisión de tiendas,
+   * 2026-10-19): si ya se cargaron más páginas con "Ver más", se vuelven a pedir
+   * TODAS y se reemplazan juntas. Con una página pidiéndose, se deja: llega sola.
+   */
+  private refrescarEnVivo(): void {
+    this.cargarResumen();
+    if (this.puedeBajarConos()) this.cargarConversiones();
+    if (this.cargando()) return;
+    const paginas = this.pagina;
+    const filtros = {
+      almacen_id: this.filtroAlmacen || undefined,
+      q: this.filtroQ.trim() || undefined,
+      bajo_stock: this.vista === 'minimo' || undefined,
+      apartado: this.vista === 'apartado' || undefined,
+      ultimo_movimiento: true,
+      limit: POR_PAGINA,
+    };
+    forkJoin(Array.from({ length: paginas }, (_, i) => this.inv.stock({ ...filtros, page: i + 1 }))).subscribe({
+      next: (ps) => {
+        if (this.pagina !== paginas) return; // mientras tanto se pidió otra
+        this.stock.set(ps.flatMap((p) => p.items));
+        this.totalStock.set(ps[ps.length - 1]?.total ?? 0);
+      },
+      error: () => {},
+    });
   }
 
   /** Vuelve a la primera página con los filtros de ahora. */

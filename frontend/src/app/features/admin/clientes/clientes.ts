@@ -35,6 +35,7 @@ import { VistaTodos } from './vistas/vista-todos';
 import { LugaresEntrega } from '../../../core/models/clientes.models';
 import { ClientesEnfriados } from '../../../core/models/analisis.models';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /**
  * Las miradas que suman las compras de TODAS las tiendas (2026-10-15): solo las
@@ -116,6 +117,7 @@ export class ClientesPantalla implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly tiempoReal = inject(TiempoRealService);
   private readonly api = inject(RedisenoService);
   private readonly clientes = inject(ClientesService);
   private readonly tickets = inject(TicketService);
@@ -215,6 +217,20 @@ export class ClientesPantalla implements OnInit {
         this.resultados.set(r);
         this.activo.set(0);
       });
+
+    // EN VIVO (2026-10-19, etapa 3): un cliente nuevo, un abono o una venta en
+    // otra caja ponen al día la pestaña que se ve (la lista, los lugares o la
+    // mirada). Son consultas pesadas: se juntan los avisos de 2 segundos.
+    this.tiempoReal
+      .cambios(['clientes', 'ventas'], 2000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.refrescarEnVivo());
+  }
+
+  /** Un aviso en vivo: la pestaña otra vez, sin "Cargando…" y nunca con una ventana abierta. */
+  private refrescarEnVivo(): void {
+    if (this.cargando() || this.nuevoAbierto() || this.abonando()) return;
+    this.cargar(true);
   }
 
   /**
@@ -222,12 +238,14 @@ export class ClientesPantalla implements OnInit {
    * (todos los activos y quién compró) y Cuánto debe; cuando la pestaña es una
    * de esas dos, se reusa la MISMA respuesta en vez de pedirla dos veces.
    */
-  cargar(): void {
+  cargar(callado = false): void {
     this.carga?.unsubscribe();
     const dias = this.dias();
     const vista = this.vista();
-    this.cargando.set(true);
-    this.error.set(null);
+    if (!callado) {
+      this.cargando.set(true);
+      this.error.set(null);
+    }
 
     const gasto$ = this.api.gasto(dias).pipe(shareReplay(1));
     const deuda$ = this.api.deuda(dias).pipe(shareReplay(1));
@@ -258,7 +276,7 @@ export class ClientesPantalla implements OnInit {
           this.cargando.set(false);
         },
         error: (e) => {
-          this.error.set(this.msg(e));
+          if (!callado) this.error.set(this.msg(e));
           this.cargando.set(false);
         },
       })

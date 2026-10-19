@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ClientesService } from '../../../../core/services/clientes.service';
@@ -152,14 +152,40 @@ export class VistaLugares {
     return s?.tipo === 'lugar' && s.lugar.id === l.id;
   }
 
+  constructor() {
+    // EN VIVO (2026-10-19, etapa 3): cuando la pantalla vuelve a traer los lugares
+    // (un aviso, o después de corregir un nombre), la lista del lugar elegido
+    // también se pone al día, sin vaciarse.
+    effect(() => {
+      this.datos();
+      untracked(() => this.refrescarLista());
+    });
+  }
+
+  private filtrosDe(sel: Seleccion) {
+    return sel.tipo === 'sin'
+      ? { sin_lugar: true, activo: true, orden: 'nombre' as const, limit: 100 }
+      : { lugar_entrega_id: sel.lugar.id, activo: true, orden: 'nombre' as const, limit: 100 };
+  }
+
+  private refrescarLista(): void {
+    const sel = this.seleccion();
+    if (!sel || this.cargandoLista() || this.corrigiendo()) return;
+    this.clientes.listar(this.filtrosDe(sel)).subscribe({
+      next: (r) => {
+        if (this.seleccion() !== sel) return;
+        this.lista.set(r.items);
+        this.totalLista.set(r.total);
+      },
+      error: () => {},
+    });
+  }
+
   ver(sel: Seleccion): void {
     this.seleccion.set(sel);
     this.lista.set(null);
     this.cargandoLista.set(true);
-    const filtros = sel.tipo === 'sin'
-      ? { sin_lugar: true, activo: true, orden: 'nombre' as const, limit: 100 }
-      : { lugar_entrega_id: sel.lugar.id, activo: true, orden: 'nombre' as const, limit: 100 };
-    this.clientes.listar(filtros).subscribe({
+    this.clientes.listar(this.filtrosDe(sel)).subscribe({
       next: (r) => {
         this.lista.set(r.items);
         this.totalLista.set(r.total);

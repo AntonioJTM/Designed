@@ -6,6 +6,7 @@ const { recalcularPesoCono } = require('./peso-cono');
 const { porPalabras } = require('../../utils/query');
 const { AppError, enOtraTienda } = require('../../middlewares/error');
 const { filtroAlmacen } = require('../permisos/service');
+const { anotarAlmacen } = require('../tiempo-real/contexto');
 
 /**
  * CADA QUIEN, SUS TIENDAS (2026-10-15): agrega al WHERE el filtro de los
@@ -408,6 +409,7 @@ async function _aplicarSaldo(conn, variante_id, almacen_id, nuevo) {
 }
 
 async function _insertarMovimiento(conn, mov) {
+  anotarAlmacen(mov.almacen_id);
   const [r] = await conn.query(
     `INSERT INTO movimientos_inventario
        (variante_id, almacen_id, tipo, cantidad, costo_unitario,

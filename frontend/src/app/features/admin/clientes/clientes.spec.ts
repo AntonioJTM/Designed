@@ -96,6 +96,7 @@ describe('ClientesPantalla', () => {
               return of({ items: [{ id: 6 + pagina, codigo: 'C-000' + (6 + pagina), nombre: 'Mercería Lupita ' + pagina, telefono: '775 100 2000', limite_credito: 0, activo: 1, saldo: '250.00', num_pedidos: 3, total_comprado: '4500.00', lugar_entrega: 'Tulancingo', lugar_entrega_estado: 'Hidalgo' }], total: totalFalso, page: pagina, limit: 100, paginas: 1 });
             },
             lugaresEntrega: () => { pedidos.push({ vista: 'lugares', dias: 0 }); return of(lugares); },
+            notasCredito: () => of({ saldo: 500, notas: [], ocultas: 0 }),
           },
         },
         { provide: VentasService, useValue: { metodosPago: () => of([]), cajas: () => of([]) } },

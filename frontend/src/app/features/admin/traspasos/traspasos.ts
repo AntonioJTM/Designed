@@ -18,6 +18,8 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { CuandoPipe } from '../inventario/cuando.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
 import { EnvioModal } from './envio-modal';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /**
  * Línea en captura. Se pide en PAQUETES y la pantalla dice cuántos kilos son
@@ -223,6 +225,13 @@ export class Traspasos {
       error: (e) => this.error.set(this.msg(e)),
     });
     this.cargarHistorial();
+    // EN VIVO (2026-10-19, etapa 2): la sucursal pide, la bodega surte o alguien
+    // firma de recibido en otra computadora, y Pendientes se pone al día solo.
+    // Solo llegan los de SUS tiendas (las del origen o del destino).
+    inject(TiempoRealService)
+      .cambios(['traspasos', 'inventario'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.cargarHistorial());
   }
 
   private cargarHistorial(): void {

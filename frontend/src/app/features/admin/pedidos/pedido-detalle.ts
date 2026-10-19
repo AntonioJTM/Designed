@@ -21,7 +21,11 @@ import { ApiError } from '../../../core/models/auth.models';
 import { etiquetaEstado, tonoEstado } from './estados';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { DevolucionModal } from './devolucion-modal';
+import { AbonoModal } from '../clientes/abono-modal';
+import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /** Una cifra de la franja de arriba del pedido. */
 interface CifraPedido {
@@ -70,7 +74,7 @@ const MESES_LARGOS = [
 @Component({
   selector: 'app-pedido-detalle',
   host: { '(document:keydown.escape)': 'alEscape()' },
-  imports: [BotonWhatsapp, FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal],
+  imports: [BotonWhatsapp, FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal, AbonoModal],
   templateUrl: './pedido-detalle.html',
   styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss'],
 })
@@ -158,6 +162,9 @@ export class PedidoDetalle implements OnDestroy {
       if (fiadaVigente && e === 'pendiente' && !debe) return false;
       if (nota && actual === 'pendiente' && notaDebe && e !== 'cancelado') return false;
       if (nota && e === 'pendiente' && !notaDebe) return false;
+      // Una venta a crédito CANCELADA se reactiva solo como pendiente: vuelve a
+      // deber y se da por pagada sola si su cuenta la cubre (2026-10-19).
+      if (this.fiado(p!) > 0 && this.inactivo(p!) && e !== 'pendiente') return false;
       return true;
     });
   });
@@ -219,10 +226,14 @@ export class PedidoDetalle implements OnDestroy {
       .reduce((s, m) => s + Number(m.monto), 0);
   }
 
-  /** Lo que sigue en su cuenta por esta venta: el cargo menos lo que se quitó al cancelar. */
+  /**
+   * Lo que sigue en su cuenta por esta venta: el cargo menos lo que se quitó al
+   * cancelar. Un abono A ESTA NOTA (2026-10-19) no lo baja: es lo pagado de ella
+   * (`credito_por_pagar` ya lo cuenta).
+   */
   fiadoVigente(p: Pedido): number {
     const neto = (p.credito ?? []).reduce(
-      (s, m) => s + (m.tipo === 'abono' ? -1 : 1) * Number(m.monto),
+      (s, m) => (m.tipo === 'abono' ? s : s + Number(m.monto)),
       0
     );
     return Math.max(0, Math.round(neto * 100) / 100);
@@ -388,6 +399,7 @@ export class PedidoDetalle implements OnDestroy {
     for (const c of p.credito ?? []) {
       const m = this.dinero(Math.abs(Number(c.monto)));
       if (c.tipo === 'cargo') ev.push({ t: c.creado_en, que: `Se cargaron ${m} a la cuenta de ${quien}` });
+      else if (c.tipo === 'abono') ev.push({ t: c.creado_en, que: `${quien} abonó ${m} a esta nota` });
       else ev.push({ t: c.creado_en, que: c.notas || (Number(c.monto) < 0 ? `Se quitaron ${m} de su cuenta` : `Se cargaron ${m} a su cuenta`) });
     }
     for (const a of p.abonos_cuenta ?? []) {
@@ -460,6 +472,27 @@ export class PedidoDetalle implements OnDestroy {
   constructor() {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.cargar(id);
+    // EN VIVO (2026-10-19, etapa 2): un abono, una devolución o una cancelación
+    // hechos en otra computadora se ven aquí. Nunca con la cancelación, la
+    // devolución o la captura a medias: se perdería lo que se está eligiendo.
+    inject(TiempoRealService)
+      .cambios(['ventas', 'clientes'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.refrescarEnVivo(id));
+  }
+
+  private refrescarEnVivo(id: number): void {
+    if (this.cargando() || this.confirmando() || this.aplicando() || this.devolviendo() || this.subiendoComprobante() || this.abonando()) return;
+    this.ventas.obtenerPedido(id).subscribe({
+      next: (p) => {
+        if (this.confirmando() || this.aplicando() || this.devolviendo()) return;
+        const antes = this.pedido()?.estado;
+        this.pedido.set(p);
+        // Un estado elegido en el selector y todavía sin aplicar se respeta.
+        if (!this.nuevoEstado || this.nuevoEstado === antes) this.nuevoEstado = p.estado;
+      },
+      error: () => {},
+    });
   }
 
   private cargar(id: number): void {
@@ -495,6 +528,35 @@ export class PedidoDetalle implements OnDestroy {
   readonly confirmando = signal(false);
   readonly aplicando = signal(false);
   readonly mensaje = signal<string | null>(null);
+  /** El aviso de un abono recién registrado trae el botón de su ticket. */
+  readonly ticketAviso = new TicketDelAviso(this.mensaje);
+
+  /**
+   * ABONAR A ESTA NOTA (2026-10-19: "quiero hacer el abono a las notas, no en
+   * general"): una venta a crédito que todavía se debe. Abre la ventana de
+   * abonar de siempre, ya en "A notas" con esta marcada.
+   */
+  readonly abonando = signal(false);
+
+  abonaANota(p: Pedido): boolean {
+    return !!p.cliente_id && !this.inactivo(p) && this.fiado(p) > 0.004 && Number(p.credito_por_pagar ?? 0) > 0.004;
+  }
+
+  abonoRegistrado(r: { saldo_nuevo: number; movimiento_id: number }): void {
+    this.abonando.set(false);
+    const p = this.pedido();
+    if (!p?.cliente_id) return;
+    const clienteId = p.cliente_id;
+    const texto = `Abono registrado. ${r.saldo_nuevo > 0 ? `Su cuenta queda en ${this.dinero(r.saldo_nuevo)}.` : 'Quedó al día.'}`;
+    this.mensaje.set(texto);
+    this.ticketAviso.poner(
+      texto,
+      'Imprimir ticket del abono',
+      () => this.tickets.imprimirAbonoCuenta(clienteId, r.movimiento_id).subscribe({ error: (e) => this.error.set(this.msg(e)) }),
+      () => this.tickets.whatsappAbonoCuenta(clienteId, r.movimiento_id)
+    );
+    this.cargar(p.id);
+  }
   /** Presentación elegida por línea: detalle_id → variante_id. */
   retornoPresentacion: Record<number, number> = {};
   /** Cantidad que de verdad regresa, por línea. */

@@ -11,6 +11,8 @@ import { fechaRelativa } from '../../../shared/fecha.pipe';
 import { folioCorto } from '../../../shared/folio.pipe';
 import { MovimientoCajaModal } from './movimiento-caja-modal';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 /**
  * La caja con que se trabaja. La MISMA clave la usa el punto de venta, para que
@@ -199,6 +201,28 @@ export class CajaPantalla {
 
   constructor() {
     this.cargarCajas(true);
+    // EN VIVO (2026-10-19): una venta, un abono o un anticipo hecho en otra
+    // computadora entra a las cifras del turno sin recargar.
+    inject(TiempoRealService)
+      .cambios(['caja', 'ventas', 'clientes', 'almacenes'])
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.refrescarTurno());
+  }
+
+  /**
+   * Vuelve a pedir el turno y la lista de cajas sin tocar lo que se está
+   * tecleando (el efectivo contado del corte) ni los avisos de la pantalla.
+   */
+  private refrescarTurno(): void {
+    const id = this.cajaSel();
+    if (id && !this.cerrando() && !this.abriendo()) {
+      this.ventas.sesionAbierta(id).subscribe({
+        // Si mientras llegaba se eligió otra caja, esta respuesta ya no sirve.
+        next: (s) => { if (this.cajaSel() === id) this.sesion.set(s); },
+        error: () => {},
+      });
+    }
+    this.cargarCajas(false);
   }
 
   private cargarCajas(elegir: boolean): void {

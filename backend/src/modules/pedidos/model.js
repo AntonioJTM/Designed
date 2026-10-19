@@ -15,6 +15,7 @@ const devoluciones = {
 };
 const archivos = require('../../utils/archivos');
 const { hoyLocal } = require('../../utils/fechas');
+const { anotarAlmacen } = require('../tiempo-real/contexto');
 
 // Ventas/pedidos unificados (online + POS). La confirmación de venta ocurre en
 // UNA transacción: pedidos + pedido_detalle + pagos + descuento de inventario +
@@ -819,6 +820,7 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
            ON DUPLICATE KEY UPDATE cantidad = cantidad - :cant`,
           { v: d.variante_id, a: almacenId, cant: d.cantidad }
         );
+        anotarAlmacen(almacenId);
         await conn.query(
           `INSERT INTO movimientos_inventario
              (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)
@@ -994,13 +996,14 @@ async function _obtenerConn(ejecutor, id) {
   }
   // Los abonos a la CUENTA después de la venta. No son de este pedido —lo fiado
   // se paga en la cuenta, no venta por venta— pero sin ellos el pedido parece
-  // que nadie lo ha pagado. Solo los últimos cinco: es contexto, no el estado
+  // que nadie lo ha pagado. (Los abonos A ESTA NOTA vienen en `credito`; los de
+  // otras notas no son de la cuenta y no van aquí.) Solo los últimos cinco: es contexto, no el estado
   // de cuenta.
   pedido.abonos_cuenta = [];
   if (credito.length && pedido.cliente_id) {
     const [abonos] = await ejecutor.query(
       `SELECT monto, creado_en FROM credito_movimientos
-        WHERE cliente_id = :cliente AND tipo = 'abono' AND creado_en >= :desde
+        WHERE cliente_id = :cliente AND tipo = 'abono' AND pedido_id IS NULL AND creado_en >= :desde
         ORDER BY creado_en DESC, id DESC LIMIT 5`,
       { cliente: pedido.cliente_id, desde: pedido.creado_en }
     );
@@ -1453,12 +1456,15 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     // reactivar vuelve. Va con el resto del dinero y antes del inventario, por
     // la misma razón: que un 409 no deje nada movido a medias.
     if (eraInactivo !== esInactivo) {
+      const reactivaFiada = clienteFiado && eraInactivo;
+      const antesDe = reactivaFiada ? await clientesModel.aplicarAbonos(conn, clienteFiado) : null;
       await clientesModel.ajustarCreditoPorPedido(conn, {
         pedidoId: id,
         numeroPedido: numero,
         usuarioId,
         revertir: esInactivo,
       });
+      if (reactivaFiada) await _revisarReactivarFiada(conn, { id, numero, estado, clienteFiado, antesDe });
     }
 
     // ---- El dinero: se devuelve el efectivo al cancelar, se reingresa al
@@ -1667,6 +1673,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
              ON DUPLICATE KEY UPDATE cantidad = cantidad + :cant`,
             { v: retorno.variante_id, a: almacenId, cant: retorno.cantidad }
           );
+          anotarAlmacen(almacenId);
           await conn.query(
             `INSERT INTO movimientos_inventario
                (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id,
@@ -1699,6 +1706,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
             'UPDATE inventario SET cantidad = cantidad - :cant WHERE variante_id = :v AND almacen_id = :a',
             { v: l.variante_id, a: almacenId, cant }
           );
+          anotarAlmacen(almacenId);
           await conn.query(
             `INSERT INTO movimientos_inventario
                (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id,
@@ -1802,6 +1810,37 @@ async function _validarCaminoFiado(conn, id, pedido, estado) {
       `${pedido.numero_pedido} ya se pagó con abonos a la cuenta del cliente: no puede volver a pendiente.`);
   }
   return cargo.cliente_id;
+}
+
+/**
+ * REACTIVAR UNA VENTA A CRÉDITO (2026-10-19). Desde que reactivar sí regresa su
+ * deuda (`ajusteDeCancelacion`), hay dos cosas que no se dejan, con lo ya
+ * ajustado dentro de la transacción (un 409 lo deshace todo):
+ *   · darla por pagada debiéndose: se reactiva como "pendiente" y se da por
+ *     pagada SOLA si su cuenta la cubre (`liquidarVentasACredito`);
+ *   · que otra nota que YA estaba pagada vuelva a deber. Al cancelarla, lo que
+ *     se le había abonado pasó a pagar otra nota (y su comisión pudo pagarse en
+ *     una nómina cerrada); reactivarla se lo quitaría. Se hace la venta de nuevo.
+ */
+async function _revisarReactivarFiada(conn, { id, numero, estado, clienteFiado, antesDe }) {
+  const despues = await clientesModel.aplicarAbonos(conn, clienteFiado);
+  const esta = despues.find((d) => d.pedidoId === Number(id));
+  if (POR_COBRADO.includes(estado) && (esta?.porPagar ?? 0) > 0.004) {
+    throw new AppError(409, 'VENTA_FIADA_SIN_PAGAR',
+      `${numero} es a crédito y al reactivarla vuelve a deber $${esta.porPagar.toFixed(2)}: ` +
+      'se reactiva como pendiente y se da por pagada sola cuando la cubran sus abonos.');
+  }
+  const cubiertaAntes = new Map(antesDe.filter((d) => d.pedidoId != null).map((d) => [d.pedidoId, d.porPagar <= 0.004]));
+  const destapadas = despues
+    .filter((d) => d.pedidoId != null && d.pedidoId !== Number(id) && d.monto > 0.004)
+    .filter((d) => cubiertaAntes.get(d.pedidoId) && d.porPagar > 0.004)
+    .map((d) => d.pedidoId);
+  if (destapadas.length) {
+    const [ps] = await conn.query('SELECT numero_pedido FROM pedidos WHERE id IN (:ids)', { ids: destapadas });
+    throw new AppError(409, 'REACTIVAR_DESTAPA_NOTAS',
+      `Al cancelar ${numero}, lo que tenía abonado pagó ${ps.map((p) => p.numero_pedido).join(', ')}; ` +
+      'si se reactiva, esa nota volvería a deber. No se reactiva: vuelve a hacer la venta.');
+  }
 }
 
 /** Estados que dicen que el pedido ya se cobró. */
@@ -2427,6 +2466,7 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
           WHERE variante_id = :v AND almacen_id = :a`,
         { v: d.variante_id, a: pedido.almacen_id, cant: d.cantidad }
       );
+      anotarAlmacen(pedido.almacen_id);
       await conn.query(
         `INSERT INTO movimientos_inventario
            (variante_id, almacen_id, tipo, cantidad, referencia_tipo, referencia_id, usuario_id, motivo)

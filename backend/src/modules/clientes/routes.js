@@ -83,7 +83,16 @@ const editarSchema = expedienteSchema.partial();
 
 const abonoSchema = z
   .object({
-    monto: z.coerce.number().positive().max(99999999),
+    // A la cuenta, `monto`; A NOTAS (2026-10-19), `a_notas` con lo de cada una
+    // (el monto es la suma). Uno de los dos.
+    monto: z.coerce.number().positive().max(99999999).optional(),
+    a_notas: z
+      .array(z.object({
+        pedido_id: z.coerce.number().int().positive(),
+        monto: z.coerce.number().positive().max(99999999),
+      }).strict())
+      .min(1).max(50)
+      .optional(),
     metodo_pago_id: z.coerce.number().int().positive().optional(),
     // Obligatoria cuando el abono es en efectivo: el dinero tiene que entrar
     // al turno o el corte no cuadra.
@@ -91,7 +100,10 @@ const abonoSchema = z
     referencia: z.string().trim().max(120).optional(),
     notas: z.string().trim().max(255).optional(),
   })
-  .strict();
+  .strict()
+  .refine((b) => (b.monto != null) !== (b.a_notas != null), {
+    message: 'Pon cuánto abona a la cuenta o a qué notas, no las dos cosas.',
+  });
 
 const ajusteSchema = z
   .object({
@@ -125,6 +137,8 @@ router.post('/', ...soloStaff, validate(expedienteSchema), controller.crearDesde
 router.get('/:id', ...soloStaff, controller.expediente);
 // "Lo que siempre lleva" (2026-10-16): sus 5 hilos más comprados, para la caja.
 router.get('/:id/lo-que-lleva', ...soloStaff, controller.loQueLleva);
+// Las notas a crédito que se pueden pagar una por una (2026-10-19).
+router.get('/:id/notas-credito', ...soloStaff, controller.notasCredito);
 router.put('/:id', ...soloStaff, validate(editarSchema), controller.actualizar);
 
 // Crédito. El estado de cuenta viaja dentro del expediente (GET /:id) y la lista

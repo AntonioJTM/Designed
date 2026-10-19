@@ -8,6 +8,7 @@ import { MENU } from '../../core/navegacion';
 import { fechaRelativa } from '../../shared/fecha.pipe';
 import { DESTINO_AVISO, urlDe } from '../../core/avisos';
 import { CantidadPipe } from '../../shared/cantidad.pipe';
+import { TiempoRealService } from '../../core/services/tiempo-real.service';
 
 /**
  * El marco del panel: el menú por tareas a la izquierda (rediseño 2026-10) y la
@@ -29,6 +30,7 @@ export class AdminLayout implements AfterViewInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly notif = inject(NotificacionesService);
+  private readonly tiempoReal = inject(TiempoRealService);
   private readonly injector = inject(Injector);
   private readonly titulo = inject(Title);
 
@@ -128,6 +130,8 @@ export class AdminLayout implements AfterViewInit {
       this.auth.cargarPerfil().subscribe({ next: () => {}, error: () => {} });
     }
     this.notif.iniciar();
+    // La conexión en vivo (2026-10-19): lo que otros guarden se ve sin recargar.
+    this.tiempoReal.iniciar();
     // En el celular el menú se cierra solo al elegir una pantalla.
     this.router.events.pipe(filter((e) => e instanceof NavigationStart)).subscribe(() => {
       const a = document.activeElement;
@@ -253,6 +257,7 @@ export class AdminLayout implements AfterViewInit {
 
   salir(): void {
     this.notif.detener();
+    this.tiempoReal.detener();
     this.auth.logout();
     this.router.navigateByUrl('/login');
   }

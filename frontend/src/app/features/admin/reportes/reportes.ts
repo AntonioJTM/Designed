@@ -34,6 +34,7 @@ import {
   serieDiaria,
   sumarDias,
 } from './periodos';
+import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 
 type Pestana = 'ventas' | 'mas' | 'color' | 'reabastecer' | 'cortes';
 
@@ -138,6 +139,38 @@ export class Reportes implements OnInit {
     inject(DestroyRef).onDestroy(() => {
       if (this.temporizadorColor) clearTimeout(this.temporizadorColor);
     });
+    // EN VIVO (2026-10-19, etapa 3): las ventas, los cortes, lo más vendido, lo
+    // que hay que reabastecer y la venta por color se ponen al día solos, con
+    // las fechas que están EN PANTALLA (no las que se estén tecleando).
+    inject(TiempoRealService)
+      .cambios(['ventas', 'caja', 'inventario'], 3000)
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.refrescarEnVivo());
+  }
+
+  private refrescarEnVivo(): void {
+    const r = this.rango();
+    const sigue = () => this.rango() === r;
+    this.rep.ventas(r.desde, r.hasta).subscribe({
+      next: (v) => {
+        if (sigue()) this.ventas.set(v);
+      },
+      error: () => {},
+    });
+    this.rep.cortesCaja(r.desde, r.hasta).subscribe({
+      next: (c) => {
+        if (sigue()) this.cortes.set(c.cortes);
+      },
+      error: () => {},
+    });
+    this.rep.masVendidos(20).subscribe({ next: (m) => this.masVendidos.set(m), error: () => {} });
+    this.rep.porReabastecer().subscribe({ next: (p) => this.porReabastecer.set(p), error: () => {} });
+    if (this.pestana() === 'color' && this.colorPedido) {
+      // Se vuelve a pedir aunque sea la misma búsqueda (la que está en pantalla).
+      const q = this.buscaColor().trim();
+      this.colorPedido = `${r.desde}|${r.hasta}|${q}`;
+      this.pedirColor.next({ desde: r.desde, hasta: r.hasta, q });
+    }
   }
 
   ngOnInit(): void {
