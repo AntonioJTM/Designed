@@ -173,7 +173,7 @@ export class Usuarios {
     // Al cargador hay que darle su sueldo en Nómina: se le recuerda dónde.
     const nomina = this.entra(u) ? '' : ' No entra al sistema; su sueldo se pone en Nómina.';
     this.mensaje.set(
-      (eraAlta ? `${u.nombre} quedó dado de alta.` : `Se guardaron los cambios de ${u.nombre}.`) + nomina
+      (eraAlta ? `Se dio de alta a ${u.nombre}.` : `Se guardaron los cambios de ${u.nombre}.`) + nomina
     );
     this.cargar();
   }

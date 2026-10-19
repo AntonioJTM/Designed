@@ -196,7 +196,7 @@ export class Traspasos {
     const recibidos = this.recibidosDelMes();
     const falto = Math.round(recibidos.reduce((s, t) => s + this.faltanteDe(t), 0) * 1000) / 1000;
     return [
-      { etiqueta: 'Por enviar', valor: String(porEnviar), pie: 'solicitudes esperando a la bodega', punto: 'var(--acento)' },
+      { etiqueta: 'Por enviar', valor: String(porEnviar), pie: porEnviar === 1 ? 'solicitud esperando a la bodega' : 'solicitudes esperando a la bodega', punto: 'var(--acento)' },
       { etiqueta: 'En camino', valor: String(enCamino), pie: 'falta que confirmen que llegó', punto: 'var(--punto-aviso)' },
       { etiqueta: 'Recibidos', valor: String(recibidos.length), pie: 'este mes', punto: 'var(--viz-series-3)' },
       {

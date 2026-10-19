@@ -159,7 +159,6 @@ export class Tablero implements OnInit {
     this.error.set(null);
     this.analisis
       .tablero({
-        dias_aviso: 30,
         // El servidor recorta la LISTA, no las cifras. Se piden de sobra para que
         // los hilos que pierden dinero —que vienen al final— no se queden fuera.
         limite: 50,
@@ -388,9 +387,11 @@ export class Tablero implements OnInit {
    * entre sí y el validador lo confirmó).
    */
   riesgo(dias: number): 'al-dia' | 'aviso' | 'serio' | 'critico' {
-    if (dias <= 30) return 'al-dia';
-    if (dias <= 60) return 'aviso';
-    if (dias <= 90) return 'serio';
+    // Los mismos cortes que `cartera` y Clientes › Cuánto debe: al día hasta los
+    // 15 días de la caja y la campana (2026-10-17; antes 30).
+    if (dias <= 15) return 'al-dia';
+    if (dias <= 30) return 'aviso';
+    if (dias <= 60) return 'serio';
     return 'critico';
   }
 
@@ -403,9 +404,9 @@ export class Tablero implements OnInit {
   etiquetaRiesgo(dias: number): string {
     const r = this.riesgo(dias);
     return r === 'al-dia' ? 'Al día'
-      : r === 'aviso' ? 'Por cobrar'
-      : r === 'serio' ? 'Atrasado'
-      : 'Muy atrasado';
+      : r === 'aviso' ? 'Atrasado'
+      : r === 'serio' ? 'Muy atrasado'
+      : 'Más de 2 meses';
   }
 
   iconoRiesgo(dias: number): string {

@@ -41,7 +41,7 @@
           <span class="cant">
             <input type="number" [step]="unidad === 'paq' ? 1 : 0.001" min="0"
                    [(ngModel)]="cantidad" (keydown.enter)="guardar()" />
-            <span>{{ unidad === 'paq' ? 'paquetes' : 'kg' }}</span>
+            <span>{{ unidad === 'paq' ? 'paquetes' : 'kg' }} o menos</span>
           </span>
         </label>
       </div>

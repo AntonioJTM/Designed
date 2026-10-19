@@ -3,6 +3,7 @@
 const { filtroAlmacen } = require('../permisos/service');
 const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
+const { hoyLocal } = require('../../utils/fechas');
 
 // Acceso a datos de la tabla `clientes`.
 //
@@ -243,6 +244,37 @@ async function diasSinAbonar(clienteId, ejecutor = pool) {
   if (!desde) return null;
   const [[d]] = await ejecutor.query('SELECT DATEDIFF(CURDATE(), :desde) AS dias', { desde });
   return Number(d.dias);
+}
+
+/**
+ * Los días sin abonar de TODOS los que deben, con la MISMA cuenta que la caja
+ * (`desdeSinAbonar`): Map cliente_id → días. Una consulta para todos (2026-10-17):
+ * la campana, Cuánto debe y Cómo va el negocio contaban desde el ÚLTIMO
+ * MOVIMIENTO —también un cargo nuevo— y con otro plazo, así que quien compraba
+ * fiado seguido sin pagar salía "al día" ahí y "atrasado" en la caja.
+ */
+async function diasSinAbonarDeTodos(ejecutor = pool) {
+  const [movs] = await ejecutor.query(
+    `SELECT m.cliente_id, m.tipo, m.monto, DATE_FORMAT(m.creado_en, '%Y-%m-%d') AS dia
+       FROM credito_movimientos m
+      WHERE m.cliente_id IN (SELECT s.cliente_id FROM v_clientes_saldo s WHERE s.saldo > 0)
+      ORDER BY m.cliente_id, m.creado_en, m.id`
+  );
+  const porCliente = new Map();
+  for (const m of movs) {
+    const id = Number(m.cliente_id);
+    if (!porCliente.has(id)) porCliente.set(id, []);
+    porCliente.get(id).push(m);
+  }
+  // Las dos fechas como medianoche UTC: la resta da días enteros, igual que
+  // DATEDIFF(CURDATE(), desde) con la hora de la tienda.
+  const hoy = Date.parse(hoyLocal());
+  const dias = new Map();
+  for (const [id, lista] of porCliente) {
+    const desde = desdeSinAbonar(lista);
+    if (desde) dias.set(id, Math.round((hoy - Date.parse(desde)) / 86400000));
+  }
+  return dias;
 }
 
 async function buscarParaVenta(q, limite = 10) {
@@ -983,7 +1015,7 @@ module.exports = {
   // Expediente
   listar,
   obtener,
-  buscarParaVenta, diasSinAbonar, desdeSinAbonar,
+  buscarParaVenta, diasSinAbonar, desdeSinAbonar, diasSinAbonarDeTodos,
   crearDesdeStaff,
   actualizar,
   duplicado,

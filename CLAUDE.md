@@ -649,7 +649,10 @@ tienda-hilos/
   (se reemplaza), el que espera cobro, una transferencia ya cobrada (solo se le adjunta), y si no
   hay ninguno se crea uno por lo que FALTA, no por el total. Si ya está cobrado completo y sin
   transferencia: 409 `PEDIDO_YA_PAGADO`. A un apartado: 409 `APARTADO_USA_ABONOS`, porque se paga
-  con abonos. Antes, en una venta en efectivo o en un apartado se creaba otro pago por el total y
+  con abonos. A una venta A CRÉDITO (con cargo a su cuenta) tampoco se le crea un pago: 409
+  `VENTA_A_CREDITO_USA_ABONOS` (2026-10-17) —lo que falta ES su deuda y quedaba "pagada" con la
+  deuda viva—; el depósito va como abono en su expediente y la pantalla lo dice
+  (`depositoComoAbono()`). Sí se le pega la prueba a una transferencia que ya tenga. Antes, en una venta en efectivo o en un apartado se creaba otro pago por el total y
   el apartado quedaba "liquidado" con dinero que no entró. La pantalla solo muestra la sección
   donde aplica (`aceptaComprobante()` en `pedido-detalle.ts`).
   El archivo vive en DISCO (`backend/uploads/comprobantes`, ruta en `env.uploadsDir`), no en la
@@ -808,9 +811,15 @@ tienda-hilos/
   calculadas de la base al momento — no hay tablas de resumen que mantener ni proceso nocturno.
   Llegan JUNTAS en ese único endpoint: tuvieron una ruta cada una, pero la pantalla siempre pide
   las cuatro, así que se quitaron el 2026-10-01 por no tener quién las llamara.
-  · **Cobranza** (`cartera`): quién debe, por antigüedad. Los días se miden desde el
-    ÚLTIMO MOVIMIENTO de la cuenta, no desde el cargo: quien abonó la semana pasada está pagando, y
-    tratarlo como moroso llevaría a cobrarle a quien no toca.
+  · **Cobranza** (`cartera`): quién debe, por antigüedad. Los días se miden desde su ÚLTIMO
+    ABONO (o desde que volvió a deber), con la MISMA cuenta y el MISMO plazo que la caja
+    (2026-10-17, `clientes/model.js → diasSinAbonarDeTodos`, sobre `desdeSinAbonar`;
+    `DIAS_SIN_ABONAR` = 15, "más de 15 días"): quien abonó la semana pasada está pagando, y quien
+    compra fiado seguido sin pagar ya no se "renueva" con cada cargo (antes contaba cualquier
+    movimiento y avisaba a los 30). Tramos: Al día (hasta 15) / Atrasado (16-30) / Muy atrasado
+    (31-60) / Más de 2 meses; claves `al_dia`, `atrasado`, `un_mes`, `vencido`. La campana sale
+    de esta misma cartera, así Cuánto debe, Cómo va el negocio, la campana y la caja nunca se
+    contradicen.
   · **Clientes enfriados** (ya NO se pintan en el tablero: viven en Clientes → Dejaron de venir;
     el endpoint los sigue mandando): exige **2 compras mínimo** —quien vino
     una vez hace meses no es un cliente perdido, es alguien que pasó— y compara los días sin venir
@@ -1096,7 +1105,8 @@ tienda-hilos/
 - **Un producto solo se elimina si NO tiene nada cargado** (regla del usuario, 2026-10-03).
   **Y una PRESENTACIÓN tampoco** (2026-10-16): `DELETE /variantes/:id` con bultos, cargas,
   existencias, kardex, ventas, traspasos o desarmes da 409 `PRESENTACION_CON_MOVIMIENTOS`
-  ("desactívala en «Precio y peso»"); `variantes/model.js → cargada / eliminarSiVacia`, con las
+  ("desactívala en «Precio y peso»", que trae la casilla **Activa: se vende** desde el
+  2026-10-17); `variantes/model.js → cargada / eliminarSiVacia`, con las
   mismas palabras que el producto (`utils/cargado.js`).
   Borrar el producto se lleva en CASCADA sus presentaciones, y con ellas sus bultos y renglones de
   inventario, sin rastro (antes un hilo con un bulto capturado a mano se borraba así). Ahora
@@ -1277,7 +1287,7 @@ tienda-hilos/
     sus conos si hay ahí.
   · **Cuenta atrasada**: `clientes/model.js → diasSinAbonar` cuenta desde su último abono o, si lo
     pagó todo y se le volvió a fiar, desde ese nuevo cargo. Pasado `DIAS_SIN_ABONAR` (15, el MISMO
-    de la campana, en `notificaciones/model.js`) la caja lo avisa en rojo y pregunta antes de
+    de la campana, Cuánto debe y Cómo va el negocio, en `notificaciones/model.js`) la caja lo avisa en rojo y pregunta antes de
     fiarle; el servidor da 409 `CREDITO_ATRASADO` sin `fiar_con_atraso: true`. Es un candado con
     llave, no un bloqueo: la tienda decide.
   · **El cintillo del modo** (`pos.ts → cintillo()`): bajo Cobrar / A crédito / Nota en espera /
@@ -1345,7 +1355,8 @@ tienda-hilos/
   solo coméntala". Se COMENTÓ, no se borró: las rutas de `tienda` y `registro` en `app.routes.ts`,
   registro/login/perfil de clientes en `clientes/routes.js`, el reintento como cliente en
   `AuthService.login`, y en las pantallas lo que solo le servía a ella (filtro "En línea", marca
-  `es_tienda_linea`, tarifa de envío, "Destacado"). Cada comentario dice cómo regresarlo.
+  `es_tienda_linea`, tarifa de envío, "Destacado", y desde el 2026-10-17 la tarjeta "Imágenes"
+  de Presentaciones). Cada comentario dice cómo regresarlo.
   `e2e-checkout-online.js` sale en 0 salvo con `E2E_TIENDA_EN_LINEA=si`.
 - **Reportes → "Venta por color"** (2026-10-06: "en cierto rango de tiempo cuántos kg se han
   vendido de cierto color y qué porcentaje lo representa, y qué porcentaje del color ya se vendió

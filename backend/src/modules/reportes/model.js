@@ -25,6 +25,9 @@ async function ventasResumen(desde, hastaExcl) {
             COALESCE(SUM(subtotal),0)  AS subtotal,
             COALESCE(SUM(descuento),0) AS descuento,
             COALESCE(SUM(impuestos),0) AS impuestos,
+            -- El envío también es parte del total (2026-10-17): sin él, "sin IVA −
+            -- descuentos + IVA" no daba el total cuando una nota llevaba chofer.
+            COALESCE(SUM(costo_envio),0) AS envio,
             COALESCE(SUM(total),0)     AS total
        FROM pedidos
       WHERE creado_en >= :desde AND creado_en < :hasta AND ${VENTA_VALIDA}`,

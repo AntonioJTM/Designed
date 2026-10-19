@@ -36,7 +36,7 @@ describe('ClientesPantalla', () => {
     ],
   };
   const deuda: Deuda = {
-    total_por_cobrar: 500, num_clientes: 1, vencido: 0, num_vencidos: 0, dias_aviso: 30,
+    total_por_cobrar: 500, num_clientes: 1, vencido: 0, num_vencidos: 0, dias_aviso: 15,
     por_antiguedad: [{ clave: 'al_dia', etiqueta: 'Al día', monto: 500, clientes: 1 }],
     clientes: [{ cliente_id: 2, nombre: 'Taller Martínez', limite_credito: '1000.00', saldo: '500.00', dias_sin_abonar: 3, tramo: 'al_dia' }],
     credito_usado: 500, credito_autorizado: 1000, cobrado_mes: { monto: 0, abonos: 0 },

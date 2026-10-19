@@ -369,7 +369,7 @@ function hojaResumen(doc, periodo, recibos, elaboro) {
 
   nota(doc, 'La comisión es sobre la VENTA NETA (subtotal menos descuento): sin IVA ni envío —lo que se cobra por ' +
     'llevar un pedido no cuenta—, y sin lo cancelado ni lo devuelto. Cada venta paga su comisión UNA vez, la semana ' +
-    'en que queda liquidada: la de contado, el día que se vende; la fiada, el apartado y el pedido, cuando se ' +
+    'en que queda liquidada: la de contado, el día que se vende; la de a crédito y las notas, cuando se ' +
     'terminan de pagar. El sueldo se paga por los días que trabajó según su horario; las vacaciones, como días ' +
     'normales; la hora extra, al doble.');
   if (p.estado === 'borrador') {
@@ -389,22 +389,35 @@ function hojaResumen(doc, periodo, recibos, elaboro) {
 
 // ------------------------------------------------------------------ comisiones
 
+// Los anchos se midieron con la letra del PDF (2026-10-17): "Nota pendiente de
+// pago" y "regresó $10,000.00" se cortaban con "…" en la columna angosta.
 const COLS_PAGADAS = [
-  { titulo: 'Venta', ancho: 2.3 },
-  { titulo: 'Tipo', ancho: 1.5 },
+  { titulo: 'Venta', ancho: 1.9 },
+  { titulo: 'Tipo', ancho: 2.1 },
   { titulo: 'Quedó pagada', ancho: 1.4 },
-  { titulo: 'Total', ancho: 1.3, alin: 'right' },
-  { titulo: 'Venta neta', ancho: 1.4, alin: 'right' },
-  { titulo: 'Comisión', ancho: 1.3, alin: 'right' },
+  { titulo: 'Total', ancho: 1.2, alin: 'right' },
+  { titulo: 'Venta neta', ancho: 1.5, alin: 'right' },
+  { titulo: 'Comisión', ancho: 1.1, alin: 'right' },
 ];
 const COLS_PENDIENTES = [
-  { titulo: 'Venta', ancho: 2.3 },
-  { titulo: 'Tipo', ancho: 1.5 },
-  { titulo: 'Total', ancho: 1.4, alin: 'right' },
+  { titulo: 'Venta', ancho: 1.9 },
+  { titulo: 'Tipo', ancho: 2.1 },
+  { titulo: 'Total', ancho: 1.3, alin: 'right' },
   { titulo: 'Pagado', ancho: 1.3, alin: 'right' },
-  { titulo: 'Debe', ancho: 1.4, alin: 'right' },
+  { titulo: 'Debe', ancho: 1.3, alin: 'right' },
   { titulo: 'Comisión', ancho: 1.3, alin: 'right' },
 ];
+
+/**
+ * "5 ventas" o "5 ventas y 1 devolución": el renglón de una devolución NO es
+ * una venta (2026-10-17: el PDF decía 6 donde la pantalla decía 5).
+ */
+function cuantas(lista) {
+  const dev = lista.filter((v) => v.tipo === 'devolucion').length;
+  const ventas = lista.length - dev;
+  const txt = `${ventas} ${ventas === 1 ? 'venta' : 'ventas'}`;
+  return { ventas, dev, txt, conDev: dev ? `${txt} y ${dev} ${dev === 1 ? 'devolución' : 'devoluciones'}` : txt };
+}
 
 /** El folio corto y el cliente; el tipo y cuándo se vendió. */
 const ventaYTipo = (v) => [
@@ -428,7 +441,7 @@ function hojaComisiones(doc, periodo, recibos, { reglaAnterior }) {
   nota(doc, reglaAnterior
     ? 'Esta semana se pagó con la regla anterior: la comisión de cada venta, en la semana en que se vendió.'
     : 'Cada venta paga su comisión UNA vez, completa, en la nómina de la semana en que quedó pagada: la de ' +
-      'contado, el día que se vende; la fiada, el apartado y el pedido, cuando se terminan de pagar. Lo que se ' +
+      'contado, el día que se vende; la de a crédito y las notas, cuando se terminan de pagar. Lo que se ' +
       'liquida en una semana ya cerrada entra en la siguiente. Sobre la venta neta: sin IVA ni envío.');
   doc.y += 6;
 
@@ -440,26 +453,30 @@ function hojaComisiones(doc, periodo, recibos, { reglaAnterior }) {
       sinComision.push(r.usuario);
       continue;
     }
+    const cu = cuantas(cm.ventas);
     tituloSeccion(doc, `${r.usuario}  ·  ${pct > 0 ? num(pct) + '%' : 'sin comisión'}`,
-      `${cm.ventas.length} ${cm.ventas.length === 1 ? 'venta' : 'ventas'} · ${pdf.dinero(cm.ventas_netas)} · comisión ${pdf.dinero(cm.comision)}`);
+      `${cu.conDev} · ${pdf.dinero(cm.ventas_netas)} · comisión ${pdf.dinero(cm.comision)}`);
     if (!cm.ventas.length) {
       nota(doc, 'Ninguna venta suya quedó pagada esta semana.');
     } else {
       const sum = (k) => r2(cm.ventas.reduce((a, v) => a + n(v[k]), 0));
+      // El total de una devolución no es dinero de esta semana (es el de la venta
+      // de donde regresó): no se suma, como en la pantalla.
+      const sumTotal = r2(cm.ventas.filter((v) => v.tipo !== 'devolucion').reduce((a, v) => a + n(v.total), 0));
       tabla(doc, COLS_PAGADAS,
         cm.ventas.map((v) => [
           ...ventaYTipo(v),
           v.tipo === 'devolucion'
             ? { t: diaCorto(v.liquidada_en), sub: 'regresó mercancía' }
             : v.liquidada_en ? diaCorto(v.liquidada_en) : { t: 'al venderla', sub: 'regla anterior' },
-          pdf.dinero(v.total),
+          v.tipo === 'devolucion' ? '' : pdf.dinero(v.total),
           // Lo que regresó no paga comisión (2026-10-14).
           n(v.devuelto) > 0 && v.tipo !== 'devolucion'
-            ? { t: pdf.dinero(v.venta_neta), sub: `regresaron ${pdf.dinero(v.devuelto)}` }
+            ? { t: pdf.dinero(v.venta_neta), sub: `regresó ${pdf.dinero(v.devuelto)}` }
             : pdf.dinero(v.venta_neta),
           { t: pdf.dinero(v.comision), bold: true },
         ]),
-        { total: ['Se paga', `${cm.ventas.length} ${cm.ventas.length === 1 ? 'venta' : 'ventas'}`, '', pdf.dinero(sum('total')), pdf.dinero(sum('venta_neta')), pdf.dinero(sum('comision'))] }
+        { total: ['Se paga', { t: cu.txt, sub: cu.dev ? `y ${cu.dev} ${cu.dev === 1 ? 'devolución' : 'devoluciones'}` : undefined }, '', pdf.dinero(sumTotal), pdf.dinero(sum('venta_neta')), pdf.dinero(sum('comision'))] }
       );
     }
     if (cm.por_liquidar.length) {
@@ -633,13 +650,15 @@ function hojaRecibo(doc, periodo, r) {
           { titulo: 'Venta neta', ancho: 1.5, alin: 'right' },
           { titulo: 'Comisión', ancho: 1.4, alin: 'right' },
         ],
+        // El tipo arriba y qué es abajo: en un renglón se cortaba con "…".
         grupos.map((g) => [
-          `${comisiones.NOMBRE_TIPO[g.tipo]}  ·  ${r.reglaAnterior ? 'por la fecha de venta' : QUE[g.tipo]}`,
+          { t: comisiones.NOMBRE_TIPO[g.tipo], sub: r.reglaAnterior ? 'por la fecha de venta' : QUE[g.tipo] },
           String(g.ventas.length),
           pdf.dinero(sum(g.ventas, 'venta_neta')),
           { t: pdf.dinero(sum(g.ventas, 'comision')), bold: true },
         ]),
-        { total: ['Total', String(cm.ventas.length), pdf.dinero(sum(cm.ventas, 'venta_neta')), pdf.dinero(sum(cm.ventas, 'comision'))] }
+        // "Cuántas" del total son VENTAS; las devoluciones van aparte (2026-10-17).
+        { total: ['Total', { t: String(cuantas(cm.ventas).ventas), sub: cuantas(cm.ventas).dev ? `+ ${cuantas(cm.ventas).dev} dev.` : undefined }, pdf.dinero(sum(cm.ventas, 'venta_neta')), pdf.dinero(sum(cm.ventas, 'comision'))] }
       );
     }
     const pendiente = [];

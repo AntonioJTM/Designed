@@ -10,6 +10,9 @@ import { FolioPipe } from '../../../shared/folio.pipe';
 import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
 import { EntregarPedidoModal } from './entregar-modal';
 import { ModificarPedidoModal } from './modificar-modal';
+import { TicketService } from '../../../core/services/ticket.service';
+import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
+import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 
 type Filtro = 'todos' | 'hoy' | 'atrasados';
 
@@ -31,18 +34,21 @@ type Filtro = 'todos' | 'hoy' | 'atrasados';
  */
 @Component({
   selector: 'app-encargos',
-  imports: [FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, EntregarPedidoModal, ModificarPedidoModal],
+  imports: [FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, EntregarPedidoModal, ModificarPedidoModal, BotonWhatsapp],
   templateUrl: './encargos.html',
   styleUrl: './encargos.scss',
 })
 export class EncargosPantalla {
   private readonly ventas = inject(VentasService);
   private readonly auth = inject(AuthService);
+  private readonly tickets = inject(TicketService);
 
   readonly datos = signal<Encargos | null>(null);
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+  /** Al entregarla ya es una venta y lleva su ticket: imprimirlo o mandarlo por WhatsApp. */
+  readonly ticketAviso = new TicketDelAviso(this.mensaje);
 
   readonly filtro = signal<Filtro>('todos');
   q = '';
@@ -142,7 +148,7 @@ export class EncargosPantalla {
     const antes = Number(p.total_antes ?? total);
     const aFavor = Number(p.a_favor ?? 0);
     const falta = Number(p.falta ?? 0);
-    const dinero = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const dinero = this.dinero;
     const cambios = (p.cambios ?? []).join('; ');
     this.mensaje.set(
       `${p.numero_pedido} modificada${cambios ? ': ' + cambios : ''}.` +
@@ -152,21 +158,38 @@ export class EncargosPantalla {
     this.cargar();
   }
 
+  /**
+   * Entregada (2026-10-17): ya es una venta y lleva su TICKET —una nota en espera
+   * no lleva— así que el aviso trae "Imprimir ticket" y "Mandar por WhatsApp",
+   * con el cambio que no se guarda, como la caja.
+   */
   alEntregar(p: Pedido): void {
     this.entregando.set(null);
     const cambio = Number(p.cambio ?? 0);
     const devuelto = Number(p.devuelto ?? 0);
-    this.mensaje.set(
+    const texto =
       `${p.numero_pedido} entregada` +
-        (p.estado === 'pendiente'
-          ? Number(p.nota_pendiente)
-            ? ': quedó como nota pendiente de pago.'
-            : ': lo que faltaba quedó a crédito en su cuenta.'
-          : '.') +
-        (cambio > 0 ? ` Su cambio: $${cambio.toFixed(2)}.` : '') +
-        (devuelto > 0 ? ` Se le devolvieron $${devuelto.toFixed(2)} (pesó menos de lo que pagó).` : '')
+      (p.estado === 'pendiente'
+        ? Number(p.nota_pendiente)
+          ? ': quedó como nota pendiente de pago.'
+          : ': lo que faltaba quedó a crédito en su cuenta.'
+        : '.') +
+      (cambio > 0 ? ` Su cambio: ${this.dinero(cambio)}.` : '') +
+      (devuelto > 0 ? ` Se le devolvieron ${this.dinero(devuelto)} (pesó menos de lo que pagó).` : '');
+    const extras = cambio > 0 ? { cambio } : undefined;
+    this.ticketAviso.poner(
+      texto,
+      'Imprimir ticket',
+      () => this.tickets.imprimir(p.id, extras).subscribe({ error: (e) => this.error.set(e instanceof Error ? e.message : this.msg(e)) }),
+      () => this.tickets.whatsapp(p.id, extras)
     );
+    this.mensaje.set(texto);
     this.cargar();
+  }
+
+  /** "$1,234.50": el signo antes del símbolo, como el pipe `dinero`. */
+  private dinero(n: number): string {
+    return `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   private msg(e: unknown): string {

@@ -10,6 +10,8 @@ export interface ResumenVentas {
   subtotal: string;
   descuento: string;
   impuestos: string;
+  /** Lo cobrado de envío (2026-10-17): también es parte del total. */
+  envio?: string;
   total: string;
   /** Kilos vendidos en el periodo (suma de `porDia`). */
   kilos?: number | string;

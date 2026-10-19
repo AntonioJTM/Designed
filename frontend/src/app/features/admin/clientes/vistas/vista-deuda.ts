@@ -4,12 +4,16 @@ import { Deuda, DeudorCartera } from '../../../../core/models/rediseno.models';
 import { DineroPipe } from '../../../../shared/dinero.pipe';
 import { COLOR, fechaCorta, pesos, plural } from '../clientes-ui';
 
-/** Cómo va cada cuenta según los días sin movimiento (los tramos de `cartera`). */
+/**
+ * Cómo va cada cuenta según los días sin abonar (los tramos de `cartera`).
+ * "Al día" llega hasta los 15 días de la caja y la campana (2026-10-17): pasado
+ * eso, la caja ya avisa antes de fiarle.
+ */
 const TRAMO: Record<DeudorCartera['tramo'], { texto: string; pill: string; leyenda: string }> = {
-  al_dia: { texto: 'Al día', pill: 'azul', leyenda: 'Al día (0 a 30 días)' },
-  un_mes: { texto: 'Por cobrar', pill: 'ambar', leyenda: '31 a 60 días' },
-  dos_meses: { texto: 'Atrasado', pill: 'naranja', leyenda: '61 a 90 días' },
-  vencido: { texto: 'Muy atrasado', pill: 'rojo', leyenda: 'Más de 90 días' },
+  al_dia: { texto: 'Al día', pill: 'azul', leyenda: 'Al día (hasta 15 días)' },
+  atrasado: { texto: 'Atrasado', pill: 'ambar', leyenda: '16 a 30 días' },
+  un_mes: { texto: 'Muy atrasado', pill: 'naranja', leyenda: '31 a 60 días' },
+  vencido: { texto: 'Más de 2 meses', pill: 'rojo', leyenda: 'Más de 60 días' },
 };
 
 /** Cuántos renglones caben en las dos gráficas de barras; el resto va en la tabla. */
@@ -54,8 +58,8 @@ export class VistaDeuda {
         etiqueta: 'Atrasado',
         valor: pesos(d.vencido),
         pie: d.num_vencidos
-          ? `${plural(d.num_vencidos, 'cliente lleva', 'clientes llevan')} ${d.dias_aviso} días o más sin abonar`
-          : `nadie lleva ${d.dias_aviso} días sin abonar`,
+          ? `${plural(d.num_vencidos, 'cliente lleva', 'clientes llevan')} más de ${d.dias_aviso} días sin abonar`
+          : `nadie lleva más de ${d.dias_aviso} días sin abonar`,
         punto: COLOR.alerta,
       },
       {

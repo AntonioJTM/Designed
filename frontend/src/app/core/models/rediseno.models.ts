@@ -62,7 +62,7 @@ export interface DeudorCartera {
   ultimo_movimiento?: string | null;
   ultimo_abono?: string | null;
   ultima_compra?: string | null;
-  tramo: 'al_dia' | 'un_mes' | 'dos_meses' | 'vencido';
+  tramo: 'al_dia' | 'atrasado' | 'un_mes' | 'vencido';
 }
 
 export interface Deuda {

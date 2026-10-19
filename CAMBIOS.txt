@@ -27,6 +27,13 @@
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
+  LAS 12 FALLAS QUE SALIERON AL HACER EL MANUAL, CORREGIDAS (2026-10-17,
+  entrada 72; DESPLEGADO en 20261018-200530, sin cambios en la base). Queda sin tocar el peso del cono que no
+  sigue al del paquete (no venía en la lista del usuario).
+  Antes:
+  MANUAL DE USO REHECHO (2026-10-17, entrada 71; fuera del repo, no se
+  despliega): D:\Imagenes\Manual de uso - Hitex.pdf, 283 páginas, 204 capturas.
+  Antes:
   WHATSAPP CON UN ENTER, "FALTA $X" EN VENTAS Y AVISO SI SE DESCONECTA
   (2026-10-16, entrada 70, DESPLEGADO en 20261016-171047, sin cambios en la base).
   Antes:
@@ -665,6 +672,137 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-17 (72) · Las fallas que salieron al hacer el manual, corregidas
+-------------------------------------------------------------------------------
+
+"Mientras vamos a solucionarlas aquí" (usuario, sobre la lista de la entrada 71).
+Sin cambios en la base.
+
+IMPORTANTES
+  1. COMPROBANTE EN UNA VENTA A CRÉDITO. El servidor ya no crea un pago por "lo
+     que falta" en una venta con cargo a su cuenta: 409
+     VENTA_A_CREDITO_USA_ABONOS (pedidos/model.js, el comprobante) y borra el
+     archivo subido. Sí se le pega la prueba a una transferencia que ya tenga.
+     La pantalla no ofrece "Subir captura" ahí y dice que el depósito va como
+     abono en su expediente (pedido-detalle → depositoComoAbono()).
+  2. CASILLA "ACTIVA" EN "PRECIO Y PESO" (presentaciones). Quitarla deja de
+     venderla sin borrarla, que es lo que pide el 409
+     PRESENTACION_CON_MOVIMIENTOS ("desactívala en «Precio y peso»"); manda
+     `activo` al PATCH /variantes/:id, que ya lo aceptaba.
+  3. CAJA: LAS CIFRAS SUMAN. "Abonos" pasó a "Abonos y otros ingresos": TODO el
+     efectivo que entró sin ser venta (abonos, anticipos, pagos de notas, cobros
+     al entregar, reactivaciones e ingresos a mano), con su desglose ("1 abono ·
+     1 anticipo · 1 pago de nota"). "Debería haber" dice "fondo $X + lo que entró
+     − lo que salió". La tabla nombra cada ingreso (caja.ts → claseIngreso).
+     Prueba nueva en caja.spec.ts.
+  4. EL ATRASO, UNA SOLA CUENTA. Cuánto debe, Cómo va el negocio y la campana
+     contaban desde el ÚLTIMO MOVIMIENTO (también un cargo nuevo: quien compraba
+     fiado seguido sin pagar nunca salía atrasado) y Cuánto debe / el tablero
+     con 30 días. Ahora los tres usan la cuenta de la caja (desde su último
+     abono, o desde que volvió a deber: clientes/model.js →
+     diasSinAbonarDeTodos, que usa desdeSinAbonar) y el MISMO plazo
+     (DIAS_SIN_ABONAR = 15, "más de 15 días"). La campana sale de la misma
+     cartera. Tramos: Al día (hasta 15) / Atrasado (16 a 30) / Muy atrasado
+     (31 a 60) / Más de 2 meses (más de 60); las claves son al_dia, atrasado,
+     un_mes, vencido. Probado en modo lectura con los 10 deudores de la base de
+     pruebas: los mismos días que la caja y 9 atrasados en las dos.
+MENORES
+  5. Hoy: el cliente nuevo sin crédito dice "capturado hoy / ayer / hace N días"
+     (decía "hace 15 días o más", al revés) y la campana "Capturado hoy". La
+     cifra "Cobranza atrasada" se esconde a quien no ve todas las tiendas.
+  6. PDF de nómina: "5 ventas y 1 devolución" (contaba 6), el total de una
+     devolución no se suma, columnas medidas con la letra del PDF ("Nota
+     pendiente de pago" y "regresó $10,000.00" ya no se cortan) y en el recibo
+     el tipo arriba y qué es abajo.
+  7. Mínimo: "5 paquetes o menos" (avisa con igual o menos, COND_ALERTA) y el
+     de un renglón abre en paquetes aunque el renglón no traiga el peso; si no
+     se sabe el peso, vuelve a kilos. Dos pruebas nuevas.
+  8. Reportes › Ventas: el desglose trae "Envío" (si hubo); ya cuadra con el
+     total (comprobado: sin IVA − descuentos + IVA + envío = total).
+  9. Kardex: el faltante de un traspaso dice "Faltante del traspaso desde
+     <origen>: llegó menos" y lo que regresa al cancelar uno en camino,
+     "Regresó: se canceló el traspaso a <destino>".
+  10. Notas en espera: al entregarla, el aviso trae "Imprimir ticket" y
+      "Mandar ticket por WhatsApp" (con el cambio). Prueba nueva.
+  11. WhatsApp: ya mandado, se quitan "Le llega a…" y "Cambiar número".
+  12. Palabras y detalles: Materiales dice "material" (no "categoría"); Un
+      solo hilo dice "carga" (no "remesa"); "Modificar la nota" y "no es una
+      nota en espera"; Nómina "la de a crédito y las notas"; Cuánto debe "ya
+      casi no les queda crédito"; Permisos "La lista de clientes, sus pestañas
+      y el expediente"; Personal "Se dio de alta a …"; el Resumen dice "a favor
+      (de lo que ha regresado y de lo que ha dejado a cuenta)" y el expediente
+      enseña deuda y saldo a favor CON centavos; en Frecuencia "A su ritmo" (no
+      "Al corriente", que se confundía con "no debe"); "1 solicitud", "≈ 1
+      paquete"; "114.6 kg — llegaron…"; WhatsApp enlazado sin "2026 ."; la hora
+      del retiro "11:15"; Vacaciones dice lo de después del 5.º año; la tarjeta
+      "Imágenes" de Presentaciones se COMENTÓ (solo le servía a la tienda en
+      línea apagada; el modal sigue).
+
+PRUEBAS
+  Backend 30/30; frontend 492/492; verificar-sistema.js en hitex: 0 hallazgos.
+  DESPLEGADO en 20261018-200530 (verificado desde internet). El PDF de nómina
+  se revisó con una devolución y una nota simuladas en memoria (sin escribir).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-17 (71) · Manual de uso rehecho con todo lo nuevo, y las fallas que se encontraron al hacerlo
+-------------------------------------------------------------------------------
+
+EL MANUAL ("actualízame todo el manual con todo lo nuevo, paso a paso, con capturas y ejemplos")
+  · D:\Imagenes\Manual de uso - Hitex.pdf: 283 páginas, introducción + 24
+    capítulos, 204 capturas (~35 MB). Fuentes en D:\Imagenes\Manual de uso
+    (fuentes)\ (LEEME.txt y GUIA-PARA-REDACTAR.md); la versión anterior en su
+    subcarpeta version-2026-10-05. NO va al repo (es público).
+  · Capturas de la base de PRUEBAS (desarrollo, datos inventados) con el
+    sistema local; lo que ahí no existe se simuló. Ninguna captura escribió nada.
+  · armar.py: @cap0 (introducción sin número, así "Caja" es el capítulo 4 como
+    su archivo) y entiende "(((dato)))".
+
+LAS FALLAS QUE SE ENCONTRARON (NO se corrigió ninguna; el usuario decide)
+  Importantes:
+  1. Una venta A CRÉDITO que todavía se debe ofrece "Subir captura": el
+     comprobante crearía un pago por "total − cobrado" sin contar el cargo de su
+     cuenta, la venta quedaría "pagada" y la deuda seguiría (cobro doble en
+     papel). pedido-detalle.ts → aceptaComprobante(); pedidos/model.js (el
+     comprobante, ~línea 1908). En el manual: el depósito de una fiada es abono.
+  2. DELETE de una presentación con algo cargado dice "desactívala en «Precio y
+     peso»", pero esa ventana (presentaciones) no tiene la casilla Activo
+     (PATCH /variantes/:id sí acepta activo). variantes/service.js + la ventana.
+  3. Caja: las cifras de arriba no suman "Debería haber": la tarjeta "Abonos"
+     solo cuenta motivos que empiezan con "Abono"; el efectivo de un ANTICIPO o
+     del pago de una NOTA entra al cajón pero no sale en ninguna cifra.
+  4. El atraso con DOS plazos: Clientes › Cuánto debe (analisis/service.js,
+     dias_aviso 30) y Cómo va el negocio (tablero.ts, 30) contra la campana y la
+     caja (DIAS_SIN_ABONAR = 15). Un cliente con 16 días sale "al día" y "atrasado".
+  Menores:
+  5. Hoy: "cliente nuevo sin crédito" dice "capturado hace 15 días o más" (son
+     los de los últimos 15; hoy.ts usa el plazo fijo). Y a quien es de una sola
+     tienda, "Cobranza atrasada" le diría $0 "nadie…" en vez de esconderse.
+  6. PDF de comisiones (nomina/reporte.js): cuenta la devolución como venta ("6"
+     contra "5") y corta "Nota pendiente…" y "regresaron $1,000…".
+  7. Mínimo: dice "menos de N" pero avisa con igual o menos; el mínimo de un
+     renglón abre en Kilos cuando debería abrir en Paquetes.
+  8. Reportes › Ventas por día: sin IVA + IVA no da el total cuando hay envío.
+  9. Kardex: el faltante de un traspaso (merma en quien recibe) sale "Traspaso a
+     <destino>" (inventario/service.js → _describir).
+  10. Al entregar una nota en espera no se ofrecen ticket ni WhatsApp.
+  11. WhatsApp: después de "Listo: se le mandó…" siguen "Le llega a…" y
+      "Cambiar número".
+  12. El peso del cono no se recalcula al cambiar el del paquete (solo el precio).
+  13. Palabras viejas o detalles de texto: Materiales dice "categoría"; Surtir
+      inventario › Un solo hilo dice "Remesa"; Modificar dice "pedido"; Nómina
+      "la fiada, el apartado y el pedido"; Cuánto debe "dónde fiar"; Permisos
+      "las cinco pestañas"; Personal "dado de alta" también a mujeres; el
+      Resumen "a favor de lo que ha regresado" aunque sea anticipo; saldo a favor
+      sin centavos en el expediente; "Al corriente" se confunde con "no debe";
+      plurales "1 solicitudes" y "≈ 1 paquetes"; "kg—" sin espacio; "2026 ." en
+      WhatsApp enlazado; hora "11:15 a.m." en la ventana de retiro; Vacaciones no
+      dice lo que toca después del 5.º año; la tarjeta "Imágenes" (tienda apagada).
+  Datos de la base de pruebas (no del sistema): la Caja Cuautepec desactivada
+  con su turno 88 abierto; POS-…0F9E "Pagado" debiendo $1,330.
 
 
 -------------------------------------------------------------------------------

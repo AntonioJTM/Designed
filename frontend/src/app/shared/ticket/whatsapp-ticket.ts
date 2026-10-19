@@ -52,7 +52,9 @@ import { enlaceWhatsapp, numeroWhatsapp } from './whatsapp';
               @if (errorGuardar()) { <p class="alert" role="alert">{{ errorGuardar() }}</p> }
 
               <!-- El número, ya que se sabe cómo se manda y está el PDF (así no brinca la ventana). -->
-              @if (tiendaSabida() && e.paquete && numeroListo(e.paquete)) {
+              @if (hecho() === 'enviado' || hecho() === 'compartido') {
+                <!-- Ya se mandó (2026-10-17): "Le llega a…" y "Cambiar número" ya no aplican; lo dice el "Listo". -->
+              } @else if (tiendaSabida() && e.paquete && numeroListo(e.paquete)) {
                 <div class="destino">
                   <span>Le llega a <b>{{ legible(e.paquete.telefono) }}</b>, el número de su expediente.</span>
                   <button type="button" class="btn btn-ghost btn-sm" (click)="cambiarNumero()">Cambiar número</button>

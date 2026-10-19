@@ -232,6 +232,7 @@ const CAMPOS_DOCUMENTO = `
             ped.numero_pedido, ped.canal AS pedido_canal,
             tr.folio AS traspaso_folio,
             tao.nombre AS traspaso_origen, tad.nombre AS traspaso_destino,
+            tr.almacen_origen_id AS traspaso_origen_id,
             cvo.sku AS conversion_paquete, cvd.sku AS conversion_cono,
             cv.codigo_bulto AS conversion_bulto,
             rem.folio AS remesa_folio,

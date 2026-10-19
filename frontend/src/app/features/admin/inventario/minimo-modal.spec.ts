@@ -65,6 +65,21 @@ describe('MinimoModal', () => {
     expect(c.cantidad).toBeNull();
   });
 
+  it('un paquete sin mínimo abre en paquetes aunque el renglón no traiga su peso', async () => {
+    const c = (await montar(fila({ peso_kg: null }))).componentInstance;
+    expect(c.unidad).toBe('paq');
+    c.cantidad = 3;
+    expect(c.kilos()).toBe(57.591);
+  });
+
+  it('si no se sabe cuánto pesa un paquete, vuelve a kilos', async () => {
+    spyOn(invFalso, 'equivalenciaPaquetes').and.returnValue(
+      of({ ...equivalencia, peso_referencia: null, referencia_nominal: true }) as never
+    );
+    const c = (await montar(fila({ peso_kg: null }))).componentInstance;
+    expect(c.unidad).toBe('kg');
+  });
+
   it('traduce paquetes a kilos con el peso promedio REAL, no el nominal', async () => {
     const c = (await montar(fila())).componentInstance;
     c.cantidad = 3;

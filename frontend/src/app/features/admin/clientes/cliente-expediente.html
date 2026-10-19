@@ -107,15 +107,15 @@
             </div>
             @if (limite() > 0) {
               <div class="cuenta-cifras">
-                <span>Debe <b>{{ pesos(saldo()) }}</b></span>
-                <span class="muted">le quedan <b>{{ pesos(disponible()) }}</b></span>
+                <span>Debe <b>{{ saldo() | dinero }}</b></span>
+                <span class="muted">le quedan <b>{{ disponible() | dinero }}</b></span>
               </div>
               <div class="carril" style="height: 14px; margin-top: 8px" role="img"
                    [attr.aria-label]="'Usa el ' + usoCredito() + ' por ciento de su crédito'">
                 <span [style.width.%]="usoBarra()" [style.background]="usoBarra() >= 85 ? COLOR.serie2 : COLOR.serie1"></span>
               </div>
             } @else if (saldo() > 0) {
-              <div class="cuenta-cifras"><span>Debe <b>{{ pesos(saldo()) }}</b></span></div>
+              <div class="cuenta-cifras"><span>Debe <b>{{ saldo() | dinero }}</b></span></div>
             }
             @if (e.credito_movimientos.length > 0) {
               <table class="movs" style="margin-top: 14px">
@@ -136,9 +136,9 @@
               <p class="muted" style="margin: 14px 0 0">Todavía no se le ha fiado nada.</p>
             }
             @if (saldoFavor() > 0) {
-              <!-- Lo que le quedó de devoluciones (2026-10-13): va aparte de lo que debe. -->
+              <!-- Lo que le quedó de devoluciones y anticipos: va aparte de lo que debe. Con centavos (2026-10-17). -->
               <p class="a-favor-resumen">
-                Tiene <b>{{ pesos(saldoFavor()) }}</b> a favor de lo que ha regresado.
+                Tiene <b>{{ saldoFavor() | dinero }}</b> a favor (de lo que ha regresado y de lo que ha dejado a cuenta).
                 <button type="button" class="btn-enlace" (click)="elegir('deuda')">Ver su saldo a favor</button>
               </p>
             }

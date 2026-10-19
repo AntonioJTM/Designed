@@ -153,7 +153,8 @@ async function frecuencia({ dias }) {
 // -------------------------------------------------------------------- deuda
 
 async function deuda() {
-  const cartera = await analisisModel.cartera({ diasAviso: 30 });
+  // El plazo de la caja y la campana (2026-10-17; antes 30 aquí).
+  const cartera = await analisisModel.cartera();
   const [[credito]] = await pool.query(
     `SELECT COALESCE(SUM(GREATEST(s.saldo, 0)), 0) AS usado, COALESCE(SUM(c.limite_credito), 0) AS autorizado
        FROM v_clientes_saldo s JOIN clientes c ON c.id = s.cliente_id

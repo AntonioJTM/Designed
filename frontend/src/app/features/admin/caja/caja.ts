@@ -126,21 +126,39 @@ export class CajaPantalla {
     [...(this.sesion()?.movimientos ?? [])].reverse().map((m) => this.fila(m))
   );
 
-  /** Las cuatro cifras del turno, sacadas de sus movimientos. */
+  /**
+   * Las cuatro cifras del turno, sacadas de sus movimientos. TIENEN QUE SUMAR
+   * (2026-10-17): "Debería haber" = fondo + ventas + abonos y otros ingresos −
+   * lo que salió. Antes la tarjeta "Abonos" solo contaba los motivos que
+   * empezaban con "Abono", y el efectivo de un anticipo, del pago de una nota o
+   * de un ingreso a mano entraba al cajón sin salir en ninguna cifra.
+   */
   readonly kpis = computed(() => {
     const s = this.sesion();
     const movs = s?.movimientos ?? [];
     const suma = (lista: MovimientoCaja[]) => lista.reduce((t, m) => t + Number(m.monto), 0);
     const ventas = movs.filter((m) => m.tipo === 'venta');
-    const abonos = movs.filter((m) => m.tipo === 'ingreso' && this.esAbono(m));
+    const ingresos = movs.filter((m) => m.tipo === 'ingreso');
     const retiros = movs.filter((m) => m.tipo === 'retiro');
     const devoluciones = movs.filter((m) => m.tipo === 'devolucion');
     const salio = [...retiros, ...devoluciones];
     const partes: string[] = [];
     if (retiros.length) partes.push(`${retiros.length} ${retiros.length === 1 ? 'retiro' : 'retiros'}`);
     if (devoluciones.length) partes.push(`${devoluciones.length} ${devoluciones.length === 1 ? 'devolución' : 'devoluciones'}`);
+    // Qué fue cada ingreso: "2 abonos · 1 anticipo · 1 pago de nota".
+    const porClase = new Map<string, number>();
+    for (const m of ingresos) {
+      const c = this.claseIngreso(m).plural;
+      porClase.set(c, (porClase.get(c) ?? 0) + 1);
+    }
+    const ingresosPie = [...porClase].map(([c, n]) => `${n} ${n === 1 ? c.split('|')[0] : c.split('|')[1]}`).join(' · ');
     return [
-      { etiqueta: 'Debería haber', valor: this.pesos(s?.esperado_actual), pie: 'en el cajón ahora mismo', punto: 'var(--acento)' },
+      {
+        etiqueta: 'Debería haber',
+        valor: this.pesos(s?.esperado_actual),
+        pie: `fondo ${this.pesos(s?.monto_inicial)} + lo que entró − lo que salió`,
+        punto: 'var(--acento)',
+      },
       {
         etiqueta: 'Ventas en efectivo',
         valor: this.pesos(suma(ventas)),
@@ -148,9 +166,9 @@ export class CajaPantalla {
         punto: 'var(--viz-series-3)',
       },
       {
-        etiqueta: 'Abonos',
-        valor: this.pesos(suma(abonos)),
-        pie: abonos.length === 0 ? 'nadie ha abonado en este turno' : `${abonos.length} ${abonos.length === 1 ? 'abono' : 'abonos'} en efectivo`,
+        etiqueta: 'Abonos y otros ingresos',
+        valor: this.pesos(suma(ingresos)),
+        pie: ingresos.length === 0 ? 'no ha entrado más efectivo' : `${ingresosPie}, en efectivo`,
         punto: 'var(--viz-series-1)',
       },
       {
@@ -375,8 +393,21 @@ export class CajaPantalla {
     return Number(c.diferencia ?? 0);
   }
 
-  private esAbono(m: MovimientoCaja): boolean {
-    return (m.motivo ?? '').toLowerCase().startsWith('abono');
+  /**
+   * Qué fue un ingreso, por su motivo (lo escribe el servidor): un abono a su
+   * cuenta o a una nota en espera, el pago de una nota pendiente, un anticipo,
+   * el cobro al entregar una nota, la reactivación de una venta o un ingreso a
+   * mano. `plural` va "singular|plural" para contarlos en la cifra.
+   */
+  private claseIngreso(m: MovimientoCaja): { tipo: string; detalle: string; plural: string } {
+    const motivo = m.motivo ?? '';
+    const quita = (re: RegExp) => motivo.replace(re, '');
+    if (/^abono/i.test(motivo)) return { tipo: 'Abono', detalle: quita(/^Abono (de |al |a la )?/i), plural: 'abono|abonos' };
+    if (/^anticipo/i.test(motivo)) return { tipo: 'Anticipo', detalle: quita(/^Anticipo de /i), plural: 'anticipo|anticipos' };
+    if (/^pago de la nota/i.test(motivo)) return { tipo: 'Pago de nota', detalle: quita(/^Pago de la nota /i), plural: 'pago de nota|pagos de notas' };
+    if (/^cobro al entregar/i.test(motivo)) return { tipo: 'Cobro de nota', detalle: quita(/^Cobro al entregar (el pedido )?/i), plural: 'cobro de nota|cobros de notas' };
+    if (/^reactivaci/i.test(motivo)) return { tipo: 'Reactivación', detalle: quita(/^Reactivación de /i), plural: 'reactivación|reactivaciones' };
+    return { tipo: 'Ingreso', detalle: motivo || 'Efectivo que se metió al cajón', plural: 'ingreso a mano|ingresos a mano' };
   }
 
   private fila(m: MovimientoCaja): FilaMovimiento {
@@ -389,10 +420,10 @@ export class CajaPantalla {
         return { ...base, tipo: 'Devolución', tono: 'rojo', detalle: m.motivo || folio, entra: false };
       case 'retiro':
         return { ...base, tipo: 'Retiro', tono: 'naranja', detalle: m.motivo || 'Sin motivo', entra: false };
-      default:
-        return this.esAbono(m)
-          ? { ...base, tipo: 'Abono', tono: 'verde', detalle: (m.motivo ?? '').replace(/^Abono (de |al )?/i, ''), entra: true }
-          : { ...base, tipo: 'Ingreso', tono: 'gris', detalle: m.motivo || 'Efectivo que se metió al cajón', entra: true };
+      default: {
+        const c = this.claseIngreso(m);
+        return { ...base, tipo: c.tipo, tono: c.tipo === 'Ingreso' ? 'gris' : 'verde', detalle: c.detalle, entra: true };
+      }
     }
   }
 

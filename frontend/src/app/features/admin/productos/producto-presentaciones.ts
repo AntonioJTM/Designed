@@ -149,6 +149,11 @@ export class ProductoPresentaciones {
    */
   precioPublico: number | null = null;
   pesoPaquete: number | null = null;
+  /**
+   * Si se vende (2026-10-17): una presentación con mercancía o ventas no se
+   * borra —el aviso dice "desactívala en «Precio y peso»"— y aquí se desactiva.
+   */
+  varianteActiva = true;
   readonly guardandoPublico = signal(false);
 
   // ---- Precios por lista ----
@@ -1006,6 +1011,7 @@ export class ProductoPresentaciones {
     this.variantePrecio.set(v);
     this.precioPublico = v.precio != null ? Number(v.precio) : null;
     this.pesoPaquete = v.peso_kg != null ? Number(v.peso_kg) : null;
+    this.varianteActiva = v.activo === true || Number(v.activo) === 1;
     this.modal.set('precio');
   }
 
@@ -1020,7 +1026,7 @@ export class ProductoPresentaciones {
   }
 
   guardarPublico(v: Variante): void {
-    const body: { precio?: number; peso_kg?: number | null } = {};
+    const body: { precio?: number; peso_kg?: number | null; activo?: boolean } = {};
     if (this.precioEditable(v)) {
       const p = Number(this.precioPublico);
       if (this.precioPublico == null || !(p >= 0)) {
@@ -1037,6 +1043,7 @@ export class ProductoPresentaciones {
       }
       if (w !== (v.peso_kg != null ? Number(v.peso_kg) : null)) body.peso_kg = w;
     }
+    if (this.varianteActiva !== (v.activo === true || Number(v.activo) === 1)) body.activo = this.varianteActiva;
     if (Object.keys(body).length === 0) {
       this.cerrarModal();
       this.mensaje.set('No hubo cambios.');
@@ -1049,7 +1056,9 @@ export class ProductoPresentaciones {
         this.guardandoPublico.set(false);
         this.cerrarModal();
         this.mensaje.set(
-          v.tipo_presentacion === 'paquete' && this.conos().length > 0 && body.precio != null
+          body.activo === false ? `${v.sku} quedó desactivada: ya no se vende. Sus ventas y su historial se quedan.`
+          : body.activo === true ? `${v.sku} se vende otra vez.`
+          : v.tipo_presentacion === 'paquete' && this.conos().length > 0 && body.precio != null
             ? `Precio de ${v.sku} actualizado. Los conos de precio calculado también cambiaron.`
             : `${v.sku} actualizado.`
         );

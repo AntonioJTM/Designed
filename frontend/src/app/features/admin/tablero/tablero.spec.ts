@@ -23,8 +23,8 @@ describe('Tablero', () => {
   function datos(conCostos: boolean): DatosTablero {
     return {
       cobranza: {
-        total_por_cobrar: 5000, num_clientes: 1, vencido: 0, num_vencidos: 0, dias_aviso: 30,
-        por_antiguedad: [{ clave: 'al_dia', etiqueta: 'Al día (0-30 días)', monto: 5000, clientes: 1 }],
+        total_por_cobrar: 5000, num_clientes: 1, vencido: 0, num_vencidos: 0, dias_aviso: 15,
+        por_antiguedad: [{ clave: 'al_dia', etiqueta: 'Al día (hasta 15 días)', monto: 5000, clientes: 1 }],
         clientes: [{ cliente_id: 7, nombre: 'María López', nombre_comercial: 'Doña Mari', saldo: '5000.00', dias_sin_abonar: 4 }],
       },
       clientes_enfriados: { dias: 60, min_compras: 2, num_clientes: 0, venta_en_riesgo: 0, clientes: [] },

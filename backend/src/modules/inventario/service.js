@@ -58,10 +58,19 @@ function _describir(m) {
     };
   }
   if (m.referencia_tipo === 'traspaso') {
+    // Tres casos más que el envío y la recepción (2026-10-17): el FALTANTE que
+    // se da de baja en quien recibe (llegó menos de lo enviado) y la mercancía
+    // que REGRESA al origen al cancelar un envío en camino. Antes los dos salían
+    // "Traspaso a…" / "Traspaso desde…" como si fueran un envío más.
+    const regreso = !salida && m.traspaso_origen_id != null && Number(m.almacen_id) === Number(m.traspaso_origen_id);
     return {
-      concepto: salida
-        ? `Traspaso a ${m.traspaso_destino}`
-        : `Traspaso desde ${m.traspaso_origen}`,
+      concepto: m.tipo === 'merma'
+        ? `Faltante del traspaso desde ${m.traspaso_origen}: llegó menos`
+        : regreso
+          ? `Regresó: se canceló el traspaso a ${m.traspaso_destino}`
+          : salida
+            ? `Traspaso a ${m.traspaso_destino}`
+            : `Traspaso desde ${m.traspaso_origen}`,
       folio: m.traspaso_folio,
       detalle_tipo: 'traspaso',
       detalle_id: m.referencia_id,

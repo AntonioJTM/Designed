@@ -589,7 +589,10 @@
       </section>
     }
 
-    <!-- ================= Imágenes ================= -->
+    <!-- ================= Imágenes =================
+      TIENDA EN LÍNEA APAGADA (2026-10-17): las fotos del hilo solo las enseñaba la
+      tienda en línea; con ella apagada la tarjeta no servía en el panel. Para
+      regresarla, quitar este comentario (el modal y sus métodos siguen).
     <section class="card">
       <div class="card-head">
         <div>
@@ -615,6 +618,7 @@
         </div>
       }
     </section>
+    -->
   }
 </div>
 
@@ -675,6 +679,11 @@
                 </span>
               </label>
             }
+            <!-- Desactivar en vez de borrar: lo que tiene mercancía o ventas no se borra (2026-10-17). -->
+            <label class="field check">
+              <input type="checkbox" name="activa" [(ngModel)]="varianteActiva" />
+              <span>Activa: se vende <span class="muted">(quítala para dejar de venderla sin borrarla)</span></span>
+            </label>
             <p class="muted" style="font-size: 0.8125rem; line-height: 1.5">
               Lo vendido antes no cambia: cada venta guarda el precio con que se cobró.
               @if (v.tipo_presentacion === 'paquete' && conos().length > 0) {

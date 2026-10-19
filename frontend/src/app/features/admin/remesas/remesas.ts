@@ -297,7 +297,7 @@ export class Remesas {
     const p = this.previa();
     if (!p) return;
     if (!this.varianteSel || !this.almacenSel) {
-      this.error.set('Elige la presentación y el almacén al que entra la remesa.');
+      this.error.set('Elige la presentación y el almacén al que entra la carga.');
       return;
     }
     if (!p.se_puede_cargar) {

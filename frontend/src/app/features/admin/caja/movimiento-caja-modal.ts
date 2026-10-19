@@ -60,11 +60,11 @@ export class MovimientoCajaModal implements OnInit {
     );
   }
 
+  /** "9:02" o "17:45", como en la tabla de la caja (2026-10-17: decía "11:15 a.m."). */
   hora(iso: string): string {
-    const d = new Date(iso);
-    return isNaN(d.getTime())
-      ? ''
-      : d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    const t = String(iso ?? '').replace('T', ' ').split(' ')[1] ?? '';
+    const [h, m] = t.split(':');
+    return h && m ? `${Number(h)}:${m}` : '';
   }
 
   dinero(v: unknown): string {
