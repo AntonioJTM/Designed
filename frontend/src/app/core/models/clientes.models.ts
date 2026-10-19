@@ -149,6 +149,9 @@ export interface MovimientoCredito {
 
 /** El expediente completo: datos, compras, colores y crédito. */
 export interface Expediente extends Cliente {
+  /** Si debe: cuántos días lleva sin abonar y si ya pasó el plazo (2026-10-16). */
+  dias_sin_abonar?: number | null;
+  atrasado?: boolean;
   estadisticas: EstadisticasCliente;
   colores_mas_comprados: ColorComprado[];
   pedidos: PedidoDeCliente[];
@@ -257,6 +260,10 @@ export interface ClienteParaVenta {
   credito_disponible: Cifra;
   /** Lo que le quedó a favor por devoluciones: se puede usar al cobrarle. */
   saldo_favor?: Cifra;
+  /** Si debe: cuántos días lleva sin abonar (2026-10-16). null si no debe. */
+  dias_sin_abonar?: number | null;
+  /** Debe y pasó el plazo sin abonar: la caja lo avisa y pregunta antes de fiarle. */
+  atrasado?: boolean;
 }
 
 /** Un abono del cliente. */

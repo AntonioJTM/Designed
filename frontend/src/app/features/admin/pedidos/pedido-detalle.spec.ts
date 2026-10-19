@@ -266,6 +266,32 @@ describe('PedidoDetalle', () => {
     expect(c.aceptaComprobante()).toBe(false);
   });
 
+  /*
+   * CÓMO SE PAGÓ (2026-10-16): "cuánto dinero recibiste: si te dio 2,300 y fueron
+   * 2,250, cuánto le diste de cambio", y si fue de contado.
+   */
+  it('en efectivo dice cuánto recibió y el cambio, y que fue de contado', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', total: '2250.00',
+      pagos: [{ id: 9, metodo_pago_id: 1, metodo: 'Efectivo', monto: '2250.00', recibido: '2300.00',
+                estado: 'completado', creado_en: '2026-10-16 10:00:00' }],
+    } as Pedido;
+    const fixture = await montar();
+    const c = fixture.componentInstance;
+    expect(c.filasPago()[0].recibido).toBe(2300);
+    expect(c.filasPago()[0].cambio).toBe(50);
+    expect(c.contado(c.pedido()!).si).toBe(true);
+    const texto = (fixture.nativeElement as HTMLElement).textContent!.replace(/\s+/g, ' ');
+    expect(texto).toContain('Recibió $2,300.00 · cambio $50.00');
+    expect(texto).toContain('De contado: se pagó el mismo día.');
+  });
+
+  it('una nota pendiente de pago no fue de contado, y dice por qué', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pendiente', nota_pendiente: 1, pagos: [] } as unknown as Pedido;
+    const c = (await montar()).componentInstance;
+    expect(c.contado(c.pedido()!)).toEqual({ si: false, porque: 'salió como nota pendiente de pago' });
+  });
+
   it('libera el object URL al salir de la pantalla', async () => {
     const fixture = await montar();
     const c = fixture.componentInstance;

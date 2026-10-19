@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
 import { App } from './app';
 import { routes } from './app.routes';
 
@@ -7,7 +8,8 @@ describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter(routes)],
+      // La ventana de WhatsApp (en la raíz) pregunta al servidor al abrirse.
+      providers: [provideRouter(routes), provideHttpClient()],
     }).compileComponents();
   });
 

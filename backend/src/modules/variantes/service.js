@@ -6,6 +6,7 @@ const tiposModel = require('../tipos-cliente/model');
 const almacenesModel = require('../almacenes/model');
 const inventarioModel = require('../inventario/model');
 const { AppError } = require('../../middlewares/error');
+const { motivosCarga, enLista } = require('../../utils/cargado');
 const { paginado } = require('../../utils/query');
 
 async function listar(filtros) {
@@ -237,7 +238,15 @@ async function eliminar(id) {
         'No se puede eliminar: hay conos que se desarman de este paquete. Bórralos primero.');
     }
   }
-  await model.eliminar(id);
+  // Con algo cargado (bultos, existencias, cargas, kardex, ventas, traspasos,
+  // desarmes…) no se borra: se desactiva (2026-10-16, el candado del producto).
+  const resultado = await model.eliminarSiVacia(id);
+  if (resultado?.noExiste) throw new AppError(404, 'NO_ENCONTRADO', 'Variante no encontrada');
+  if (resultado) {
+    throw new AppError(409, 'PRESENTACION_CON_MOVIMIENTOS',
+      `No se puede eliminar la presentación ${variante.sku}: tiene ${enLista(motivosCarga(resultado))}. ` +
+      'Para dejar de venderla, desactívala en «Precio y peso».');
+  }
 }
 
 // ---- Precios por tipo de cliente ----

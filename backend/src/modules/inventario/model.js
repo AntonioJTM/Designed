@@ -1751,6 +1751,75 @@ async function listarConversiones({ variante_id, limit, offset, almacenes }) {
   return { rows, total };
 }
 
+/**
+ * MÍNIMO PARA VARIOS HILOS DE UN ALMACÉN, de una vez (2026-10-16: "avisarme en
+ * Sucursal Moroleón cuando queden menos de 5 paquetes de cualquier color, para
+ * que en 10 segundos queden protegidos todos los colores"). Es el mismo mínimo
+ * que pone la ventana de cada renglón: en KILOS, traducidos de paquetes con el
+ * peso PROMEDIO REAL de los paquetes que hay en ese almacén (`pesoPorPaquete`;
+ * sin paquetes ahí, el peso del catálogo, y lo dice).
+ *
+ * Solo a los hilos que ese almacén YA maneja (tienen su renglón de inventario):
+ * ponérselo a un color que la tienda nunca tiene encendería alertas de algo que
+ * no vende. Solo paquetes: el cono se baja en la tienda, no se resurte.
+ * `solo_sin_minimo` (lo recomendado) respeta el que ya tenía su propio mínimo.
+ * `paquetes = 0` quita el aviso. Sin `guardar` solo responde lo que haría.
+ */
+async function minimosEnPaquetes({ almacen_id, paquetes, solo_sin_minimo, guardar }) {
+  const [filas] = await pool.query(
+    `SELECT i.variante_id, i.stock_minimo, pv.peso_kg, pv.sku,
+            p.nombre AS producto, p.grosor_calibre AS calibre
+       FROM inventario i
+       JOIN producto_variantes pv ON pv.id = i.variante_id
+       JOIN productos p           ON p.id = pv.producto_id
+      WHERE i.almacen_id = :a AND pv.tipo_presentacion = 'paquete' AND pv.activo = 1 AND p.activo = 1
+      ORDER BY p.nombre, p.grosor_calibre, pv.id`,
+    { a: almacen_id }
+  );
+  const renglones = [];
+  for (const f of filas) {
+    const tenia = round3(f.stock_minimo ?? 0);
+    const peso = await pesoPorPaquete(null, { id: f.variante_id, peso_kg: f.peso_kg }, almacen_id);
+    const sinPeso = paquetes > 0 && !(peso.peso > 0);
+    const kg = paquetes > 0 && !sinPeso ? peso.kilos(paquetes) : 0;
+    const respeta = solo_sin_minimo && tenia > 0;
+    renglones.push({
+      variante_id: Number(f.variante_id),
+      producto: f.producto,
+      calibre: f.calibre,
+      sku: f.sku,
+      tenia_kg: tenia,
+      kg,
+      peso_paquete: peso.peso,
+      peso_estimado: peso.nominal,
+      sin_peso: sinPeso,
+      // Lo que va a pasar con este hilo.
+      cambia: !respeta && !sinPeso && Math.abs(kg - tenia) > 0.0005,
+      se_queda: respeta,
+    });
+  }
+  if (guardar) {
+    await withTransaction(async (conn) => {
+      for (const r of renglones.filter((x) => x.cambia)) {
+        await conn.query(
+          'UPDATE inventario SET stock_minimo = :kg WHERE variante_id = :v AND almacen_id = :a',
+          { kg: r.kg, v: r.variante_id, a: almacen_id }
+        );
+      }
+    });
+  }
+  return {
+    almacen_id: Number(almacen_id),
+    paquetes,
+    solo_sin_minimo,
+    guardado: !!guardar,
+    cambian: renglones.filter((r) => r.cambia).length,
+    se_quedan: renglones.filter((r) => r.se_queda).length,
+    sin_peso: renglones.filter((r) => r.sin_peso).length,
+    renglones,
+  };
+}
+
 /** Configura umbrales/ubicación SIN mover existencias (upsert). */
 async function configurar(datos) {
   await pool.query(
@@ -1768,6 +1837,7 @@ async function configurar(datos) {
 }
 
 module.exports = {
+  minimosEnPaquetes,
   listarStock,
   resumenPorAlmacen,
   alertas,

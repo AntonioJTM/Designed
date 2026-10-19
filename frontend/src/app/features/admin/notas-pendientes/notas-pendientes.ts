@@ -12,6 +12,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { PagoNotaModal } from './pago-nota-modal';
+import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 
 /**
  * NOTAS PENDIENTES DE PAGO (2026-10-13): "si no me pagan ese día el ticket, que
@@ -30,7 +31,7 @@ import { PagoNotaModal } from './pago-nota-modal';
  */
 @Component({
   selector: 'app-notas-pendientes',
-  imports: [FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, PagoNotaModal],
+  imports: [BotonWhatsapp, FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, PagoNotaModal],
   templateUrl: './notas-pendientes.html',
 })
 export class NotasPendientesPantalla {
@@ -113,7 +114,8 @@ export class NotasPendientesPantalla {
     if (r.pago_id) {
       const pagoId = r.pago_id;
       this.ticketAviso.poner(texto, 'Imprimir ticket del abono', () =>
-        this.tickets.imprimirPagoNota(r.pedido_id, pagoId).subscribe({ error: (e) => this.error.set(this.msg(e)) }));
+        this.tickets.imprimirPagoNota(r.pedido_id, pagoId).subscribe({ error: (e) => this.error.set(this.msg(e)) }),
+        () => this.tickets.whatsappPagoNota(r.pedido_id, pagoId));
     }
     this.error.set(null);
     this.cargar();

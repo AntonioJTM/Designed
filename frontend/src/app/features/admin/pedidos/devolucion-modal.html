@@ -180,33 +180,32 @@
 
         <!-- Para el lector de pantalla: el resumen en una frase, cuando se deja de teclear. -->
         <p class="oculto" role="status">{{ anuncio() }}</p>
-        <div class="resumen">
-          <div>
-            <span>Regresan</span>
-            <b>{{ kgTotal() | cantidad: 'kg' }}</b>
+        <!-- ANTES → DESPUÉS (2026-10-16): cómo se reparte lo que regresa, en vivo. -->
+        <div class="card suave resumen reparto">
+          <div class="reparto-total">
+            <span>Regresan <b>{{ kgTotal() | cantidad: 'kg' }}</b></span>
+            <span>que valen <b>{{ total() | dinero }}</b></span>
           </div>
-          <div>
-            <span>Lo que regresa vale</span>
-            <b>{{ total() | dinero }}</b>
-          </div>
-          @if (descuentaDeEsta() > 0) {
-            <div>
-              <span>Se descuenta de esta nota</span>
-              <b>{{ descuentaDeEsta() | dinero }}</b>
-            </div>
+          @if (reparto().length > 0) {
+            <table class="reparto-tabla">
+              <caption class="oculto">Cómo se reparte lo que regresa: antes y después</caption>
+              <thead>
+                <tr><th scope="col"><span class="oculto">Qué</span></th><th scope="col" class="num">Antes</th>
+                    <th scope="col" class="num">Después</th><th scope="col"><span class="oculto">Cambio</span></th></tr>
+              </thead>
+              <tbody>
+                @for (f of reparto(); track f.que) {
+                  <tr [class.mueve]="cambioReparto(f) !== 'sin cambio'">
+                    <th scope="row">{{ f.que }}</th>
+                    <td class="num">{{ f.antes | dinero }}</td>
+                    <td class="num despues">{{ f.despues | dinero }}</td>
+                    <td class="cambio">{{ cambioReparto(f) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
           }
-          @if (descuentaDeOtras() > 0) {
-            <div>
-              <span>Se descuenta de lo demás que debe</span>
-              <b>{{ descuentaDeOtras() | dinero }}</b>
-            </div>
-          }
-          @if (hayCliente()) {
-            <div>
-              <span>Le queda a favor</span>
-              <b class="queda">{{ quedaAFavor() | dinero }}</b>
-            </div>
-          }
+          <p class="reparto-nota">No sale dinero de la caja: lo que regresa baja lo que debe o le queda a favor.</p>
         </div>
       } @else if (error()) {
         <p class="alert" role="alert">{{ error() }}</p>

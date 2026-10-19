@@ -1,0 +1,11 @@
+// LA BARRA DE CADA HILO (2026-10-16): cuántos paquetes van de los pedidos.
+// A medias en el azul de la casa; completa, en verde (pagado / listo / entregado).
+.avance-linea { display: flex; align-items: center; gap: 10px; margin-top: 6px; max-width: 420px; }
+.avance-barra {
+  flex: 1 1 auto; min-width: 80px; height: 6px; border-radius: 3px;
+  background: var(--superficie-2); overflow: hidden;
+}
+.avance-barra > span { display: block; height: 100%; border-radius: 3px; background: var(--acento); }
+.avance-linea.completo .avance-barra > span { background: var(--ok-t); }
+.avance-texto { flex: 0 0 auto; font-size: 0.75rem; color: var(--tinta-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.avance-linea.completo .avance-texto { color: var(--ok-t); font-weight: 500; }

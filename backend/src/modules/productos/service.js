@@ -5,6 +5,7 @@ const variantesService = require('../variantes/service');
 const variantesModel = require('../variantes/model');
 const almacenesModel = require('../almacenes/model');
 const { AppError } = require('../../middlewares/error');
+const { motivosCarga, enLista } = require('../../utils/cargado');
 const { paginado } = require('../../utils/query');
 
 // El catálogo reporta `disponible` contra el almacén que surte la tienda en
@@ -145,26 +146,6 @@ async function actualizar(id, datos) {
  * Qué impide borrar el producto, dicho en palabras: "tiene 9 bultos", "177.91 kg
  * en existencia"… Lista vacía = se puede borrar.
  */
-function motivos(c) {
-  const n = (x, uno, varios) => `${x.toLocaleString('en-US')} ${x === 1 ? uno : varios}`;
-  const lista = [];
-  if (c.cargas) lista.push(n(c.cargas, 'carga de mercancía', 'cargas de mercancía'));
-  if (c.bultos) lista.push(n(c.bultos, 'bulto', 'bultos'));
-  if (c.saldos) lista.push(`${Number(c.kg).toLocaleString('en-US', { maximumFractionDigits: 3 })} kg en existencia`);
-  if (c.movimientos) lista.push(n(c.movimientos, 'movimiento en el kardex', 'movimientos en el kardex'));
-  if (c.ventas) lista.push(n(c.ventas, 'venta', 'ventas'));
-  if (c.traspasos) lista.push(n(c.traspasos, 'traspaso', 'traspasos'));
-  if (c.desarmes) lista.push(n(c.desarmes, 'desarme a conos', 'desarmes a conos'));
-  if (c.compras) lista.push(n(c.compras, 'orden de compra', 'órdenes de compra'));
-  if (c.carritos) lista.push(n(c.carritos, 'carrito de la tienda en línea', 'carritos de la tienda en línea'));
-  return lista;
-}
-
-/** "a, b y c". */
-function enLista(xs) {
-  return xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`;
-}
-
 /**
  * ¿Se puede borrar? Lo pregunta el modal del producto antes de ofrecer el botón,
  * para decir POR QUÉ no en vez de dejar que el usuario lo intente y falle.
@@ -172,7 +153,7 @@ function enLista(xs) {
 async function eliminacion(id) {
   const producto = await model.obtener(id);
   if (!producto) throw new AppError(404, 'NO_ENCONTRADO', 'Producto no encontrado');
-  const lista = motivos(await model.cargado(id));
+  const lista = motivosCarga(await model.cargado(id));
   return {
     se_puede: lista.length === 0,
     motivos: lista,
@@ -190,7 +171,7 @@ async function eliminar(id) {
   if (resultado?.noExiste) throw new AppError(404, 'NO_ENCONTRADO', 'Producto no encontrado');
   if (resultado) {
     throw new AppError(409, 'PRODUCTO_CON_MOVIMIENTOS',
-      `No se puede eliminar: tiene ${enLista(motivos(resultado))}. ` +
+      `No se puede eliminar: tiene ${enLista(motivosCarga(resultado))}. ` +
       'Para dejar de venderlo, desmárcalo como Activo.');
   }
 }

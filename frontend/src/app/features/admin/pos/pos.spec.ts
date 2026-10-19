@@ -9,7 +9,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { TiendaService } from '../../../core/services/tienda.service';
-import { ClienteParaVenta } from '../../../core/models/clientes.models';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { ClienteParaVenta, ColorComprado } from '../../../core/models/clientes.models';
 import { SesionCaja } from '../../../core/models/ventas.models';
 
 /**
@@ -60,6 +61,11 @@ describe('Pos', () => {
   let cajaPedida: number | null = null;
   let permisos: Set<string>;
   let invFalso: Record<string, unknown> = {};
+  /** Lo que siempre lleva el cliente elegido (2026-10-16). */
+  let hilosCliente: ColorComprado[] = [];
+  /** Lo que contesta la cajera cuando la caja pregunta (y si preguntó). */
+  let respuesta = true;
+  let preguntado: string | null = null;
 
   const ventasFalso = {
     cajas: () =>
@@ -109,8 +115,12 @@ describe('Pos', () => {
               ]),
           },
         },
-        { provide: ClientesService, useValue: { buscar: () => of([]) } },
+        { provide: ClientesService, useValue: { buscar: () => of([]), loQueLleva: () => of(hilosCliente) } },
         { provide: TiendaService, useValue: { cotizar: () => of({ total: 432, subtotal: 372.41, impuestos: 59.59, lineas: [] }) } },
+        {
+          provide: ConfirmacionService,
+          useValue: { pedir: (o: { titulo: string }) => { preguntado = o.titulo; return Promise.resolve(respuesta); } },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Pos);
@@ -130,6 +140,9 @@ describe('Pos', () => {
     cajaPedida = null;
     permisos = new Set(['ver:caja', 'hacer:fiar']);
     invFalso = {};
+    hilosCliente = [];
+    respuesta = true;
+    preguntado = null;
     try { localStorage.removeItem('caja_sel'); } catch { /* sin almacenamiento */ }
   });
   afterEach(() => {
@@ -278,6 +291,98 @@ describe('Pos', () => {
     c.cobrar();
     expect(pedidoEnviado!.a_credito).toBe(100);
     expect(pedidoEnviado!.pagos).toEqual([{ metodo_pago_id: 2, monto: 332 }]);
+  });
+
+  /*
+   * CUENTA ATRASADA (2026-10-16): debe y pasó el plazo sin abonar. Se avisa en
+   * rojo, y antes de fiarle se pregunta; el servidor sabe que se confirmó.
+   */
+  it('con la cuenta atrasada pregunta antes de fiarle y, si no, no vende', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirModo('credito');
+    respuesta = false;
+    await c.cobrar();
+    expect(preguntado).toBe('¿Darle a crédito con la cuenta atrasada?');
+    expect(pedidoEnviado).toBeNull();
+  });
+
+  it('con la cuenta atrasada y la cajera dice que sí: vende y lo avisa al servidor', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirModo('credito');
+    await c.cobrar();
+    expect(pedidoEnviado!.a_credito).toBe(432);
+    expect((pedidoEnviado as unknown as { fiar_con_atraso?: boolean }).fiar_con_atraso).toBe(true);
+  });
+
+  it('al corriente, fía sin preguntar', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: false, dias_sin_abonar: 3 });
+    c.elegirModo('credito');
+    await c.cobrar();
+    expect(preguntado).toBeNull();
+    expect((pedidoEnviado as unknown as { fiar_con_atraso?: boolean }).fiar_con_atraso).toBeUndefined();
+  });
+
+  it('el aviso del cliente dice los días y va en rojo cuando está atrasado', async () => {
+    const { c, fixture } = await montar();
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    fixture.detectChanges();
+    const aviso = (fixture.nativeElement as HTMLElement).querySelector('.aviso-cliente');
+    expect(aviso?.classList.contains('atrasado')).toBe(true);
+    expect(aviso?.textContent).toContain('22 días sin abonar');
+  });
+
+  /*
+   * EL CINTILLO DEL MODO (2026-10-16): una línea que dice qué pasa con la
+   * mercancía y con el dinero, con el color de su estado.
+   */
+  it('el cintillo dice qué pasa en cada modo, con su color', async () => {
+    const { c, fixture } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente(mayoreo);
+    let ci = c.cintillo();
+    expect(ci.tono).toBe('cobrar');
+    expect(ci.texto).toBe('La mercancía sale hoy y se cobran $432.00.');
+
+    c.elegirModo('espera');
+    expect(c.cintillo().tono).toBe('espera');
+    expect(c.cintillo().texto).toContain('no sale del inventario');
+    c.anticipo = 100;
+    expect(c.cintillo().texto).toContain('Deja $100.00 hoy');
+
+    c.elegirModo('pendiente');
+    expect(c.cintillo().tono).toBe('pendiente');
+    expect(c.cintillo().texto).toContain('no entra dinero ni usa su crédito');
+
+    fixture.detectChanges();
+    const p = (fixture.nativeElement as HTMLElement).querySelector('.cintillo');
+    expect(p?.getAttribute('data-tono')).toBe('pendiente');
+  });
+
+  it('a crédito dice cuánto crédito libre le quedará, y sigue lo que se teclea', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente(mayoreo);
+    c.elegirModo('credito');
+    const libre = Number(mayoreo.credito_disponible);
+    expect(c.cintillo().texto).toContain(`Le quedarán ${c.dinero(libre - 432)} de crédito libre`);
+    c.aCredito = 100;
+    expect(c.cintillo().texto).toBe(
+      `Se lleva la mercancía hoy y $100.00 van a su cuenta; paga $332.00 hoy. Le quedarán ${c.dinero(libre - 100)} de crédito libre.`);
+  });
+
+  it('a crédito con la cuenta atrasada el cintillo va en rojo y dice los días', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirModo('credito');
+    expect(c.cintillo().tono).toBe('atrasado');
+    expect(c.cintillo().texto).toContain('lleva 22 días sin abonar');
   });
 
   it('con saldo a favor: se usa solo si lo pide, y paga hoy lo que falte (2026-10-13)', async () => {
@@ -629,5 +734,61 @@ describe('Pos', () => {
     await esperar();
     expect(c.ticket()).not.toBeNull();
     expect(document.activeElement).toBe(lectorDe(fixture));
+  });
+
+  /*
+   * LO QUE SIEMPRE LLEVA (2026-10-16): al elegir al cliente, sus hilos de
+   * siempre como botones; el nombre busca el hilo y "Conos" abre la báscula.
+   */
+  describe('lo que siempre lleva', () => {
+    const doñaMari = {
+      id: 7, nombre: 'María', nombre_comercial: 'Doña Mari', limite_credito: 0, saldo: 0, credito_disponible: 0,
+    } as unknown as ClienteParaVenta;
+    const rojo = { producto_id: 40, color: 'ROJO', calibre: '2/30', kilos: '368.4', importe: '0', veces: 12 } as ColorComprado;
+    const variante = (tipo: string, kg: number) => ({
+      id: tipo === 'cono' ? 41 : 40, producto_id: 40, sku: tipo === 'cono' ? 'ROJO-CONO' : 'ROJO', producto: 'ROJO',
+      calibre: '2/30', presentacion: tipo, tipo_presentacion: tipo, precio: '200', unidad: 'kg', activo: 1,
+      aqui: { cantidad: kg, paquetes: null },
+    });
+
+    it('al elegirlo salen sus hilos; al quitarlo se van', async () => {
+      hilosCliente = [rojo];
+      const { c } = await montar();
+      c.elegirCliente(doñaMari);
+      expect(c.loQueLleva().map((h) => c.nombreHiloCliente(h))).toEqual(['ROJO 2/30']);
+      expect(c.detalleHiloCliente(rojo)).toBe('Se ha llevado 368.4 kg en 12 compras');
+      c.quitarCliente();
+      expect(c.loQueLleva()).toEqual([]);
+    });
+
+    it('el nombre busca ese hilo con lo que hay en esta caja', async () => {
+      const buscados: string[] = [];
+      invFalso['buscarVariantes'] = (q: string) => { buscados.push(q); return of([]); };
+      hilosCliente = [rojo];
+      const { c } = await montar();
+      c.elegirCliente(doñaMari);
+      c.buscarHiloCliente(rojo);
+      expect(buscados).toContain('ROJO 2/30');
+    });
+
+    it('"Conos" abre directo la báscula de sus conos si hay aquí', async () => {
+      invFalso['buscarVariantes'] = () => of([variante('paquete', 120), variante('cono', 12.5)]);
+      hilosCliente = [rojo];
+      const { c } = await montar();
+      c.elegirCliente(doñaMari);
+      c.conosHiloCliente(rojo);
+      expect(c.pesando()?.id).toBe(41);
+      expect(c.pesando()?.tipo).toBe('cono');
+    });
+
+    it('sin conos aquí no abre la báscula: enseña el hilo y dice por qué', async () => {
+      invFalso['buscarVariantes'] = () => of([variante('paquete', 120), variante('cono', 0)]);
+      hilosCliente = [rojo];
+      const { c } = await montar();
+      c.elegirCliente(doñaMari);
+      c.conosHiloCliente(rojo);
+      expect(c.pesando()).toBeNull();
+      expect(c.avisoLector()).toContain('No hay conos de ROJO 2/30 en esta tienda');
+    });
   });
 });

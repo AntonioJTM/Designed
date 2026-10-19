@@ -6,9 +6,14 @@
 
 /** Quién es el cliente, como lo dice el ticket. */
 export interface ClienteTicket {
+  /** Para guardarle el teléfono desde la ventana de WhatsApp (2026-10-16). */
+  id?: number;
   nombre: string;
   nombre_comercial?: string | null;
   codigo?: string | null;
+  /** Sus teléfonos, para mandarle el ticket por WhatsApp (2026-10-16). */
+  telefono?: string | null;
+  telefono_alt?: string | null;
 }
 
 /** Un abono a su CUENTA de crédito (`GET /clientes/:id/abonos/:mov/ticket`). */

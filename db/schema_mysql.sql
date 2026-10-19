@@ -958,6 +958,9 @@ CREATE TABLE `pagos` (
   `pedido_id` bigint(20) unsigned NOT NULL,
   `metodo_pago_id` smallint(5) unsigned NOT NULL,
   `monto` decimal(12,2) NOT NULL,
+  -- El billete que entregó en efectivo, solo informativo (cambio = recibido −
+  -- monto). Migración 2026-10_efectivo_recibido.sql.
+  `recibido` decimal(12,2) DEFAULT NULL,
   `estado` varchar(15) NOT NULL DEFAULT 'completado',
   `referencia_transaccion` varchar(120) DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),

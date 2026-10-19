@@ -132,8 +132,13 @@ async function expediente(id, { limitePedidos = 20, almacenes = null } = {}) {
     saldoFavor.deudaTotal(id),
   ]);
 
+  // Si debe: cuántos días lleva sin abonar (la caja lo dice al elegirlo desde aquí).
+  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
+  const diasSinAbonar = Number(cliente.saldo ?? 0) > 0 ? await model.diasSinAbonar(id) : null;
   return {
     ...sanitizar(cliente),
+    dias_sin_abonar: diasSinAbonar,
+    atrasado: diasSinAbonar != null && diasSinAbonar > DIAS_SIN_ABONAR,
     estadisticas: stats,
     colores_mas_comprados: colores,
     pedidos: pedidos.rows,
@@ -305,6 +310,13 @@ async function ajustarCredito(id, datos, usuarioId) {
   return estadoDeCuenta(id);
 }
 
+/** Sus 5 hilos más comprados en SUS tiendas: lo que la caja le ofrece de un clic. */
+async function loQueLleva(id, almacenes = null) {
+  const cliente = await model.obtener(id);
+  if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
+  return model.coloresMasComprados(id, 5, almacenes);
+}
+
 /** Ajustar a mano su SALDO A FAVOR: sumarle o quitarle, con motivo (2026-10-16). */
 async function ajustarSaldoFavor(id, datos, usuarioId) {
   const cliente = await model.obtener(id);
@@ -331,6 +343,7 @@ async function recibirAnticipo(id, datos, usuarioId) {
 module.exports = {
   aplicarSaldoFavor,
   ajustarSaldoFavor,
+  loQueLleva,
   recibirAnticipo,
   registrar,
   iniciarSesion,

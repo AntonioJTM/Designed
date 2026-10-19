@@ -389,6 +389,48 @@ async function eliminar(id) {
   return r.affectedRows > 0;
 }
 
+/**
+ * Lo que tiene CARGADO una presentación: los mismos conteos que `cargado()` del
+ * producto (productos/model.js), pero de esta sola (2026-10-16).
+ */
+async function cargada(id, ejecutor = pool) {
+  const [[r]] = await ejecutor.query(
+    `SELECT
+       (SELECT COUNT(*) FROM variante_codigos      WHERE variante_id = :id) AS bultos,
+       (SELECT COUNT(*) FROM remesas               WHERE variante_id = :id) AS cargas,
+       (SELECT COALESCE(SUM(cantidad), 0) FROM inventario WHERE variante_id = :id) AS kg,
+       (SELECT COUNT(*) FROM inventario
+         WHERE variante_id = :id AND (cantidad <> 0 OR cantidad_reservada <> 0)) AS saldos,
+       (SELECT COUNT(*) FROM movimientos_inventario WHERE variante_id = :id) AS movimientos,
+       (SELECT COUNT(DISTINCT pedido_id) FROM pedido_detalle WHERE variante_id = :id) AS ventas,
+       (SELECT COUNT(DISTINCT traspaso_id) FROM traspaso_detalle WHERE variante_id = :id) AS traspasos,
+       (SELECT COUNT(*) FROM variante_conversiones
+         WHERE variante_origen_id = :id OR variante_destino_id = :id) AS desarmes,
+       (SELECT COUNT(*) FROM orden_compra_detalle  WHERE variante_id = :id) AS compras,
+       (SELECT COUNT(*) FROM carrito_items         WHERE variante_id = :id) AS carritos`,
+    { id }
+  );
+  return Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Number(v)]));
+}
+
+/**
+ * Borra la presentación SOLO si no tiene nada cargado (2026-10-16: el mismo
+ * candado que el producto). Lo revisa y la borra en la misma transacción, con
+ * la fila bloqueada. Devuelve null si la borró, { noExiste } o lo que tiene.
+ */
+async function eliminarSiVacia(id) {
+  return withTransaction(async (conn) => {
+    const [[v]] = await conn.query('SELECT id FROM producto_variantes WHERE id = :id FOR UPDATE', { id });
+    if (!v) return { noExiste: true };
+    const c = await cargada(id, conn);
+    const tiene = c.bultos || c.cargas || c.saldos || c.movimientos || c.ventas || c.traspasos
+      || c.desarmes || c.compras || c.carritos;
+    if (tiene) return c;
+    await conn.query('DELETE FROM producto_variantes WHERE id = :id', { id });
+    return null;
+  });
+}
+
 /** Precios por tipo de cliente de una variante (sin incluir el público). */
 async function preciosDe(varianteId) {
   const [rows] = await pool.query(
@@ -463,6 +505,8 @@ module.exports = {
   crear,
   actualizar,
   eliminar,
+  cargada,
+  eliminarSiVacia,
   derivadasDe,
   fijarPrecio,
   preciosDe,

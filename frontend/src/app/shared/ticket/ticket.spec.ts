@@ -71,16 +71,17 @@ describe('Ticket impreso', () => {
       saldo_favor_usado: { usado: 2820.25, quedo, hoy },
     });
 
+    // El recuadro de hoy va SIEMPRE (2026-10-16), aunque no haya cambiado.
     let html = armarTicket(conSaldo(500, 500), tienda);
     expect(html).toContain('Pagó con su saldo a favor');
     expect(html).toContain('Le queda a favor');
-    expect(html).toContain('$500.00');
-    expect(html).not.toContain('Su saldo a favor hoy');
+    expect(html).toContain('Su saldo a favor hoy<b>$500.00</b>');
 
-    // Lo usó todo: no se dice "le queda".
+    // Lo usó todo: no se dice "le queda", y el recuadro dice $0.00.
     html = armarTicket(conSaldo(0, 0), tienda);
     expect(html).toContain('Pagó con su saldo a favor');
     expect(html).not.toContain('Le queda a favor');
+    expect(html).toContain('Su saldo a favor hoy<b>$0.00</b>');
 
     // Reimpreso días después, ya con otro saldo: lo que le quedó ese día y lo de hoy.
     html = armarTicket(conSaldo(500, 1200), tienda);
@@ -100,6 +101,16 @@ describe('Ticket impreso', () => {
     expect(html).toContain('Pagó con su saldo a favor');
     expect(html).toContain('$800.00');
     expect(html).toContain('Efectivo');
+  });
+
+  it('reimpreso, dice lo recibido y el cambio que se guardaron con el pago (2026-10-16)', () => {
+    const html = armarTicket(venta({
+      pagos: [{ id: 1, metodo_pago_id: 1, metodo: 'Efectivo', monto: '3980.00', recibido: '4000.00', estado: 'completado', creado_en: '2026-10-13 21:40:12' }],
+    }), tienda);
+    expect(html).toContain('Recibido');
+    expect(html).toContain('$4,000.00');
+    expect(html).toContain('Cambio');
+    expect(html).toContain('$20.00');
   });
 
   it('dice qué fue: apartado, a crédito, nota pendiente, cancelada', () => {
@@ -424,8 +435,8 @@ describe('Tickets de abono y de anticipo', () => {
     expect(html).toMatch(/Le quedó a favor<\/span><span>\$1,000\.00/);
     expect(html).toContain('No aparta mercancía');
     expect(html).toContain('Para el pedido del sábado');
-    // El saldo de hoy solo sale si cambió desde entonces.
-    expect(html).not.toContain('saldo a favor hoy');
+    // El saldo de hoy va SIEMPRE en su recuadro (2026-10-16), cambie o no.
+    expect(html).toContain('Su saldo a favor hoy<b>$1,000.00</b>');
     expect(armarTicketAnticipo({ ...d, a_favor_hoy: 250 }, tienda)).toContain('Su saldo a favor hoy<b>$250.00</b>');
   });
 

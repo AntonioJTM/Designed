@@ -164,5 +164,15 @@ router.put('/traspasos/:id/escaneos', ...soloStaff, requirePermiso('hacer:enviar
 router.post('/traspasos/:id/recibir', ...soloStaff, requirePermiso('hacer:recibir_traspaso'), validate(recepcionSchema), controller.recibirTraspaso);
 router.post('/traspasos/:id/cancelar', ...soloStaff, requirePermiso('ver:surtir'), validate(cancelacionSchema), controller.cancelarTraspaso);
 router.put('/configuracion', ...soloStaff, requirePermiso('ver:inventario'), validate(configurarSchema), controller.configurar);
+// El mínimo para VARIOS hilos de un almacén, en paquetes (2026-10-16): vista previa o guardar.
+const minimosSchema = z
+  .object({
+    almacen_id: z.coerce.number().int().positive(),
+    paquetes: z.coerce.number().int().min(0).max(999),
+    solo_sin_minimo: z.boolean().optional(),
+    guardar: z.boolean().optional(),
+  })
+  .strict();
+router.post('/configuracion/minimos', ...soloStaff, requirePermiso('ver:inventario'), validate(minimosSchema), controller.minimos);
 
 module.exports = router;

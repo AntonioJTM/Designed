@@ -28,6 +28,14 @@
           Ajuste / merma
         </button>
       }
+      <!-- El mínimo de VARIOS hilos de un almacén, en paquetes, de una vez (2026-10-16). -->
+      <button type="button" class="btn btn-ghost" (click)="modal.set('minimos')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z M10 21h4"></path>
+        </svg>
+        Mínimo para varios
+      </button>
       @if (veKardex()) {
         <a class="btn btn-ghost" routerLink="/admin/kardex">Ver kardex</a>
       }
@@ -352,6 +360,15 @@
     [hilo]="{ producto_id: h.producto_id!, producto: h.producto, calibre: h.calibre, material: h.material, linea: h.linea }"
     [almacenId]="filtroAlmacen || null"
     (cerrado)="hiloAbierto.set(null)"
+  />
+}
+
+@if (modal() === 'minimos') {
+  <app-minimos-modal
+    [almacenes]="almacenes()"
+    [almacenInicial]="filtroAlmacen || null"
+    (cerrado)="modal.set(null)"
+    (guardado)="alMover()"
   />
 }
 

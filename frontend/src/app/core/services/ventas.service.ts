@@ -94,6 +94,8 @@ export interface CrearPedidoInput {
    * no se le fía a un desconocido.
    */
   a_credito?: number;
+  /** Fiarle aunque traiga la cuenta atrasada: la caja lo preguntó antes (2026-10-16). */
+  fiar_con_atraso?: boolean;
   sesion_caja_id?: number;
   /** Lista de precios a aplicar. Sin esto se cobra el precio público. */
   tipo_cliente_id?: number;
@@ -171,8 +173,10 @@ export class VentasService {
     f: {
       canal?: CanalVenta;
       estado?: EstadoPedido;
-      /** Folio o cliente (nombre o como le dicen). */
+      /** Folio o cliente (nombre, como le dicen o su número). */
       q?: string;
+      /** emitidas / canceladas / con_devolucion (2026-10-16). */
+      situacion?: 'emitidas' | 'canceladas' | 'con_devolucion';
       caja_id?: number;
       /** 'YYYY-MM-DD', los dos inclusivos. */
       desde?: string;
@@ -184,6 +188,7 @@ export class VentasService {
     if (f.canal) params = params.set('canal', f.canal);
     if (f.estado) params = params.set('estado', f.estado);
     if (f.q) params = params.set('q', f.q);
+    if (f.situacion) params = params.set('situacion', f.situacion);
     if (f.caja_id) params = params.set('caja_id', f.caja_id);
     if (f.desde) params = params.set('desde', f.desde);
     if (f.hasta) params = params.set('hasta', f.hasta);

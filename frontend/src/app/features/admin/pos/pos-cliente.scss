@@ -1,0 +1,37 @@
+// El cliente en la caja (2026-10-16): "lo que siempre lleva", la cuenta atrasada
+// y el cintillo de cada modo. Hoja aparte: pos.scss ya pasa de 4 kB.
+
+// ---- Lo que siempre lleva: sus 5 hilos, como botones de dos partes ----
+.lo-que-lleva { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; }
+.lql-titulo { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; color: var(--tinta-3); text-transform: uppercase; }
+.lql-lista { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.lql-hilo {
+  display: inline-flex; align-items: stretch; border: 1px solid var(--borde); border-radius: 8px;
+  background: var(--superficie); overflow: hidden;
+}
+.lql-hilo button {
+  border: 0; background: none; font: inherit; font-size: 0.8125rem; color: var(--tinta); cursor: pointer;
+  padding: 6px 10px; min-height: 32px;
+}
+.lql-hilo button:hover { background: var(--acento-suave); color: var(--acento-oscuro); }
+.lql-hilo button:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
+.lql-hilo .lql-nombre { font-weight: 500; }
+.lql-hilo .lql-conos { border-left: 1px solid var(--borde); color: var(--tinta-2); font-size: 0.75rem; }
+
+// Con el dedo, 44 px (como los demás botones de la caja).
+@media (max-width: 900px), (pointer: coarse) {
+  .lql-hilo button { min-height: 44px; }
+}
+
+// ---- Cuenta atrasada: el aviso del cliente en rojo (no se le fía a ciegas) ----
+.aviso-cliente.atrasado { background: var(--peligro-f); color: var(--peligro-t); }
+.aviso-cliente.atrasado .btn { border-color: var(--peligro-borde); }
+
+// ---- El cintillo de cada modo: qué pasa con la mercancía y con el dinero ----
+// Los pares de estado de DESIGN.md: verde se cobra, ámbar queda por pagar,
+// azul neblina se aparta, rojo la cuenta viene atrasada.
+.cintillo { margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 0.8125rem; line-height: 1.45; }
+.cintillo[data-tono='cobrar'] { background: var(--ok-f); color: var(--ok-t); }
+.cintillo[data-tono='credito'], .cintillo[data-tono='pendiente'] { background: var(--aviso-f); color: var(--aviso-t); }
+.cintillo[data-tono='espera'] { background: var(--acento-suave); color: var(--acento-oscuro); }
+.cintillo[data-tono='atrasado'] { background: var(--peligro-f); color: var(--peligro-t); }

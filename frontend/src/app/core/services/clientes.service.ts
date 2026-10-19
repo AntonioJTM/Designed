@@ -12,6 +12,7 @@ import {
   Cliente,
   ClienteInput,
   ClienteParaVenta,
+  ColorComprado,
   EstadoDeCuenta,
   Expediente,
   LugarEntrega,
@@ -82,6 +83,11 @@ export class ClientesService {
    * resultados, con el crédito disponible: el cajero necesita saber AL elegirlo
    * si a esta persona se le puede fiar.
    */
+  /** Sus 5 hilos más comprados en esta tienda: "lo que siempre lleva" (la caja). */
+  loQueLleva(id: number): Observable<ColorComprado[]> {
+    return this.http.get<ApiResponse<ColorComprado[]>>(`${this.base}/${id}/lo-que-lleva`).pipe(map(data));
+  }
+
   buscar(q: string): Observable<ClienteParaVenta[]> {
     const p = new HttpParams().set('q', q);
     return this.http

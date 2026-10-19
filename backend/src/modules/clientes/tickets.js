@@ -21,7 +21,8 @@ const SIGNO_FAVOR = { devolucion: 1, anticipo: 1, uso: -1, aplicado: -1, reinteg
 
 async function _cliente(clienteId) {
   const [[c]] = await pool.query(
-    'SELECT id, nombre, nombre_comercial, codigo FROM clientes WHERE id = :id',
+    // Con sus teléfonos: el ticket se le puede mandar por WhatsApp (2026-10-16).
+    'SELECT id, nombre, nombre_comercial, codigo, telefono, telefono_alt FROM clientes WHERE id = :id',
     { id: clienteId }
   );
   if (!c) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');

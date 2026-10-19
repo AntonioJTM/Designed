@@ -18,13 +18,71 @@
   · PRUEBAS: https://devtristan.cloud:8443 → base "desarrollo", con la etiqueta
     roja "SISTEMA DE PRUEBAS". Tiene la MUESTRA sembrada el 2026-10-01 (18 hilos,
     40 clientes y tres meses INVENTADOS) mezclada con lo que se capturó antes.
-  · El .env LOCAL sigue apuntando a "desarrollo": trabajar desde aquí es probar.
+  · El .env LOCAL apunta a "hitex" desde el 2026-10-16 (entrada 68): lo que se
+    haga con un servidor levantado aquí es DE VERDAD. Las E2E no corren contra
+    hitex; para la de pruebas, DB_NAME=desarrollo delante del comando.
   · Las E2E y el sembrado se NIEGAN a correr contra "hitex"
     (backend/scripts/_produccion.js), aun con E2E_ACEPTO_PRODUCCION.
   · Una MIGRACIÓN nueva se aplica en LAS DOS bases.
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
 LO ÚLTIMO QUE SE TERMINÓ
+  WHATSAPP CON UN ENTER, "FALTA $X" EN VENTAS Y AVISO SI SE DESCONECTA
+  (2026-10-16, entrada 70, DESPLEGADO en 20261016-171047, sin cambios en la base).
+  Antes:
+  MÍNIMO PARA VARIOS HILOS Y EL NÚMERO SE GUARDA DESDE WHATSAPP (2026-10-16, DESPLEGADO en 20261016-165758,
+  entrada 69, sin cambios en la base): en Inventario, "Mínimo para varios" pone
+  "avísame cuando queden menos de N paquetes" a todos los hilos de un almacén de
+  una vez; y el número que se escribe al mandar un ticket por WhatsApp se guarda
+  en el expediente del cliente (casilla marcada). Lo de crear el cono solo YA
+  existía (no se cambió).
+  Antes:
+  EL .ENV LOCAL APUNTA A HITEX Y estado-migraciones REVISA HITEX (2026-10-16,
+  entrada 68; solo herramientas locales, no se despliega): el script de
+  migraciones ignoraba --base y revisaba la base del .env (desarrollo).
+  Antes:
+  EL WHATSAPP DE LA TIENDA SE ENLAZA CON UN QR (2026-10-16, entrada 67, DESPLEGADO en 20261016-141543, sin
+  cambios en la base; dependencias nuevas en el servidor): Configuración → "WhatsApp
+  de la tienda" → Enlazar → se escanea el QR con el celular de la tienda. Ya
+  enlazado, el botón "WhatsApp" de cada ticket le manda el PDF al cliente DIRECTO,
+  sin abrir nada. FALTA que el usuario lo enlace en producción y mande una prueba.
+  Antes:
+  LOS TICKETS SE MANDAN POR WHATSAPP (2026-10-16, entrada 66, DESPLEGADO en 20261016-135942, sin cambios de
+  estructura en la base): junto a cada botón de ticket (venta, venta cancelada,
+  devolución, anticipo, abono a su cuenta y abono a una nota) hay un botón
+  "WhatsApp": baja el ticket en PDF y abre el chat del cliente con un mensaje
+  corto; el PDF se arrastra al chat. En el celular se comparte con su menú.
+  Antes:
+  "SU SALDO A FAVOR HOY" SALE SIEMPRE EN LOS TICKETS (2026-10-16, entrada 65, DESPLEGADO en 20261016-132706,
+  sin cambios en la base): el de anticipo y el de una venta pagada con saldo a
+  favor lo ponían solo si el saldo había cambiado; ahora lo ponen siempre, como
+  el de devolución. El usuario eligió la opción A.
+  Antes:
+  VENTAS = LAS NOTAS DE VENTA (2026-10-16, entrada 64, DESPLEGADO en
+  20261016-132257; migración 2026-10_efectivo_recibido en las dos bases,
+  respaldo /root/respaldos/hitex_antes_efectivo_recibido_20261016-131745.sql.gz):
+  la lista dice clave, cliente con su número, estatus (emitida, cancelada,
+  devolución, devolución parcial), cuándo se hizo con la hora, si fue de
+  contado, de qué almacén salió, quién la hizo y el importe; filtros por
+  cliente, estatus y periodo (hoy, 7 días, este mes, todo o de una fecha a
+  otra). Al abrir una venta en efectivo: cuánto entregó y cuánto cambio se le
+  dio (solo de las ventas de hoy en adelante).
+  Antes:
+  SEIS MEJORAS DE CAJA, CRÉDITO, DEVOLUCIÓN, SURTIR Y CATÁLOGO (2026-10-16,
+  entrada 63, DESPLEGADO en 20261016-124413, sin cambios en la base): "lo que
+  siempre lleva" el cliente en la caja, aviso y candado por cuenta atrasada
+  (plazo de 15 días, también en la campana), cintillo de cada modo de cobro,
+  devolución "antes → después", barra por hilo al surtir y candado al borrar
+  una presentación.
+  Antes:
+  AUDITOR ESTRICTO MÓDULO POR MÓDULO + EXPERTO CRM Y DISEÑO UI/UX: SKILL
+  /verificar Y AGENTE revisor-general (2026-10-16, entrada 62; no toca el
+  sistema, no se despliega): revisan en solo lectura y con rigor estricto los
+  12 módulos de Hitex únicamente sobre la base "hitex" (se dejó de usar
+  "desarrollo"), apoyados en backend/scripts/verificar-sistema.js (989
+  comprobaciones, incluidas las reglas de DESIGN.md), y entregan propuestas de
+  mejora tanto de lógica/CRM como de Diseño UI/UX conectado con la operación.
+  Antes:
   AJUSTAR A MANO EL SALDO A FAVOR (2026-10-16, entrada 61, DESPLEGADO en
   20261016-105041, sin cambios en la base): botón "Ajustar" en la tarjeta "Su saldo
   a favor" del expediente: quitarle o agregarle, con motivo, para quien tiene
@@ -607,6 +665,478 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (70) · WhatsApp con un Enter, cuánto falta en "Contado" y aviso si se desconecta el WhatsApp (DESPLEGADO 20261016-171047)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO (tres mejoras de diseño ligadas a la operación, de una revisión)
+  1. Con el WhatsApp de la tienda enlazado y el cliente con su celular, mandar sin
+     usar el ratón dos veces: la ventana con "Cambiar número" y un Enter.
+  2. En Ventas, que "No · a crédito" diga cuánto falta o que ya se liquidó, sin
+     abrir cada venta (y sin agregar columnas).
+  3. Un aviso en la campana, para quien entra a Configuración, si el WhatsApp de la
+     tienda tenía sesión y se desconectó.
+
+LO QUE SE HIZO
+  1. shared/ticket/whatsapp-ticket.ts: enlazado y con un número válido de su
+     expediente (sin haber tecleado ni "Cambiar número"), no se enseña el campo:
+     "Le llega a 775 256 6861, el número de su expediente." + "Cambiar número"; el
+     estado dice "Aprieta Enter para mandarlo." y el cursor queda en "Mandar por
+     WhatsApp" en cuanto el PDF está listo. Enviado, el cursor pasa a "Listo" (otro
+     Enter cierra). "Cambiar número" enseña el campo con su número seleccionado. El
+     bloque del número espera a saber si está enlazado y a tener el PDF: así no se
+     ve un campo que luego desaparece.
+  2. pedidos-list: contadoDe trae `falta` (el que ya calcula el listado, con los
+     abonos de una fiada repartidos); abajo de "No": "a crédito · falta $1,200.00"
+     (ámbar) o "a crédito · ya liquidada". Una cancelada o devuelta no debe nada:
+     solo dice por qué. Mismas 8 columnas.
+  3. whatsapp/conexion.js → avisoCampana(): "sesion_cerrada" (la cerró el
+     celular o WhatsApp; deja la marca uploads/whatsapp-aviso.json FUERA de la
+     carpeta de la sesión, que sigue tras reiniciar; se quita al enlazar o al
+     desenlazar a propósito) o "sin_conexion" (ya enlazado, 10 minutos sin
+     conectar). Va en GET /notificaciones como `whatsapp` y cuenta en el total. La
+     campana lo pone arriba, en "Sistema", a quien tiene ver:config: "El WhatsApp
+     de la tienda se desconectó · Desde hoy a las 17:05 · los tickets se mandan a
+     mano hasta volver a enlazarlo · Enlazar ›". Configuración lo sigue diciendo
+     tras reiniciar el servicio.
+
+LA VERIFICACIÓN
+  · Pantallas: 488 pruebas (5 nuevas: un Enter con el cursor en Mandar y luego en
+    Listo; Cambiar número; cuánto falta en la columna; el aviso de la campana con y
+    sin ver:config —primera prueba de la campana—). Servidor: 30. verificar: 0.
+  · En Chrome con el sistema local (hitex) y una carpeta temporal con la marca de
+    "sesión cerrada": la campana con su aviso y el globo en 1, y la tarjeta de
+    Configuración con su aviso; 0 escrituras. (La foto de página completa enseñaba
+    el panel "transparente": era la herramienta estirando la página; la foto de lo
+    visible lo enseña sólido.) El envío directo y el "falta" no se vieron con datos
+    reales: no hay WhatsApp enlazado ni ventas fiadas en hitex; los cubren las pruebas.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (69) · Mínimo para varios hilos, y el número del WhatsApp se guarda en el expediente (DESPLEGADO 20261016-165758)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO (tres propuestas de una revisión: "ahora estas")
+  1. Crear sola la presentación de cono la primera vez que se baja un paquete.
+  2. Guardar en el expediente el teléfono que el cajero escribe al mandar un
+     ticket por WhatsApp ("que la base de CRM se llene sola desde la caja").
+  3. Poner "mínimo en paquetes" a varios hilos de un almacén de una sola vez.
+
+1 · YA EXISTÍA: no se cambió nada
+  inventario/service.js → desarmar crea la presentación de cono si el paquete no
+  la tiene (desde el 2026-07; regla en CLAUDE.md: "No hay que configurar nada antes
+  de bajar el primer paquete"), y la ventana lo dice: "se dará de alta la
+  presentación de cono". En hitex los 5 hilos sin cono (VINO OSCURO, VINO CLARO,
+  L.BEIGE MELANGE, ROJO y CAMEL 2/30) no tienen nada que lo impida: admiten varias
+  presentaciones, tienen precio ($145), peso y todos sus paquetes dicen cuántos
+  conos rinden. El sexto (A.ALECRICO) ya tiene el suyo, creado así en el único
+  desarme hecho. Quizá la revisión se confundió porque el selector "Cono a
+  producir" (el modo a mano) solo aparece cuando ya hay conos.
+
+2 · EL NÚMERO SE GUARDA EN SU EXPEDIENTE
+  · La ventana de WhatsApp (shared/ticket/whatsapp-ticket.ts): si el ticket tiene
+    cliente y el número escrito no es ninguno de los dos de su expediente, aparece
+    una casilla YA MARCADA: "Guardar este número en el expediente de …" (sin
+    teléfono), "Guardarlo… (el 775 … que tenía queda como segundo teléfono)" (si
+    el segundo está vacío) o "(reemplaza al 775 …)". Al mandarlo —directo, solo si
+    se mandó; a mano, al bajarlo— lo guarda con PUT /clientes/:id (parcial: lo
+    demás del cliente no se toca) y dice "El número quedó en su expediente". Si
+    falla, lo avisa sin frenar el envío. Un celular de México se guarda con sus
+    10 números.
+  · Cada ticket lleva de quién es y sus dos teléfonos (PaqueteWhatsapp.clienteId,
+    telefonoPrincipal, telefonoAlt): venta, devolución, abono, anticipo y abono a
+    nota (pedidos/tickets.js ahora manda el id del cliente).
+
+3 · MÍNIMO PARA VARIOS HILOS
+  · POST /inventario/configuracion/minimos (ver:inventario, solo su almacén):
+    { almacen_id, paquetes, solo_sin_minimo (por omisión sí), guardar }. A cada
+    hilo en paquete que ese almacén YA maneja le calcula N × el peso promedio real
+    de sus paquetes ahí (sin paquetes, el del catálogo, y lo marca); sin guardar
+    solo devuelve la vista previa; guardando, en una transacción y solo
+    stock_minimo. No se le pone a colores que el almacén nunca tiene (sonarían
+    alertas de lo que no vende) ni a los conos.
+  · Inventario → "Mínimo para varios" (inventario/minimos-modal.ts): almacén (el
+    del filtro de la pantalla), "Avisarme cuando queden menos de 5 paquetes",
+    "Solo a los que no tienen mínimo" o "A todos (reemplaza el que tenían)", y la
+    lista de cada hilo con sus kilos y lo que tenía. "Poner el mínimo a N hilos";
+    no se cierra al guardar (se sigue con otro almacén).
+  · En hitex, la vista previa con 5 paquetes: MATRIZ CUAUTEPEC 6 hilos (93.6 a
+    98.1 kg cada uno), SUCURSAL MOROLEON 3. Hoy ninguno tiene mínimo. NO se guardó.
+
+LA VERIFICACIÓN
+  · Pantallas: 483 pruebas (5 nuevas: guardar el número sin teléfono, con otro y
+    desmarcado; la ventana del mínimo con su vista previa, guardar y "A todos").
+    Servidor: 30. verificar-sistema: 0 hallazgos.
+  · Chrome con el sistema local en hitex, 1280 y 390 px: las dos ventanas con
+    datos reales; axe sin fallas (la lista del mínimo se desplazaba por dentro y no
+    se llegaba con el teclado: se quitó ese desplazamiento). En el registro solo 4
+    vistas previas del mínimo (no guardan): hitex sigue con 0 mínimos y el
+    teléfono de Ines como estaba. No se guardó ni se mandó nada.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (68) · El .env local apunta a hitex y estado-migraciones.js revisa hitex (no se despliega)
+-------------------------------------------------------------------------------
+
+LO QUE SE ENCONTRÓ (lo pasó el usuario, de una revisión: "vamos a hacer esto")
+  · scripts/estado-migraciones.js tomaba la base del .env e IGNORABA --base: un
+    "estado-migraciones.js --base hitex" revisaba en realidad "desarrollo". Las
+    entradas 64 y anteriores que dicen "estado-migraciones dice que hitex está al
+    día" revisaron desarrollo; esa vez la columna nueva (pagos.recibido) sí se
+    comprobó directo en hitex, por information_schema.
+  · backend/.env local seguía en DB_NAME=desarrollo, aunque desde la entrada 62
+    solo se trabaja con hitex: un servidor levantado aquí decía que el WhatsApp de
+    la tienda estaba "apagado" (solo se enciende con hitex).
+
+LO QUE SE HIZO
+  1. estado-migraciones.js: la base es la de --base y, sin él, "hitex" (como
+     verificar-sistema.js). Corrido de verdad: hitex al día; desarrollo al día.
+  2. backend/.env: DB_NAME=hitex (el archivo no va al repo ni al servidor).
+     Consecuencias: un servidor levantado aquí trabaja con la base REAL (lo que se
+     haga es de verdad) y su WhatsApp ya dice "Sin enlazar" en vez de "Apagado".
+     Las E2E siguen negándose a correr contra hitex (_produccion.js): para la de
+     pruebas, DB_NAME=desarrollo delante del comando.
+  3. aplicar-migracion.js: si la base es hitex, avisa que primero va el respaldo
+     y pide escribir "hitex" (no "si") para aplicarla.
+  · Pruebas del servidor: 30. verificar-sistema contra hitex: 0 hallazgos.
+  · Son herramientas locales: no cambian el sistema y no se despliegan solas
+    (van en el siguiente despliegue).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (67) · El WhatsApp de la tienda se enlaza con un QR y manda los tickets directo (DESPLEGADO 20261016-141543)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Quiero configurar WhatsApp dentro de la página para que no lo tenga que estar
+  abriendo; que me pida escanear el QR para enlazarlo y listo; agrégalo en
+  Configuración." Se le dieron tres opciones (QR como WhatsApp Web, la API oficial
+  de Meta, o dejarlo como estaba) y eligió el QR SABIENDO EL RIESGO: no es la
+  conexión oficial; WhatsApp podría bloquear el número si cree que son mensajes
+  automáticos, y puede fallar unos días cuando WhatsApp cambie algo, hasta
+  actualizar la librería. Se recomendó usar el número de la tienda, no uno personal.
+
+CÓMO QUEDÓ
+  1. SERVIDOR (backend/src/modules/whatsapp/): Baileys 7.0.0-rc14 (sin navegador:
+     es un "dispositivo vinculado" más del celular; ESM, se carga con import()) y
+     qrcode 1.5.4, versiones exactas. conexion.js lleva UNA conexión por sistema en
+     el mismo proceso: enlazar (devuelve el QR, cambia cada ~20 s; a los 6 sin
+     escanear se da por vencido), se reconecta sola si se cae (2, 5, 10, 30, 60 s),
+     si la cierran desde el celular borra la sesión y lo avisa, desenlazar la quita
+     del celular. La sesión vive en uploads/whatsapp/ (el despliegue no toca
+     uploads/), así que al reiniciar el servicio se conecta sola (server.js →
+     arrancar). Solo MANDA: no lee ni guarda chats. Manda uno a la vez.
+     Rutas /api/v1/whatsapp: GET /estado (personal, sin QR), GET /enlace, POST
+     /enlazar, /desenlazar y /prueba (quien ve Configuración, «ver:config»), POST
+     /enviar (personal: el PDF EN CRUDO, y teléfono, archivo y mensaje en
+     cabeceras X-…; revisa que empiece con %PDF). El número se busca con onWhatsApp
+     (en México a veces lo tiene con el 1): sin WhatsApp, 422 SIN_WHATSAPP; sin
+     enlazar, 409 WHATSAPP_SIN_ENLAZAR. Respuestas sin caché.
+     SOLO SE ENCIENDE CON LA BASE hitex: el sistema de pruebas (desarrollo) tiene
+     clientes inventados cuyos teléfonos podrían ser de alguien; ahí dice
+     "apagado" (se fuerza con WHATSAPP=si/no). server.js ahora apunta (y no se cae
+     por) una promesa sin atender, porque la conexión corre en el mismo proceso.
+  2. CONFIGURACIÓN → "WhatsApp de la tienda" (configuracion/whatsapp-tienda.ts):
+     sin enlazar explica y avisa el riesgo; "Enlazar WhatsApp" enseña el QR y los
+     pasos (⋮ → Dispositivos vinculados → Vincular un dispositivo) y pregunta cada
+     2.5 s hasta que quede enlazado; enlazado dice con qué número y desde cuándo,
+     "Mandar prueba" a un número y "Desenlazar" (pregunta antes).
+  3. LA VENTANA DEL TICKET: al abrirse pregunta si está enlazado. Enlazado: pide
+     su número (obligatorio) y "Mandar por WhatsApp" lo manda desde el servidor
+     ("Listo: se le mandó … a +52 …"); "Bajarlo y mandarlo yo" hace lo de antes.
+     Sin enlazar o reconectando: lo de antes, con una nota de dónde se enlaza.
+
+LA VERIFICACIÓN
+  · Servidor: 30 pruebas (3 nuevas del número). Pantallas: 478 (5 nuevas: el envío
+    directo, sin número, sin WhatsApp y a mano; la tarjeta sin enlazar/QR,
+    enlazada con prueba y desenlazar, y el aviso). verificar-sistema: 0 hallazgos.
+  · Local con hitex (solo lectura de la base; la sesión en una carpeta temporal):
+    "Enlazar WhatsApp" trajo el QR REAL de WhatsApp y los pasos; se canceló sin
+    escanear. NO se ha enlazado ni mandado nada de verdad: lo hace el usuario.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (66) · Los tickets se mandan por WhatsApp, en PDF (DESPLEGADO 20261016-135942)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  "Que se puedan mandar los tickets de venta, de abonos, de anticipos, de
+  devolución y de ventas canceladas a los clientes por WhatsApp… que tenga el
+  ícono de WhatsApp para compartírsela", en cada lugar donde está el ticket.
+  Se le dieron tres formas (mensaje de texto, enlace al ticket o PDF para
+  adjuntar) y eligió el PDF PARA ADJUNTAR.
+
+CÓMO QUEDÓ
+  1. Junto a cada botón de ticket hay uno "WhatsApp" (ícono + palabra;
+     shared/ticket/boton-whatsapp.ts): el detalle de la venta (su ticket, también
+     de una venta cancelada; cada devolución y el aviso de una recién hecha; cada
+     abono de una nota), la caja al cobrar (venta, a crédito, pendiente de pago) y
+     el aviso de un abono o anticipo, el expediente (cada abono de su cuenta, cada
+     anticipo en "Su saldo a favor" y el aviso), Clientes → Cuánto debe y Notas
+     pendientes de pago (sus avisos). TicketDelAviso acepta la acción de WhatsApp.
+  2. Abre una VENTANA (shared/ticket/whatsapp-ticket.ts, una sola vez en app.ts,
+     con WhatsappService): mientras arma el PDF dice "Preparando el PDF…"; trae el
+     teléfono del cliente (el primero o el segundo) y se puede corregir; un
+     celular de México son 10 números y se le pone el 52; sin número, WhatsApp
+     pide elegir el contacto. Su botón "Bajar el PDF y abrir WhatsApp" baja el PDF
+     y abre wa.me con el mensaje, y la ventana dice que se arrastre al chat.
+     Va en ventana porque el navegador solo deja abrir otra pestaña en el clic, y
+     el PDF tarda un instante. En celular o tableta (puntero de dedo con "compartir"
+     de archivos) se abre el menú del teléfono con el PDF pegado.
+  3. EL PDF ES EL MISMO TICKET que se imprime (shared/ticket/ticket-pdf.ts, sin
+     librerías): se arma en un marco, se dibuja con el logo a 4 veces su tamaño
+     (SVG foreignObject → lienzo), se pasa a grises, se comprime sin pérdida
+     (CompressionStream = FlateDecode) y va en un PDF de una hoja del tamaño del
+     ticket (62 mm). El de una venta real pesó 98 KB y se lee nítido. Para eso el
+     estilo de letra del ticket va también en .t (no solo en body).
+  4. El mensaje (shared/ticket/whatsapp.ts y TicketService → hoja…): "Hola Ines
+     Hernandez Salais, le mandamos su ticket de venta POS-468D por $2,726.00.
+     ¡Gracias por su compra! — Hitex"; la cancelada sin "gracias"; la devolución,
+     el anticipo (AN-), el abono (AB-) y el abono a nota (PG-) con su folio corto.
+     El archivo: "Ticket de venta POS-468D.pdf", "Devolución DEV-B23B.pdf",
+     "Anticipo AN-12.pdf", "Abono AB-…pdf".
+  5. El servidor manda los teléfonos del cliente en el detalle de la venta
+     (cliente_telefono / _alt) y en los datos de los tickets de abono, anticipo y
+     abono a nota (cliente.telefono / telefono_alt). Solo consultas: la base no
+     cambió. Token nuevo --whatsapp (#128C7E, su verde oscuro: el claro de la
+     marca no se lee sobre blanco).
+
+LA VERIFICACIÓN
+  · Pruebas de pantallas: 473 (15 nuevas: el número, el enlace y el mensaje; el
+    PDF —que el dibujo no salga en blanco y que su índice apunte a cada objeto—;
+    la ventana; y el mensaje y archivo de venta, cancelada y anticipo). Servidor:
+    27. verificar-sistema.js contra hitex: 0 hallazgos.
+  · En Chrome con el sistema local apuntando a hitex, SOLO LECTURA (0 escrituras
+    en el registro): venta 468D (y su devolución), venta CCA3 y los anticipos del
+    expediente; cada ventana trajo el número del cliente, bajó su PDF y armó el
+    enlace del chat (interceptado, no se abrió WhatsApp). Se vio el PDF: el ticket
+    completo con el logo. Se corrigió: el botón quedaba 4 px más arriba que
+    "Ticket" (ahora el ícono va en un span y se alinea por la letra) y el folio
+    largo de la devolución (ahora DEV-B23B).
+  · NO se probó con WhatsApp de verdad ni en un celular físico.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (65) · El recuadro "Su saldo a favor hoy" sale siempre en los tickets (DESPLEGADO 20261016-132706)
+-------------------------------------------------------------------------------
+
+LO QUE PASÓ
+  El usuario vio en el expediente que unos tickets de saldo a favor salían con el
+  recuadro "Su saldo a favor hoy" y otros no ("no entiendo eso"). Era a propósito:
+  el de devolución lo ponía siempre, pero el de anticipo y el de una venta pagada
+  con saldo a favor solo cuando el saldo había cambiado desde ese día (para no
+  repetir el mismo número). Se le dieron dos opciones y eligió la A: que salga
+  SIEMPRE, para que todos los tickets se vean igual.
+
+LO QUE SE HIZO
+  · shared/ticket/ticket.ts: armarTicketAnticipo y el pago con saldo a favor de
+    armarTicket ponen el recuadro siempre (si lo usó todo, dice $0.00). El de
+    devolución no cambió (solo no lo pone si la devolución no tiene cliente).
+  · Pruebas de pantallas: 458 (se ajustaron las del ticket que pedían que NO
+    saliera). verificar-sistema.js contra hitex: 0 hallazgos.
+  · CLAUDE.md: las dos reglas del ticket dicen "SIEMPRE".
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (64) · Ventas = las notas de venta: estatus, contado, almacén, filtros y el cambio que se dio (DESPLEGADO 20261016-132257)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO (dictado)
+  "En la lista de notas de venta: la clave (el folio), el cliente (su número y
+  nombre), el estatus (emitida, cancelada, devolución o devolución parcial), la
+  fecha de elaboración con la hora, si pagó de contado sí o no, de qué almacén,
+  quién elaboró la venta y el importe total, nada más. El método de pago lo
+  puedes omitir: cuando se abra la venta, cómo se pagó, cuánto dinero recibiste
+  (si te dio 2,300 y fueron 2,250, cuánto le diste de cambio). Y filtrar por
+  cliente, las ventas de hoy, de una fecha a otra, las canceladas, las emitidas
+  y las que tienen devolución, y nada más."
+
+LO QUE SE HIZO
+  1. LA LISTA (Ventas, /admin/ventas): columnas Clave · Cliente (con su número
+     C-0001 abajo) · Estatus · Elaborada ("hoy 13:42", "ayer 21:25", "14 oct
+     21:51") · Contado (Sí / No y por qué: a crédito, pendiente de pago, en
+     espera, apartado) · Almacén · Elaboró · Importe · Ver. Se quitaron "Qué se
+     llevó" y "Falta" (el usuario dijo "nada más"); siguen al abrir la venta.
+  2. EL ESTATUS lo calcula el servidor (pedidos/model.js → situacionDe):
+     cancelada (estado cancelado), devolución (estado viejo 'devuelto', o lo que
+     regresó por Devolución cubre la venta sin el envío), devolución parcial
+     (regresó algo, no todo) y emitida (lo demás). La lista trae `situacion`,
+     `devuelto_total`, `contado`, `fiada`, `almacen` y `cliente_codigo`.
+     "De contado" = no fiada (sin cargo en su cuenta), no nota pendiente de
+     pago, no nota en espera y no apartado.
+  3. FILTROS: el buscador también encuentra por el número del cliente (C-0001);
+     "Estatus" (Todas / Emitidas / Con devolución / Canceladas) =
+     GET /pedidos?situacion=emitidas|con_devolucion|canceladas (SITUACIONES en
+     pedidos/model.js); "Periodo" con Hoy / 7 días / Este mes / Todo, y Desde /
+     Hasta para de una fecha a otra. El título de la lista dice cuál ("Ventas de
+     hoy", "Ventas de los últimos 7 días", "Ventas de este mes", "Todas las
+     ventas" o "Ventas del 01/10 al 16/10"). Se quitó el filtro por estado
+     interno (pendiente, pagado…), que la tienda no pidió.
+  4. EL CAMBIO QUE SE DIO: el pago en efectivo se seguía asentando por lo
+     COBRADO y el billete se perdía (no se guardaba, regla del 2026-10-02). Ahora
+     se guarda aparte, solo informativo, en `pagos.recibido` (migración
+     2026-10_efectivo_recibido.sql), al cobrar en la caja y al entregar una nota
+     en espera. El detalle de la venta dice en cada pago "Recibió $2,300.00 ·
+     cambio $50.00", arriba de la tabla "De contado: se pagó el mismo día." o
+     "No fue de contado: …", y en la línea de arriba "salió de {almacén} · la
+     elaboró {quién}". El ticket reimpreso también trae lo recibido y el cambio.
+     OJO: las ventas de ANTES no tienen el billete guardado; dicen solo el monto.
+  5. Detalle chico: un pago con saldo a favor decía "Saldo a favor" dos veces
+     (el método y su referencia); la referencia ya no se repite si es igual.
+
+LA VERIFICACIÓN
+  · Pruebas de pantallas: 458 (7 nuevas: la lista con sus 8 columnas, el
+    estatus, el porqué del contado, los periodos y el filtro; el detalle con
+    "Recibió $2,300.00 · cambio $50.00"; el ticket reimpreso con su cambio).
+    Pruebas del servidor: 27. verificar-sistema.js contra hitex: 0 hallazgos.
+  · Solo LECTURA contra hitex: la lista con las 3 ventas reales (CCA3 y 719E
+    emitidas, 468D devolución), los filtros y el detalle en Chrome a 1280 y
+    390 px, axe sin fallas, 0 escrituras en el registro. A 1280 el botón "Ver"
+    quedaba cortado: la tabla bajó de 960 a 880 px de ancho mínimo.
+  · Migración: respaldo de hitex y luego la columna en hitex y desarrollo;
+    estado-migraciones.js dice que hitex está al día.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (63) · Seis mejoras: caja + CRM, cuenta atrasada, cintillo, devolución, surtir y presentaciones (DESPLEGADO 20261016-124413)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO (ya solo con la base "hitex"; "cuidando que el diseño
+visual vaya de la mano con la lógica")
+  1. En la caja, al elegir cliente: sus 5 hilos más comprados como botones para
+     buscarlos o abrir directo la báscula de conos.
+  2. Además del límite de crédito, avisar si trae saldo sin abonar con más de
+     DIAS_SIN_ABONAR (15 días): no fiarle a ciegas.
+  3. Un cintillo en la tarjeta de cobro que diga, por modo, qué pasa con la
+     mercancía y con el dinero (y a crédito, cuánto crédito libre le queda).
+  4. En la devolución, "antes → después" en vivo: cuánto baja la deuda de esa
+     nota y cuánto pasa a saldo a favor.
+  5. En Surtir sucursal, una barra por hilo: "8 de 8 paquetes · 152.4 kg".
+  6. No dejar borrar una presentación con bultos, existencias, cargas, kardex o
+     ventas: pedir desactivarla.
+
+LO QUE SE HIZO
+  1. LO QUE SIEMPRE LLEVA: GET /clientes/:id/lo-que-lleva (sus 5 hilos por
+     producto_id, de SUS tiendas: coloresMasComprados). En la caja, debajo del
+     cliente, un botón de dos partes por hilo: el nombre ("ROJO 2/30") lo busca;
+     "Conos" abre DIRECTO la báscula de sus conos si hay en esa tienda (si no,
+     enseña el hilo y dice por qué). pos.ts → buscarHiloCliente / conosHiloCliente.
+  2. CUENTA ATRASADA: clientes/model.js → diasSinAbonar (pura: desdeSinAbonar):
+     días desde su último abono o, si lo pagó todo y se le volvió a fiar, desde
+     ese nuevo cargo (comprar fiado seguido no "renueva" la cuenta). La búsqueda
+     de la caja y el expediente traen dias_sin_abonar y atrasado (> plazo).
+     · La caja pinta el aviso del cliente en ROJO con los días, y antes de fiarle
+       pregunta ("¿Darle a crédito con la cuenta atrasada?").
+     · CANDADO en el servidor: POST /pedidos con a_credito a un atrasado da 409
+       CREDITO_ATRASADO salvo `fiar_con_atraso: true` (la caja lo manda al
+       confirmar). Solo en la venta de la caja; entregar una nota o pasarla a
+       crédito no lo piden.
+     · DIAS_SIN_ABONAR pasó de 30 a 15 (notificaciones/model.js), como lo dijo el
+       usuario: la CAMPANA también avisa la cobranza a los 15 días.
+  3. CINTILLO DEL MODO (pos.ts → cintillo()): una línea bajo los 4 modos, con los
+     pares de DESIGN.md: verde "se cobran $X", ámbar a crédito ("…van a su
+     cuenta; le quedarán $Y de crédito libre") y pendiente de pago, azul neblina
+     la nota en espera ("se aparta, no sale del inventario, no sale ticket") y
+     rojo a crédito con la cuenta atrasada. Se quitaron los textos que repetía.
+     Estilos en pos-cliente.scss (pos.scss ya pasaba de 4 kB).
+  4. DEVOLUCIÓN ANTES → DESPUÉS (la ventana es pedidos/devolucion-modal, que se
+     abre desde el detalle de la venta): una tarjeta .card.suave con una tabla
+     "Lo que debe esta nota / Lo demás que debe / Su saldo a favor", antes,
+     después y el cambio, en verde lo que se mueve, y "No sale dinero de la caja"
+     (una devolución nunca da efectivo). Estilos en devolucion-reparto.scss.
+  5. BARRA POR HILO en Pendientes de Surtir sucursal (traspasos.ts → avanceLinea):
+     por enviar, los paquetes ESCANEADOS y guardados de los pedidos; en camino,
+     los que salieron; con sus kilos. Azul a medias, verde completa (role
+     progressbar). traspasos-avance.scss.
+  6. CANDADO DE LA PRESENTACIÓN: variantes/model.js → cargada / eliminarSiVacia
+     (lo mismo que el producto, con la fila bloqueada); DELETE /variantes/:id con
+     algo cargado da 409 PRESENTACION_CON_MOVIMIENTOS: "…tiene 1 carga de
+     mercancía, 105 bultos… Para dejar de venderla, desactívala en «Precio y
+     peso»". Las palabras salen de utils/cargado.js (motivosCarga, enLista), que
+     ahora comparte con el candado del producto.
+
+LA VERIFICACIÓN (después de CADA punto)
+  · scripts/verificar-sistema.js contra hitex: 0 hallazgos, los 12 módulos en
+    verde, las seis veces.
+  · Pruebas del servidor: 27 (nuevas: el reloj sin abonar y las palabras de lo
+    cargado). Pruebas de pantallas: 451 (12 nuevas: caja, devolución, surtir).
+  · Solo LECTURA contra hitex: diasSinAbonar (nadie debe hoy), lo cargado de sus 7
+    presentaciones (las 7 tienen algo: ninguna se borraría) y las pantallas en
+    Chrome a 1280 y 390 px con el sistema local apuntando a hitex (la caja con
+    los 5 hilos de un cliente real, los cintillos y la devolución), sin escribir
+    nada (0 POST/PUT/PATCH/DELETE en el registro) y axe sin fallas.
+  · Las E2E ya no se corrieron: escriben y solo corren contra "desarrollo".
+
+
+-------------------------------------------------------------------------------
+ 2026-10-16 (62) · Skill /verificar y agente revisor-general estrictos por módulo + experto CRM y Diseño UI/UX (no se despliega)
+-------------------------------------------------------------------------------
+
+LO QUE PIDIÓ EL USUARIO
+  1. "Necesito que me crees un skill o agente para que me verifique que todo
+     esté bien donde tiene que ir, que no haya cosas que no tienen sentido."
+  2. "Igual necesito que agregues que sea muy estricto con todo módulo por
+     módulo y que las cosas se hagan como tiene que ser ya que es un software,
+     ya que es un CRM muy específico, y que me diga propuestas de mejora, que
+     sea un experto en diseños de este tipo de sistemas."
+  3. "Agrégale que en la parte del diseño igual proponga, o no sé si instalar
+     la extensión de [UI UX Pro Max] para que el diseño vaya con la lógica y
+     eso; ahora la base de desarrollo olvídate, ahora solo trabajamos con
+     hitex, no otra."
+
+LO QUE SE HIZO
+  · Se dejó configurada la base "hitex" como la ÚNICA base de datos en el
+    verificador, en la skill /verificar y en el agente revisor-general (sin
+    comparar ni tocar "desarrollo").
+  · En vez de instalar la extensión genérica UI UX Pro Max (que sugiere estilos
+    de vitrina como cristal esmerilado, degradados o modo oscuro que chocan con
+    DESIGN.md), se integraron sus heurísticas de ergonomía y alineación
+    Diseño-Lógica junto con DESIGN.md ("La bodega bien llevada") y la skill ya
+    instalada .claude/skills/impeccable.
+  · backend/scripts/verificar-sistema.js (989 comprobaciones de solo lectura,
+    con desglose de estado para cada uno de los 12 módulos de Hitex):
+    1. Orden de archivos, arquitectura por capas, limpieza y privacidad:
+       carpeta raíz sin archivos sueltos, .claude/settings.json sin rutas
+       locales ni IPs, git status sin archivos privados, ningún routes.js con
+       SQL directo, ningún módulo ajeno a login exponiendo contrasena_hash,
+       todos los módulos de backend/src/modules/* montados en routes.js y todas
+       las pantallas de features/admin/* conectadas en admin.routes.ts.
+    2. Pantallas, menú, permisos y sistema de diseño UI/UX (DESIGN.md):
+       catálogo de permisos sincronizado contra rutas y pantallas, menú vs
+       admin.routes.ts, pantallas globales en SOLO_TODAS_LAS_TIENDAS,
+       plantillas sin dinero formateado a mano, sin cuadros nativos del
+       navegador, modales con aria-modal="true", inputs de archivo con
+       class="oculto" (accesibles por teclado), hojas .scss sin colores
+       hexadecimales sueltos, sin font-size en px (Regla "Letra En Rem") y sin
+       backdrop-filter (Regla "Plano Por Defecto").
+    3. Auditoría estricta en código de los 12 módulos:
+       01 Hoy y Campana · 02 Punto de venta y Tickets · 03 Caja y Cortes ·
+       04 Ventas, Devoluciones, Notas en espera y Pendientes · 05 CRM Clientes
+       (8 pestañas), Expediente, Crédito y Saldo a favor · 06 Inventario,
+       Detalle por hilo, Conos y Kardex · 07 Surtir inventario (.xlsx) y
+       Proveedores · 08 Surtir sucursal (Traspasos con escaneo) · 09 Catálogo
+       (Hilos, Presentaciones, Materiales, Precios) · 10 Cómo va el negocio y
+       Reportes · 11 Nómina semanal, Horarios, Vacaciones y Comisiones ·
+       12 Administración (Almacenes, Personal, Permisos, Configuración).
+    4. Base de datos "hitex" módulo por módulo (solo lectura):
+       existencia de todas las tablas esenciales y vistas de reportes, 1
+       almacén Matriz, turnos de caja coherentes, inventario sin negativos,
+       kilos de inventario vs paquetes físicos, sin paquetes huérfanos en
+       ventas/traspasos cancelados, aritmética de pedidos, notas pendientes y
+       pagos sin exceder el total, clientes con código C-0001, saldos a favor
+       sin negativos, ajustes con motivo, traspasos válidos, hilos con 1
+       paquete y conos ligados a su origen, 1 lista Público, recibos de nómina
+       sin negativos y CLABEs válidas.
+  · .claude/skills/verificar/SKILL.md, .agents/skills/verificar/SKILL.md y
+    .claude/agents/revisor-general.md: entregan siempre dos bloques de
+    propuestas de experto: (A) Lógica, Flujo y CRM, y (B) Diseño UI/UX
+    conectado con la lógica de negocio.
+
+LA VERIFICACIÓN
+  · Probado contra hitex: 0 hallazgos en las 989 comprobaciones; los 12 módulos
+    en verde.
 
 
 -------------------------------------------------------------------------------

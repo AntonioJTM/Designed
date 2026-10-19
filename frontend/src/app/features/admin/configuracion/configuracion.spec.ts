@@ -3,6 +3,7 @@ import { of } from 'rxjs';
 import { Configuracion } from './configuracion';
 import { clabeLegible, clabeValida } from './cuenta-bancaria-modal';
 import { TiendaService } from '../../../core/services/tienda.service';
+import { WhatsappService } from '../../../core/services/whatsapp.service';
 import { CuentaBancaria, OpcionConfiguracion } from '../../../core/models/tienda.models';
 
 /**
@@ -45,7 +46,11 @@ describe('Configuracion', () => {
   async function montar() {
     await TestBed.configureTestingModule({
       imports: [Configuracion],
-      providers: [{ provide: TiendaService, useValue: tiendaFalsa }],
+      providers: [
+        { provide: TiendaService, useValue: tiendaFalsa },
+        // La tarjeta del WhatsApp de la tienda (tiene sus propias pruebas).
+        { provide: WhatsappService, useValue: { enlace: () => of({ estado: 'sin_enlazar', numero: null, nombre: null, desde: null, aviso: null }) } },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Configuracion);
     fixture.detectChanges();

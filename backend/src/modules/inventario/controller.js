@@ -302,7 +302,18 @@ async function configurar(req, res, next) {
   }
 }
 
+/** Mínimo en paquetes para varios hilos de un almacén (vista previa o guardar). */
+async function minimos(req, res, next) {
+  try {
+    await _suAlmacen(req, req.body.almacen_id);
+    res.json({ data: await service.minimos(req.body), error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  minimos,
   traspasoDeSusTiendas,
   listarStock,
   resumenPorAlmacen,

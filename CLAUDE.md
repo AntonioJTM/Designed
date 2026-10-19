@@ -321,15 +321,55 @@ tienda-hilos/
   cuanto cambia el aviso). `TicketService.imprimirDevolucion`.
   **PAGADO CON SALDO A FAVOR** (2026-10-15: "que diga que se pagó con saldo a favor y cuánto le
   queda, si aún tiene"): el renglón del pago dice "Pagó con su saldo a favor" y, si le queda,
-  "Le queda a favor $X"; reimpreso, "Su saldo a favor hoy" si cambió. Lo da el GET de la venta
+  "Le queda a favor $X"; y SIEMPRE el recuadro "Su saldo a favor hoy" (2026-10-16: el usuario
+  eligió que los tickets de saldo a favor se vean todos iguales). Lo da el GET de la venta
   en `saldo_favor_usado` (`clientes/saldo-favor.js → usadoEnVenta`: lo usado, lo que le quedó con
   el libro HASTA ese uso, y lo de hoy).
+  **TODO TICKET SE MANDA POR WHATSAPP, EN PDF** (2026-10-16; el usuario eligió "PDF para
+  adjuntar" sobre un texto o un enlace): junto a CADA botón de ticket va
+  `<app-boton-whatsapp>` (`shared/ticket/boton-whatsapp.ts`; en los avisos, el cuarto argumento
+  de `TicketDelAviso.poner`). Abre la ventana `shared/ticket/whatsapp-ticket.ts` (una vez en
+  `app.ts`, con `WhatsappService`): trae el teléfono del cliente (`cliente_telefono`/`_alt` del
+  detalle de la venta; `cliente.telefono` de los tickets de abono, anticipo y nota), se corrige
+  ahí, y "Bajar el PDF y abrir WhatsApp" baja el PDF y abre `wa.me/52…?text=` en el MISMO clic (el
+  navegador no deja abrir otra pestaña después de esperar); el PDF se arrastra al chat. En
+  celular, el menú de compartir con el PDF. El PDF es el MISMO ticket (`ticket-pdf.ts`: dibujado
+  con foreignObject a 4×, en grises y Flate, una hoja del tamaño del ticket; sin librerías): un
+  ticket nuevo se manda solo con agregarle su `hoja…` en `TicketService`. Un botón de ticket nuevo
+  lleva su gemelo de WhatsApp.
+  **Y SI EL WHATSAPP DE LA TIENDA ESTÁ ENLAZADO, SE MANDA DIRECTO** (2026-10-16: "que me pida
+  escanear el QR para enlazarlo y listo"; el usuario eligió el QR sabiendo que NO es la conexión
+  oficial y que WhatsApp podría bloquear el número). `modules/whatsapp/conexion.js` (Baileys
+  7.0.0-rc14, versión exacta, cargada con `import()`): UNA conexión por sistema en el mismo
+  proceso, sesión en `uploads/whatsapp/` (el despliegue no la toca: al reiniciar se conecta
+  sola), reconexión espaciada, solo manda. Se enlaza en Configuración → "WhatsApp de la tienda"
+  (`configuracion/whatsapp-tienda.ts`, QR que cambia cada ~20 s). La ventana del ticket pregunta
+  `GET /whatsapp/estado` y, enlazado, "Mandar por WhatsApp" sube el PDF en crudo a
+  `POST /whatsapp/enviar`. **Solo se enciende con la base `hitex`** (en pruebas dice "apagado":
+  sus clientes inventados podrían tener el teléfono de alguien). Si deja de enlazar o de mandar,
+  lo primero es actualizar Baileys.
+  **El número que se escribe ahí se GUARDA en el expediente** (2026-10-16: "que la base de
+  clientes se llene sola desde la caja"): si el ticket tiene cliente (`PaqueteWhatsapp.clienteId`,
+  con sus dos teléfonos) y el número escrito no es ninguno de los suyos, una casilla YA MARCADA
+  lo guarda al mandarlo (`PUT /clientes/:id`, parcial): el que tenía pasa a segundo teléfono si
+  ese estaba vacío; si no, se reemplaza (la casilla lo dice). Un celular de México se guarda con
+  sus 10 números. Directo, solo si se mandó; a mano, al bajarlo.
+  **UN ENTER** (2026-10-16): enlazado y con un número válido en su expediente, la ventana NO
+  enseña el campo ("Le llega a 775 …, el número de su expediente" + "Cambiar número") y, listo el
+  PDF, el cursor queda en "Mandar por WhatsApp" (`afterNextRender`, una vez por ventana): Enter lo
+  manda y el cursor pasa a "Listo" (otro Enter cierra). El número se enseña hasta saber si está
+  enlazado y tener el PDF, para que la ventana no brinque.
+  **Si se DESCONECTA, la campana lo dice** a quien tiene `ver:config` (grupo "Sistema", lleva a
+  Configuración): `conexion.js → avisoCampana()` → `whatsapp` en `GET /notificaciones`. Dos casos:
+  la sesión se cerró desde el celular (marca `uploads/whatsapp-aviso.json`, FUERA de la carpeta
+  de la sesión, para que siga tras reiniciar; se quita al volver a enlazar o al desenlazar a
+  propósito) o, ya enlazado, 10 minutos sin poder conectar.
   **TICKETS DE ABONO Y DE ANTICIPO** (2026-10-15: "genérame tickets de anticipos y tickets de
   abono"). Tres, con el mismo encabezado y hoja: **abono a su cuenta** (banda "Abono", folio
   `AB-<id del movimiento>`: debía, ABONÓ, con qué, "Quedó debiendo" o "Quedó al corriente", qué
   ventas fiadas quedaron pagadas con él y, al reimprimir, "Hoy debe"), **anticipo** (banda
   "Anticipo", `AN-<id>`: efectivo y/o transferencia en UN ticket, "A CUENTA", ya tenía a favor, le
-  quedó a favor, "Su saldo a favor hoy" si cambió, "No aparta mercancía") y **abono a una nota**
+  quedó a favor, SIEMPRE el recuadro "Su saldo a favor hoy", "No aparta mercancía") y **abono a una nota**
   —pendiente de pago, en espera o apartado— (banda "Abono", `PG-<id del pago>`: a qué nota, total,
   llevaba pagado, ABONÓ, "Le falta por pagar" o "Nota pagada completa", "Hoy le falta").
   Los datos los arma el SERVIDOR con el libro HASTA ese movimiento, así salen igual al registrarlos
@@ -360,6 +400,12 @@ tienda-hilos/
   faltante que nadie se llevó. Solo el efectivo da cambio: un pago con tarjeta o transferencia
   por encima de lo que se cobra es 422 `PAGO_EXCEDE_TOTAL`. La caja manda lo recibido y pinta el
   cambio que le devuelve el servidor.
+  **El billete SÍ se guarda, aparte y solo informativo** (2026-10-16: "cuánto dinero recibiste, si
+  te dio 2,300 y fueron 2,250, cuánto le diste de cambio"): `pagos.recibido` (migración
+  `2026-10_efectivo_recibido.sql`), al cobrar en la caja y al entregar una nota en espera; `monto`
+  sigue siendo lo cobrado y NADA suma `recibido` (ni el corte ni la cancelación). El detalle de
+  la venta dice "Recibió $2,300.00 · cambio $50.00" y el ticket reimpreso trae el cambio. Las
+  ventas anteriores lo tienen en NULL.
 - **Cancelar o devolver repone el inventario.** `cambiarEstado` es transaccional: al pasar a
   `cancelado`/`devuelto` la mercancía regresa al almacén DE DONDE SALIÓ (`pedidos.almacen_id`, el
   de la caja que vendió o el de la tienda en línea) con su `movimientos_inventario` de entrada
@@ -519,6 +565,9 @@ tienda-hilos/
     Al ENVIAR, lo guardado que viene en `codigos` vale (es de ESE envío), se rehacen los renglones
     con lo que sale, lo guardado que no salió se suelta y lo que sale vuelve a `disponible` en el
     destino. CANCELAR una solicitud suelta lo guardado. `e2e-surtir-a-medias.js`.
+    **Cada hilo de Pendientes lleva su BARRA** (2026-10-16, `traspasos.ts → avanceLinea`): por
+    enviar, escaneados de los pedidos; en camino, los que salieron; "8 de 8 paquetes · 152.4 kg",
+    azul a medias y verde completa.
   · `POST /inventario/traspasos/:id/recibir` **recibe**: lo firma cualquiera del staff y queda su
     nombre y la hora. Acepta `recibido: [{detalle_id, paquetes|cantidad}]` para declarar lo que de
     verdad llegó; entra al destino solo eso y el faltante se asienta como **merma** con el folio
@@ -986,6 +1035,9 @@ tienda-hilos/
     la fecha de la venta. NO cambian el dinero de "Ventas" ni el "Hilo parado", y así se quedan
     (decisión del usuario, 2026-10-14): "Ventas" cuenta cada venta completa, y en Hilo parado el
     hilo "entró y salió": lo que regresó vuelve a estar en el inventario.
+  · **La ventana dice ANTES → DESPUÉS en vivo** (2026-10-16, `devolucion-modal.ts → reparto()`,
+    tarjeta `.card.suave` con tabla): lo que debe esta nota, lo demás que debe y su saldo a favor,
+    antes y después, y "No sale dinero de la caja".
   · `e2e-devoluciones.js` (74, con los anticipos, el pago parte y parte y el saldo de hoy del
     ticket) y `e2e-nomina-pdf.js` (40). Su ticket: ver "El TICKET impreso es uno solo".
 - **ANTICIPOS: dinero a cuenta, SIN NOTA (2026-10-14)**: "se dan anticipos en efectivo y
@@ -1042,6 +1094,10 @@ tienda-hilos/
   mostrador"), que solo aparece si ya hay paquete: existe únicamente para poder desarmar y vender
   por pieza. Su SKU se deriva del paquete (`<PAQUETE>-CONO`).
 - **Un producto solo se elimina si NO tiene nada cargado** (regla del usuario, 2026-10-03).
+  **Y una PRESENTACIÓN tampoco** (2026-10-16): `DELETE /variantes/:id` con bultos, cargas,
+  existencias, kardex, ventas, traspasos o desarmes da 409 `PRESENTACION_CON_MOVIMIENTOS`
+  ("desactívala en «Precio y peso»"); `variantes/model.js → cargada / eliminarSiVacia`, con las
+  mismas palabras que el producto (`utils/cargado.js`).
   Borrar el producto se lleva en CASCADA sus presentaciones, y con ellas sus bultos y renglones de
   inventario, sin rastro (antes un hilo con un bulto capturado a mano se borraba así). Ahora
   `DELETE /productos/:id` revisa, en la misma transacción y con el producto bloqueado
@@ -1215,6 +1271,20 @@ tienda-hilos/
   inicio de cada quien, y quien no tiene NINGUNA pantalla (antes caía en Pregúntame, que no pedía
   permiso) va a `/admin/sin-acceso` ("Todavía no tienes pantallas"; si sí tiene alguna, lo manda a
   la suya). Si algún día vuelve, está en git hasta el 2026-10-13 y en CAMBIOS.txt.
+- **LA CAJA Y EL CLIENTE (2026-10-16):**
+  · **Lo que siempre lleva**: al elegirlo, sus 5 hilos de esa tienda (`GET /clientes/:id/lo-que-lleva`,
+    por `producto_id`) como botones: el nombre busca el hilo, "Conos" abre directo la báscula de
+    sus conos si hay ahí.
+  · **Cuenta atrasada**: `clientes/model.js → diasSinAbonar` cuenta desde su último abono o, si lo
+    pagó todo y se le volvió a fiar, desde ese nuevo cargo. Pasado `DIAS_SIN_ABONAR` (15, el MISMO
+    de la campana, en `notificaciones/model.js`) la caja lo avisa en rojo y pregunta antes de
+    fiarle; el servidor da 409 `CREDITO_ATRASADO` sin `fiar_con_atraso: true`. Es un candado con
+    llave, no un bloqueo: la tienda decide.
+  · **El cintillo del modo** (`pos.ts → cintillo()`): bajo Cobrar / A crédito / Nota en espera /
+    Pendiente de pago, una línea con qué pasa con la mercancía y con el dinero, en los pares de
+    DESIGN.md (verde se cobra, ámbar por pagar, azul neblina se aparta, rojo cuenta atrasada); a
+    crédito dice cuánto crédito libre le quedará. No es región viva (cambia al teclear). Lo que ya
+    dice no se repite abajo. Los estilos nuevos de la caja van en `pos-cliente.scss`.
 - **Un cliente registrado desde la caja nace SIN crédito.** El alta rápida del POS pide
   nombre y teléfono y nada más (sin apodo desde el 2026-10-14; el número lo da el sistema),
   con `limite_credito: 0`, así que el cobro sale
@@ -1489,13 +1559,25 @@ tienda-hilos/
   "POS-79FA"), con el completo en el `title`. El largo partía la celda en tres renglones y sacaba
   columnas de la tarjeta. El detalle del pedido y el ticket llevan el completo; buscar "79FA" lo
   encuentra igual.
+- **Ventas = las NOTAS DE VENTA** (2026-10-16, lo dictó el usuario: "y nada más"). La lista
+  (`pedidos/pedidos-list`) lleva SOLO: Clave · Cliente con su número · Estatus · Elaborada (con
+  la hora) · Contado (Sí / No y por qué) · Almacén · Elaboró · Importe. Cómo se pagó, lo que se
+  llevó y lo que falta van al ABRIRLA. El estatus lo da el servidor (`pedidos/model.js →
+  situacionDe`): cancelada, devolución (regresó todo, sin contar el envío, o el estado viejo
+  'devuelto'), devolución parcial y emitida; "de contado" = sin cargo en su cuenta, no nota
+  pendiente de pago, no nota en espera y no apartado. Filtros: buscar (folio, nombre o C-0001),
+  Estatus (`?situacion=emitidas|con_devolucion|canceladas`, `SITUACIONES`) y Periodo (Hoy, 7
+  días, Este mes, Todo, o Desde/Hasta). No le agregues columnas sin preguntar.
+  Cuando "Contado" dice No, abajo va **cuánto falta** (2026-10-16): "a crédito · falta $1,200.00"
+  en ámbar o "a crédito · ya liquidada" (el `falta` que ya calcula el listado; una cancelada
+  solo dice por qué).
 - **Las notificaciones van en la barra, junto al nombre y el tipo de usuario** (la campana de
   `admin-layout`). Son pendientes VIVOS que se calculan de la base con `GET /notificaciones`
   (`modules/notificaciones`): solicitudes de traspaso por surtir, envíos por acusar recibo y
   existencias bajo su mínimo. **No hay tabla de notificaciones ni "marcar como leída"** a propósito:
   el aviso tiene que estar ahí hasta que el pendiente se resuelva, y una marca de leído solo lo
   taparía. Los avisos de CLIENTES cuentan **uno por tema**, no uno por cliente: "5 clientes
-  te deben desde hace más de 30 días" es un aviso, no cinco, o la campana marcaría 40 y
+  te deben desde hace más de 15 días" es un aviso, no cinco, o la campana marcaría 40 y
   nadie la abriría. Los umbrales tienen nombre en `notificaciones/model.js`
   (`DIAS_SIN_ABONAR`, `DIAS_SIN_VENIR`, `DIAS_CLIENTE_NUEVO`), no van sueltos en el SQL. Se refresca cada minuto y al abrir el panel.
   **El panel se abre A LA DERECHA del menú** (`position: fixed`, 460 px, pegado abajo junto a la
@@ -1569,6 +1651,15 @@ tienda-hilos/
   teclear en paquetes (con el peso promedio REAL de los bultos de ahí, como en Ajuste / merma) y
   se guarda en kilos con `PUT /inventario/configuracion`. Ese endpoint escribe mínimo, máximo y
   ubicación juntos, así que el modal manda los dos que no cambia para no borrarlos.
+  **Y PARA VARIOS HILOS DE UNA VEZ** (2026-10-16: "avisarme en Sucursal Moroleón cuando queden
+  menos de 5 paquetes de cualquier color"): botón "Mínimo para varios" del encabezado
+  (`inventario/minimos-modal.ts`) → `POST /inventario/configuracion/minimos` (`ver:inventario`,
+  su almacén): a cada hilo en PAQUETE que ese almacén YA maneja (tiene su renglón de inventario;
+  no a colores que nunca tiene, o sonarían alertas de lo que no vende) le pone N paquetes ×
+  el peso promedio real de sus paquetes ahí (`pesoPorPaquete`; sin paquetes, el del catálogo, y
+  lo dice). Por omisión respeta a los que ya tenían su propio mínimo ("A todos" los reemplaza).
+  Sin `guardar: true` solo responde la vista previa, que la ventana enseña antes de guardar; no se
+  cierra al guardar. Solo toca `stock_minimo`.
 - **Si algo tarda más de unos segundos, la pantalla lo dice** (la carga de la lista del
   proveedor pinta su avance por partes). Un "Cargando…" mudo durante medio minuto se lee como que
   se trabó: la gente vuelve a intentarlo o cierra la pantalla.
@@ -1675,7 +1766,12 @@ tienda-hilos/
   `.claude/hooks/antes-de-desplegar.js`, que corre `npm test` del backend y `ng test` sin ventana
   antes de `npm run deploy` y no deja subir si fallan). Los permisos PERSONALES van en
   `.claude/settings.local.json` (en `.gitignore`): nunca rutas de la máquina ni comandos con
-  servidores en el compartido. El ritual de subir está en la skill `/desplegar`; el agente
+  servidores en el compartido. El ritual de subir está en la skill `/desplegar`; la skill
+  `/verificar` (también en `.agents/skills/verificar/`) y el agente `revisor-general` auditan en
+  solo lectura y de forma estricta módulo por módulo (los 12 módulos de Hitex, trabajando
+  **únicamente sobre la base `hitex`**, apoyados en `backend/scripts/verificar-sistema.js` con 989
+  comprobaciones que incluyen las reglas visuales de `DESIGN.md`) y entregan propuestas de mejora
+  tanto de lógica/CRM como de Diseño UI/UX conectado con la lógica de negocio; y el agente
   `revisor-tiendas` revisa "cada quien, sus tiendas", permisos y costo. **Trello EN PAUSA**: no
   escribir ahí hasta que el usuario diga.
 - API REST versionada bajo `/api/v1`. Recursos en plural: `/api/v1/productos`, `/api/v1/pedidos`.
@@ -1778,7 +1874,7 @@ tienda-hilos/
       congela en la venta. Migración: `db/migrations/2026-09_costo_y_margen.sql`.
 - [x] Módulo de análisis (BACKEND): cobranza por antigüedad, clientes enfriados, hilo muerto y
       margen por hilo. `GET /api/v1/analisis/tablero` los trae los cuatro de un viaje.
-- [x] La campana avisa de cobranza atrasada (30 días sin abonar) y de clientes que dejaron de
+- [x] La campana avisa de cobranza atrasada (15 días sin abonar desde el 2026-10-16; antes 30) y de clientes que dejaron de
       venir (60 días). El globo cuenta UN aviso por asunto, no uno por cliente: contar cada uno
       lo inflaría a decenas y dejaría de significar nada.
 - [x] **Tablero visual** (Admin → Cómo va el negocio, solo administradores): las cuatro
@@ -1914,7 +2010,13 @@ tienda-hilos/
     mismo código, `/etc/tienda-hilos/pruebas.env` con `DB_NAME`, `PORT`, `UPLOADS_DIR` y un
     `JWT_SECRET` propio) → base **`desarrollo`**, con la muestra. nginx le pone "PRUEBAS ·" al
     título y una etiqueta roja (`sub_filter` en `conf.d/tienda-hilos-pruebas.conf`).
-  · El `.env` LOCAL apunta a `desarrollo`: lo que se hace desde aquí es PRUEBA.
+  · **El `.env` LOCAL apunta a `hitex` desde el 2026-10-16** ("ahora solo trabajamos con hitex"):
+    un servidor levantado en esta computadora trabaja con la base REAL —lo que se haga ahí es de
+    verdad— y el WhatsApp de la tienda ya no sale "apagado". Las E2E siguen negándose a correr
+    contra `hitex`; para la de pruebas: `DB_NAME=desarrollo node scripts/…`.
+    `estado-migraciones.js` revisa `hitex` por omisión (`--base desarrollo` para la otra; antes
+    ignoraba `--base` y revisaba la del `.env`) y `aplicar-migracion.js` pide escribir "hitex" para
+    aplicarle algo a la base real.
   · **Ninguna E2E ni el sembrado corren contra `hitex`**, ni con `E2E_ACEPTO_PRODUCCION`
     (`backend/scripts/_produccion.js`). El seguro anterior miraba solo el host, y ahora las dos
     bases viven en el mismo.

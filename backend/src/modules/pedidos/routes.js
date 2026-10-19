@@ -66,6 +66,8 @@ const crearSchema = z
     // ocurre de verdad en el mostrador. Exige `cliente_id`: no se le puede
     // fiar a un desconocido.
     a_credito: z.coerce.number().positive().max(99999999).optional(),
+    // Fiarle aunque traiga la cuenta atrasada: la caja lo pregunta antes (2026-10-16).
+    fiar_con_atraso: z.boolean().optional(),
     // NOTA PENDIENTE DE PAGO: se lleva la mercancía y paga después (2026-10-13).
     pendiente_pago: z.boolean().optional(),
     // Cuánto paga con su SALDO A FAVOR (2026-10-13): lo que le quedó de una
@@ -93,6 +95,7 @@ const crearSchema = z
 // cotizar no cobra.
 const cotizarSchema = crearSchema.omit({
   pagos: true, metodo_pago_id: true, a_credito: true, apartado: true, pendiente_pago: true, saldo_favor: true,
+  fiar_con_atraso: true,
 });
 
 // En qué presentación regresa cada línea al cancelar o devolver. Sin esto vuelve

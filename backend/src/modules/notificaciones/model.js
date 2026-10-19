@@ -3,10 +3,14 @@
 const { pool } = require('../../config/db');
 const analisisModel = require('../analisis/model');
 const { filtroAlmacen } = require('../permisos/service');
+const whatsapp = require('../whatsapp/conexion');
 
 // Cuándo un pendiente empieza a doler. Van aquí, con nombre, para poder
 // ajustarlos sin buscarlos dentro de una consulta.
-const DIAS_SIN_ABONAR = 30; // debe y no ha movido su cuenta en un mes
+// Debe y lleva más de dos semanas sin abonar. Era 30; el 2026-10-16 el usuario lo
+// pidió de 15 al poner el aviso en la caja ("no fiarle a ciegas"): la campana y
+// la caja usan el MISMO plazo.
+const DIAS_SIN_ABONAR = 15;
 const DIAS_SIN_VENIR = 60;  // compraba seguido y lleva dos meses sin aparecer
 // Cuánto tiempo un cliente sigue siendo "nuevo" para el aviso. Pasado eso, si
 // nadie le autorizó crédito se entiende que es a propósito y el aviso estorba.
@@ -173,7 +177,11 @@ async function pendientes(almacenes = null) {
     fp.params
   );
 
+  // El WhatsApp de la tienda se desconectó (2026-10-16): lo ve quien entra a Configuración.
+  const avisoWhatsapp = whatsapp.avisoCampana();
+
   return {
+    whatsapp: avisoWhatsapp,
     notas_pendientes: {
       num: Number(notas.num),
       num_clientes: Number(notas.clientes),
@@ -210,6 +218,7 @@ async function pendientes(almacenes = null) {
     // te debe"— aunque dentro haya varios. Contar cada cliente inflaría el
     // globo a decenas y dejaría de significar nada.
     total:
+      (avisoWhatsapp ? 1 : 0) +
       (Number(notas.num) > 0 ? 1 : 0) +
       porEnviar.length +
       porRecibir.length +
@@ -221,4 +230,4 @@ async function pendientes(almacenes = null) {
   };
 }
 
-module.exports = { pendientes, DIAS_SIN_VENIR };
+module.exports = { pendientes, DIAS_SIN_VENIR, DIAS_SIN_ABONAR };

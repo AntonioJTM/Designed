@@ -21,6 +21,7 @@ import { ApiError } from '../../../core/models/auth.models';
 import { etiquetaEstado, tonoEstado } from './estados';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { DevolucionModal } from './devolucion-modal';
+import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 
 /** Una cifra de la franja de arriba del pedido. */
 interface CifraPedido {
@@ -41,6 +42,9 @@ interface FilaPago {
   referencia?: string | null;
   /** En una nota (pendiente de pago, en espera o apartado) cada pago es un abono con su ticket. */
   pagoId?: number;
+  /** En efectivo (2026-10-16): lo que entregó y el cambio que se le dio. */
+  recibido?: number | null;
+  cambio?: number | null;
 }
 
 /** Algo que le pasó al pedido, con su fecha. */
@@ -66,7 +70,7 @@ const MESES_LARGOS = [
 @Component({
   selector: 'app-pedido-detalle',
   host: { '(document:keydown.escape)': 'alEscape()' },
-  imports: [FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal],
+  imports: [BotonWhatsapp, FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal],
   templateUrl: './pedido-detalle.html',
   styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss'],
 })
@@ -293,13 +297,21 @@ export class PedidoDetalle implements OnDestroy {
     if (!p) return [];
     // En una nota que se paga en abonos, cada pago cobrado tiene su ticket de abono.
     const enAbonos = this.esNotaPendiente(p) || this.esEncargo(p) || this.esApartadoSinEntregar(p) || p.estado === 'apartado';
-    const filas: FilaPago[] = (p.pagos ?? []).map((g) => ({
-      como: g.metodo,
-      monto: Number(g.monto),
-      ...this.estadoPago(g.estado),
-      referencia: g.referencia_transaccion,
-      pagoId: enAbonos && g.estado === 'completado' ? g.id : undefined,
-    }));
+    const filas: FilaPago[] = (p.pagos ?? []).map((g) => {
+      // Lo que entregó en efectivo y el cambio (se guarda desde el 2026-10-16).
+      const recibido = g.recibido != null ? Number(g.recibido) : null;
+      const cambio = recibido != null ? Math.round((recibido - Number(g.monto)) * 100) / 100 : null;
+      return {
+        como: g.metodo,
+        monto: Number(g.monto),
+        ...this.estadoPago(g.estado),
+        // "Saldo a favor" debajo de "Saldo a favor" no dice nada.
+        referencia: g.referencia_transaccion && g.referencia_transaccion !== g.metodo ? g.referencia_transaccion : null,
+        pagoId: enAbonos && g.estado === 'completado' ? g.id : undefined,
+        recibido,
+        cambio,
+      };
+    });
     const fiado = this.fiado(p);
     if (fiado > 0) {
       const vigente = this.fiadoVigente(p);
@@ -427,9 +439,22 @@ export class PedidoDetalle implements OnDestroy {
   dondeYQuien(p: Pedido): string {
     const partes = [p.canal === 'punto_venta' ? 'Punto de venta' : 'Tienda en línea'];
     if (p.caja) partes.push(p.caja);
-    else if (p.almacen) partes.push(p.almacen);
-    if (p.usuario) partes.push(`atendió ${p.usuario}`);
+    // De qué almacén salió el hilo (2026-10-16).
+    if (p.almacen) partes.push(`salió de ${p.almacen}`);
+    if (p.usuario) partes.push(`la elaboró ${p.usuario}`);
     return partes.join(' · ');
+  }
+
+  /**
+   * ¿Fue de contado? (2026-10-16) Se pagó ese mismo día: no a crédito, como nota
+   * pendiente de pago, en espera ni apartada. Si no, por qué.
+   */
+  contado(p: Pedido): { si: boolean; porque: string } {
+    if (this.fiado(p) > 0) return { si: false, porque: 'parte se fue a su cuenta de crédito' };
+    if (this.esNotaPendiente(p) || Number(p.nota_pendiente)) return { si: false, porque: 'salió como nota pendiente de pago' };
+    if (Number(p.encargo)) return { si: false, porque: 'fue una nota en espera' };
+    if (p.estado === 'apartado' || this.esApartadoSinEntregar(p)) return { si: false, porque: 'es un apartado' };
+    return { si: true, porque: '' };
   }
 
   constructor() {
@@ -587,6 +612,25 @@ export class PedidoDetalle implements OnDestroy {
     this.tickets.imprimirPagoNota(p.id, pagoId).subscribe({
       error: (e) => this.error.set(e instanceof Error ? e.message : this.msg(e)),
     });
+  }
+
+  /**
+   * MANDAR EL TICKET POR WHATSAPP (2026-10-16): el mismo que se imprime, en PDF.
+   * Abre la ventana que lo prepara, con el teléfono del cliente (`WhatsappService`).
+   */
+  whatsappTicket(): void {
+    const p = this.pedido();
+    if (p) this.tickets.whatsappPedido(p);
+  }
+
+  whatsappDevolucion(d: DevolucionHecha): void {
+    const p = this.pedido();
+    if (p) this.tickets.whatsappDevolucion(p, d);
+  }
+
+  whatsappPago(pagoId: number): void {
+    const p = this.pedido();
+    if (p) this.tickets.whatsappPagoNota(p.id, pagoId);
   }
 
   /** Una nota en espera no lleva ticket (todavía se puede modificar): no se ofrece el botón. */

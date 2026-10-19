@@ -92,6 +92,20 @@
                       <span class="pill azul">{{ l.guardados!.length }} escaneados</span>
                     }
                   }
+                  <!-- Cuántos paquetes van de los pedidos (2026-10-16): por enviar, los
+                       escaneados; en camino, los que salieron. Verde al completarse. -->
+                  @if (avanceLinea(t, l); as a) {
+                    <div class="avance-linea" [class.completo]="a.completo">
+                      <span class="avance-barra" role="progressbar" aria-valuemin="0" [attr.aria-valuemax]="a.de"
+                            [attr.aria-valuenow]="a.van"
+                            [attr.aria-label]="(t.estado === 'solicitado' ? 'Paquetes escaneados de ' : 'Paquetes que salieron de ') + etiquetaHilo(l)">
+                        <span [style.width.%]="a.pct"></span>
+                      </span>
+                      <span class="avance-texto">
+                        {{ a.van }} de {{ a.de }} {{ a.de === 1 ? 'paquete' : 'paquetes' }}@if (a.kg > 0) { · {{ a.kg | cantidad: 'kg' }} }
+                      </span>
+                    </div>
+                  }
                 </li>
               }
             </ul>

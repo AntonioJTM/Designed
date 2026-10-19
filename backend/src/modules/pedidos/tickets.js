@@ -17,8 +17,8 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 async function pagoDeNota(pedidoId, pagoId) {
   const [[p]] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.creado_en, p.total, p.estado, p.nota_pendiente, p.encargo,
-            p.inventario_descontado, c.nombre AS cliente, c.nombre_comercial, c.codigo AS cliente_codigo,
-            a.nombre AS almacen
+            p.inventario_descontado, p.cliente_id, c.nombre AS cliente, c.nombre_comercial, c.codigo AS cliente_codigo,
+            c.telefono, c.telefono_alt, a.nombre AS almacen
        FROM pedidos p
        LEFT JOIN clientes c  ON c.id = p.cliente_id
        LEFT JOIN almacenes a ON a.id = p.almacen_id
@@ -55,7 +55,12 @@ async function pagoDeNota(pedidoId, pagoId) {
     pedido: {
       id: Number(p.id), numero_pedido: p.numero_pedido, creado_en: p.creado_en, total, de, almacen: p.almacen,
     },
-    cliente: p.cliente ? { nombre: p.cliente, nombre_comercial: p.nombre_comercial, codigo: p.cliente_codigo } : null,
+    cliente: p.cliente
+      ? {
+        id: Number(p.cliente_id), nombre: p.cliente, nombre_comercial: p.nombre_comercial, codigo: p.cliente_codigo,
+        telefono: p.telefono, telefono_alt: p.telefono_alt,
+      }
+      : null,
     fecha: g.creado_en,
     monto: round2(g.monto),
     metodo: g.metodo,

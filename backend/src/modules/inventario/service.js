@@ -354,7 +354,18 @@ async function configurar(datos) {
   });
 }
 
+/** Mínimo para varios hilos de un almacén (ver `model.minimosEnPaquetes`). */
+async function minimos(datos) {
+  return model.minimosEnPaquetes({
+    almacen_id: datos.almacen_id,
+    paquetes: datos.paquetes,
+    solo_sin_minimo: datos.solo_sin_minimo !== false,
+    guardar: datos.guardar === true,
+  });
+}
+
 module.exports = {
+  minimos,
   listarStock,
   resumenPorAlmacen,
   alertas,

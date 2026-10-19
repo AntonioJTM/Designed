@@ -203,6 +203,42 @@ describe('DevolucionModal', () => {
     expect(c.quedaAFavor()).toBe(2200);
   });
 
+  /*
+   * ANTES → DESPUÉS (2026-10-16): la tarjeta de abajo dice, en vivo, cómo se
+   * reparte lo que regresa: primero baja lo que debe esta nota, luego lo demás
+   * (si así se eligió) y lo que sobre le queda a favor. No sale dinero.
+   */
+  it('el reparto antes → después: baja esta nota, lo demás que debe y lo que le queda a favor', async () => {
+    previa = { ...previaBase(), saldo_favor: 300, debe_esta: 1000, debe_esta_tipo: 'credito',
+      deuda: { credito: 1000, notas: 500, total: 1500 } };
+    const { c, fixture } = await montar();
+    escanear(c, 'P1'); // $3,700: $1,000 a esta nota y sobran $2,700
+    c.destino = 'deuda';
+    expect(c.reparto()).toEqual([
+      { que: 'Lo que debe esta nota', antes: 1000, despues: 0 },
+      { que: 'Lo demás que debe', antes: 500, despues: 0 },
+      { que: 'Su saldo a favor', antes: 300, despues: 2500 },
+    ]);
+    expect(c.cambioReparto({ antes: 1000, despues: 0 })).toBe('−$1,000.00');
+    expect(c.cambioReparto({ antes: 300, despues: 2500 })).toBe('+$2,200.00');
+
+    // Dejarlo a favor: lo demás que debe no se mueve.
+    c.destino = 'favor';
+    fixture.detectChanges();
+    const filas = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.reparto-tabla tbody tr')]
+      .map((tr) => tr.textContent!.replace(/\s+/g, ' ').trim());
+    expect(filas[1]).toContain('sin cambio');
+    expect(filas[2]).toContain('$3,000.00');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.reparto')?.classList.contains('card')).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.reparto-nota')?.textContent).toContain('No sale dinero');
+  });
+
+  it('sin deudas solo enseña su saldo a favor, antes y después', async () => {
+    const { c } = await montar();
+    escanear(c, 'P2'); // 19 × 200 = 3,800
+    expect(c.reparto()).toEqual([{ que: 'Su saldo a favor', antes: 0, despues: 3800 }]);
+  });
+
   it('la venta sin cliente pide a quién se le pone el saldo', async () => {
     previa = { ...previaBase(), cliente_id: null, cliente: null };
     const { c } = await montar();

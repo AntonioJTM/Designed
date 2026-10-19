@@ -76,6 +76,18 @@ async function expediente(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * LO QUE SIEMPRE LLEVA (2026-10-16): sus 5 hilos más comprados (por
+ * `producto_id`: el mismo color en dos calibres son dos hilos), de SUS tiendas.
+ * La caja los pone como botones al elegir al cliente.
+ */
+async function loQueLleva(req, res, next) {
+  try {
+    const almacenes = await permisos.almacenesDe(req.auth);
+    res.json({ data: await service.loQueLleva(Number(req.params.id), almacenes), error: null });
+  } catch (err) { next(err); }
+}
+
 /** Búsqueda rápida para el mostrador. */
 async function buscar(req, res, next) {
   try {
@@ -197,6 +209,6 @@ module.exports = {
   analisis: analisisVista,
   registrar, iniciarSesion, perfil,
   listar, expediente, buscar, crearDesdeStaff, actualizar,
-  abonar, ajustar, ajustarSaldoFavor,
+  abonar, ajustar, ajustarSaldoFavor, loQueLleva,
   ticketAbono, ticketAnticipo,
 };

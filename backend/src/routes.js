@@ -21,6 +21,7 @@ const reportesRoutes = require('./modules/reportes/routes');
 const analisisRoutes = require('./modules/analisis/routes');
 const notificacionesRoutes = require('./modules/notificaciones/routes');
 const configuracionRoutes = require('./modules/configuracion/routes');
+const whatsappRoutes = require('./modules/whatsapp/routes');
 const permisosRoutes = require('./modules/permisos/routes');
 const hoyRoutes = require('./modules/hoy/routes');
 
@@ -38,6 +39,8 @@ router.use('/permisos', permisosRoutes);
 
 // Configuración de la tienda (tarifa de envío, datos para depositar).
 router.use('/configuracion', configuracionRoutes);
+// El WhatsApp de la tienda: enlazarlo con el QR y mandar los tickets (2026-10-16).
+router.use('/whatsapp', whatsappRoutes);
 
 // Catálogo
 router.use('/categorias', categoriasRoutes);

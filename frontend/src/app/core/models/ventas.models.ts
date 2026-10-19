@@ -121,6 +121,8 @@ export interface PagoLinea {
   metodo_pago_id: number;
   metodo: string;
   monto: string;
+  /** En efectivo: el billete que entregó (2026-10-16). Cambio = recibido − monto. */
+  recibido?: string | null;
   estado: string;
   referencia_transaccion?: string | null;
   creado_en: string;
@@ -323,6 +325,9 @@ export interface Pedido {
   cliente?: string | null;
   /** Como le dicen al cliente ("Doña Chela"): con eso lo reconoce el mostrador. */
   cliente_nombre_comercial?: string | null;
+  /** Sus teléfonos, para mandarle el ticket por WhatsApp (2026-10-16; solo en el detalle). */
+  cliente_telefono?: string | null;
+  cliente_telefono_alt?: string | null;
   usuario?: string | null;
   almacen?: string | null;
   sesion_caja_id?: number | null;
@@ -333,6 +338,14 @@ export interface Pedido {
   falta?: number;
   /** Listado: qué se llevó, con su calibre ("ROJO 2/30 · cono"). */
   hilos?: string[];
+  /** Listado (2026-10-16): el número del cliente (C-0001). */
+  cliente_codigo?: string | null;
+  /** Listado: se pagó ese mismo día (no a crédito, pendiente de pago, en espera ni apartado). */
+  contado?: boolean;
+  /** Listado: si parte se fue a la cuenta del cliente (a crédito). */
+  fiada?: boolean;
+  /** Listado: emitida, cancelada, devolución (regresó todo) o devolución parcial. */
+  situacion?: 'emitida' | 'cancelada' | 'devolucion' | 'devolucion_parcial';
   /** Detalle: lo que se fió con esta venta (cargo y, si se canceló, su ajuste). */
   credito?: MovimientoCreditoPedido[];
   /** Detalle: abonos a la cuenta del cliente después de la venta (no son de este pedido). */

@@ -12,7 +12,11 @@
     <div class="ok-msg con-accion" role="status">
       <span>{{ mensaje() }}</span>
       @if (devolucionDelAviso(); as d) {
-        <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirDevolucion(d)">Imprimir ticket de devolución</button>
+        <div class="botones">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirDevolucion(d)">Imprimir ticket de devolución</button>
+          <app-boton-whatsapp [chico]="true" etiqueta="Mandar por WhatsApp el ticket de devolución"
+                              (mandar)="whatsappDevolucion(d)" />
+        </div>
       }
     </div>
   }
@@ -42,6 +46,8 @@
             <button type="button" class="btn btn-ghost" (click)="imprimirTicket()">
               {{ p.devoluciones?.length ? 'Ticket de venta' : 'Imprimir ticket' }}
             </button>
+            <!-- El mismo ticket, en PDF por WhatsApp (2026-10-16); también el de una venta cancelada. -->
+            <app-boton-whatsapp [etiqueta]="'Mandar por WhatsApp el ticket de ' + p.numero_pedido" (mandar)="whatsappTicket()" />
           }
           @if (esEncargo(p) && esApartadoSinEntregar(p) && !inactivo(p) && veEncargos()) {
             <a class="btn btn-ghost" routerLink="/admin/notas-en-espera">Entregar o cobrar</a>
@@ -202,8 +208,12 @@
                     @if (+d.aplicado_a_deuda > 0) { se descontaron {{ d.aplicado_a_deuda | dinero }} de lo que debía }
                     @else { a favor }
                   </div>
-                  <button type="button" class="btn btn-ghost btn-sm devolucion-ticket" (click)="imprimirDevolucion(d)"
-                          [attr.aria-label]="'Ticket de devolución ' + d.folio">Ticket de devolución</button>
+                  <div class="devolucion-ticket">
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirDevolucion(d)"
+                            [attr.aria-label]="'Ticket de devolución ' + d.folio">Ticket de devolución</button>
+                    <app-boton-whatsapp [chico]="true" (mandar)="whatsappDevolucion(d)"
+                                        [etiqueta]="'Mandar por WhatsApp el ticket de devolución ' + d.folio" />
+                  </div>
                 </div>
               </div>
               <ul class="devolucion-lineas">
@@ -232,7 +242,15 @@
 
     <div class="fila">
       <section class="card mitad">
-        <div class="card-head"><div><h2>Pagos</h2></div></div>
+        <div class="card-head">
+          <div>
+            <h2>Pagos</h2>
+            <!-- ¿De contado? (2026-10-16): se pagó ese mismo día, o por qué no. -->
+            @if (contado(p); as ct) {
+              <p>@if (ct.si) { De contado: se pagó el mismo día. } @else { No fue de contado: {{ ct.porque }}. }</p>
+            }
+          </div>
+        </div>
         @if (filasPago().length) {
           <div class="tabla-scroll">
             <table class="grid">
@@ -243,6 +261,10 @@
                     <td>
                       {{ f.como }}
                       @if (f.referencia) { <div class="muted ref">{{ f.referencia }}</div> }
+                      <!-- En efectivo: lo que entregó y su cambio (2026-10-16). -->
+                      @if (f.recibido != null && f.recibido > 0) {
+                        <div class="muted ref">Recibió {{ f.recibido | dinero }} · cambio {{ (f.cambio ?? 0) | dinero }}</div>
+                      }
                     </td>
                     <td class="num"><b>{{ f.monto | dinero }}</b></td>
                     <td><span [class]="'pill ' + f.tono">{{ f.estado }}</span></td>
@@ -251,6 +273,8 @@
                       @if (f.pagoId) {
                         <button type="button" class="btn btn-ghost btn-sm" (click)="imprimirPago(f.pagoId)"
                                 [attr.aria-label]="'Ticket del abono de ' + (f.monto | dinero)">Ticket</button>
+                        <app-boton-whatsapp [chico]="true" (mandar)="whatsappPago(f.pagoId)"
+                                            [etiqueta]="'Mandar por WhatsApp el ticket del abono de ' + (f.monto | dinero)" />
                       }
                     </td>
                   </tr>

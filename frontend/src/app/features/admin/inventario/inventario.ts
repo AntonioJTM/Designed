@@ -19,6 +19,7 @@ import { MovimientoModal } from './movimiento-modal';
 import { MinimoModal } from './minimo-modal';
 import { HiloModal } from './hilo-modal';
 import { FolioPipe } from '../../../shared/folio.pipe';
+import { MinimosModal } from './minimos-modal';
 
 /** Un hilo (color + calibre) con sus renglones de existencias juntos. */
 interface GrupoHilo {
@@ -97,7 +98,7 @@ const POR_PAGINA = 100;
  */
 @Component({
   selector: 'app-inventario',
-  imports: [FolioPipe, FormsModule, RouterLink, CantidadPipe, CuandoPipe, DesarmeModal, MovimientoModal, MinimoModal, HiloModal],
+  imports: [MinimosModal, FolioPipe, FormsModule, RouterLink, CantidadPipe, CuandoPipe, DesarmeModal, MovimientoModal, MinimoModal, HiloModal],
   templateUrl: './inventario.html',
   styleUrl: './inventario.scss',
 })
@@ -119,7 +120,7 @@ export class Inventario {
   readonly soloConStock = signal(true);
 
   /** Qué modal está abierto. */
-  readonly modal = signal<'desarme' | 'movimiento' | 'minimo' | null>(null);
+  readonly modal = signal<'desarme' | 'movimiento' | 'minimo' | 'minimos' | null>(null);
   /** El renglón cuyo mínimo se está fijando. */
   readonly filaMinimo = signal<StockItem | null>(null);
   /** El hilo cuyo detalle (lotes y paquetes) está abierto. */

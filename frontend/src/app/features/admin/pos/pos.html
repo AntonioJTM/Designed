@@ -35,7 +35,13 @@
     <div class="ok-msg con-accion" role="status">
       <span>{{ mensaje() }}</span>
       @if (ticketAviso.actual(); as t) {
-        <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+        <div class="botones">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="t.imprimir()">{{ t.etiqueta }}</button>
+          @if (t.whatsapp) {
+            <app-boton-whatsapp [chico]="true" [etiqueta]="t.etiqueta.replace('Imprimir ', 'Mandar por WhatsApp el ')"
+                                (mandar)="t.whatsapp()" />
+          }
+        </div>
       }
     </div>
   }
@@ -70,6 +76,7 @@
           <button type="button" class="btn btn-ghost" (click)="imprimirTicket()" [disabled]="imprimiendo()">
             {{ imprimiendo() ? 'Preparando…' : 'Imprimir ticket' }}
           </button>
+          <app-boton-whatsapp etiqueta="Mandar el ticket por WhatsApp" (mandar)="whatsappTicket()" />
           @if (veNotas()) { <a class="btn btn-ghost" routerLink="/admin/notas-pendientes">Ver notas pendientes</a> }
         </div>
       } @else if (num(t.pedido.total) > 0 && t.pedido.estado === 'pendiente') {
@@ -90,6 +97,7 @@
           <button type="button" class="btn btn-ghost" (click)="imprimirTicket()" [disabled]="imprimiendo()">
             {{ imprimiendo() ? 'Preparando…' : 'Imprimir ticket' }}
           </button>
+          <app-boton-whatsapp etiqueta="Mandar el ticket por WhatsApp" (mandar)="whatsappTicket()" />
         </div>
       } @else {
         <h2>Venta <span class="mono">{{ t.pedido.numero_pedido }}</span></h2>
@@ -105,6 +113,7 @@
           <button type="button" class="btn btn-ghost" (click)="imprimirTicket()" [disabled]="imprimiendo()">
             {{ imprimiendo() ? 'Preparando…' : 'Imprimir ticket' }}
           </button>
+          <app-boton-whatsapp etiqueta="Mandar el ticket por WhatsApp" (mandar)="whatsappTicket()" />
         </div>
       }
     </section>
@@ -189,11 +198,37 @@
                 <button type="button" class="btn btn-ghost btn-sm" (click)="quitarCliente()">Quitar</button>
               </div>
             </div>
+            <!-- LO QUE SIEMPRE LLEVA (2026-10-16): sus 5 hilos de esta tienda, de un clic.
+                 El nombre busca el hilo; "Conos" abre directo la báscula de sus conos. -->
+            @if (loQueLleva().length > 0) {
+              <div class="lo-que-lleva">
+                <span class="lql-titulo" id="lql-titulo">Lo que siempre lleva</span>
+                <ul class="lql-lista" aria-labelledby="lql-titulo">
+                  @for (h of loQueLleva(); track h.producto_id) {
+                    <li class="lql-hilo">
+                      <button type="button" class="lql-nombre" (click)="buscarHiloCliente(h)"
+                              [title]="detalleHiloCliente(h)"
+                              [attr.aria-label]="'Buscar ' + nombreHiloCliente(h) + '. ' + detalleHiloCliente(h)">
+                        {{ nombreHiloCliente(h) }}
+                      </button>
+                      <button type="button" class="lql-conos" (click)="conosHiloCliente(h)"
+                              [attr.aria-label]="'Pesar conos de ' + nombreHiloCliente(h)">Conos</button>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
             <!-- Si debe o tiene algo apartado, se le recuerda AHORA: vino a la tienda. -->
             @if (num(c.saldo) > 0 || apartadoCliente()) {
-              <div class="aviso aviso-cliente">
+              <!-- Con la cuenta ATRASADA (2026-10-16) el aviso va en rojo y dice los días:
+                   no se le fía a ciegas. -->
+              <div class="aviso aviso-cliente" [class.atrasado]="c.atrasado">
                 <span>
-                  @if (num(c.saldo) > 0) {
+                  @if (num(c.saldo) > 0 && c.atrasado) {
+                    <b>Cuenta atrasada:</b> debe <b>{{ c.saldo | dinero }}</b> y lleva
+                    <b>{{ c.dias_sin_abonar }} días sin abonar</b>. Pídele un abono antes de fiarle más.
+                    @if (apartadoCliente()) { También tiene }
+                  } @else if (num(c.saldo) > 0) {
                     Debe <b>{{ c.saldo | dinero }}</b>@if (apartadoCliente()) { y tiene } @else {.}
                   } @else {
                     Tiene
@@ -462,6 +497,11 @@
                   [class.on]="modo() === 'pendiente'" [disabled]="!!motivoSinPendiente()"
                   (click)="elegirModo('pendiente')">Pendiente de pago</button>
         </div>
+        <!-- Qué pasa con la mercancía y con el dinero en este modo (2026-10-16). No es una
+             región viva: cambia al teclear lo que va a crédito o lo que deja. -->
+        @if (cintillo(); as ci) {
+          <p class="cintillo" [attr.data-tono]="ci.tono">{{ ci.texto }}</p>
+        }
         @if (modo() === 'cobrar') {
           @if (!clienteSel()) {
             <p class="ayuda-modo">{{ puedeFiar() ? 'A crédito, nota en espera y pendiente de pago' : 'Nota en espera y pendiente de pago' }} piden elegir primero al cliente.</p>
@@ -517,7 +557,7 @@
               <input type="number" min="0" step="0.01" [(ngModel)]="anticipo" name="ped-deja" placeholder="0.00" />
               <span class="ayuda">Lo que falte se cobra al entregarla, a crédito o como nota pendiente de pago.</span>
             </label>
-            <p class="ayuda">No sale ticket. La mercancía se aparta: <b>no sale del inventario</b> hasta que se entrega, y la nota se puede modificar.</p>
+            <p class="ayuda">La nota se puede modificar hasta que se entrega.</p>
           </div>
           @if (num(anticipo) > 0) {
             <label class="field">
@@ -530,12 +570,8 @@
         }
 
         @if (notaPendiente()) {
-          <div class="bloque-modo">
-            <p class="ayuda">
-              Se lleva la mercancía y sale el ticket como <b>nota pendiente de pago</b>. Hoy no paga nada y no
-              usa su crédito: el pago se registra después en Notas pendientes de pago (o se pasa a crédito).
-            </p>
-          </div>
+          <!-- Lo dice el cintillo; aquí solo lo que no: se puede pasar a crédito. -->
+          <p class="ayuda">Si después lo pide, la nota se puede pasar a crédito.</p>
         } @else if (!pidiendo() && aPagarHoy() > 0) {
           <label class="field">
             Método de pago
@@ -567,10 +603,6 @@
           } @else {
             <p class="ayuda">Se cobran {{ aPagarHoy() | dinero }} justos.</p>
           }
-        } @else if (fiando()) {
-          <p class="ayuda">Se lleva todo a crédito: hoy no paga nada.</p>
-        } @else if (saldoActual() > 0) {
-          <p class="ayuda">Todo se paga con su saldo a favor: hoy no paga nada.</p>
         }
 
         <button type="button" class="btn btn-primary btn-bloque btn-cobrar" (click)="cobrar()"

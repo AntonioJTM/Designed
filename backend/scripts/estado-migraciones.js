@@ -3,8 +3,13 @@
 /**
  * Qué migraciones le faltan a una base. NO escribe nada: solo compara.
  *
- *   node scripts/estado-migraciones.js                        # la base del .env
- *   node --env-file=.env.produccion scripts/estado-migraciones.js   # el servidor
+ *   node scripts/estado-migraciones.js                     # hitex, la base REAL
+ *   node scripts/estado-migraciones.js --base desarrollo   # la de pruebas
+ *
+ * La base es la de `--base` y, sin él, `hitex` (2026-10-16), igual que
+ * `verificar-sistema.js`. Antes tomaba la del `.env` e IGNORABA `--base`: un
+ * "--base hitex" revisaba en realidad `desarrollo`. El servidor y el usuario
+ * siguen saliendo del `.env`.
  *
  * Nació el 2026-09-05, después de descubrir que `2026-07_traspasos_estados.sql`
  * llevaba semanas sin aplicarse pese a que la bitácora la daba por aplicada, y
@@ -19,6 +24,9 @@
 
 require('dotenv').config();
 const mysql = require('mysql2/promise');
+
+const idxBase = process.argv.indexOf('--base');
+const BASE = idxBase >= 0 && process.argv[idxBase + 1] ? process.argv[idxBase + 1] : 'hitex';
 
 // tabla            → la tabla debe EXISTIR
 // tabla.columna    → la columna debe EXISTIR
@@ -95,13 +103,14 @@ const MIGRACIONES = [
   ['2026-10_puesto_cargador (cargador)', 'roles#nombre=cargador'],
   ['2026-10_tiendas_por_persona', 'usuarios.todas_las_tiendas'],
   ['2026-10_tiendas_por_persona (tiendas)', 'usuario_almacenes'],
+  ['2026-10_efectivo_recibido', 'pagos.recibido'],
 ];
 
 (async () => {
   const c = await mysql.createConnection({
     host: process.env.DB_HOST, port: +(process.env.DB_PORT || 3306),
     user: process.env.DB_USER, password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    database: BASE,
   });
   const [[donde]] = await c.query('SELECT @@hostname h, DATABASE() db');
   console.log(`Base: ${donde.db} en ${donde.h} (${process.env.DB_HOST})\n`);
@@ -122,7 +131,7 @@ const MIGRACIONES = [
       const [[k]] = await c.query(
         `SELECT COUNT(*) n FROM information_schema.check_constraints
           WHERE constraint_schema = ? AND table_name = ? AND check_clause LIKE ?`,
-        [process.env.DB_NAME, tabla, `%${texto}%`]
+        [BASE, tabla, `%${texto}%`]
       );
       const ok = Number(k.n) > 0;
       console.log(`  ${ok ? 'ok      ' : 'FALTA   '} ${nombre}${ok ? '' : `  → ningún CHECK de ${tabla} admite ${texto}`}`);
@@ -133,7 +142,7 @@ const MIGRACIONES = [
       const [vista, texto] = huella.split('~');
       const [[v]] = await c.query(
         'SELECT VIEW_DEFINITION d FROM information_schema.views WHERE table_schema = ? AND table_name = ?',
-        [process.env.DB_NAME, vista]
+        [BASE, vista]
       );
       const ok = !!v && v.d.includes(texto);
       console.log(`  ${ok ? 'ok      ' : 'FALTA   '} ${nombre}${ok ? '' : `  → ${vista} no filtra ${texto}`}`);
@@ -143,7 +152,7 @@ const MIGRACIONES = [
     const [tabla, col] = huella.split('.');
     const [[t]] = await c.query(
       'SELECT COUNT(*) n FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',
-      [process.env.DB_NAME, tabla]
+      [BASE, tabla]
     );
     let ok;
     let detalle;
@@ -158,7 +167,7 @@ const MIGRACIONES = [
       const [[x]] = await c.query(
         `SELECT COUNT(*) n FROM information_schema.columns
           WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
-        [process.env.DB_NAME, tabla, nombreCol]
+        [BASE, tabla, nombreCol]
       );
       ok = niega ? !x.n : !!x.n;
       detalle = niega ? `${tabla}.${nombreCol} debería estar eliminada` : `falta ${tabla}.${nombreCol}`;

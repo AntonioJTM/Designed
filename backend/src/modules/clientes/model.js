@@ -210,6 +210,41 @@ async function obtener(id) {
  * Trae el saldo y el crédito disponible porque el cajero necesita saber, EN EL
  * MOMENTO de elegirlo, si a esta persona se le puede fiar.
  */
+/**
+ * Desde qué día corre el reloj "sin abonar", con sus movimientos de crédito en
+ * orden ({ tipo, monto, dia }); null si al final no debe. Pura: se prueba sola.
+ */
+function desdeSinAbonar(movs) {
+  let saldoCorriente = 0;
+  let desde = null;
+  for (const m of movs) {
+    const antes = saldoCorriente;
+    saldoCorriente = Math.round((saldoCorriente + SIGNO_CREDITO[m.tipo] * Number(m.monto)) * 100) / 100;
+    if (m.tipo === 'abono') desde = m.dia;                 // abonó: el reloj vuelve a empezar
+    else if (antes <= 0.004 && saldoCorriente > 0.004) desde = m.dia; // volvió a deber desde cero
+  }
+  return saldoCorriente > 0.004 ? desde : null;
+}
+
+/**
+ * CUÁNTOS DÍAS LLEVA SIN ABONAR quien debe (2026-10-16, el aviso de la caja):
+ * desde su último abono o, si después de él la deuda volvió a empezar desde cero
+ * (lo pagó todo y luego se le fió otra vez), desde ese nuevo cargo. Así un
+ * cliente que abonó la semana pasada no sale atrasado, y uno que compra fiado
+ * seguido sin pagar nunca no se "renueva" con cada compra. null si no debe.
+ */
+async function diasSinAbonar(clienteId, ejecutor = pool) {
+  const [movs] = await ejecutor.query(
+    `SELECT tipo, monto, DATE_FORMAT(creado_en, '%Y-%m-%d') AS dia
+       FROM credito_movimientos WHERE cliente_id = :id ORDER BY creado_en, id`,
+    { id: clienteId }
+  );
+  const desde = desdeSinAbonar(movs);
+  if (!desde) return null;
+  const [[d]] = await ejecutor.query('SELECT DATEDIFF(CURDATE(), :desde) AS dias', { desde });
+  return Number(d.dias);
+}
+
 async function buscarParaVenta(q, limite = 10) {
   const [rows] = await pool.query(
     `SELECT c.id, c.codigo, c.nombre, c.nombre_comercial, c.telefono, c.direccion,
@@ -231,6 +266,12 @@ async function buscarParaVenta(q, limite = 10) {
       LIMIT :limite`,
     { q: `%${q}%`, limite }
   );
+  // Si debe, cuántos días lleva sin abonar: la caja avisa antes de fiarle a ciegas.
+  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
+  for (const r of rows) {
+    r.dias_sin_abonar = Number(r.saldo) > 0 ? await diasSinAbonar(r.id) : null;
+    r.atrasado = r.dias_sin_abonar != null && r.dias_sin_abonar > DIAS_SIN_ABONAR;
+  }
   return rows;
 }
 
@@ -942,7 +983,7 @@ module.exports = {
   // Expediente
   listar,
   obtener,
-  buscarParaVenta,
+  buscarParaVenta, diasSinAbonar, desdeSinAbonar,
   crearDesdeStaff,
   actualizar,
   duplicado,

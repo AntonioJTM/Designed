@@ -81,6 +81,11 @@ export interface Pendientes {
     num_clientes: number;
     dias: number;
   };
+  /**
+   * El WhatsApp de la tienda se desconectó (2026-10-16): la sesión se cerró desde el
+   * celular, o ya enlazado no conecta desde hace 10 minutos. null si está bien.
+   */
+  whatsapp?: { motivo: 'sesion_cerrada' | 'sin_conexion'; desde: string | null } | null;
   /** Notas pendientes de pago (se llevaron la mercancía sin pagar): UN aviso. */
   notas_pendientes?: {
     num: number;
