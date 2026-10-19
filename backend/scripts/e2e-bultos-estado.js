@@ -100,15 +100,15 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
     ck('y NO quedó un pedido a medias', np === foto.pedidos.size + 1, np + ' pedidos');
 
     console.log('\n=== 4. Ni desarmar un bulto ya vendido ===');
-    r = await api('POST', '/inventario/desarmes', { cono_variante_id: cono, almacen_origen_id: alm, almacen_destino_id: alm, paquetes: 1, kg: 18.65, codigo_bulto: b1.codigo });
+    r = await api('POST', '/inventario/desarmes', { almacen_origen_id: alm, almacen_destino_id: alm, codigo_bulto: b1.codigo });
     ck('409 al desarmarlo', r.status === 409 && r.error?.code === 'BULTO_NO_DISPONIBLE', r.status + ' ' + r.error?.code);
 
     console.log('\n=== 5. Desarmar marca desarmado ===');
     const inc = (await api('GET', `/variantes/resolver/${cod('00548087')}`)).data.bulto;
-    r = await api('POST', '/inventario/desarmes', { cono_variante_id: cono, almacen_origen_id: alm, almacen_destino_id: alm, paquetes: 1, kg: Number(inc.peso_kg), conos: inc.conos, codigo_bulto: inc.codigo });
+    r = await api('POST', '/inventario/desarmes', { almacen_origen_id: alm, almacen_destino_id: alm, conos: inc.conos, codigo_bulto: inc.codigo });
     ck('el desarme pasa', r.status === 201, '+' + r.data?.piezas_generadas + ' conos');
     ck('el bulto quedó desarmado', (await estadoDe(inc.codigo)) === 'desarmado');
-    r = await api('POST', '/inventario/desarmes', { cono_variante_id: cono, almacen_origen_id: alm, almacen_destino_id: alm, paquetes: 1, kg: 10.75, codigo_bulto: inc.codigo });
+    r = await api('POST', '/inventario/desarmes', { almacen_origen_id: alm, almacen_destino_id: alm, codigo_bulto: inc.codigo });
     ck('no se desarma dos veces', r.status === 409, r.status + ' ' + r.error?.code);
     r = await api('POST', '/pedidos', { canal: 'punto_venta', sesion_caja_id: s.id,
       items: [{ variante_id: paq, cantidad: 10.75, bultos: [{ codigo: inc.codigo, peso_kg: 10.75 }] }],

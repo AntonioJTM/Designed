@@ -10,7 +10,6 @@ import {
 } from '../../../core/services/inventario.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Almacen, StockItem } from '../../../core/models/inventario.models';
-import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { CuandoPipe } from './cuando.pipe';
@@ -143,7 +142,6 @@ export class Inventario {
    * Datos que consume el modal de desarme. Se cargan aquí y entran por input para
    * que el modal abra armado, sin esperar peticiones ni cambiar de tamaño.
    */
-  readonly conos = signal<Variante[]>([]);
   readonly conversiones = signal<Conversion[]>([]);
 
   /**
@@ -162,10 +160,7 @@ export class Inventario {
     });
     this.cargarStock();
     this.cargarResumen();
-    if (this.puedeBajarConos()) {
-      this.cargarConos();
-      this.cargarConversiones();
-    }
+    if (this.puedeBajarConos()) this.cargarConversiones();
   }
 
   cargarResumen(): void {
@@ -473,14 +468,6 @@ export class Inventario {
     this.cargarStock();
   }
 
-  /** Trae las presentaciones de tipo cono: son las que se pueden desarmar a mano. */
-  private cargarConos(): void {
-    this.inv.buscarVariantes('').subscribe({
-      next: (vs) => this.conos.set(vs.filter((v) => v.tipo_presentacion === 'cono')),
-      error: () => {},
-    });
-  }
-
   private cargarConversiones(): void {
     this.inv.conversiones().subscribe({
       next: (p) => this.conversiones.set(p.items),
@@ -492,10 +479,7 @@ export class Inventario {
   alMover(): void {
     this.cargarStock();
     this.cargarResumen();
-    if (this.puedeBajarConos()) {
-      this.cargarConos();
-      this.cargarConversiones();
-    }
+    if (this.puedeBajarConos()) this.cargarConversiones();
   }
 
   /** Vuelve a la primera página con los filtros de ahora. */

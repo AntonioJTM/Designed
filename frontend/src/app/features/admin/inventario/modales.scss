@@ -35,11 +35,6 @@
 .mono { font-family: var(--mono); font-size: 0.8125rem; }
 
 /* Captura a mano, plegada: es la excepción, no el flujo normal. */
-details.a-mano { margin-top: 20px; border-top: 1px solid var(--borde-suave); padding-top: 14px; }
-details.a-mano > summary { cursor: pointer; font-size: 0.875rem; font-weight: 500; color: var(--acento); }
-details.a-mano > summary:hover { color: var(--acento-oscuro); }
-details.a-mano[open] > summary { margin-bottom: 14px; }
-.acciones-a-mano { margin-top: 14px; }
 
 /* Las últimas bajadas, dentro del modal. */
 .recientes { margin-top: 24px; }

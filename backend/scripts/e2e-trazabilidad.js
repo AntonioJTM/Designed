@@ -98,8 +98,8 @@ let f=0;const ck=(n,ok,d)=>{console.log((ok?'  ok  ':' FALLA')+' · '+n+(d!==und
   const inc=(await api('GET',`/variantes/resolver/${cod('00548087')}`)).data.bulto;
   ck('el bulto dice 10.75 kg y 7 conos', Number(inc.peso_kg)===10.75 && inc.conos===7, inc.peso_kg+' kg · '+inc.conos+' conos');
   const [[antesC]]=await db.query('SELECT COALESCE(cantidad,0) c FROM inventario WHERE variante_id=? AND almacen_id=?',[cono,alm]);
-  r=await api('POST','/inventario/desarmes',{cono_variante_id:cono,almacen_origen_id:alm,almacen_destino_id:alm,
-    paquetes:1,kg:Number(inc.peso_kg),conos:inc.conos,codigo_bulto:inc.codigo});
+  r=await api('POST','/inventario/desarmes',{almacen_origen_id:alm,almacen_destino_id:alm,
+    conos:inc.conos,codigo_bulto:inc.codigo});
   ck('el desarme respeta los 7 conos', r.status===201 && Number(r.data.piezas_generadas)===7,
      '−'+r.data?.kg_consumidos+' kg → +'+r.data?.piezas_generadas+' conos');
   ck('y consume el peso real, no el nominal', Number(r.data.kg_consumidos)===10.75,
@@ -113,10 +113,11 @@ let f=0;const ck=(n,ok,d)=>{console.log((ok?'  ok  ':' FALLA')+' · '+n+(d!==und
   const [[cv]]=await db.query('SELECT codigo_bulto FROM variante_conversiones ORDER BY id DESC LIMIT 1');
   ck('queda el rastro de cuál bulto se desarmó', cv.codigo_bulto===inc.codigo, cv.codigo_bulto);
 
-  console.log('');console.log('=== 5. Sin escanear sigue usando los nominales ===');
+  // 2026-10-18: ya NO se baja sin el codigo del paquete (sacaba kilos sin marcar
+  // ninguno como abierto). Ni cono + paquetes, ni kilos tecleados.
+  console.log('');console.log('=== 5. Sin el codigo del paquete no se baja ===');
   r=await api('POST','/inventario/desarmes',{cono_variante_id:cono,almacen_origen_id:alm,almacen_destino_id:alm,paquetes:1});
-  ck('12 conos y 19.094 kg', Number(r.data.piezas_generadas)===12 && Number(r.data.kg_consumidos)===19.094,
-     '−'+r.data?.kg_consumidos+' kg → +'+r.data?.piezas_generadas+' conos');
+  ck('422 sin codigo', r.status===422, r.status+' '+r.error?.code);
  } finally {
   console.log('');console.log('=== Limpieza ===');
   await db.query('SET FOREIGN_KEY_CHECKS=0');

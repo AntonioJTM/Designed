@@ -78,7 +78,7 @@
                 @if (pctSinCosto() >= 50) {
                   Es más de la mitad, así que el margen todavía no representa al negocio.
                 }
-                Captura el precio de compra al recibir cada remesa y el análisis se irá completando.
+                Captura el precio de compra en cada carga y el análisis se irá completando.
               </p>
             }
 
@@ -128,7 +128,7 @@
             } @else {
               <p class="vacio">
                 Todavía no se puede calcular el margen de {{ periodo().nombre }}: hace falta capturar el
-                precio de compra al recibir las remesas.
+                precio de compra al surtir el inventario.
               </p>
             }
           }
@@ -174,7 +174,7 @@
           <p class="aviso">
             Parte de esto está valorado a <b>precio de venta</b>, no a costo, porque esos hilos
             todavía no tienen precio de compra capturado. El dinero realmente inmovilizado es
-            menor. Se captura al recibir la remesa.
+            menor. Se captura al surtir el inventario.
           </p>
         }
 

@@ -373,53 +373,127 @@ function verificarPantallasYPermisos() {
         `En "${rel}" quedó texto o un enlace a algo que ya se eliminó ("Pregúntame" o "Apartados").`,
         'IMPORTANTE'
       );
+
+      // Diccionario estricto de palabras viejas en el texto visible real de la plantilla
+      const visible = textoVisibleHtml(texto);
+      const palabrasViejasHtml = [
+        { re: /\bcategor[ií]as?\b/i, msg: 'dice "categoría(s)" en pantalla (en Hitex se llama "material" / "materiales")' },
+        { re: /\bremesas?\b/i, msg: 'dice "remesa(s)" en pantalla (en Hitex se llama "carga" o "surtir inventario")' },
+        { re: /\b(?:fiar|fiad[oa]s?)\b/i, msg: 'dice "fiar/fiado/fiada" en pantalla (en Hitex se dice "a crédito")' },
+        { re: /cinco pesta[ñn]as/i, msg: 'dice "cinco pestañas" en pantalla (Clientes ya tiene más pestañas)' },
+        { re: /\bdado de alta\b/i, msg: 'dice "dado de alta" en masculino fijo (usa "Se dio de alta a…" o texto neutro)' },
+      ];
+      for (const pv of palabrasViejasHtml) {
+        revisar(
+          'pantallas',
+          !pv.re.test(visible),
+          `En la plantilla "${rel}" ${pv.msg}.`,
+          'AVISO'
+        );
+      }
+
+      // Puntuación y formato roto en plantillas (kg— sin espacio, espacio antes de punto tras {{ }})
+      revisar(
+        'pantallas',
+        !/\bkg—/.test(texto) && !/\}\}\s+\.(?!\.)/.test(texto),
+        `En "${rel}" hay un error de espaciado o puntuación ("kg—" sin espacio o espacio antes de un punto "}} .").`,
+        'AVISO'
+      );
+
+      // Plurales fijos con interpolación directa sin singular/plural
+      revisar(
+        'pantallas',
+        !/\{\{[^?:}]+\}\}\s+(?:solicitudes|paquetes)\b/i.test(texto.replace(/<!--[\s\S]*?-->/g, '')),
+        `En "${rel}" hay un plural fijo ("1 solicitudes" o "1 paquetes") que no cambia a singular cuando el número es 1.`,
+        'AVISO'
+      );
     }
   }
 }
 
+function sinComentariosJs(txt) {
+  return txt
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^\s*\/\/.*$/gm, ' ');
+}
+
+function textoVisibleHtml(html) {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(?:svg|style)\b[\s\S]*?<\/(?:svg|style)>/gi, ' ')
+    .replace(/<[a-zA-Z!/](?:"[^"]*"|'[^']*'|[^'">])*>/g, ' ')
+    .replace(/@(?:if|else\s+if|for|switch|case)\b[^{]*\{/g, ' ')
+    .replace(/@else\s*\{?/g, ' ')
+    .replace(/\{\{[\s\S]*?\}\}/g, ' ')
+    .replace(/[{}]/g, ' ');
+}
+
 // ============================================================================
 // 3. AUDITORÍA ESTRICTA MÓDULO POR MÓDULO EN EL CÓDIGO (LOS 12 MÓDULOS)
+//    Incluye coherencia entre pantallas, ecuaciones que deben cuadrar,
+//    promesas de mensajes contra controles reales y flujos completos.
 // ============================================================================
 function verificarModulosEnCodigo() {
   // MÓDULO 01 · Hoy y Campana de avisos
   const M01 = '01 · Hoy y Campana de avisos';
   const notifModel = leer('backend/src/modules/notificaciones/model.js');
   const hoyRoutes = leer('backend/src/modules/hoy/routes.js');
+  const hoyTs = sinComentariosJs(leer('frontend/src/app/features/admin/hoy/hoy.ts'));
   revisar('modulos', notifModel.includes('DIAS_SIN_ABONAR') && notifModel.includes('DIAS_SIN_VENIR') && notifModel.includes('DIAS_CLIENTE_NUEVO'), 'Los umbrales de avisos (DIAS_SIN_ABONAR, DIAS_SIN_VENIR, DIAS_CLIENTE_NUEVO) deben tener nombre en notificaciones/model.js.', 'IMPORTANTE', M01);
   revisar('modulos', notifModel.includes('filtroAlmacen') && hoyRoutes.includes('almacenesDe'), 'Hoy y la campana deben filtrar los pendientes por las tiendas del usuario.', 'GRAVE', M01);
+  // Coherencia entre texto y condición: cliente nuevo es de los últimos 15 días (nunca "hace 15 días o más")
+  revisar('modulos', !/hace\s+\d+\s+d[ií]as\s+o\s+m[aá]s/i.test(hoyTs), 'En Hoy (hoy.ts), el aviso de cliente nuevo sin crédito no debe decir "hace 15 días o más" (es al revés: capturado en los últimos 15 días).', 'IMPORTANTE', M01);
+  // Quien trabaja en una sola tienda no debe ver la tarjeta global "Cobranza atrasada" en $0
+  revisar('modulos', hoyTs.includes('veTodasLasTiendas') || hoyTs.includes('todas_las_tiendas'), 'En Hoy (hoy.ts), "Cobranza atrasada" es de toda la cartera y debe ocultarse a quien solo trabaja en una tienda.', 'IMPORTANTE', M01);
 
   // MÓDULO 02 · Punto de venta (POS) y Tickets
   const M02 = '02 · Punto de venta (POS) y Tickets';
   const posTs = leer('frontend/src/app/features/admin/pos/pos.ts');
   const ticketTs = leer('frontend/src/app/shared/ticket/ticket.ts');
+  const waTicketTs = leer('frontend/src/app/shared/ticket/whatsapp-ticket.ts');
   revisar('modulos', posTs.includes('enfocarLector') && posTs.includes('alTeclear'), 'El Punto de venta debe mantener siempre el foco en el lector de código de barras (enfocarLector / alTeclear).', 'GRAVE', M02);
   revisar('modulos', posTs.includes("'cobrar'") && posTs.includes("'credito'") && posTs.includes("'espera'") && posTs.includes("'pendiente'"), 'El Punto de venta debe tener los 4 modos de operación (cobrar, credito, espera, pendiente).', 'GRAVE', M02);
   for (const fnTicket of ['armarTicket', 'armarTicketDevolucion', 'armarTicketAbono', 'armarTicketAnticipo', 'armarTicketPagoNota', 'armarPrueba']) {
     revisar('modulos', ticketTs.includes(fnTicket), `En shared/ticket/ticket.ts falta la función "${fnTicket}" para imprimir tickets térmicos.`, 'GRAVE', M02);
   }
   revisar('modulos', !/@page\s*\{[^}]*\bsize\s*:/.test(ticketTs), 'El ticket térmico NO debe poner `size:` dentro de `@page` (Chrome lo encoge a la mitad del rollo de 3 m).', 'GRAVE', M02);
+  revisar('modulos', waTicketTs.includes("hecho() === 'enviado'") && !/\}\}\s+\./.test(waTicketTs), 'En whatsapp-ticket.ts, después de mandar el ticket deben ocultarse "Le llega a…" y "Cambiar número" (hecho() === \'enviado\').', 'IMPORTANTE', M02);
 
   // MÓDULO 03 · Caja y Cortes de turno
   const M03 = '03 · Caja y Cortes de turno';
   const cajaModel = leer('backend/src/modules/caja/model.js');
   const cajaRoutes = leer('backend/src/modules/caja/routes.js');
+  const cajaTs = leer('frontend/src/app/features/admin/caja/caja.ts');
   revisar('modulos', cajaModel.includes('SIGNO_CAJA') && cajaModel.includes('EFECTIVO_INSUFICIENTE'), 'El módulo de Caja debe calcular con SIGNO_CAJA e impedir retiros mayores al efectivo del cajón (EFECTIVO_INSUFICIENTE).', 'GRAVE', M03);
   revisar('modulos', cajaRoutes.includes('hacer:mover_efectivo'), 'Sacar o meter efectivo en Caja debe exigir el permiso "hacer:mover_efectivo" en el servidor.', 'GRAVE', M03);
+  // Identidad matemática de Caja: las tarjetas de arriba deben incluir todos los ingresos que no son venta (abonos, anticipos, pagos de nota, entregas, ingresos) para cuadrar con "Debería haber"
+  revisar('modulos', cajaTs.includes('claseIngreso') && cajaTs.includes('anticipo') && cajaTs.includes('nota'), 'En Caja (caja.ts), las cifras de arriba deben sumar todos los ingresos al cajón (abonos, anticipos, pagos de nota, entregas e ingresos a mano) para cuadrar con "Debería haber".', 'GRAVE', M03);
 
   // MÓDULO 04 · Ventas, Devoluciones, Notas en espera y Pendientes
   const M04 = '04 · Ventas, Devoluciones, Notas en espera y Pendientes';
   const pedModel = leer('backend/src/modules/pedidos/model.js');
   const pedRoutes = leer('backend/src/modules/pedidos/routes.js');
   const devJs = leer('backend/src/modules/pedidos/devoluciones.js');
+  const pedDetTs = leer('frontend/src/app/features/admin/pedidos/pedido-detalle.ts');
+  const encargosTs = leer('frontend/src/app/features/admin/encargos/encargos.ts');
+  const encargosHtml = leer('frontend/src/app/features/admin/encargos/encargos.html');
   revisar('modulos', pedRoutes.includes('sinCostosEnRespuesta'), 'El router de pedidos debe filtrar costos con sinCostosEnRespuesta.', 'GRAVE', M04);
   revisar('modulos', pedModel.includes('_cotizar') && pedModel.includes('_exigirPaqueteAqui'), 'Ventas debe calcular totales en un solo lugar (_cotizar) y exigir que los paquetes escaneados sean de esa tienda (_exigirPaqueteAqui).', 'GRAVE', M04);
   revisar('modulos', devJs.includes('descontarDeVenta') && devJs.includes('debeDeVenta'), 'Las devoluciones de una nota que todavía se debe deben descontarse primero de esa misma nota (debeDeVenta / descontarDeVenta).', 'GRAVE', M04);
+  // Prohibido subir comprobante directo en una venta a crédito que aún se debe (causa doble cobro / deuda fantasma)
+  revisar('modulos', pedModel.includes('VENTA_A_CREDITO_USA_ABONOS') && pedDetTs.includes('depositoComoAbono'), 'Una venta a crédito que todavía se debe NO debe permitir "Subir captura" en el pedido (el depósito se registra como abono a su cuenta).', 'GRAVE', M04);
+  // Al entregar una nota en espera, debe ofrecerse tanto Imprimir ticket como Mandar por WhatsApp
+  revisar('modulos', encargosTs.includes('ticketAviso') && encargosHtml.includes('app-boton-whatsapp'), 'Al entregar una nota en espera (encargos), se debe ofrecer imprimir el ticket y mandarlo por WhatsApp.', 'IMPORTANTE', M04);
 
   // MÓDULO 05 · CRM Clientes, Expediente, Crédito y Saldo a favor
   const M05 = '05 · CRM Clientes, Expediente, Crédito y Saldo a favor';
   const cliModel = leer('backend/src/modules/clientes/model.js');
   const cliSaldo = leer('backend/src/modules/clientes/saldo-favor.js');
   const cliRoutes = leer('backend/src/modules/clientes/routes.js');
+  const anaModel = leer('backend/src/modules/analisis/model.js');
+  const anaService = leer('backend/src/modules/analisis/service.js');
+  const tableroTs = sinComentariosJs(leer('frontend/src/app/features/admin/tablero/tablero.ts'));
+  const vistaDeudaTs = sinComentariosJs(leer('frontend/src/app/features/admin/clientes/vistas/vista-deuda.ts'));
   const adminRoutesTs = leer('frontend/src/app/features/admin/admin.routes.ts');
   revisar('modulos', cliModel.includes('asignarCodigo') && cliModel.includes('repartirAbonos') && cliModel.includes('liquidarVentasACredito'), 'El CRM de Clientes debe asignar código automático (C-0001), repartir abonos por antigüedad (FIFO) y liquidar ventas a crédito cubiertas.', 'GRAVE', M05);
   revisar('modulos', cliSaldo.includes('recibirAnticipo') && cliSaldo.includes('ajustarSaldo') && cliSaldo.includes('SALDO_FAVOR_INSUFICIENTE'), 'El libro de saldo a favor debe soportar anticipos, ajustes con motivo y nunca permitir saldo negativo.', 'GRAVE', M05);
@@ -427,22 +501,44 @@ function verificarModulosEnCodigo() {
   for (const vista of ['todos', 'frecuencia', 'dejaron', 'deuda', 'que-compra', 'cuando', 'gasto', 'lugares']) {
     revisar('modulos', adminRoutesTs.includes(`'${vista}'`), `Falta la pestaña "${vista}" del CRM de Clientes en admin.routes.ts.`, 'GRAVE', M05);
   }
+  // Unificación del plazo de atraso en todo el sistema (15 días desde el último abono en Caja, Campana, Cuánto debe y Cómo va el negocio)
+  revisar(
+    'modulos',
+    cliModel.includes('diasSinAbonarDeTodos') &&
+      anaModel.includes('diasSinAbonarDeTodos') &&
+      !anaService.includes('dias_aviso ?? 30') &&
+      !tableroTs.includes('dias_aviso: 30'),
+    'El plazo de cuenta atrasada debe ser uno solo (15 días desde el último abono) en Caja, Campana, Clientes › Cuánto debe y Cómo va el negocio (sin mezclar 15 y 30 días).',
+    'GRAVE',
+    M05
+  );
+  revisar('modulos', !/d[oó]nde\s+fiar/i.test(vistaDeudaTs), 'En Clientes › Cuánto debe no debe quedar la palabra vieja "dónde fiar".', 'AVISO', M05);
 
   // MÓDULO 06 · Inventario, Detalle por hilo, Conos y Kardex
   const M06 = '06 · Inventario, Detalle por hilo, Conos y Kardex';
   const invModel = leer('backend/src/modules/inventario/model.js');
+  const invService = leer('backend/src/modules/inventario/service.js');
   const invRoutes = leer('backend/src/modules/inventario/routes.js');
   const hiloJs = leer('backend/src/modules/inventario/hilo.js');
+  const minModalHtml = leer('frontend/src/app/features/admin/inventario/minimo-modal.html').replace(/<!--[\s\S]*?-->/g, '');
+  const minModalTs = sinComentariosJs(leer('frontend/src/app/features/admin/inventario/minimo-modal.ts'));
+  const minsModalTs = sinComentariosJs(leer('frontend/src/app/features/admin/inventario/minimos-modal.ts'));
   revisar('modulos', invRoutes.includes('sinCostosEnRespuesta'), 'El router de inventario debe filtrar costos con sinCostosEnRespuesta.', 'GRAVE', M06);
   revisar('modulos', invModel.includes('COND_ALERTA') && invModel.includes('SOLO_EN_TIENDA') && invModel.includes('destare_por_cono_kg'), 'Inventario debe exigir stock_minimo > 0 para alertas (COND_ALERTA), permitir bajar conos solo en tiendas (SOLO_EN_TIENDA) y soportar destare por cono.', 'GRAVE', M06);
   revisar('modulos', hiloJs.includes('detalleHilo') && hiloJs.includes('bultosDeLote'), 'El detalle de un hilo en Inventario debe exponer saldos por almacén, lotes y paquetes uno por uno.', 'IMPORTANTE', M06);
+  // Coherencia entre COND_ALERTA (<=) y texto de las ventanas de mínimo ("o menos", no "menos de")
+  revisar('modulos', !/menos de\b/i.test(minModalHtml) && !/menos de\b/i.test(minModalTs) && !/menos de\b/i.test(minsModalTs), 'El stock mínimo avisa al llegar al número o menos (<=); las ventanas de mínimo deben decir "N paquetes o menos", nunca "menos de N".', 'IMPORTANTE', M06);
+  // Kardex: distinguir el faltante (merma) y la cancelación de un traspaso del envío normal
+  revisar('modulos', invService.includes('Faltante del traspaso') && invService.includes('se canceló el traspaso'), 'En el Kardex (inventario/service.js → _describir), el faltante de un envío debe rotularse como "Faltante del traspaso…" y la cancelación como "Regresó: se canceló el traspaso…", no como un traspaso normal.', 'IMPORTANTE', M06);
 
   // MÓDULO 07 · Surtir inventario (Cargas .xlsx) y Proveedores
   const M07 = '07 · Surtir inventario (Cargas .xlsx) y Proveedores';
   const remModel = leer('backend/src/modules/remesas/model.js');
   const remLista = leer('backend/src/modules/remesas/lista.js');
+  const remHtml = leer('frontend/src/app/features/admin/remesas/remesas.html').replace(/<!--[\s\S]*?-->/g, '');
   revisar('modulos', remModel.includes('TANDA_BULTOS') && remModel.includes('recalcularCosto'), 'Surtir inventario debe insertar bultos por tandas (TANDA_BULTOS) y recalcular el costo promedio ponderado móvil.', 'GRAVE', M07);
   revisar('modulos', remLista.includes('X-Accel-Buffering') || leer('backend/src/modules/remesas/controller.js').includes('X-Accel-Buffering'), 'La carga de lista completa del proveedor debe reportar avance por partes sin buffering (X-Accel-Buffering: no).', 'IMPORTANTE', M07);
+  revisar('modulos', !/>\s*Remesa\s*</i.test(remHtml), 'En Surtir inventario (remesas.html) no debe quedar el rótulo viejo "Remesa" en vez de "Carga".', 'AVISO', M07);
 
   // MÓDULO 08 · Surtir sucursal (Traspasos con escaneo)
   const M08 = '08 · Surtir sucursal (Traspasos con escaneo)';
@@ -455,27 +551,50 @@ function verificarModulosEnCodigo() {
   const prodService = leer('backend/src/modules/productos/service.js');
   const varRoutes = leer('backend/src/modules/variantes/routes.js');
   const varCtrl = leer('backend/src/modules/variantes/controller.js');
+  const varService = leer('backend/src/modules/variantes/service.js');
+  const presHtml = leer('frontend/src/app/features/admin/productos/producto-presentaciones.html');
+  const presTs = leer('frontend/src/app/features/admin/productos/producto-presentaciones.ts');
+  const catTs = sinComentariosJs(leer('frontend/src/app/features/admin/categorias/categorias.ts'));
   revisar('modulos', prodModel.includes('eliminarSiVacio') && prodService.includes('PRODUCTO_CON_MOVIMIENTOS'), 'Un producto solo debe poder eliminarse si no tiene paquetes, cargas, ventas ni movimientos (eliminarSiVacio / PRODUCTO_CON_MOVIMIENTOS).', 'GRAVE', M09);
   revisar('modulos', varRoutes.includes('sinCostosEnRespuesta') && varCtrl.includes('_bultosDeSusTiendas'), 'Presentaciones debe ocultar el costo a quien no lo ve y filtrar los bultos a las tiendas del usuario (_bultosDeSusTiendas).', 'GRAVE', M09);
+  // Si el error al borrar presentación promete "desactívala en «Precio y peso»", esa ventana DEBE tener la casilla Activa
+  if (varService.includes('Precio y peso')) {
+    revisar(
+      'modulos',
+      presHtml.includes('varianteActiva') && presTs.includes('varianteActiva'),
+      'El mensaje al borrar una presentación dice "desactívala en «Precio y peso»", pero la ventana de Precio y peso no tiene la casilla Activa (varianteActiva).',
+      'GRAVE',
+      M09
+    );
+  }
+  // La tarjeta "Imágenes" solo le servía a la tienda en línea apagada: debe estar comentada o fuera del DOM
+  const presHtmlSinComentarios = presHtml.replace(/<!--[\s\S]*?-->/g, '');
+  revisar('modulos', !/>\s*Im[aá]genes\s*</.test(presHtmlSinComentarios), 'En Presentaciones sigue visible la tarjeta "Imágenes" que solo servía para la tienda en línea apagada.', 'AVISO', M09);
+  revisar('modulos', !/\bcategoría/i.test(catTs), 'En Materiales (categorias.ts), los mensajes al usuario deben decir "material", nunca "categoría".', 'AVISO', M09);
 
   // MÓDULO 10 · Cómo va el negocio (Tablero) y Reportes
   const M10 = '10 · Cómo va el negocio (Tablero) y Reportes';
   const anaRoutes = leer('backend/src/modules/analisis/routes.js');
   const repRoutes = leer('backend/src/modules/reportes/routes.js');
   const repModel = leer('backend/src/modules/reportes/model.js');
+  const repHtml = leer('frontend/src/app/features/admin/reportes/reportes.html');
   const ventaColor = leer('backend/src/modules/reportes/venta-color.js');
   revisar('modulos', anaRoutes.includes('requireTodasLasTiendas') && repRoutes.includes('requireTodasLasTiendas'), 'El tablero "Cómo va el negocio" y "Reportes" suman todas las tiendas y deben exigir requireTodasLasTiendas.', 'GRAVE', M10);
   revisar('modulos', repModel.includes('devolucion') && ventaColor.includes('armarVentaPorColor'), 'El reporte de "Venta por color" debe restar los kilos devueltos por los clientes.', 'IMPORTANTE', M10);
+  // En Reportes › Ventas por día, el desglose debe incluir costo_envio / envio para que sin IVA - descuentos + IVA + envío = total
+  revisar('modulos', repModel.includes('costo_envio') && repHtml.includes('envio'), 'En Reportes › Ventas por día, el desglose debe incluir el envío (costo_envio) para que las cifras sumen el total.', 'IMPORTANTE', M10);
 
   // MÓDULO 11 · Nómina semanal, Horarios, Vacaciones y Comisiones
   const M11 = '11 · Nómina semanal, Horarios, Vacaciones y Comisiones';
   const nomRoutes = leer('backend/src/modules/nomina/routes.js');
   const nomCom = leer('backend/src/modules/nomina/comisiones.js');
+  const nomRep = leer('backend/src/modules/nomina/reporte.js');
   const nomJorBack = leer('backend/src/modules/nomina/jornada.js');
   const nomJorFront = leer('frontend/src/app/features/admin/nomina/jornada.ts');
   revisar('modulos', nomRoutes.includes('requireTodasLasTiendas'), 'Nómina suma todas las tiendas y debe exigir requireTodasLasTiendas.', 'GRAVE', M11);
   revisar('modulos', nomCom.includes('ventasSinPagarComision') && nomCom.includes('devuelto'), 'Las comisiones de nómina deben pagarse al liquidarse la venta y descontar lo que el cliente devolvió.', 'GRAVE', M11);
   revisar('modulos', Boolean(nomJorBack && nomJorFront), 'El cálculo de jornada, horas extra al doble y vacaciones por ley debe existir en el servidor (nomina/jornada.js) y en la pantalla (nomina/jornada.ts).', 'IMPORTANTE', M11);
+  revisar('modulos', nomRep.includes("tipo === 'devolucion'") || nomRep.includes('devoluciones'), 'El PDF de comisiones (nomina/reporte.js) no debe contar una devolución como venta ni sumar su total al monto vendido.', 'IMPORTANTE', M11);
 
   // MÓDULO 12 · Administración (Almacenes, Personal, Permisos, Config)
   const M12 = '12 · Administración (Almacenes, Personal, Permisos, Config)';
@@ -483,6 +602,8 @@ function verificarModulosEnCodigo() {
   const costosTs = leer('frontend/src/app/core/costos.ts');
   const usuCtrl = leer('backend/src/modules/usuarios/controller.js');
   const usuService = leer('backend/src/modules/usuarios/service.js');
+  const usuTs = sinComentariosJs(leer('frontend/src/app/features/admin/usuarios/usuarios.ts'));
+  const permTs = sinComentariosJs(leer('frontend/src/app/features/admin/permisos/permisos.ts'));
   const cuentasJs = leer('backend/src/modules/configuracion/cuentas.js');
   const prodGuard = leer('backend/scripts/_produccion.js');
   const dbConfig = leer('backend/src/config/db.js');
@@ -492,6 +613,7 @@ function verificarModulosEnCodigo() {
   revisar('modulos', usuCtrl.includes('SOLO_ADMINISTRADOR') && usuService.includes('SOLO_SUS_TIENDAS'), 'En Personal, solo un administrador puede dar el puesto de administrador (SOLO_ADMINISTRADOR) y nadie puede asignar tiendas que no ve (SOLO_SUS_TIENDAS).', 'GRAVE', M12);
   revisar('modulos', cuentasJs.includes('clabeValida'), 'Las cuentas bancarias en Configuración deben validar el dígito de control de la CLABE (clabeValida).', 'IMPORTANTE', M12);
   revisar('modulos', prodGuard.includes('hitex') && dbConfig.includes('time_zone'), 'Debe estar activo el candado que protege la base "hitex" y la hora de México centro en la conexión.', 'GRAVE', M12);
+  revisar('modulos', !/dado de alta/i.test(usuTs) && !/cinco pesta[ñn]as/i.test(permTs), 'En Personal y Permisos no deben quedar textos viejos ("dado de alta" en masculino fijo o "las cinco pestañas").', 'AVISO', M12);
 }
 
 // ============================================================================

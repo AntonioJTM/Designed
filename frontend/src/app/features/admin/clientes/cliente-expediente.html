@@ -133,7 +133,7 @@
                 Ver su estado de cuenta
               </button>
             } @else if (limite() > 0) {
-              <p class="muted" style="margin: 14px 0 0">Todavía no se le ha fiado nada.</p>
+              <p class="muted" style="margin: 14px 0 0">Todavía no se le ha dado nada a crédito.</p>
             }
             @if (saldoFavor() > 0) {
               <!-- Lo que le quedó de devoluciones y anticipos: va aparte de lo que debe. Con centavos (2026-10-17). -->
@@ -286,7 +286,7 @@
               </div>
             } @else {
               <div><span class="muted">Debe</span><span class="grande">{{ saldo() | dinero }}</span>
-                @if (saldo() <= 0) { <span class="muted">{{ limite() > 0 ? 'sin deuda' : 'no se le ha fiado' }}</span> }
+                @if (saldo() <= 0) { <span class="muted">{{ limite() > 0 ? 'sin deuda' : 'no se le ha dado a crédito' }}</span> }
               </div>
             }
             @if (limite() > 0) {
@@ -331,7 +331,7 @@
             </div>
           </div>
           @if (e.credito_movimientos.length === 0) {
-            <p class="vacio">Todavía no se le ha fiado nada.</p>
+            <p class="vacio">Todavía no se le ha dado nada a crédito.</p>
           } @else {
             <div class="tabla-scroll">
               <table class="grid" style="min-width: 720px">

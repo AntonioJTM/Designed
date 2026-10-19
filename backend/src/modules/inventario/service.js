@@ -216,20 +216,27 @@ async function previaDesarmeBulto(codigo, almacenes = null) {
 }
 
 /**
- * Desarma. Se puede mandar `cono_variante_id` (como siempre) o solo el
- * `codigo_bulto`: en ese caso se resuelve el paquete del bulto, se toman sus
- * kilos y sus conos reales, y si el producto todavía no tiene presentación de
- * cono SE CREA con lo que dice el bulto. Así bajar mercancía a mostrador es
- * escanear y confirmar, sin configurar nada antes.
+ * Desarma UN paquete, SIEMPRE por su código (`codigo_bulto`): se resuelve el
+ * paquete del bulto, se toman sus kilos y sus conos reales, y si el producto
+ * todavía no tiene presentación de cono SE CREA con lo que dice el bulto. Así
+ * bajar mercancía a mostrador es escanear (o escribir el código) y confirmar.
+ *
+ * Ya NO se acepta desarmar "a mano" con `cono_variante_id` + `paquetes` + `kg`
+ * (2026-10-18, a petición del usuario): sacaba kilos del paquete sin marcar
+ * ninguno como abierto, y ese paquete se seguía pudiendo vender o mandar. Los
+ * kilos son SIEMPRE los del paquete escaneado; el cono, el de SU hilo.
  */
 async function desarmar(datos, usuarioId, almacenes = null) {
-  if (datos.cono_variante_id) return model.desarmar(datos, usuarioId);
-
   if (!datos.codigo_bulto) {
-    throw new AppError(422, 'FALTA_DESTINO',
-      'Escanea el bulto o indica qué cono se va a producir');
+    throw new AppError(422, 'FALTA_CODIGO',
+      'Escanea o escribe el código del paquete que vas a abrir');
   }
   const previa = await previaDesarmeBulto(datos.codigo_bulto, almacenes);
+  const pesoBulto = Number(previa.bulto.peso_kg);
+  if (!(pesoBulto > 0)) {
+    throw new AppError(422, 'BULTO_SIN_PESO',
+      `El paquete ${previa.bulto.codigo} no tiene peso registrado: captúraselo en Presentaciones antes de abrirlo.`);
+  }
   const conos = datos.conos ?? previa.conos_a_generar;
   if (!conos) {
     throw new AppError(422, 'CONOS_REQUERIDOS',
@@ -253,8 +260,8 @@ async function desarmar(datos, usuarioId, almacenes = null) {
     {
       ...datos,
       cono_variante_id: cono.variante_id ?? cono.id,
-      paquetes: datos.paquetes ?? 1,
-      kg: datos.kg ?? Number(previa.bulto.peso_kg),
+      paquetes: 1,
+      kg: pesoBulto,
       conos,
     },
     usuarioId

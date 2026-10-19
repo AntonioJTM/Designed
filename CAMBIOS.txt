@@ -26,10 +26,24 @@
   · Una MIGRACIÓN nueva se aplica en LAS DOS bases.
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
+POR DECIDIR CON EL USUARIO (entrada 73)
+  · El destare de la única bajada real de hitex (A-ALECRICO 2/30, 15-oct) se
+    capturó en 0.8 kg POR CONO (800 g por tubo): entraron 29.1 kg de conos de
+    un paquete de 19.5 kg, pero los 4 conos vendidos pesaron 6.4 kg (1.6 c/u).
+    Si los 8 que quedan pesan lo mismo, hay ~12.8 kg y el sistema dice 22.7.
+    Se le pidió pesar los que quedan; si cuadra, se corrige con Ajuste.
+  · "Peso de un cono" no lleva el destare: también lo usa Inventario para el
+    "≈ N conos" (22.7 ÷ 1.604 = ≈ 14.2 conos donde hay 8).
+
 LO ÚLTIMO QUE SE TERMINÓ
+  EL VERIFICADOR EN 0 HALLAZGOS: palabras viejas y plurales (2026-10-18,
+  entrada 74; DESPLEGADO en 20261018-204258, sin cambios en la base).
+  Antes:
+  SE QUITÓ "CAPTURAR A MANO, SIN ESCANEAR" AL BAJAR CONOS (2026-10-18, entrada
+  73; DESPLEGADO en 20261018-203820, sin cambios en la base).
+  Antes:
   LAS 12 FALLAS QUE SALIERON AL HACER EL MANUAL, CORREGIDAS (2026-10-17,
-  entrada 72; DESPLEGADO en 20261018-200530, sin cambios en la base). Queda sin tocar el peso del cono que no
-  sigue al del paquete (no venía en la lista del usuario).
+  entrada 72; DESPLEGADO en 20261018-200530, sin cambios en la base).
   Antes:
   MANUAL DE USO REHECHO (2026-10-17, entrada 71; fuera del repo, no se
   despliega): D:\Imagenes\Manual de uso - Hitex.pdf, 283 páginas, 204 capturas.
@@ -672,6 +686,81 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-18 (74) · Palabras viejas y plurales: el verificador queda en 0 hallazgos
+-------------------------------------------------------------------------------
+
+"Y vamos a corregir esto igual" (usuario, con la lista de los 8 avisos que daba
+`node backend/scripts/verificar-sistema.js`). Sin cambios en la base; solo
+plantillas (.html).
+
+  · "Fiar" → "a crédito": cliente-expediente ("Todavía no se le ha dado nada a
+    crédito", dos veces, y "no se le ha dado a crédito") y pos ("se le puede
+    dar a crédito", dos veces —una en un comentario—, "Pídele un abono antes de
+    darle más a crédito", "decidir si le autoriza crédito").
+  · "Remesa" → "carga" / "surtir el inventario": producto-form-modal
+    ("etiqueta de carga"), producto-presentaciones ("Etiqueta de la carga", "lo
+    ponga la carga con su precio de compra") y tablero ("en cada carga", "al
+    surtir el inventario" dos veces).
+  · Plurales: kardex, movimiento-modal y traspasos dicen "1 paquete". Se
+    compara con `+x === 1` y no `x === 1`: `paquetes` llega como TEXTO
+    (`string | null` en el modelo), y "1" o "1.000" nunca son igual a 1. En
+    Surtir sucursal, cancelar con escaneos guardados dice "El paquete que ya se
+    había escaneado queda libre…" o "Los N paquetes…" (una sola expresión: el
+    verificador marca cualquier "{{ n }} paquetes" sin decidir el singular).
+  Pruebas: verificar-sistema.js 0 hallazgos (1489 comprobaciones), pantallas
+  492/492, compila.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-18 (73) · Bajar conos solo con el código del paquete; se quitó la captura "a mano, sin escanear"
+-------------------------------------------------------------------------------
+
+"Sí, quita esa parte, ya que es un peligro y puede descuadrar inventario"
+(usuario, después de ver la captura de lo que se quitaba).
+
+POR QUÉ
+  La ventana "Bajar conos a mostrador" tenía, plegada abajo, "Capturar a mano,
+  sin escanear": elegía el cono, cuántos paquetes, kilos (vacío = el peso del
+  Excel) y conos, SIN el número del paquete. Con eso sacaba kilos del paquete
+  pero no marcaba NINGÚN paquete como abierto: seguía "disponible" y se podía
+  vender en la caja o mandar en Surtir sucursal, y el detalle del hilo salía
+  "no cuadra". El usuario aclaró que él "captura a mano" ESCRIBIENDO el número
+  en "Código del paquete", que es lo mismo que escanearlo y sí es seguro.
+  En hitex no había pasado: la única bajada (paquete 00626933) fue con código y
+  los 9 renglones de paquetes cuadraban con sus kilos.
+
+QUÉ CAMBIÓ
+  · Pantalla (inventario/desarme-modal): se quitó esa sección y lo que solo le
+    servía (el input `conos`, `manual`, `conoSel`, `previaManual`,
+    `desarmarManual`, sus estilos en modales.scss y la carga de conos en
+    inventario.ts). El campo dice "Escanea o escribe el código del paquete".
+  · Servidor: POST /inventario/desarmes EXIGE `codigo_bulto` (422 si falta) y
+    ya no acepta `cono_variante_id`, `paquetes` ni `kg` (.strict() los
+    rechaza): los kilos son SIEMPRE los del paquete escaneado y el cono, el de
+    SU hilo (antes, con cono_variante_id + un código de otro hilo, no se
+    comparaba). Un paquete sin peso: 422 BULTO_SIN_PESO. Probado contra un
+    servidor local: sin código, con kilos tecleados y vacío dan 422; un código
+    que no existe, 404; nada se escribió.
+  · e2e-bultos-estado y e2e-trazabilidad mandan solo el código (la sección 5
+    de trazabilidad ahora espera 422). No corren: les faltan sus listas de
+    muestras/.
+  Pruebas: backend 30/30, pantallas 492/492 (una prueba nueva: no hay captura
+  a mano y solo se manda el código).
+
+LO QUE SE ENCONTRÓ AL REVISARLO (por decidir con el usuario)
+  · El "peso de un cono" (producto_variantes.peso_kg del cono) nace en la
+    primera bajada = peso del paquete del Excel ÷ conos de ESE paquete, sin el
+    destare, y no cambia. Se ve en Presentaciones ("Peso de un cono"), en el
+    detalle de una venta ("· 1.604 kg por cono") y en Inventario ("≈ N conos",
+    inventario.ts → equivalencia: kilos ÷ ese peso). No lo usan el cobro, el
+    kardex, la bajada ni las devoluciones. (En la conversación primero se le
+    dijo al usuario que solo salía en dos lugares: el tercero es Inventario.)
+  · El peso del paquete SÍ se puede cambiar a mano ("Precio y peso", permiso
+    hacer:cambiar_precios); el usuario cree que solo viene del Excel.
+  · El destare de la bajada real: ver "POR DECIDIR" arriba.
 
 
 -------------------------------------------------------------------------------

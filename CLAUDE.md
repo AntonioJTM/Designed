@@ -469,9 +469,15 @@ tienda-hilos/
   (`kg_enconados = kg_consumidos + destare_kg`) y queda escrito en las dos patas del kardex.
   NO cambia el precio del cono (que es el del paquete, por kilo) ni su `peso_kg`, que queda como
   referencia de cuánto pesa un cono.
-- **El desarme respeta lo que rinde el bulto.** `POST /inventario/desarmes` acepta `kg` (kilos
-  reales) y `conos` (piezas reales), y guarda `codigo_bulto` para dejar el rastro. Sin esos datos
-  usa los nominales. Importa porque hay bultos que rinden menos —el de 10.75 kg del archivo real
+- **SOLO SE BAJA CON EL CÓDIGO DEL PAQUETE** (2026-10-18: "es un peligro y puede descuadrar
+  inventario", usuario). Se QUITÓ la captura "a mano, sin escanear" (cono + cuántos paquetes +
+  kilos, sin código): sacaba kilos sin marcar ningún paquete como abierto. "A mano" para la tienda
+  es ESCRIBIR el número en "Código del paquete", que es lo mismo que escanearlo. El servidor exige
+  `codigo_bulto` y rechaza `cono_variante_id`, `paquetes` y `kg` (`.strict()`): los kilos son los
+  del paquete y el cono el de su hilo. No reintroduzcas un desarme sin código.
+- **El desarme respeta lo que rinde el bulto.** `POST /inventario/desarmes` toma los kilos del
+  bulto y acepta `conos` (piezas reales) si el paquete no lo dice, y guarda `codigo_bulto` para
+  dejar el rastro. Importa porque hay bultos que rinden menos —el de 10.75 kg del archivo real
   da 7 conos y no 12, y ASÍ VIENE DE FÁBRICA, no es un defecto—: darles de alta los nominales
   infla el inventario de conos con piezas que no existen. La carga NO avisa de esos bultos: es
   normal y avisarlo sería ruido.

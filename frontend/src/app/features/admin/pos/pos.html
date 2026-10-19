@@ -164,7 +164,7 @@
         <!--
           Quién compra. Es OPCIONAL: la mayoría de las ventas de mostrador son a
           quien pasa. Pero si se identifica, la venta queda en su historial y se
-          le puede fiar.
+          le puede dar a crédito.
         -->
         <section class="card cliente">
           @if (clienteSel(); as c) {
@@ -226,7 +226,7 @@
                 <span>
                   @if (num(c.saldo) > 0 && c.atrasado) {
                     <b>Cuenta atrasada:</b> debe <b>{{ c.saldo | dinero }}</b> y lleva
-                    <b>{{ c.dias_sin_abonar }} días sin abonar</b>. Pídele un abono antes de fiarle más.
+                    <b>{{ c.dias_sin_abonar }} días sin abonar</b>. Pídele un abono antes de darle más a crédito.
                     @if (apartadoCliente()) { También tiene }
                   } @else if (num(c.saldo) > 0) {
                     Debe <b>{{ c.saldo | dinero }}</b>@if (apartadoCliente()) { y tiene } @else {.}
@@ -255,7 +255,7 @@
                 <input type="search" [(ngModel)]="qCliente" name="qcli" (keyup)="buscarCliente()"
                        placeholder="Nombre, número o teléfono" autocomplete="off" />
               </div>
-              <span class="ayuda">Si lo identificas, la venta queda en su historial, se le aplica su lista de precios y se le puede fiar.</span>
+              <span class="ayuda">Si lo identificas, la venta queda en su historial, se le aplica su lista de precios y se le puede dar a crédito.</span>
             </label>
             @if (buscandoCliente()) { <p class="muted" style="margin: 0">Buscando…</p> }
             @if (resultadosCliente().length > 0) {
@@ -640,7 +640,7 @@
           <input type="tel" [(ngModel)]="nuevoCliente.telefono" name="nct" maxlength="20" />
         </label>
         <p class="nota-info">
-          Nace sin crédito: el cobro es completo. El administrador recibe el aviso para decidir si le autoriza fiarle.
+          Nace sin crédito: el cobro es completo. El administrador recibe el aviso para decidir si le autoriza crédito.
         </p>
       </div>
       <div class="modal-foot">

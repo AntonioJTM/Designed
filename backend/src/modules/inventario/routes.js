@@ -26,22 +26,17 @@ const movimientoSchema = z
   })
   .strict();
 
-// Desarmar paquetes en conos. El peso del paquete y cuántos conos salen ya
-// están en la variante cono; aquí solo se dice cuántos paquetes se abren.
+// Bajar UN paquete a conos, SIEMPRE con su código (2026-10-18: "es un peligro
+// y puede descuadrar inventario", usuario). Del código salen el hilo, el cono,
+// los KILOS (los del paquete, no se teclean) y los conos que rinde. Se quitaron
+// `cono_variante_id`, `paquetes` y `kg`: con ellos se sacaban kilos sin marcar
+// ningún paquete como abierto. `.strict()` los rechaza si alguien los manda.
 const desarmarSchema = z
   .object({
-    // Con `codigo_bulto` no hace falta: se resuelve el paquete del bulto y, si el
-    // producto no tiene cono todavía, se crea con los conos que dice el bulto.
-    cono_variante_id: z.coerce.number().int().positive().optional(),
     almacen_origen_id: z.coerce.number().int().positive(),
     almacen_destino_id: z.coerce.number().int().positive(),
-    paquetes: z.coerce.number().positive().max(100000).optional(),
-    // Kilos reales a consumir. Sin este dato se usa paquetes × peso del paquete;
-    // sirve cuando el bulto no pesó exactamente lo nominal.
-    kg: z.coerce.number().positive().max(1000000).nullable().optional(),
-    // Conos que rinde de verdad. Sin este dato se usan los nominales de la
-    // presentación; hace falta cuando el bulto rinde menos (uno del archivo real
-    // da 7 en vez de 12, así viene de fábrica) o el inventario queda inflado.
+    // Conos que rinde de verdad, solo si el paquete no lo dice (la lista del
+    // proveedor lo trae). No mueve kilos: es cuántas piezas son.
     conos: z.coerce.number().positive().max(1000000).nullable().optional(),
     // Lo que GANA de peso el hilo al enconarse (el tubo de cada cono). Lo captura
     // la tienda: no se calcula. Se suma a los kilos y queda en el kardex.
@@ -49,14 +44,12 @@ const desarmarSchema = z
     // O por CONO (lo que pesa el tubo de uno): se multiplica por los conos que
     // salen (2026-10-06: "eso se le suma a cada cono"). Si viene, manda.
     destare_por_cono_kg: z.coerce.number().nonnegative().max(1).nullable().optional(),
-    // Bulto que se desarmó, para dejar el rastro en el kardex.
-    codigo_bulto: z.string().trim().max(60).nullable().optional(),
+    // El paquete que se abre: escaneado o escrito a mano, es lo mismo.
+    codigo_bulto: z.string({ required_error: 'Escanea o escribe el código del paquete que vas a abrir' })
+      .trim().min(1, 'Escanea o escribe el código del paquete que vas a abrir').max(60),
     motivo: z.string().trim().max(255).optional(),
   })
-  .strict()
-  .refine((d) => d.cono_variante_id || d.codigo_bulto, {
-    message: 'Escanea el bulto o indica qué cono se va a producir',
-  });
+  .strict();
 
 // Traspaso de matriz a sucursal. Cada línea manda `paquetes` (si la variante
 // es un paquete) o `cantidad` en la unidad de la variante.
