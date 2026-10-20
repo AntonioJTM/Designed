@@ -136,6 +136,15 @@ router.get('/desarmes/previa/:codigo', ...soloStaff, controller.previaDesarmeBul
 // Cuántos paquetes son X kilos, con el peso real de los bultos de la bodega.
 router.get('/equivalencia-paquetes', ...soloStaff, controller.equivalenciaPaquetes);
 router.get('/traspasos', ...soloStaff, controller.listarTraspasos);
+// Los pedidos a otra tienda que esperan autorización o ya se resolvieron (2026-10-20).
+// Literal antes de '/traspasos/:id'.
+router.get('/traspasos/autorizaciones', ...soloStaff, requirePermiso('ver:surtir'), async (req, res, next) => {
+  try {
+    res.json({ data: await require('../autorizaciones/service').pedidosASucursal(req.auth), error: null });
+  } catch (err) {
+    next(err);
+  }
+});
 router.get('/traspasos/:id', ...soloStaff, controller.obtenerTraspaso);
 
 // Escrituras (staff): movimientos, desarmes, traspasos y configuración de umbrales.

@@ -183,6 +183,23 @@ async function esperandoDe(operacion, ruta) {
   return r ?? null;
 }
 
+/**
+ * Las de una operación para su propia pantalla (los pedidos a otra tienda en
+ * Surtir sucursal): las que esperan y las resueltas de los últimos `dias`. Con
+ * su cuerpo y lo que contestó (de ahí sale el traspaso que se creó); no van tal
+ * cual a la pantalla.
+ */
+async function deOperacion(operacion, dias = 30) {
+  const [rows] = await pool.query(
+    `${SELECT.replace('a.motivo, a.ultimo_error,', 'a.motivo, a.ultimo_error, a.cuerpo, a.resultado,')}
+      WHERE a.operacion = :operacion
+        AND (a.estado IN ('pendiente', 'aprobando') OR a.solicitado_en >= NOW() - INTERVAL :dias DAY)
+      ORDER BY a.solicitado_en DESC, a.id DESC LIMIT 200`,
+    { operacion, dias }
+  );
+  return rows.map(deFila);
+}
+
 /** Sus solicitudes de vacaciones, las más nuevas primero (para "Mis vacaciones"). */
 async function vacacionesPedidas(usuarioId, limite = 20) {
   const [rows] = await pool.query(
@@ -345,7 +362,7 @@ async function nombresDeAlmacenes() {
 
 module.exports = {
   obtener, paraHacer, crear, crearEnElMomento, cerrarEnElMomento, tomarParaAprobar, consumirLlave,
-  marcarAprobada, anotarAviso, vacacionesPedidas, esperandoDe, reemplazarPendientes, cerrarPorCambio, cerrarPendientesDeRuta, contextoDe, regresarAPendiente, anotarError, anotarErrorAprobando, rechazar, cerrarInterrumpida,
+  marcarAprobada, anotarAviso, vacacionesPedidas, deOperacion, esperandoDe, reemplazarPendientes, cerrarPorCambio, cerrarPendientesDeRuta, contextoDe, regresarAPendiente, anotarError, anotarErrorAprobando, rechazar, cerrarInterrumpida,
   cerrarSinQuienPidio, cancelar, marcarVencida,
   pendientes, deSolicitante, resueltas, nombresDeAlmacenes,
 };

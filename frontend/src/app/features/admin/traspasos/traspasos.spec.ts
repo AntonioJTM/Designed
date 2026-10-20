@@ -9,6 +9,9 @@ import {
   TraspasoInput,
 } from '../../../core/services/inventario.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { AutorizacionesService } from '../../../core/services/autorizaciones.service';
+import { provideRouter } from '@angular/router';
+import { SolicitudTraspaso } from '../../../core/services/inventario.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 
@@ -100,8 +103,13 @@ describe('Traspasos', () => {
   /** ¿Se preguntó cuánto hay en el origen? */
   let pidioEquivalencia = false;
 
+  /** Los pedidos con autorización (2026-10-20). */
+  let solicitudesActuales: SolicitudTraspaso[] = [];
+  let retiradas: number[] = [];
+
   const invFalso = {
     almacenes: () => of(almacenesActuales),
+    solicitudesTraspaso: () => of(solicitudesActuales),
     traspasos: () => of({ items: [enTransito], total: 1, page: 1, limit: 50, paginas: 1 }),
     equivalenciaPaquetes: () => {
       pidioEquivalencia = true;
@@ -142,6 +150,8 @@ describe('Traspasos', () => {
       providers: [
         { provide: InventarioService, useValue: { ...invFalso, traspasos: () => of({ items: historial, total: historial.length, page: 1, limit: 100, paginas: 1 }) } },
         { provide: AuthService, useValue: authFalso },
+        { provide: AutorizacionesService, useValue: { cancelar: (id: number) => { retiradas.push(id); return of({}); } } },
+        provideRouter([]),
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Traspasos);
@@ -478,5 +488,33 @@ describe('Traspasos', () => {
     const botones = [...el.querySelectorAll('.traspaso-acciones button')].map((b) => b.textContent!.trim());
     expect(botones).not.toContain('Enviar');
     expect(botones).toContain('Cancelar');
+  });
+
+  it('enseña los pedidos con autorización: esperando, autorizado por menos y rechazado (2026-10-20)', async () => {
+    const base = {
+      interrumpida: false, origen: 'Matriz', destino: 'Moroleón', notas: null, solicitante: 'Carlos',
+      solicitado_en: '2026-10-20 09:00:00', autorizador: null, resuelto_en: null, motivo: null, nota_aprobacion: null,
+      ultimo_error: null, traspaso: null, es_mia: false, puedo_autorizar: false,
+    };
+    solicitudesActuales = [
+      { ...base, id: 1, estado: 'pendiente', lineas: [{ hilo: 'BLACK 2/30', unidad: 'paquetes', pedido: 20 }], es_mia: true, puedo_autorizar: true },
+      { ...base, id: 2, estado: 'aprobada', lineas: [{ hilo: 'OPTIK 2/30', unidad: 'paquetes', pedido: 5 }], autorizador: 'Antonio',
+        nota_aprobacion: 'Autorizó menos de lo pedido: OPTIK 2/30: 3 de 5 paquetes.', traspaso: { id: 70, folio: 'TRA-1-ABCD', estado: 'en_transito' } },
+      { ...base, id: 3, estado: 'rechazada', lineas: [{ hilo: 'MARINO 2/30', unidad: 'paquetes', pedido: 2 }], autorizador: 'Antonio', motivo: 'Ya llevan' },
+    ] as SolicitudTraspaso[];
+    retiradas = [];
+    const f = await montarFixture();
+    const t = (f.nativeElement as HTMLElement).textContent ?? '';
+    expect(t).toContain('Pedidos con autorización');
+    expect(t).toContain('Esperando autorización');
+    expect(t).toContain('Autorizar o rechazar');
+    expect(t).toContain('Autorizado por menos');
+    expect(t).toContain('3 de 5 paquetes');
+    expect(t).toContain('en camino');
+    expect(t).toContain('Rechazado');
+    expect(t).toContain('Ya llevan');
+    f.componentInstance.retirarSolicitud(solicitudesActuales[0]);
+    expect(retiradas).toEqual([1]);
+    solicitudesActuales = [];
   });
 });

@@ -541,8 +541,10 @@ tienda-hilos/
     2). Era lo único que había.") y después va lo que escriba quien surte. La pantalla lo
     enseña en Pendientes ("2 de 3 paq", "no salió (no había)", "Al enviar: …"), en el historial
     y en el acuse. Al recibir, la línea en 0 no entra ni cuenta como faltante; al cancelar en
-    camino, no regresa nada de ella. Pueden salir más de los pedidos ("21 paq, se pidieron 20")
-    y el apartado se libera completo. El servidor rechaza, sin mover nada: código repetido (`BULTO_REPETIDO`),
+    camino, no regresa nada de ella. **NUNCA salen MÁS de los pedidos** (2026-10-19, con las
+    autorizaciones: "si autorizas 10, solo se mandan 10"; antes sí, "21 paq, se pidieron 20"):
+    al enviar y al guardar a medias, 422 `MAS_DE_LO_PEDIDO` (`_exigirNoMasDeLoPedido`), y la
+    ventana del lector rechaza el que sobra al escanearlo. Lo pedido en kilos no se topa. El servidor rechaza, sin mover nada: código repetido (`BULTO_REPETIDO`),
     desconocido (`CODIGO_DESCONOCIDO`), el de la presentación (`CODIGO_NO_ES_PAQUETE`), de un
     hilo que no está en el traspaso (`BULTO_NO_ES_DEL_TRASPASO`), vendido o desarmado (409
     `BULTO_NO_DISPONIBLE`), sin peso (`BULTO_SIN_PESO`) o en camino en otro envío (409

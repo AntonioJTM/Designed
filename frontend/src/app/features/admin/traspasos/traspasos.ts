@@ -5,6 +5,7 @@ import {
   EstadoTraspaso,
   InventarioService,
   ResultadoTraspaso,
+  SolicitudTraspaso,
   Traspaso,
   TraspasoItemInput,
   TraspasoLinea,
@@ -20,6 +21,8 @@ import { FolioPipe } from '../../../shared/folio.pipe';
 import { EnvioModal } from './envio-modal';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
+import { AutorizacionesService } from '../../../core/services/autorizaciones.service';
+import { RouterLink } from '@angular/router';
 
 /**
  * Línea en captura. Se pide en PAQUETES y la pantalla dice cuántos kilos son
@@ -76,9 +79,9 @@ const HISTORIAL = 100;
  */
 @Component({
   selector: 'app-traspasos',
-  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe, EnvioModal],
+  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe, EnvioModal, RouterLink],
   templateUrl: './traspasos.html',
-  styleUrls: ['./traspasos.scss', './traspasos-avance.scss'],
+  styleUrls: ['./traspasos.scss', './traspasos-avance.scss', './traspasos-solicitudes.scss'],
   // Los dos modales (acuse y cancelación) se cierran con Escape, nunca al
   // tocar el fondo: se perdería lo capturado.
   host: { '(document:keydown.escape)': 'alEscape()' },
@@ -100,6 +103,11 @@ export class Traspasos {
 
   readonly almacenes = signal<Almacen[]>([]);
   readonly historial = signal<Traspaso[]>([]);
+  /** Los pedidos que pasaron por autorización (2026-10-20): esperando, autorizados o rechazados. */
+  readonly solicitudes = signal<SolicitudTraspaso[]>([]);
+  private readonly autorizacionesApi = inject(AutorizacionesService);
+  readonly esperando = computed(() => this.solicitudes().filter((s) => s.estado === 'pendiente' || s.estado === 'aprobando'));
+  readonly resueltas = computed(() => this.solicitudes().filter((s) => s.estado !== 'pendiente' && s.estado !== 'aprobando'));
   readonly resultados = signal<Variante[]>([]);
   readonly lineas = signal<LineaEnvio[]>([]);
   readonly ultimo = signal<ResultadoTraspaso | null>(null);
@@ -229,7 +237,7 @@ export class Traspasos {
     // firma de recibido en otra computadora, y Pendientes se pone al día solo.
     // Solo llegan los de SUS tiendas (las del origen o del destino).
     inject(TiempoRealService)
-      .cambios(['traspasos', 'inventario'])
+      .cambios(['traspasos', 'inventario', 'autorizaciones'])
       .pipe(takeUntilDestroyed())
       .subscribe(() => this.cargarHistorial());
   }
@@ -238,6 +246,46 @@ export class Traspasos {
     this.inv.traspasos(undefined, HISTORIAL).subscribe({
       next: (p) => this.historial.set(p.items),
       error: () => {},
+    });
+    this.inv.solicitudesTraspaso().subscribe({
+      next: (s) => this.solicitudes.set(s),
+      error: () => {},
+    });
+  }
+
+  /** En qué quedó una solicitud, en palabras de la tienda. */
+  estadoSolicitud(s: SolicitudTraspaso): { texto: string; tono: string } {
+    if (s.interrumpida) return { texto: 'Se interrumpió', tono: 'naranja' };
+    switch (s.estado) {
+      case 'pendiente': return { texto: 'Esperando autorización', tono: 'ambar' };
+      case 'aprobando': return { texto: 'Autorizándose…', tono: 'info' };
+      case 'aprobada': return { texto: s.nota_aprobacion ? 'Autorizado por menos' : 'Autorizado', tono: 'verde' };
+      case 'rechazada': return { texto: 'Rechazado', tono: 'rojo' };
+      case 'cancelada': return { texto: 'Retirado', tono: 'gris' };
+      default: return { texto: 'Cerrado', tono: 'gris' };
+    }
+  }
+
+  /** En qué va el traspaso que nació de una solicitud autorizada. */
+  pasoTraspaso(e: EstadoTraspaso): string {
+    return { solicitado: 'por enviar', en_transito: 'en camino', recibido: 'recibido', cancelado: 'cancelado' }[e] ?? e;
+  }
+
+  textoLineas(s: SolicitudTraspaso): string {
+    return s.lineas
+      .map((l) => `${l.hilo} · ${l.unidad === 'paquetes' ? `${l.pedido} ${l.pedido === 1 ? 'paquete' : 'paquetes'}` : `${l.pedido} kg`}`)
+      .join('; ');
+  }
+
+  /** Quien la pidió la retira mientras espera. */
+  retirarSolicitud(s: SolicitudTraspaso): void {
+    this.error.set(null);
+    this.autorizacionesApi.cancelar(s.id).subscribe({
+      next: () => {
+        this.mensaje.set(`Se retiró el pedido a ${s.origen}.`);
+        this.cargarHistorial();
+      },
+      error: (e) => this.error.set(this.msg(e)),
     });
   }
 
@@ -453,8 +501,18 @@ export class Traspasos {
           this.cargarHistorial();
         },
         error: (e) => {
-          this.error.set(this.msg(e));
           this.enviando.set(false);
+          // Se PIDIÓ con autorización (no es un error): queda en "Pedidos con
+          // autorización" hasta que la acepten o la rechacen.
+          if ((e as { error?: { error?: ApiError } })?.error?.error?.code === 'AUTORIZACION_PEDIDA') {
+            this.mensaje.set('Se pidió la autorización: el pedido aparece arriba, en «Pedidos con autorización», ' +
+              'y la bodega lo ve para surtir cuando lo autoricen.');
+            this.lineas.set([]);
+            this.notas = '';
+            this.cargarHistorial();
+            return;
+          }
+          this.error.set(this.msg(e));
         },
       });
   }

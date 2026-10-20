@@ -29,6 +29,66 @@
   </div>
 
   <!--
+    LOS PEDIDOS CON AUTORIZACIÓN (2026-10-20: "que salgan las solicitudes y cuál
+    ya está aprobada y cuál está por aprobar o rechazar"). Hasta que se autoriza
+    no hay traspaso: aquí se ve que se pidió y en qué quedó.
+  -->
+  @if (solicitudes().length) {
+    <section class="card solicitudes-card">
+      <div class="card-head">
+        <div>
+          <h2>Pedidos con autorización</h2>
+          <p>Hasta que se autorizan no se aparta nada ni los ve quien surte. Los resueltos, de los últimos 30 días.</p>
+        </div>
+      </div>
+      <ul class="solicitudes-surtir">
+        @for (s of esperando(); track s.id) {
+          <li class="solicitud-surtir esperando">
+            <div class="que">
+              <div class="arriba">
+                <b>{{ s.origen }} → {{ s.destino }}</b>
+                <span [class]="'pill ' + estadoSolicitud(s).tono">{{ estadoSolicitud(s).texto }}</span>
+              </div>
+              <span class="lleva">{{ textoLineas(s) }}</span>
+              <span class="quien">Lo pidió {{ s.solicitante }} {{ s.solicitado_en | cuando }}@if (s.notas) { · «{{ s.notas }}»}</span>
+              @if (s.ultimo_error) { <span class="aviso-chico">No se pudo hacer: {{ s.ultimo_error }}</span> }
+            </div>
+            <div class="acciones-solicitud">
+              @if (s.puedo_autorizar) {
+                <a class="btn btn-primary btn-sm" routerLink="/admin/autorizaciones">Autorizar o rechazar ›</a>
+              }
+              @if (s.es_mia && s.estado === 'pendiente') {
+                <button type="button" class="btn btn-ghost btn-sm" (click)="retirarSolicitud(s)">Retirar</button>
+              }
+            </div>
+          </li>
+        }
+        @for (s of resueltas(); track s.id) {
+          <li class="solicitud-surtir">
+            <div class="que">
+              <div class="arriba">
+                <b>{{ s.origen }} → {{ s.destino }}</b>
+                <span [class]="'pill ' + estadoSolicitud(s).tono">{{ estadoSolicitud(s).texto }}</span>
+                @if (s.traspaso) {
+                  <span class="mono muted" [title]="s.traspaso.folio">{{ s.traspaso.folio | folio }} · {{ pasoTraspaso(s.traspaso.estado) }}</span>
+                }
+              </div>
+              <span class="lleva">{{ textoLineas(s) }}</span>
+              <span class="quien">
+                Lo pidió {{ s.solicitante }} {{ s.solicitado_en | cuando }}
+                @if (s.autorizador && s.estado === 'aprobada') { · lo autorizó {{ s.autorizador }} }
+                @if (s.autorizador && s.estado === 'rechazada') { · lo rechazó {{ s.autorizador }} }
+              </span>
+              @if (s.nota_aprobacion) { <span class="nota-menos">{{ s.nota_aprobacion }}</span> }
+              @if (s.estado !== 'aprobada' && s.motivo) { <span class="motivo-solicitud">Por qué: {{ s.motivo }}</span> }
+            </div>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  <!--
     Lo que está esperando algo: es lo primero que hay que ver. Cada uno dice en
     qué paso va y qué le falta. Enviar es de la bodega (hacer:enviar_traspaso) y
     confirmar que llegó, de quien recibe (hacer:recibir_traspaso): sin el permiso

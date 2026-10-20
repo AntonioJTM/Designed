@@ -26,20 +26,17 @@
   · Una MIGRACIÓN nueva se aplica en LAS DOS bases.
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
-POR DECIDIR CON EL USUARIO (entradas 82 a 84)
-  · Que le avise a quien pidió cuando se acepta o rechaza lo que no es
-    vacaciones (hoy lo ve en Autorizaciones → Mis solicitudes; el WhatsApp
-    eligió que fuera solo para vacaciones).
-  · Surtir sucursal: la pantalla todavía no enseña los pedidos que esperan
-    autorización (se ven en Autorizaciones).
-  · Surtir sucursal: al ENVIAR se pueden mandar más paquetes que los pedidos
-    ("se manda lo que hay"). Con la autorización por menos, ¿se topa el envío
-    a lo autorizado? (la revisión lo señaló; no se cambió sin preguntar).
-  · Personal: quien lo tenga puede cambiarle la contraseña a otra persona o dar
-    de alta una cuenta y entrar con ella (saltaría "nadie toca su propia
-    nómina" y cualquier autorización). Hoy en hitex solo el administrador
-    tiene Personal. ¿Solo el administrador cambia contraseñas de quien ya
-    entra al sistema? (entrada 84)
+DECIDIDO POR EL USUARIO (2026-10-20, entrada 86)
+  · Personal (quien lo tenga puede cambiarle la contraseña a otro o dar de alta
+    una cuenta y entrar con ella): "olvídalo, eso lo hago al finalizar el
+    proyecto". Hoy en hitex solo el administrador tiene Personal.
+  · Avisar a quien pidió cuando se acepta o rechaza lo que no es vacaciones:
+    "no por el momento, así está bien".
+  · Lo que el usuario captura (su clave para autorizar, teléfonos, la gerente
+    en Nómina, listas de precio): "después lo hago, esto es desarrollo".
+  · Seguridad del servidor (contraseña de MySQL, llaves de IA, puerto 3306):
+    "por el momento que siga así".
+  No los vuelvas a ofrecer hasta que él los retome.
 
 POR DECIDIR CON EL USUARIO (entradas 79 y 80)
   · Anotado, sin hacer: un tope de conexiones en vivo por persona (hoy cada
@@ -56,6 +53,13 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  SURTIR SUCURSAL enseña los PEDIDOS CON AUTORIZACIÓN: esperando, autorizado
+  (o por menos, con su traspaso y en qué va) o rechazado (2026-10-20, entrada
+  86; DESPLEGADO en 20261020-085755, sin base).
+  Antes:
+  SURTIR SUCURSAL: no salen MÁS paquetes de los pedidos (o autorizados)
+  (2026-10-19, entrada 85; DESPLEGADO en 20261019-181742, sin base).
+  Antes:
   AUTORIZACIONES, FASE 3 (la nómina): la prepara la gerente o Contabilidad y
   PAGARLA lo autoriza el administrador; nadie toca su propia nómina
   (2026-10-19, entrada 84; DESPLEGADO en 20261019-173742, migración
@@ -753,6 +757,72 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (86) · Surtir sucursal enseña los pedidos con autorización
+-------------------------------------------------------------------------------
+
+"Sí, que salgan las solicitudes y que salga cuál ya está aprobada y cuál está
+en solicitud por aprobar o rechazar" (usuario). DESPLEGADO en 20261020-085755; no toca la
+base.
+
+  · Tarjeta "Pedidos con autorización" arriba de Pendientes (solo si hay): los
+    que ESPERAN ("Esperando autorización", con "Autorizar o rechazar ›" a quien
+    puede —lleva a Autorizaciones— y "Retirar" a quien lo pidió) y los
+    RESUELTOS de los últimos 30 días: "Autorizado" o "Autorizado por menos"
+    (con quién, la nota "Autorizó menos de lo pedido: …" y el traspaso que
+    nació y en qué va: por enviar, en camino, recibido), "Rechazado" (con quién
+    y por qué) y "Retirado".
+  · `GET /inventario/traspasos/autorizaciones` (`ver:surtir`;
+    `autorizaciones/service.js → pedidosASucursal`): los de SUS tiendas (las
+    del origen o del destino), solo con lo PEDIDO —nada de cuánto hay en el
+    origen: pedir a ciegas—, `puedo_autorizar` con la misma regla de
+    Autorizaciones (quien ve el almacén que surte) y `es_mia`. Del traspaso
+    que nació solo sale su folio y su estado.
+  · Al pedir uno que necesita autorización, la pantalla ya no lo pinta en
+    rojo: "Se pidió la autorización: el pedido aparece arriba…", limpia la
+    captura y lo enseña en la tarjeta. Se pone al día sola (`autorizaciones`
+    en el tiempo real de la pantalla).
+
+PRUEBAS
+  Backend 63/63, pantallas 536/536 (nueva: la tarjeta con los tres estados y
+  retirar), verificar-sistema.js 0 hallazgos, e2e-tiendas. De punta a punta con
+  la base de pruebas: fase 2 de autorizaciones 46 (nuevas: la enseña
+  autorizada por menos con su traspaso y lo pedido —no lo que hay—; esperando y
+  autorizable para quien ve la bodega; la gerente del destino la ve pero no la
+  autoriza; otra tienda no la ve; retirada). La base quedó igual. En Chrome
+  (escritorio y celular): esperando, rechazado y autorizado por menos.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (85) · Surtir sucursal: no salen más paquetes de los pedidos
+-------------------------------------------------------------------------------
+
+"Si autorizas 10 paquetes, el almacenista todavía puede mandar 30. ¿Topamos el
+envío a lo autorizado?" — "Sí, solo a lo que manda" (usuario). DESPLEGADO en
+20261019-181742; no toca la base.
+
+  · De cada hilo pedido en PAQUETES no salen más paquetes escaneados que los
+    pedidos (el traspaso nace con lo AUTORIZADO, así que es lo autorizado). Al
+    enviar y al guardar a medias, 422 MAS_DE_LO_PEDIDO ("BLACK 2/30: se
+    pidieron 10 y van 11 (quita 1)") antes de mover nada
+    (`inventario/model.js → _exigirNoMasDeLoPedido`). La ventana del lector
+    rechaza el que sobra al escanearlo ("…ya van 10: no sale más de lo
+    pedido"). Menos de lo pedido sigue saliendo ("se manda lo que hay").
+  · Lo pedido en KILOS (una presentación suelta o una solicitud vieja) no se
+    topa: sus kilos son un aproximado.
+  · Antes salían más ("21 paq, se pidieron 20"); la regla vieja quedó
+    corregida en CLAUDE.md. La prueba e2e-paquete-de-otra-tienda (sección 5)
+    pedía 1 paquete y mandaba 2: ahora lo pide en kilos.
+
+PRUEBAS
+  Backend 63/63, pantallas 535/535 (la del lector: no deja escanear de más),
+  verificar-sistema.js 0 hallazgos. De punta a punta con la base de pruebas:
+  fase 2 de autorizaciones 40 (nuevas: enviar 11 de 10 autorizados y
+  guardarlos a medias, 422, y el traspaso sigue por enviar),
+  e2e-surtir-a-medias, e2e-paquete-de-otra-tienda, e2e-traspaso-estados (39),
+  e2e-tiendas y e2e-permisos. La base quedó igual.
 
 
 -------------------------------------------------------------------------------

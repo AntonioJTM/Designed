@@ -1,0 +1,15 @@
+/* Los pedidos con autorización (2026-10-20): aparte, para no pasar el límite de la hoja de la pantalla. */
+.solicitudes-surtir { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.solicitud-surtir {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between;
+  padding: 12px 0; border-bottom: 1px solid var(--borde-suave);
+}
+.solicitud-surtir:last-child { border-bottom: 0; }
+.solicitud-surtir .que { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.solicitud-surtir .arriba { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.solicitud-surtir .arriba > b { font-size: 0.9375rem; font-weight: 600; }
+.solicitud-surtir .lleva { font-size: 0.8125rem; color: var(--tinta-2); overflow-wrap: anywhere; }
+.solicitud-surtir .quien { font-size: 0.8125rem; color: var(--tinta-3); }
+.solicitud-surtir .nota-menos { font-size: 0.8125rem; color: var(--aviso-t); }
+.solicitud-surtir .motivo-solicitud, .solicitud-surtir .aviso-chico { font-size: 0.8125rem; color: var(--peligro-t); }
+.acciones-solicitud { display: flex; flex-wrap: wrap; gap: 8px; }
