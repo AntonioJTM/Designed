@@ -204,6 +204,12 @@ button, input, select, textarea { font-family: inherit; }
 .kpi-label .punto.tono-alerta { background: var(--punto-alerta); }
 .kpi-label .punto.tono-serie-3 { background: var(--viz-series-3); }
 .kpi-label .punto.tono-tinta { background: var(--tinta); }
+/* Más tonos para los puntos (2026-10-20: Nómina y Notas en espera los pintaban con style=). */
+.kpi-label .punto.tono-acento { background: var(--acento); }
+.kpi-label .punto.tono-ok { background: var(--ok-t); }
+.kpi-label .punto.tono-peligro { background: var(--peligro-t); }
+.kpi-label .punto.tono-ambar { background: var(--aviso-t); }
+.kpi-label .punto.tono-suave { background: var(--tinta-3); }
 /* La cifra grande se encoge solo si no cabe en su tarjeta (con la letra del
    navegador al doble, "$14,000.00" se salía: un número no se parte en dos
    renglones). Con la letra normal y la tarjeta de siempre mide 1.75rem. */
@@ -342,6 +348,16 @@ div.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .buscador:focus-within {
   outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco);
 }
+/* LA CONTRASEÑA CON SU OJITO (2026-10-20, usuario): a la derecha, dentro del
+   campo; enseña lo que se escribió para revisarlo. Personal y Entrar. */
+.con-ojo { position: relative; display: block; }
+.con-ojo input { padding-right: 48px; }
+.ojo {
+  position: absolute; top: 0; right: 0; width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 0 8px 8px 0; background: transparent; color: var(--tinta-3); cursor: pointer;
+}
+.ojo:hover, .ojo[aria-pressed='true'] { color: var(--tinta); }
 .field.check { flex-direction: row; align-items: center; gap: 8px; }
 .field.check input { width: 18px; min-height: 18px; height: 18px; accent-color: var(--acento); }
 .field .ayuda { font-size: 0.75rem; font-weight: 400; color: var(--tinta-3); }

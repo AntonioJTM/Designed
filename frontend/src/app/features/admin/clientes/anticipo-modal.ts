@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { VentasService } from '../../../core/services/ventas.service';
@@ -36,6 +37,8 @@ import { turnoPropuesto, turnosAbiertos } from './turnos-caja';
   `,
 })
 export class AnticipoModal implements OnInit {
+  /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
+  private clave = nuevaClave();
   private readonly clientes = inject(ClientesService);
   private readonly ventas = inject(VentasService);
 
@@ -117,10 +120,11 @@ export class AnticipoModal implements OnInit {
         transferencia: this.parteTransferencia() || undefined,
         sesion_caja_id: this.parteEfectivo() > 0 ? Number(this.turnoId) : undefined,
         referencia: this.parteTransferencia() > 0 ? this.referencia.trim() || undefined : undefined,
-      })
+      }, this.clave)
       .subscribe({
         next: (r) => {
           this.guardando.set(false);
+          this.clave = nuevaClave();
           this.registrado.emit({ total: Number(r.total), saldo_favor: Number(r.saldo_favor), movimiento_id: Number(r.movimiento_id) });
         },
         error: (e) => {

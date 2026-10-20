@@ -294,7 +294,7 @@ export class Tablero implements OnInit {
         : c.num_clientes === 0
           ? 'nadie te debe ahora mismo'
           : `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente' : 'clientes'}` +
-            (c.num_vencidos > 0 ? ` · ${c.num_vencidos} con más de ${c.dias_aviso} días sin abonar` : ''),
+            (c.num_vencidos > 0 ? ` · ${c.num_vencidos} con notas de más de ${c.dias_aviso} días` : ''),
       punto: 'var(--punto-alerta)',
     });
     return lista;
@@ -414,7 +414,7 @@ export class Tablero implements OnInit {
       .map((x) => ({
         label: x.nombre_comercial || x.nombre,
         value: Number(x.saldo),
-        detalle: `${x.dias_sin_abonar} días sin abonar`,
+        detalle: `su nota más vieja, ${x.dias_sin_abonar} días`,
         title: `${x.nombre}${x.telefono ? ' · ' + x.telefono : ''}`,
       }));
   });

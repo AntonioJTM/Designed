@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -35,6 +36,8 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
   `,
 })
 export class PagoNotaModal implements OnInit {
+  /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
+  private clave = nuevaClave();
   private readonly ventas = inject(VentasService);
 
   readonly nota = input.required<NotaPendiente>();
@@ -72,6 +75,18 @@ export class PagoNotaModal implements OnInit {
     return n.nombre_comercial || n.cliente || 'el cliente';
   }
 
+  /** "Con qué paga" = su SALDO A FAVOR (2026-10-20): no es un método de la lista. */
+  readonly SALDO = -1;
+
+  /** Su saldo a favor (anticipos, lo que regresó). */
+  saldoFavor(): number {
+    return Math.max(0, Number(this.nota().saldo_favor ?? 0));
+  }
+
+  conSaldo(): boolean {
+    return Number(this.metodoId) === this.SALDO;
+  }
+
   /** Método y no `computed`: lee campos de ngModel. */
   esEfectivo(): boolean {
     const m = this.metodos().find((x) => x.id === Number(this.metodoId));
@@ -98,6 +113,10 @@ export class PagoNotaModal implements OnInit {
       this.error.set('Elige con qué está pagando.');
       return;
     }
+    if (this.conSaldo() && monto > this.saldoFavor() + 0.001) {
+      this.error.set(`Tiene ${this.dinero(this.saldoFavor())} a favor: no alcanza para ${this.dinero(monto)}.`);
+      return;
+    }
     if (this.esEfectivo() && !this.turnoId) {
       this.error.set(
         this.turnos().length > 1
@@ -110,15 +129,18 @@ export class PagoNotaModal implements OnInit {
     this.guardando.set(true);
     this.error.set(null);
     this.ventas
-      .pagarNota(this.nota().id, {
-        monto,
-        metodo_pago_id: Number(this.metodoId),
-        sesion_caja_id: this.esEfectivo() ? Number(this.turnoId) : undefined,
-        referencia: this.referencia.trim() || undefined,
-      })
+      .pagarNota(this.nota().id, this.conSaldo()
+        ? { monto, con_saldo_favor: true }
+        : {
+          monto,
+          metodo_pago_id: Number(this.metodoId),
+          sesion_caja_id: this.esEfectivo() ? Number(this.turnoId) : undefined,
+          referencia: this.referencia.trim() || undefined,
+        }, this.clave)
       .subscribe({
         next: (r) => {
           this.guardando.set(false);
+          this.clave = nuevaClave();
           this.registrado.emit(r);
         },
         error: (e) => {

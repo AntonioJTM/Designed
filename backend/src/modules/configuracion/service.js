@@ -40,6 +40,17 @@ async function guardar(cambios) {
     cambios.envio_costo_fijo = n.toFixed(2);
   }
 
+  // El tope del destare por cono (2026-10-20): vacío, o un número de 0 a 1 kg.
+  if (cambios.desarme_destare_max_kg !== undefined && cambios.desarme_destare_max_kg !== null &&
+      String(cambios.desarme_destare_max_kg).trim() !== '') {
+    const n = Number(cambios.desarme_destare_max_kg);
+    if (!Number.isFinite(n) || n <= 0 || n > 1) {
+      throw new AppError(422, 'DESTARE_TOPE_INVALIDO',
+        'El tope del destare por cono va en kilos, más de 0 y hasta 1 (un tubo pesa gramos: 50 g son 0.05).');
+    }
+    cambios.desarme_destare_max_kg = String(Math.round(n * 1000) / 1000);
+  }
+
   await model.guardar(cambios);
   return completa();
 }

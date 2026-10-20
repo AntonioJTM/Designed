@@ -33,11 +33,20 @@ import { AutorizacionDialogoService } from '../../core/services/autorizacion-dia
             </span>
             <div class="texto">
               @if (a.pedida) {
-                <h2 id="autorizacion-titulo">Listo: se pidió la autorización</h2>
-                <p id="autorizacion-que">
-                  {{ a.info.resumen }}.<br />
-                  Se hace cuando la acepte {{ quienes(a.info.autorizadores) }}. La sigues en <b>Autorizaciones</b>.
-                </p>
+                @if (a.yaEstaba) {
+                  <h2 id="autorizacion-titulo">Ya la habías pedido</h2>
+                  <p id="autorizacion-que">
+                    {{ a.info.resumen }}.<br />
+                    Sigue esperando a que la acepte {{ quienes(a.info.autorizadores) }}: no se pidió otra. La sigues en
+                    <b>Autorizaciones</b>.
+                  </p>
+                } @else {
+                  <h2 id="autorizacion-titulo">Listo: se pidió la autorización</h2>
+                  <p id="autorizacion-que">
+                    {{ a.info.resumen }}.<br />
+                    Se hace cuando la acepte {{ quienes(a.info.autorizadores) }}. La sigues en <b>Autorizaciones</b>.
+                  </p>
+                }
               } @else {
                 <h2 id="autorizacion-titulo">«{{ a.info.nombre }}» necesita autorización</h2>
                 <p id="autorizacion-que" class="que">{{ a.info.resumen }}</p>
@@ -47,14 +56,14 @@ import { AutorizacionDialogoService } from '../../core/services/autorizacion-dia
 
           @if (!a.pedida) {
             <div class="opciones">
-              @if (a.error) { <p class="alert" role="alert">{{ a.error }}</p> }
+              @if (a.error || errorLocal) { <p class="alert" role="alert">{{ errorLocal || a.error }}</p> }
 
               @if (!a.info.autorizadores.length) {
                 <p class="aviso">Nadie puede autorizar esto en esta tienda. Pídele al administrador que lo revise en Permisos.</p>
               } @else if (!conClave(a.info.autorizadores).length) {
                 <p class="aviso">
-                  Quien autoriza todavía no tiene su clave de autorización: la pone en <b>Mi clave para autorizar</b>
-                  (abajo, junto a su nombre).
+                  Quien autoriza todavía no tiene su clave de autorización: la pone en <b>«Mi clave»</b>,
+                  abajo, junto a su nombre.
                 </p>
               } @else {
                 <!-- Sin <form>: así el navegador no ofrece "guardar la contraseña" en la caja. -->
@@ -70,7 +79,8 @@ import { AutorizacionDialogoService } from '../../core/services/autorizacion-dia
                     </label>
                     <label class="field">
                       Su clave de autorización
-                      <input #campoClave type="password" inputmode="numeric" maxlength="6" [(ngModel)]="clave" name="clave"
+                      <!-- Sin cortar a 6: si la pistola escribe aquí, se avisa y no cuenta como intento (2026-10-20). -->
+                      <input #campoClave type="password" inputmode="numeric" maxlength="20" [(ngModel)]="clave" name="clave"
                              autocomplete="one-time-code" [disabled]="a.ocupado" (keydown.enter)="autorizarAqui()" />
                     </label>
                   </div>
@@ -82,9 +92,11 @@ import { AutorizacionDialogoService } from '../../core/services/autorizacion-dia
 
               @if (!a.info.solo_en_el_momento && a.info.autorizadores.length) {
                 <div class="pedir">
-                  <h3>O pedirla</h3>
+                  <!-- Si no se puede autorizar aquí, pedirla es LA opción: va sin "O" y en azul (2026-10-20). -->
+                  <h3>{{ conClave(a.info.autorizadores).length ? 'O pedirla' : 'Pedirla' }}</h3>
                   <p class="muted">Le llega a {{ quienes(a.info.autorizadores) }} en Autorizaciones; se hace cuando la acepte.</p>
-                  <button type="button" class="btn btn-ghost" (click)="pedir()" [disabled]="a.ocupado">
+                  <button type="button" class="btn" [class.btn-primary]="!conClave(a.info.autorizadores).length"
+                          [class.btn-ghost]="conClave(a.info.autorizadores).length" (click)="pedir()" [disabled]="a.ocupado">
                     {{ a.ocupado && modo === 'pedir' ? 'Pidiendo…' : 'Pedir autorización' }}
                   </button>
                 </div>
@@ -107,8 +119,9 @@ import { AutorizacionDialogoService } from '../../core/services/autorizacion-dia
   `,
   styles: `
     .autorizacion-fondo { z-index: 61; align-items: center; }
-    .autorizacion { max-width: 520px; }
-    .cuerpo { display: flex; gap: 16px; padding: 24px 24px 12px; }
+    /* Se desplaza por dentro: en el celular con el teclado abierto no se sale del recuadro (2026-10-20). */
+    .autorizacion { max-width: 520px; display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
+    .cuerpo { display: flex; gap: 16px; padding: 24px 24px 12px; flex: 0 0 auto; }
     .icono {
       flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%;
       display: inline-flex; align-items: center; justify-content: center;
@@ -119,7 +132,7 @@ import { AutorizacionDialogoService } from '../../core/services/autorizacion-dia
     .texto h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
     .texto p { margin: 0; font-size: 0.875rem; color: var(--tinta-3); line-height: 1.5; }
     .texto p.que { color: var(--tinta); font-weight: 500; }
-    .opciones { display: flex; flex-direction: column; gap: 16px; padding: 4px 24px 20px; }
+    .opciones { display: flex; flex-direction: column; gap: 16px; padding: 4px 24px 20px; overflow-y: auto; min-height: 0; }
     .opciones h3 { margin: 0 0 4px; font-size: 0.9375rem; }
     .opciones .muted { margin: 0 0 10px; font-size: 0.8125rem; }
     .aqui, .pedir { border: 1px solid var(--borde); border-radius: 8px; padding: 14px 16px; }
@@ -153,6 +166,7 @@ export class AutorizacionDialogo {
       if (!conClave.some((u) => u.id === this.usuarioId)) this.usuarioId = conClave[0]?.id ?? null;
       this.clave = '';
       this.modo = null;
+      this.errorLocal = null;
       setTimeout(() => this.campoClave()?.nativeElement.focus());
     });
 
@@ -169,8 +183,19 @@ export class AutorizacionDialogo {
     inject(DestroyRef).onDestroy(() => document.removeEventListener('keydown', alTeclear, true));
   }
 
+  /** Lo que se revisa aquí, sin gastar un intento de la clave. */
+  errorLocal: string | null = null;
+
   autorizarAqui(): void {
     if (!this.usuarioId || !this.clave) return;
+    // Una clave son de 4 a 6 números: si no, no se manda (no cuenta como intento
+    // equivocado de quien autoriza; la pistola pudo escribir aquí un código).
+    if (!/^\d{4,6}$/.test(this.clave.trim())) {
+      this.errorLocal = 'La clave de autorización son de 4 a 6 números. Escríbela otra vez.';
+      this.clave = '';
+      return;
+    }
+    this.errorLocal = null;
     this.modo = 'aqui';
     this.svc.elegir({ tipo: 'aqui', usuario_id: this.usuarioId, clave: this.clave });
     this.clave = '';

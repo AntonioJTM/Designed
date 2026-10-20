@@ -292,9 +292,39 @@ describe('Traspasos', () => {
       id: 77,
       body: { notas: undefined, recibido: [{ detalle_id: 501, paquetes: 2 }] },
     });
-    expect(c.mensaje()).toContain('incompletas');
+    expect(c.mensaje()).toContain('llegó incompleto');
     // El acuse se cierra al firmar.
     expect(c.recibiendo()).toBeNull();
+  });
+
+  it('con los paquetes escaneados se palomean los que NO llegaron y se mandan sus códigos (2026-10-20)', async () => {
+    const f = await montarFixture();
+    const c = f.componentInstance;
+    const conPaquetes = {
+      ...enTransito,
+      lineas: (enTransito.lineas ?? []).map((l, i) => i === 0
+        ? { ...l, paquetes: 3, enviados: [
+          { codigo: 'P-1', peso_kg: '19.100', falto: false },
+          { codigo: 'P-2', peso_kg: '18.400', falto: false },
+          { codigo: 'P-3', peso_kg: '19.500', falto: false },
+        ] }
+        : l),
+    } as typeof enTransito;
+    c.abrirRecepcion(conPaquetes);
+    const linea = c.lineasRecepcion()[0];
+    expect(linea.paquetes.length).toBe(3);
+    expect(linea.recibido).toBe(3);
+
+    c.marcarFalta(linea.detalle_id, 'P-2', true);
+    const l2 = c.lineasRecepcion()[0];
+    expect(l2.recibido).toBe(2);
+    expect(c.kgFaltan(l2)).toBe(18.4);
+    expect(c.faltantesRecepcion().length).toBe(1);
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('falta 1 paquete');
+
+    c.confirmarRecepcion();
+    expect(recibido!.body.recibido![0]).toEqual({ detalle_id: linea.detalle_id, faltan: ['P-2'] });
   });
 
   it('no deja aceptar más de lo que se envió', async () => {

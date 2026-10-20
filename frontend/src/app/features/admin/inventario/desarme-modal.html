@@ -85,13 +85,20 @@
           <label class="field">
             <span>Destare por cono <span class="muted">(opcional)</span></span>
             <span class="cant">
-              <input type="number" step="0.001" min="0" max="1" [(ngModel)]="destarePorCono" placeholder="Ej. 0.035" />
+              <input type="number" step="0.001" min="0" [max]="topeDestare() ?? 1" [(ngModel)]="destarePorCono"
+                     placeholder="Ej. 0.035" [class.invalido]="pasaDelTope()" [attr.aria-invalid]="pasaDelTope()" />
               <span>kg</span>
             </span>
             <span class="ayuda">
               Lo que pesa el tubo de UN cono{{ gramos() ? ' (' + gramos() + ' g)' : '' }}. Se multiplica por los
               conos que salen y se suma a los kilos del mostrador; lo que se descuenta del paquete no cambia.
+              @if (topeDestare() !== null) { Lo más que se acepta: {{ topeDestare()! * 1000 }} g. }
             </span>
+            @if (pasaDelTope()) {
+              <span class="ayuda destare-alto">
+                Es demasiado para un tubo{{ topeDestare() !== null ? ': el tope es de ' + topeDestare()! * 1000 + ' g' : '' }}.
+              </span>
+            }
           </label>
           <label class="field">
             <span>Motivo <span class="muted">(opcional)</span></span>

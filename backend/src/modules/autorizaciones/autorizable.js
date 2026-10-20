@@ -131,6 +131,7 @@ function autorizable(clave) {
         const solicitud = await model.crear({
           operacion: clave, metodo: guardar.metodo, ruta: guardar.ruta, cuerpo: JSON.stringify(guardar.cuerpo ?? {}),
           resumen, almacenes: tiendas, contexto: op.contexto ? await op.contexto(req) : null, solicitanteId: req.auth.sub,
+          venceElDia: op.vence === 'dia',
         });
         if (parcial) {
           // Lo demás se guarda ya; lo que necesita autorización queda pedido.

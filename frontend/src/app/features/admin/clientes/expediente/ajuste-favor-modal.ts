@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ClientesService } from '../../../../core/services/clientes.service';
 import { AjusteSaldoFavor } from '../../../../core/models/clientes.models';
 import { ApiError } from '../../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../../shared/autorizacion/pedida';
 import { DineroPipe } from '../../../../shared/dinero.pipe';
 
 /**
@@ -143,6 +144,11 @@ export class AjusteFavorModal {
       },
       error: (e) => {
         this.guardando.set(false);
+        // Se pidió la autorización: ya se dijo; se cierra para no pedirla dos veces.
+        if (autorizacionPedida(e)) {
+          this.cerrar();
+          return;
+        }
         this.error.set(this.msg(e));
       },
     });

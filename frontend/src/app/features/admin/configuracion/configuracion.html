@@ -40,7 +40,15 @@
                     }
                   </select>
                 } @else if (campo(o).tipo === 'number') {
-                  <input type="number" min="0" step="0.01" [(ngModel)]="valores[o.clave]" [name]="o.clave" />
+                  @if (campo(o).unidad) {
+                    <span class="cant">
+                      <input type="number" min="0" [step]="campo(o).paso ?? '0.01'" [(ngModel)]="valores[o.clave]"
+                             [name]="o.clave" [placeholder]="campo(o).placeholder ?? ''" />
+                      <span class="muted">{{ campo(o).unidad }}</span>
+                    </span>
+                  } @else {
+                    <input type="number" min="0" [step]="campo(o).paso ?? '0.01'" [(ngModel)]="valores[o.clave]" [name]="o.clave" />
+                  }
                 } @else {
                   <input
                     [type]="campo(o).tipo || 'text'"

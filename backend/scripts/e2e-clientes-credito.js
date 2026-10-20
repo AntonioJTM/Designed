@@ -376,17 +376,26 @@ const cerca = (a, b) => Math.abs(Number(a) - Number(b)) < 0.011;
       `${r.status} ${await estadoDe(a2.data.id)}`);
     ck('y no queda debiendo nada', cerca(Number((await api('GET', `/clientes/${cli.id}`)).data.saldo), 0));
 
-    // Cancelar una fiada que ya se había abonado deja saldo A FAVOR, y eso paga
-    // lo próximo que se le fíe.
+    // Cancelar una fiada que ya se había abonado: lo abonado pasa a su SALDO A
+    // FAVOR (un solo "a favor", 2026-10-20) y la cuenta queda en $0. Con eso se
+    // paga lo próximo que se le fíe con «Descontar de lo que debe».
     const b = await vender(hilos[0].variante, 3, { a_credito: 300 });
     await api('POST', `/clientes/${cli.id}/abonos`, { monto: 100, metodo_pago_id: transferencia, referencia: 'SPEI-TMPCC-6' });
-    await api('PATCH', `/pedidos/${b.data.id}/estado`, { estado: 'cancelado' });
-    const aFavor = Number((await api('GET', `/clientes/${cli.id}`)).data.saldo);
-    ck('cancelar una fiada ya abonada deja lo abonado a su favor', cerca(aFavor, -100), aFavor);
+    r = await api('PATCH', `/pedidos/${b.data.id}/estado`, { estado: 'cancelado' });
+    let ficha = (await api('GET', `/clientes/${cli.id}`)).data;
+    ck('cancelar una fiada ya abonada: lo abonado pasa a su saldo a favor y la cuenta queda en 0',
+      r.status === 200 && cerca(Number(r.data?.abonado_a_favor), 100) && cerca(Number(ficha.saldo), 0) && cerca(Number(ficha.saldo_favor), 100),
+      `${r.status} pasó ${r.data?.abonado_a_favor} · cuenta ${ficha.saldo} · a favor ${ficha.saldo_favor}`);
+    r = await api('PATCH', `/pedidos/${b.data.id}/estado`, { estado: 'pendiente' });
+    ck('esa venta ya no se reactiva', r.status === 409 && r.error?.code === 'VENTA_CON_SALDO_FAVOR', `${r.status} ${r.error?.code}`);
     const cnueva = await vender(hilos[0].variante, 0.5, { a_credito: 50 });
-    ck('lo próximo que se le fía lo paga su saldo a favor: nace PAGADA', cnueva.status === 201 && cnueva.data?.estado === 'pagado',
+    ck('lo próximo que se le fía nace pendiente', cnueva.status === 201 && cnueva.data?.estado === 'pendiente',
       `${cnueva.status} ${cnueva.data?.estado}`);
-    ck('y le queda a favor lo que sobró', cerca(Number((await api('GET', `/clientes/${cli.id}`)).data.saldo), -50));
+    r = await api('POST', `/clientes/${cli.id}/saldo-favor/aplicar`, {});
+    ficha = (await api('GET', `/clientes/${cli.id}`)).data;
+    ck('«Descontar de lo que debe» la paga y le quedan 50 a favor',
+      r.status === 200 && (await estadoDe(cnueva.data.id)) === 'pagado' && cerca(Number(ficha.saldo), 0) && cerca(Number(ficha.saldo_favor), 50),
+      `${r.status} ${await estadoDe(cnueva.data.id)} · cuenta ${ficha.saldo} · a favor ${ficha.saldo_favor}`);
 
     if (abriYo) await api('POST', `/caja/sesiones/${sesion.id}/cerrar`, { monto_final: 0 });
 

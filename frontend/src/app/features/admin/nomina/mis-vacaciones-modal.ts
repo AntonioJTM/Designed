@@ -79,9 +79,9 @@ const ESTADO: Record<VacacionPedida['estado'], { texto: string; tono: string }> 
                     <p class="aviso">Cumples tu primer año el {{ conAnio(s.proximo_aniversario) }}: desde entonces te tocan {{ s.dias_proximo_anio }} días.</p>
                   } @else {
                     <div class="saldo">
-                      <div class="kpi"><span class="kpi-label">Te tocan</span><span class="kpi-valor">{{ s.corresponden }}</span></div>
-                      <div class="kpi"><span class="kpi-label">Ya tomaste</span><span class="kpi-valor">{{ s.tomados }}</span></div>
-                      <div class="kpi"><span class="kpi-label">Te quedan</span><span class="kpi-valor">{{ s.restan }}</span></div>
+                      <div class="kpi"><span class="kpi-label">Te tocan</span><span class="kpi-valor">{{ dias(s.corresponden) }}</span></div>
+                      <div class="kpi"><span class="kpi-label">Ya tomaste</span><span class="kpi-valor">{{ dias(s.tomados) }}</span></div>
+                      <div class="kpi"><span class="kpi-label">Te quedan</span><span class="kpi-valor">{{ dias(s.restan) }}</span></div>
                     </div>
                     <p class="muted">Tu año de vacaciones va del {{ conAnio(s.desde) }} al {{ conAnio(s.hasta, 1) }}. Cuentan solo tus días de trabajo: tus descansos no.</p>
                   }
@@ -110,8 +110,13 @@ const ESTADO: Record<VacacionPedida['estado'], { texto: string; tono: string }> 
                     @if (diasPedidos() === 0) {
                       En esas fechas no te toca trabajar: no gastan días.
                     } @else {
-                      Son {{ diasPedidos() }} {{ diasPedidos() === 1 ? 'día' : 'días' }} de trabajo.
-                      @if (d.saldo && diasPedidos()! > d.saldo.restan) { Te quedan {{ d.saldo.restan }}: son más de los que tienes. }
+                      Son {{ dias(diasPedidos()!) }} de trabajo.
+                      @if (d.saldo && diasPedidos()! > d.saldo.restan) {
+                        <b>Te quedan {{ dias(d.saldo.restan) }}: son más de los que tienes.</b>
+                      } @else if (d.saldo) {
+                        <!-- Antes → después (2026-10-20). -->
+                        Te quedan {{ dias(d.saldo.restan) }} → te quedarán {{ dias(d.saldo.restan - diasPedidos()!) }}.
+                      }
                     }
                   </p>
                 }
@@ -208,9 +213,16 @@ export class MisVacacionesModal implements OnInit {
     return Boolean(d?.en_nomina && d.horario?.length && d.saldo && d.saldo.anios >= 1);
   }
 
+  /** "1 día" / "3 días". */
+  dias(n: number): string {
+    return `${n} ${n === 1 ? 'día' : 'días'}`;
+  }
+
+  /** Con fechas válidas y sin pasarse de los días que le quedan (2026-10-20: el botón seguía encendido). */
   puedePedir(): boolean {
     const n = this.diasPedidos();
-    return n !== null && n > 0 && this.desde >= this.hoy;
+    const s = this.datos()?.saldo;
+    return n !== null && n > 0 && this.desde >= this.hoy && (!s || n <= s.restan);
   }
 
   pedir(): void {

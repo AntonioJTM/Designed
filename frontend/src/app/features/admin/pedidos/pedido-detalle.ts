@@ -18,6 +18,7 @@ import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { ApiError } from '../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 import { etiquetaEstado, tonoEstado } from './estados';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { DevolucionModal } from './devolucion-modal';
@@ -766,17 +767,27 @@ export class PedidoDetalle implements OnDestroy {
     this.error.set(null);
     this.mensaje.set(null);
     this.ventas.cambiarEstado(p.id, estado, devoluciones).subscribe({
-      next: () => {
+      next: (r) => {
         this.aplicando.set(false);
         this.confirmando.set(false);
         const almacen = p.almacen ?? 'su almacén';
+        // En el cajón no había todo el efectivo: lo que faltó le quedó a favor (2026-10-20).
+        const aFavor = Number(r?.a_favor_sin_efectivo ?? 0);
+        const sinEfectivo = aFavor > 0
+          ? ` En la caja no había efectivo para devolverle todo: ${aFavor.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} le quedaron a favor.`
+          : '';
+        // Venta a crédito ya abonada: lo abonado pasó a su saldo a favor (2026-10-20).
+        const abonado = Number(r?.abonado_a_favor ?? 0);
+        const abonadoTxt = abonado > 0
+          ? ` Lo que había abonado, ${abonado.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}, le quedó como saldo a favor.`
+          : '';
         this.mensaje.set(
           this.esApartadoSinEntregar(p)
             ? estado === 'apartado'
               ? `Se volvió a apartar la mercancía en ${almacen}.`
               : `Apartado cancelado. Se liberó lo apartado en ${almacen}.`
             : estado === 'cancelado' || estado === 'devuelto'
-              ? `${estado === 'cancelado' ? 'Venta cancelada' : 'Mercancía devuelta'}. Regresó al inventario de ${almacen}.`
+              ? `${estado === 'cancelado' ? 'Venta cancelada' : 'Mercancía devuelta'}. Regresó al inventario de ${almacen}.${sinEfectivo}${abonadoTxt}`
               : `Pedido marcado como ${etiquetaEstado(estado, p.canal, p.encargo).toLowerCase()}.`
         );
         // Se recarga: cambiaron los bultos, los pagos y las alternativas.
@@ -784,6 +795,13 @@ export class PedidoDetalle implements OnDestroy {
       },
       error: (e) => {
         this.aplicando.set(false);
+        // Se pidió la autorización (cancelar la venta): en verde, y el panel se cierra.
+        const pedida = autorizacionPedida(e);
+        if (pedida) {
+          this.confirmando.set(false);
+          this.mensaje.set(pedida);
+          return;
+        }
         this.error.set(this.msg(e));
       },
     });
@@ -827,11 +845,28 @@ export class PedidoDetalle implements OnDestroy {
     // Una venta A CRÉDITO se paga con abonos a su cuenta (2026-10-17): aquí solo
     // se le pega la prueba a una transferencia que ya tenga. Un pago nuevo por
     // "lo que falta" la dejaba pagada con la deuda todavía en su cuenta.
-    if (this.fiado(p) > 0.004) return hayAQuienPegarla;
+    // Igual una NOTA PENDIENTE DE PAGO (2026-10-20): su depósito va en «Registrar su pago».
+    if (this.fiado(p) > 0.004 || this.esNotaPendiente(p)) return hayAQuienPegarla;
     const cobrado = pagos
       .filter((g) => g.estado === 'completado')
       .reduce((s, g) => s + Number(g.monto), 0);
     return hayAQuienPegarla || Number(p.total) - cobrado > 0.004;
+  }
+
+  /**
+   * La captura solo se PEGA como prueba (venta a crédito o nota pendiente de
+   * pago): no cambia lo que debe ni la da por pagada.
+   */
+  capturaSoloPrueba(): boolean {
+    const p = this.pedido();
+    return !!p && (this.fiado(p) > 0.004 || this.esNotaPendiente(p));
+  }
+
+  /** Una nota pendiente de pago que todavía se debe: su depósito va en «Registrar su pago». */
+  depositoComoPagoDeNota(): boolean {
+    const p = this.pedido();
+    return !!p && this.esNotaPendiente(p) && p.estado === 'pendiente' && this.fiado(p) <= 0 &&
+      this.veNotas() && !this.aceptaComprobante();
   }
 
   /** Una venta a crédito que todavía se debe: su depósito va como abono a su cuenta. */

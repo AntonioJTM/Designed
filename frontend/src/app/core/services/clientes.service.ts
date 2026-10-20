@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { conClave } from '../clave-unica';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -132,11 +133,13 @@ export class ClientesService {
     return this.http.get<ApiResponse<NotasCredito>>(`${this.base}/${id}/notas-credito`).pipe(map(data));
   }
 
-  abonar(id: number, body: AbonoInput): Observable<{ movimiento_id: number; saldo_nuevo: number }> {
+  /** `clave`: la llave de un solo uso (2026-10-20): un doble clic no abona dos veces. */
+  abonar(id: number, body: AbonoInput, clave?: string): Observable<{ movimiento_id: number; saldo_nuevo: number }> {
     return this.http
       .post<ApiResponse<{ movimiento_id: number; saldo_nuevo: number }>>(
         `${this.base}/${id}/abonos`,
-        body
+        body,
+        conClave(clave)
       )
       .pipe(map(data));
   }
@@ -153,9 +156,9 @@ export class ClientesService {
       .pipe(map(data));
   }
 
-  aplicarSaldoFavor(id: number, monto?: number): Observable<AplicacionSaldoFavor> {
+  aplicarSaldoFavor(id: number, monto?: number, clave?: string): Observable<AplicacionSaldoFavor> {
     return this.http
-      .post<ApiResponse<AplicacionSaldoFavor>>(`${this.base}/${id}/saldo-favor/aplicar`, monto ? { monto } : {})
+      .post<ApiResponse<AplicacionSaldoFavor>>(`${this.base}/${id}/saldo-favor/aplicar`, monto ? { monto } : {}, conClave(clave))
       .pipe(map(data));
   }
 
@@ -163,9 +166,9 @@ export class ClientesService {
    * Un ANTICIPO: el cliente deja dinero a cuenta, sin nota (efectivo, transferencia
    * o las dos) y le queda a favor. El efectivo necesita `sesion_caja_id`.
    */
-  recibirAnticipo(id: number, body: AnticipoInput): Observable<ResultadoAnticipo> {
+  recibirAnticipo(id: number, body: AnticipoInput, clave?: string): Observable<ResultadoAnticipo> {
     return this.http
-      .post<ApiResponse<ResultadoAnticipo>>(`${this.base}/${id}/anticipos`, body)
+      .post<ApiResponse<ResultadoAnticipo>>(`${this.base}/${id}/anticipos`, body, conClave(clave))
       .pipe(map(data));
   }
 

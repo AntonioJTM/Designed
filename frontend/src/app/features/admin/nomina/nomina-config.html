@@ -81,7 +81,7 @@
                     @if (v.anios === 0) {
                       <span class="muted" style="font-size: 0.8125rem">desde el {{ v.proximo_aniversario | fecha }}</span>
                     } @else {
-                      Le quedan <b>{{ v.restan }}</b> de {{ v.corresponden }}
+                      Le quedan <b>{{ v.restan }}</b> de {{ v.corresponden }} {{ v.corresponden === 1 ? 'día' : 'días' }}
                       <div class="muted" style="font-size: 0.75rem">{{ v.anios }} {{ v.anios === 1 ? 'año' : 'años' }} de antigüedad</div>
                     }
                   } @else {
@@ -101,7 +101,7 @@
                     <button type="button" class="btn btn-ghost btn-sm" (click)="abrirVacaciones(e)">Vacaciones</button>
                   }
                   @if (esSuya(e)) {
-                    <span class="muted" title="Tu propia nómina la ajusta el administrador">La tuya</span>
+                    <span class="muted">La tuya: la ajusta el administrador</span>
                   } @else {
                     <button type="button" class="btn btn-ghost btn-sm" (click)="abrir(e)">
                       {{ e.en_nomina ? 'Editar' : 'Dar de alta' }}

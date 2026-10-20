@@ -16,6 +16,10 @@ interface Campo {
   opciones?: { valor: string; texto: string }[];
   /** `flex` del campo dentro de la fila de su tarjeta. */
   ancho?: string;
+  /** Para `number`: de cuánto en cuánto (por omisión, centavos). */
+  paso?: string;
+  /** Para `number`: lo que se lee junto al campo ("kg"). */
+  unidad?: string;
 }
 
 /** Una tarjeta de la pantalla: un grupo de claves por su prefijo. */
@@ -63,6 +67,8 @@ interface Grupo {
     .campos > .field { flex: 1 1 240px; }
     .card.suave .card-head { margin-bottom: 0; align-items: center; }
     .cuenta-num { font-family: var(--mono); font-size: 0.875rem; white-space: nowrap; }
+    .cant { display: flex; align-items: center; gap: 8px; }
+    .cant input { flex: 1; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
   `,
 })
 export class Configuracion implements OnInit {
@@ -101,6 +107,12 @@ export class Configuracion implements OnInit {
       prefijos: ['ticket_'],
       prueba: true,
     },
+    // El tope del destare por cono (2026-10-20: "este yo lo pongo").
+    {
+      titulo: 'Bajar conos',
+      sub: 'Lo más que puede pesar el tubo de UN cono. Si al bajar un paquete alguien escribe más, no se deja: así un destare de 0.8 kg por cono ya no entra por error.',
+      prefijos: ['desarme_'],
+    },
     // Las cuentas para transferencias ya no son claves: tienen su propia tarjeta (ver arriba).
     // TIENDA EN LÍNEA APAGADA (2026-10): la tarifa de envío solo la cobra el
     // pedido en línea. Para regresarla, descomentar este grupo y quitar
@@ -120,6 +132,10 @@ export class Configuracion implements OnInit {
   private readonly CAMPOS: Record<string, Campo> = {
     tienda_direccion: { etiqueta: 'Dirección', placeholder: 'Calle, número, colonia y ciudad', ancho: '2 1 360px' },
     tienda_telefono: { etiqueta: 'Teléfono', placeholder: '445 000 0000', tipo: 'tel', ancho: '1 1 220px' },
+    desarme_destare_max_kg: {
+      etiqueta: 'Tope del destare por cono', placeholder: 'Ej. 0.05 (50 g)', tipo: 'number', paso: '0.001',
+      unidad: 'kg', ancho: '0 1 260px',
+    },
     // En este orden en la pantalla (el servidor las manda por orden alfabético).
     fiscal_razon_social: { etiqueta: 'Razón social', placeholder: 'Como en la constancia, con S.A. de C.V.', ancho: '2 1 360px' },
     fiscal_rfc: { etiqueta: 'RFC', placeholder: '12 o 13 letras y números', ancho: '1 1 200px' },

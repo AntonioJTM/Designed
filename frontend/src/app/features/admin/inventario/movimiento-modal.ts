@@ -4,6 +4,7 @@ import { EquivalenciaPaquetes, InventarioService } from '../../../core/services/
 import { Almacen, TipoMovimiento } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 
 /**
@@ -212,8 +213,16 @@ export class MovimientoModal implements OnInit {
           this.hecho.emit();
         },
         error: (e) => {
-          this.error.set(this.msg(e));
           this.guardando.set(false);
+          // Se pidió la autorización: en verde y la captura limpia, lista para el siguiente.
+          const pedida = autorizacionPedida(e);
+          if (pedida) {
+            this.mensaje.set(pedida);
+            this.mov.cantidad = null;
+            this.mov.motivo = '';
+            return;
+          }
+          this.error.set(this.msg(e));
         },
       });
   }

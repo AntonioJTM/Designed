@@ -158,6 +158,13 @@ tienda-hilos/
     esa fecha la pantalla no lo pedía). Los papeles (proveedor, factura, pedimento, contenedor,
     fecha) son los mismos para toda la lista y sus cargas comparten la marca `remesas.lista`.
     El proveedor de la hoja DOCUMENTO se elige solo si ya está en la lista de proveedores.
+  · **Antes de confirmar se revisa CADA PAQUETE** (2026-10-20, usuario): en "Revisa y confirma"
+    el nombre del color abre sus lotes (paquetes, kilos y conos de cada uno) y sus paquetes con
+    renglón, código, peso y conos, en el orden del Excel; los que tienen error en rojo y los de
+    aviso en ámbar (`carga-lista.ts → lotesConPaquetes`, hoja `carga-lista-paquetes.scss`). Sale
+    de la vista previa (cada hilo ya trae `bultos`): no se pide nada más al servidor. Y el PDF
+    de la carga va IGUAL, por lote con sus cifras (`remesas/reportes.js → _porLote`), con
+    "Lotes de cada hilo" en el resumen de la lista.
   · **La carga dice lo que está haciendo.** Con `?progreso=1` (lo usa la pantalla),
     `POST /remesas/lista` contesta POR PARTES, un JSON por renglón (NDJSON): `hilo`, `bultos`
     (cuántos van), `hilo_listo`, `paso` y al final `fin` (el resultado) o `error`. Lleva
@@ -229,8 +236,10 @@ tienda-hilos/
   MISMA transacción de la venta. Es opcional: la tienda en línea y las ventas a granel no mandan
   bultos.
 - **Un bulto se consume UNA vez.** `variante_codigos.estado` es `disponible` | `apartado` |
-  `vendido` | `desarmado`, con `consumido_en`, `consumido_tipo` (`'pedido'`|`'conversion'`) y
-  `consumido_id`. **`apartado`** (2026-10-06, migración `2026-10_bulto_apartado.sql`) = ligado a un
+  `vendido` | `desarmado` | `faltante`, con `consumido_en`, `consumido_tipo` (`'pedido'`|`'conversion'`|
+  `'traspaso'`) y `consumido_id`. **`faltante`** (2026-10-20, migración `2026-10_bulto_faltante.sql`) =
+  se dio por faltante al RECIBIR un envío (no llegó; ver el traspaso): ya no se vende, no se baja a
+  conos, no se envía, y el detalle del hilo y el PDF de la carga lo dicen ("No llegó"). **`apartado`** (2026-10-06, migración `2026-10_bulto_apartado.sql`) = ligado a un
   PEDIDO o un APARTADO que no se ha entregado: sigue en la tienda (el saldo lo incluye, el
   `consumido_en` va en NULL) pero ya tiene dueño, así que la caja, el desarme y el envío lo
   rechazan como a uno vendido (el 409 dice para qué pedido y de quién). Pasa a `vendido` al
@@ -425,6 +434,14 @@ tienda-hilos/
   El turno YA CERRADO no se toca: si la venta fue en un turno cerrado, el dinero sale del turno
   ABIERTO de la misma caja. Si no hay ninguno abierto, 409 `CAJA_CERRADA` y NO se cancela nada
   (ni inventario, ni bultos, ni estado): todo o nada.
+  **Si en el cajón no hay todo el efectivo, lo que NO hay queda A FAVOR del cliente** (2026-10-20,
+  auditoría; lo eligió el usuario): devolver más de lo que hay dejaba el cajón en negativo. Sale
+  lo que hay (`caja/model.js → efectivoEnCajon`, con la sesión bloqueada) y el resto es un
+  `reintegro` en su saldo a favor ("En la caja no había efectivo para devolverle todo…"); la
+  respuesta trae `a_favor_sin_efectivo`. Sin cliente no hay a quién dejárselo: 409
+  `EFECTIVO_INSUFICIENTE` y no se cancela. Una venta así ya no se reactiva (409
+  `VENTA_CON_SALDO_FAVOR`). Lo mismo con la diferencia de una nota en espera que pesó menos
+  (`_devolverDiferencia`).
   El movimiento del dinero va ANTES de tocar inventario, para que ese 409 no deje nada movido.
 - **Retiros e ingresos de efectivo** van por `POST /caja/sesiones/:id/movimientos` (modal "Sacar
   o meter efectivo" de la pantalla Caja, `caja/movimiento-caja-modal.ts`; pide
@@ -459,7 +476,12 @@ tienda-hilos/
   en "Un bulto se consume UNA vez"). (`e2e-bajar-a-mostrador.js`, que no corre
   sin las listas de `muestras/`, todavía baja de bodega a mostrador: al recuperarla, ajustarla.)
 - **El DESTARE lo captura la tienda, POR CONO.** Al enconar, el hilo pesa más porque cada cono lleva
-  su tubo. El modal pide "Destare por cono" (lo que pesa UN tubo, en kg, con los gramos al lado; se
+  su tubo. **Su TOPE lo pone la tienda** (2026-10-20, auditoría: dos bajadas de A-ALECRICO en hitex
+  llevan 0.8 kg por cono; "este yo lo pongo", usuario): `configuracion.desarme_destare_max_kg`
+  (pública; Configuración → "Bajar conos"; de más de 0 a 1 kg, 422 `DESTARE_TOPE_INVALIDO`;
+  migración `2026-10_destare_tope.sql`, nace VACÍA = sin tope propio, sigue el de 1 kg). Pasarlo
+  es 422 `DESTARE_MUY_ALTO`; la ventana lo dice antes de mandar y no recuerda un destare que lo
+  pase. El modal pide "Destare por cono" (lo que pesa UN tubo, en kg, con los gramos al lado; se
   recuerda en `localStorage['destare_por_cono']`) y `POST /inventario/desarmes` acepta
   `destare_por_cono_kg`, que el servidor multiplica por los conos que salen ("eso se le suma a cada
   cono", 2026-10-06); `destare_kg` (el total) se sigue aceptando. El total se guarda en
@@ -582,11 +604,21 @@ tienda-hilos/
     destino. CANCELAR una solicitud suelta lo guardado. `e2e-surtir-a-medias.js`.
     **Cada hilo de Pendientes lleva su BARRA** (2026-10-16, `traspasos.ts → avanceLinea`): por
     enviar, escaneados de los pedidos; en camino, los que salieron; "8 de 8 paquetes · 152.4 kg",
-    azul a medias y verde completa.
+    azul a medias y verde completa. Y la VENTANA DE ENVÍO la misma, al escanear (2026-10-20,
+    `envio-modal.ts → avance`, "3 de 3 · completo ✓"). Para quien SURTE (de la matriz), "Pedidos
+    con autorización" va DEBAJO de Pendientes (`traspasos.ts → surte`); para quien pide, arriba.
   · `POST /inventario/traspasos/:id/recibir` **recibe**: lo firma cualquiera del staff y queda su
     nombre y la hora. Acepta `recibido: [{detalle_id, paquetes|cantidad}]` para declarar lo que de
     verdad llegó; entra al destino solo eso y el faltante se asienta como **merma** con el folio
     (422 `RECIBE_MAS_DE_LO_ENVIADO` si dice que llegó más).
+    **SE MARCAN CUÁLES NO LLEGARON** (2026-10-20, auditoría; el usuario eligió "marcar cuáles
+    faltaron", sin volver a escanear): la línea que viajó con sus paquetes escaneados
+    (`traspaso_bultos`) trae `enviados` en la lista de traspasos, y el acuse enseña cada paquete con
+    su casilla "no llegó". Se manda `faltan: [códigos]`: la merma es su PESO REAL y pasan a
+    `faltante` (`consumido_tipo = 'traspaso'`, el envío en `consumido_id`). Decir solo "llegaron 2
+    de 3" de una línea con paquetes es 422 `DI_CUALES_FALTARON`; un código que no viene ahí, 422
+    `BULTO_NO_ES_DEL_ENVIO`. Antes los kilos se daban de baja con el promedio y los paquetes que no
+    llegaron seguían "disponibles" en la sucursal. Un envío viejo sin paquetes sigue con el número.
   · `POST /inventario/traspasos/:id/cancelar`: si estaba solicitado libera el apartado; si iba en
     tránsito la mercancía REGRESA al origen y vuelven SOLO los bultos de ese envío (los de
     `traspaso_bultos`). Antes regresaban todos los del hilo que hubiera en la sucursal, también
@@ -644,6 +676,19 @@ tienda-hilos/
   dos al mismo tiempo el índice deja pasar una. La llave cambia al registrar y se conserva si el
   servidor rechaza. Igual "Abrir turno": `caja/model.js → abrirSesion` revisa y abre en UNA
   transacción con la caja bloqueada (antes un doble clic abría dos turnos).
+  **Y LO MISMO TODA OPERACIÓN DE DINERO** (2026-10-20, auditoría: 3 anticipos de $1,000 en 98
+  segundos): abonos (a la cuenta, a notas y desde la caja), anticipos, «Descontar de lo que
+  debe», pagos de nota, entregar una nota en espera y sacar o meter efectivo mandan la cabecera
+  `X-Clave-Unica` (`core/clave-unica.ts → nuevaClave/conClave`; cada ventana la guarda y la
+  cambia al registrar). `middlewares/una-vez.js → unaVez()` va en la ruta DESPUÉS de `validate`
+  y ANTES de `autorizable`: anota la llave en `operaciones_unicas` (migración
+  `2026-10_operaciones_unicas.sql`), guarda la respuesta buena ANTES de mandarla y a otra
+  petición con la misma llave le contesta LO MISMO (`X-Repetida: 1`) sin registrar nada —con
+  `res.json`, para que pase otra vez por `sinCostosEnRespuesta`: guardada va SIN filtrar—; si
+  falla o solo se pidió autorización (202), la suelta para reintentar; con la primera trabajando, 409 `YA_SE_ESTA_REGISTRANDO`; de
+  otra persona, ruta o método, 422 `CLAVE_REPETIDA`. Sin la cabecera pasa como siempre (scripts
+  y la autorización que se repite). Se tiran las de más de 2 días. Una operación de dinero nueva
+  lleva su `unaVez()` y su llave en la pantalla.
 - **EL SISTEMA EN TIEMPO REAL** (2026-10-19, las tres etapas). Las pantallas abiertas se ponen al día
   solas cuando otro guarda algo. Son eventos del servidor (`GET /api/v1/tiempo-real`, módulo
   `tiempo-real/`): lo que escribe y sale bien avisa QUÉ TIPO de cosa cambió (`tipos.js →
@@ -701,7 +746,12 @@ tienda-hilos/
   con abonos. A una venta A CRÉDITO (con cargo a su cuenta) tampoco se le crea un pago: 409
   `VENTA_A_CREDITO_USA_ABONOS` (2026-10-17) —lo que falta ES su deuda y quedaba "pagada" con la
   deuda viva—; el depósito va como abono en su expediente y la pantalla lo dice
-  (`depositoComoAbono()`). Sí se le pega la prueba a una transferencia que ya tenga. Antes, en una venta en efectivo o en un apartado se creaba otro pago por el total y
+  (`depositoComoAbono()`). Sí se le pega la prueba a una transferencia que ya tenga. Igual una
+  NOTA PENDIENTE DE PAGO sin transferencia: 409 `NOTA_PENDIENTE_USA_ABONOS` (2026-10-20: el pago
+  por TODO lo que faltaba la daba por pagada aunque el depósito fuera de una parte; va en
+  «Registrar su pago» con lo que depositó). Y pegar la captura da el pedido por pagado SOLO si con
+  eso queda cubierto y no es a crédito (antes, a la transferencia de una venta a crédito que se
+  debía la daba por "pagada"); la pantalla lo dice (`capturaSoloPrueba()`). Antes, en una venta en efectivo o en un apartado se creaba otro pago por el total y
   el apartado quedaba "liquidado" con dinero que no entró. La pantalla solo muestra la sección
   donde aplica (`aceptaComprobante()` en `pedido-detalle.ts`).
   El archivo vive en DISCO (`backend/uploads/comprobantes`, ruta en `env.uploadsDir`), no en la
@@ -816,8 +866,12 @@ tienda-hilos/
   · **A mano no se marca pagada una fiada que se debe** (409 `VENTA_FIADA_SIN_PAGAR`) ni se
     regresa a pendiente una ya pagada con abonos (409 `VENTA_FIADA_PAGADA`); el selector del
     detalle ni las ofrece. Antes el pedido decía "pagado" con la cuenta debiéndolo.
-  · **Saldo NEGATIVO = a su favor**: cancelar una fiada que ya se había abonado deja lo abonado a
-    favor del cliente (el expediente dice "A su favor"), y paga lo próximo que se le fíe.
+  · **UN SOLO "A FAVOR"** (2026-10-20; antes la CUENTA quedaba en negativo y ese "a favor" no se
+    veía en Cuánto debe ni se usaba al cobrar): al cancelar una fiada que ya se había abonado, lo
+    abonado que ya no paga nada pasa al SALDO A FAVOR (`saldo-favor.js → pasarSobranteAFavor`, en
+    la transacción de `cambiarEstado`): un `ajuste` que deja la cuenta en $0 y un `reintegro`
+    ("Lo abonado a X (se canceló) pasó a su saldo a favor"); la respuesta trae
+    `abonado_a_favor`. Esa venta ya no se reactiva (409 `VENTA_CON_SALDO_FAVOR`).
   · `scripts/liquidar-ventas-credito.js --base X [--confirmar]` pone al día las que ya estaban
     pagadas y AVISA (sin tocarlas) de las marcadas pagadas a mano que todavía se deben.
 - **Un abono en EFECTIVO entra a la caja.** Se inserta `movimientos_caja` tipo `'ingreso'` —no
@@ -827,6 +881,10 @@ tienda-hilos/
   inexplicable. Por transferencia no toca caja.
   Cobrar más de lo que se debe se rechaza (422 `ABONO_EXCEDE_DEUDA`): un saldo negativo se leería
   como crédito a favor, y no es eso.
+  Un abono repartido en VARIAS notas entra al cajón como UN movimiento ("Abono de X a 3 notas (…)",
+  `referencia_id` = el primer renglón de crédito; 2026-10-20): Caja lo contaba como 3 abonos. Y
+  "Cobrado este mes" de Cuánto debe no suma lo pagado con su saldo a favor (método interno) y
+  cuenta un abono repartido como uno (mismo cliente, hora y quién).
 - **EL COSTO, SOLO ADMINISTRACIÓN Y CONTABILIDAD (2026-10-06).** "Costo por kilo — solo
   administrador y contabilidad" (usuario, al pedir Surtir inventario). El interruptor
   `SE_LLEVA_COSTO` (en `backend/src/modules/permisos/service.js` y su gemelo
@@ -876,12 +934,14 @@ tienda-hilos/
   calculadas de la base al momento — no hay tablas de resumen que mantener ni proceso nocturno.
   Llegan JUNTAS en ese único endpoint: tuvieron una ruta cada una, pero la pantalla siempre pide
   las cuatro, así que se quitaron el 2026-10-01 por no tener quién las llamara.
-  · **Cobranza** (`cartera`): quién debe, por antigüedad. Los días se miden desde su ÚLTIMO
-    ABONO (o desde que volvió a deber), con la MISMA cuenta y el MISMO plazo que la caja
-    (2026-10-17, `clientes/model.js → diasSinAbonarDeTodos`, sobre `desdeSinAbonar`;
-    `DIAS_SIN_ABONAR` = 15, "más de 15 días"): quien abonó la semana pasada está pagando, y quien
-    compra fiado seguido sin pagar ya no se "renueva" con cada cargo (antes contaba cualquier
-    movimiento y avisaba a los 30). Tramos: Al día (hasta 15) / Atrasado (16-30) / Muy atrasado
+  · **Cobranza** (`cartera`): quién debe, por antigüedad. **Los días son los que lleva sin pagarse
+    su NOTA MÁS VIEJA** (2026-10-20, auditoría; el usuario eligió "por la nota más vieja"): lo
+    pagado se reparte de lo más viejo a lo más nuevo (y el abono a una nota, a esa nota) con
+    `repartirAbonos`, y cuenta la primera deuda que todavía debe algo (`clientes/model.js →
+    deudaMasVieja / atrasoDe / diasSinAbonarDeTodos`). Antes contaba desde el ÚLTIMO ABONO y quien
+    abonaba $50 cada dos semanas nunca salía atrasado con una nota de hace meses. Con la MISMA
+    cuenta y el MISMO plazo que la caja (`DIAS_SIN_ABONAR` = 15, "más de 15 días"; el campo sigue
+    llamándose `dias_sin_abonar`, y `nota_vieja_por_pagar` dice lo que falta de esa nota). Tramos: Al día (hasta 15) / Atrasado (16-30) / Muy atrasado
     (31-60) / Más de 2 meses; claves `al_dia`, `atrasado`, `un_mes`, `vencido`. La campana sale
     de esta misma cartera, así Cuánto debe, Cómo va el negocio, la campana y la caja nunca se
     contradicen.
@@ -996,6 +1056,11 @@ tienda-hilos/
     como al enviar (desconocido, de presentación, `BULTO_DE_OTRO_HILO`, repetido, tomado, sin
     peso) y, desde el 2026-10-07, que estén en la tienda del pedido (409
     `PAQUETE_EN_OTRA_SUCURSAL` / `PAQUETE_EN_CAMINO`).
+  · Al entregarla se puede **usar su saldo a favor** (2026-10-20): `saldo_favor` en
+    `POST /pedidos/:id/entregar` paga primero eso (`pagarConSaldo`; no más de lo que falta, 422
+    `SALDO_FAVOR_EXCEDE`; solo notas en espera, 422 `SALDO_FAVOR_SOLO_NOTAS`) y lo demás se cobra,
+    se da a crédito o queda pendiente como siempre. Casilla "Usar su saldo a favor (tiene $X)" en
+    la ventana; `GET /pedidos/encargos` trae `saldo_favor`.
   · Se ENTREGA cuando sea con `POST /pedidos/:id/entregar` (`entregar-modal.ts`), que cobra lo
     que falte (`pagos`, solo el efectivo da cambio, entra al turno `sesion_caja_id` como
     'ingreso') y/o lo fía (`a_credito`, pide `hacer:fiar`; queda 'pendiente' como cualquier
@@ -1048,6 +1113,10 @@ tienda-hilos/
     abono pasa sola a `'pagado'`. A mano no se marca pagada debiéndose (409
     `NOTA_PENDIENTE_SIN_PAGAR`) ni vuelve a pendiente pagada (409 `NOTA_YA_PAGADA`); el selector del
     detalle ni las ofrece.
+  · **Se paga con su SALDO A FAVOR** (2026-10-20): `POST /pedidos/:id/abonos` con
+    `con_saldo_favor: true` (sin método; `saldo-favor.js → pagarConSaldo`: un `pagos` "Saldo a
+    favor" y su `uso`, 409 `SALDO_FAVOR_INSUFICIENTE`). En la ventana es la forma de pago "Su saldo
+    a favor (tiene $X)"; la lista trae `saldo_favor` del cliente. No toca la caja.
   · **Pasar a crédito**: `POST /pedidos/:id/a-credito` (`hacer:fiar`) carga lo que FALTA (total −
     abonado) a su cuenta con `cargarVentaACredito` (su límite: 409 `SIN_CREDITO` /
     `CREDITO_INSUFICIENTE`) y desde ahí es una venta a crédito como cualquiera (se liquida con abonos
@@ -1168,11 +1237,12 @@ tienda-hilos/
   mostrador"), que solo aparece si ya hay paquete: existe únicamente para poder desarmar y vender
   por pieza. Su SKU se deriva del paquete (`<PAQUETE>-CONO`).
 - **Un producto solo se elimina si NO tiene nada cargado** (regla del usuario, 2026-10-03).
-  **Y una PRESENTACIÓN tampoco** (2026-10-16): `DELETE /variantes/:id` con bultos, cargas,
-  existencias, kardex, ventas, traspasos o desarmes da 409 `PRESENTACION_CON_MOVIMIENTOS`
-  ("desactívala en «Precio y peso»", que trae la casilla **Activa: se vende** desde el
-  2026-10-17); `variantes/model.js → cargada / eliminarSiVacia`, con las
-  mismas palabras que el producto (`utils/cargado.js`).
+  **Y una PRESENTACIÓN NUNCA se elimina** (2026-10-20, usuario: "que no se puedan eliminar las
+  presentaciones"): `DELETE /variantes/:id` da SIEMPRE 409 `PRESENTACION_NO_SE_ELIMINA` ("para
+  dejar de venderla, desactívala en «Precio y peso»", la casilla **Activa: se vende**) y la
+  pantalla ya no tiene "Eliminar presentación". (Del 2026-10-16 al 20 se borraba la que no tenía
+  nada cargado.) El botón «Precio y peso» se QUEDA (lo decidió el usuario el 2026-10-20): es lo
+  único que cambia el precio público, el peso y si se vende.
   Borrar el producto se lleva en CASCADA sus presentaciones, y con ellas sus bultos y renglones de
   inventario, sin rastro (antes un hilo con un bulto capturado a mano se borraba así). Ahora
   `DELETE /productos/:id` revisa, en la misma transacción y con el producto bloqueado
@@ -1228,7 +1298,11 @@ tienda-hilos/
   los pedidos donde el empleado es el vendedor (`pedidos.usuario_id`), excluyendo cancelados y
   devueltos, y se paga la semana en que cada venta queda LIQUIDADA (ver abajo). Al calcular un recibo, `ventas_netas` y `porcentaje_comision` se **congelan** en
   `nomina_recibos` para que el histórico no cambie si después se edita la configuración del
-  empleado. Un periodo `pagado` es inmutable: no se recalcula ni se reabre.
+  empleado. Un periodo `pagado` es inmutable: no se recalcula ni se reabre. Uno `cancelado` no se
+  paga directo (409 `NOMINA_CANCELADA`): regresa a borrador, donde se RECALCULA solo (mientras
+  estuvo cancelado sus ventas pudieron entrar en otra semana; 2026-10-20). Una venta que regresó
+  COMPLETA antes de pagarse su comisión (`comisiones.devueltaCompleta`: venta neta en $0 por lo
+  devuelto) sigue en la lista pero no cuenta como venta ni suma su total (recibo, PDF y pantalla).
   **Por días, horario, horas extra y vacaciones (2026-10-06, decisiones del usuario):**
   · Cada empleado tiene su HORARIO día por día (`nomina_horarios`, 0 = domingo; día sin
     renglón = descanso) y `comida_min`. El DÍA vale sueldo semanal ÷ días que trabaja; la HORA,
@@ -1350,8 +1424,9 @@ tienda-hilos/
   · **Lo que siempre lleva**: al elegirlo, sus 5 hilos de esa tienda (`GET /clientes/:id/lo-que-lleva`,
     por `producto_id`) como botones: el nombre busca el hilo, "Conos" abre directo la báscula de
     sus conos si hay ahí.
-  · **Cuenta atrasada**: `clientes/model.js → diasSinAbonar` cuenta desde su último abono o, si lo
-    pagó todo y se le volvió a fiar, desde ese nuevo cargo. Pasado `DIAS_SIN_ABONAR` (15, el MISMO
+  · **Cuenta atrasada**: `clientes/model.js → atrasoDe` cuenta los días de su NOTA MÁS VIEJA que
+    todavía se debe (2026-10-20; antes, desde su último abono). La caja dice "su nota más vieja
+    lleva N días sin pagarse (le faltan $X)". Pasado `DIAS_SIN_ABONAR` (15, el MISMO
     de la campana, Cuánto debe y Cómo va el negocio, en `notificaciones/model.js`) la caja lo avisa en rojo y pregunta antes de
     fiarle; el servidor da 409 `CREDITO_ATRASADO` sin `fiar_con_atraso: true`. Es un candado con
     llave, no un bloqueo: la tienda decide.
@@ -1381,8 +1456,14 @@ tienda-hilos/
   quien ya no la puede pedir se cierra sola; una interrumpida solo se CIERRA ('cerrada'). Aceptar (`POST /autorizaciones/:id/aprobar`) REPITE la petición guardada como
   quien la pidió con una llave de un solo uso (`X-Autorizacion`): pasa por todo lo de siempre; si ya no se
   puede, sigue pendiente con `ultimo_error`. Autoriza quien la hace directo y ve su tienda. En la pantalla,
-  `autorizacion.interceptor.ts` + `<app-autorizacion-dialogo>` (una vez en `app.ts`): ningún modal cambia;
-  "Pedir" le llega como error AUTORIZACION_PEDIDA (no un éxito falso). Un botón de una operación que se
+  `autorizacion.interceptor.ts` + `<app-autorizacion-dialogo>` (una vez en `app.ts`);
+  "Pedir" le llega como error AUTORIZACION_PEDIDA (no un éxito falso), y cada pantalla lo reconoce con
+  `shared/autorizacion/pedida.ts → autorizacionPedida(e)` (2026-10-20): la ventana de una sola vez se
+  CIERRA (la de la autorización ya dijo "Listo"), la que trabaja en serie limpia la captura y lo dice en
+  verde; nunca en rojo, o se volvía a pedir. Y mientras una solicitud IDÉNTICA de la misma persona siga
+  esperando, pedirla otra vez devuelve esa con `ya_estaba` ("Ya la habías pedido"), no otra (antes solo
+  se juntaban las de 2 minutos; lo que vence el día solo junta las del día). Una nómina que cambió desde
+  que se pidió pagarla cierra sola esa solicitud al abrirse (`nomina/service.js → _conRecibos`). Un botón de una operación que se
   autoriza se enseña con `AuthService.puedeOPide`; un 2xx con `X-Autorizacion-Pedida` = se guardó lo demás y
   quedó pedido lo que se autoriza. Fase 1: efectivo, cancelar, devolución, corregir
   deuda, saldo a favor, precios (y de lista), ajuste y merma, fiar atrasado (`soloEnElMomento`) y dar
@@ -1397,6 +1478,16 @@ tienda-hilos/
   `detalle`/`ajustar`, `alResolver`, `sinConsulta`, `siempreSePide`/`noASiMismo`.
   **Decidido por el usuario (2026-10-19):** el anticipo y el abono POR TRANSFERENCIA se quedan sin
   autorización. No los "arregles".
+  **Pantalla (2026-10-20, ronda 4):** cada solicitud lleva su TIPO (Dinero, Precios, Inventario,
+  Personal; `autorizaciones.ts → TIPO_OPERACION`: una operación nueva se agrega ahí) y el resumen
+  enseña el monto con números alineados y el folio corto en letra de código (`partirResumen`).
+  **Pantalla (2026-10-20, ronda 2):** `/admin/autorizaciones?id=N` resalta esa solicitud (lo usa
+  "Autorizar o rechazar ›" de Surtir sucursal); "Aceptar" es verde (`btn-ok`: un solo azul por
+  pantalla) y pagar una nómina pregunta antes; en "Autorizar el pedido" el Enter pasa al siguiente
+  renglón, no autoriza todo; "Retirar" se apaga mientras responde. En la ventana "necesita
+  autorización", sin nadie con clave "Pedirla" es el botón azul y sin "O"; se desplaza por dentro;
+  una clave que no son 4-6 números (la pistola) ni se manda: no gasta un intento de quien autoriza.
+  Surtir sucursal pliega lo resuelto en "Resueltos de los últimos 30 días (N)".
   **Fase 3 (2026-10-19), la NÓMINA:** la preparan la gerente y Contabilidad (`ver:nomina`); PAGARLA
   (`pagar_nomina`) la autoriza solo el administrador, y se autoriza lo que se pidió: si los recibos cambian
   (su FIRMA), no se paga y la solicitud se cierra sola; pedirla otra vez reemplaza la anterior. NADIE toca
@@ -1491,6 +1582,11 @@ tienda-hilos/
   venir, cuánto debe (cartera por antigüedad, igual que el tablero), qué compra (por
   `producto_id`, con calibre), cuándo compra (día × hora) y cuánto gasta (contra el periodo
   anterior). El expediente trae las miradas para un cliente (`habitos` en `GET /clientes/:id`).
+  **Cuánto debe trae también las NOTAS PENDIENTES DE PAGO** (2026-10-20, `notas_pendientes` en
+  `analisis.js → deuda`, con la cuenta de `saldo-favor.js → deudaTotal`): columna "En notas" y su
+  tarjeta con "Cobrar ›" a Notas pendientes `?q=<número de cliente>`. No es crédito: no cuenta
+  para el atraso ni para su límite. (Notas pendientes y Notas en espera leen `?q=` del enlace y
+  buscan también por el número C-0001; el detalle de la venta lleva ahí con su folio.)
   El cajero las ve todas, incluida "Cuánto debe" (decisión del usuario) — SI tiene «Todas las
   tiendas» en Personal: desde el 2026-10-15 las seis miradas son solo de quien ve todas (ver
   "CADA QUIEN, SUS TIENDAS").
@@ -1525,7 +1621,8 @@ tienda-hilos/
   pantallas se desplaza, con la rueda, y el final se desvanece mientras haya opciones abajo
   (`revisarMenu` en `admin-layout.ts`). El nombre, la campana y "Salir" quedan SIEMPRE abajo y a
   la vista: antes la barra se desplazaba entera y la campana se perdía bajo el menú del
-  administrador. Las barras de la página son delgadas (`scrollbar-width: thin` en `html`).
+  administrador. Bajo el nombre (2026-10-20): "Mi clave" y "Mis vacaciones" en UNA fila de
+  botones chicos y "Salir" APARTE, abajo de una línea y con su ícono (`admin-cuenta.scss`). Las barras de la página son delgadas (`scrollbar-width: thin` en `html`).
 - **Los estilos del panel de avisos viven en `admin-avisos.scss`**, aparte de `admin-layout.scss`:
   juntos pasaban el límite de 4 kB por hoja de `angular.json`. Separar la hoja es la salida; no
   subas el límite.
@@ -1602,7 +1699,9 @@ tienda-hilos/
     escribe donde esté el cursor"). `pos.ts → enfocarLector()` lo regresa al abrir la caja (al
     haber turno), al terminar una venta, apartado o pedido, al cerrar cualquier ventana (báscula,
     alta de cliente, abono), al quitar algo del carrito y con Enter en los kilos de una línea;
-    deja seleccionado lo escrito para que el siguiente código lo reemplace. Espera al siguiente
+    deja seleccionado lo escrito para que el siguiente código lo reemplace. Al abrir la caja solo
+    cuando CAMBIA el turno, y si el cursor ya está en el lector no lo vuelve a seleccionar (2026-10-20,
+    auditoría: la recarga en vivo seleccionaba lo que se estaba escribiendo); `forzar` sí. Espera al siguiente
     dibujado (`afterNextRender`): con `eventCoalescing` un `setTimeout` llegaba antes de que se
     quitara la ventana. No le quita el cursor a otro campo de texto y en pantalla táctil no lo
     pone. Y la red: `alTeclear` (keydown del documento) lleva el cursor al lector con la PRIMERA
@@ -1691,7 +1790,12 @@ tienda-hilos/
   taparía. Los avisos de CLIENTES cuentan **uno por tema**, no uno por cliente: "5 clientes
   te deben desde hace más de 15 días" es un aviso, no cinco, o la campana marcaría 40 y
   nadie la abriría. Los umbrales tienen nombre en `notificaciones/model.js`
-  (`DIAS_SIN_ABONAR`, `DIAS_SIN_VENIR`, `DIAS_CLIENTE_NUEVO`), no van sueltos en el SQL. Se refresca cada minuto y al abrir el panel.
+  (`DIAS_SIN_ABONAR`, `DIAS_SIN_VENIR`, `DIAS_CLIENTE_NUEVO`, `DIAS_TURNO_ABIERTO`), no van sueltos en el SQL.
+  **Un turno de caja abierto de 2 días o más sin su corte se avisa** (2026-10-20, auditoría: dos
+  llevaban 5 días): `turnos_abiertos` en `GET /notificaciones` (de SUS tiendas), grupo "Caja" de
+  la campana y Hoy, a quien ve `ver:caja`; lleva a Caja ("Hacer el corte"). Se refresca cada minuto y al abrir el panel.
+  Un aviso con lista cuenta a TODOS aunque la lista se recorte (los clientes nuevos sin crédito: el
+  número es el total y la lista va hasta 8, con "Y N más"; 2026-10-20: con 12 decía 8).
   **El panel se abre A LA DERECHA del menú** (`position: fixed`, 460 px, pegado abajo junto a la
   campana), sobre la página: dentro de la barra de 248 px los textos se cortaban, salía una barra
   de desplazamiento y media pantalla quedaba vacía al lado (lo señaló el usuario el 2026-10-02).
@@ -1834,13 +1938,18 @@ tienda-hilos/
     asignados y el modal abre en blanco. Ya pasó con el de producto; hay pruebas que lo cubren.
   · Un modal que se usa varias veces seguidas (bajar conos, ajuste/merma, capturar colores) NO se
     cierra al confirmar: avisa, se limpia y espera el siguiente.
+- **La contraseña lleva su OJITO** (2026-10-20, usuario): `.con-ojo` + `button.ojo` (styles.scss)
+  en Entrar y en Personal; enseña SOLO lo que se escribió (la guardada nunca se ve). El campo va
+  en un `<div class="field">` con `<label for>`, no dentro de un `<label>` (lleva un botón).
 - **Nada de `confirm()`, `alert()` ni `prompt()` del navegador** (lo pidió el usuario el
   2026-10-03: el cuadro gris de "localhost:4200 dice" no se puede diseñar). Para preguntar antes
   de algo sin vuelta: `await inject(ConfirmacionService).pedir({ titulo, mensaje, aceptar,
   peligro })` (`core/services/confirmacion.service.ts`), que devuelve `true`/`false`. La ventana
   (`shared/confirmacion/confirmacion.ts`) va UNA vez en `app.ts`: queda encima de cualquier modal
   (z-index 60), no se cierra al tocar el fondo, Enter acepta y su Escape se atiende en la fase de
-  captura para que NO cierre también el modal de abajo. El botón lleva el verbo ("Eliminar",
+  captura para que NO cierre también el modal de abajo. Lo que se pregunta A MEDIO ESCANEO lleva
+  `enfocarCancelar: true` (2026-10-20): el cursor empieza en "Cancelar" y el Enter de la siguiente
+  lectura de la pistola ya no acepta "¿Este paquete sí está aquí?" sin que nadie lo lea. El botón lleva el verbo ("Eliminar",
   "Cerrar el turno"), no "Aceptar"; `peligro` lo pinta rojo. En una prueba se provee un doble:
   `{ provide: ConfirmacionService, useValue: { pedir: () => Promise.resolve(true) } }`.
 - **Nunca uses `computed()` para una vista previa que dependa de campos `[(ngModel)]`.** Un
@@ -1870,7 +1979,9 @@ tienda-hilos/
   `{{ x | cantidad: 'kg' }}`.
 - **El kardex habla de documentos, no de tipos.** `listarMovimientos` resuelve `concepto`, `folio`
   y `detalle_tipo`/`detalle_id` a partir de `referencia_tipo`; la pantalla nunca debe reconstruir
-  esa etiqueta por su cuenta.
+  esa etiqueta por su cuenta. Desde el 2026-10-20 la carga dice "Carga del proveedor" (el motivo
+  nuevo "Carga REM-…"; los viejos dicen "Remesa") y lo que regresa al cancelar una venta dice
+  "Regresó: se canceló la venta" (o "se devolvió"), no "Venta mostrador".
 
 ## Convenciones de código
 - **Herramientas de Claude Code (2026-10-16).** `.claude/settings.json` es COMPARTIDO y va al

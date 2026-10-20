@@ -46,7 +46,22 @@
           <tbody>
             @for (l of lineas(); track l.variante_id) {
               <tr>
-                <td>{{ etiqueta(l) }}</td>
+                <td>
+                  {{ etiqueta(l) }}
+                  <!-- La misma barra que Pendientes (2026-10-20, auditoría): se ve cuándo
+                       ya está completo el hilo sin contar a mano. -->
+                  @if (avance(l); as a) {
+                    <div class="avance-linea" [class.completo]="a.completo">
+                      <span class="avance-barra" role="progressbar" aria-valuemin="0" [attr.aria-valuemax]="a.de"
+                            [attr.aria-valuenow]="a.van" [attr.aria-label]="'Paquetes escaneados de ' + etiqueta(l)">
+                        <span [style.width.%]="a.pct"></span>
+                      </span>
+                      <span class="avance-texto">
+                        {{ a.van }} de {{ a.de }}@if (a.completo) { · completo ✓ }
+                      </span>
+                    </div>
+                  }
+                </td>
                 <td class="num muted">
                   @if (pedidos(l) !== null) { {{ pedidos(l) }} paq. }
                   <div class="sub">≈ {{ l.cantidad | cantidad: 'kg' }}</div>

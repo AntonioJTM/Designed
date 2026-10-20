@@ -33,12 +33,13 @@
     ya está aprobada y cuál está por aprobar o rechazar"). Hasta que se autoriza
     no hay traspaso: aquí se ve que se pidió y en qué quedó.
   -->
+  <ng-template #pedidosAutorizacion>
   @if (solicitudes().length) {
     <section class="card solicitudes-card">
       <div class="card-head">
         <div>
           <h2>Pedidos con autorización</h2>
-          <p>Hasta que se autorizan no se aparta nada ni los ve quien surte. Los resueltos, de los últimos 30 días.</p>
+          <p>Hasta que se autorizan no se aparta nada ni los ve quien surte.</p>
         </div>
       </div>
       <ul class="solicitudes-surtir">
@@ -55,14 +56,23 @@
             </div>
             <div class="acciones-solicitud">
               @if (s.puedo_autorizar) {
-                <a class="btn btn-primary btn-sm" routerLink="/admin/autorizaciones">Autorizar o rechazar ›</a>
+                <!-- Lleva a ESA solicitud (2026-10-20); un solo azul por pantalla. -->
+                <a class="btn btn-ghost btn-sm" routerLink="/admin/autorizaciones" [queryParams]="{ id: s.id }">Autorizar o rechazar ›</a>
               }
               @if (s.es_mia && s.estado === 'pendiente') {
-                <button type="button" class="btn btn-ghost btn-sm" (click)="retirarSolicitud(s)">Retirar</button>
+                <button type="button" class="btn btn-ghost btn-sm" [disabled]="retirando() === s.id" (click)="retirarSolicitud(s)">
+                  {{ retirando() === s.id ? 'Retirando…' : 'Retirar' }}
+                </button>
               }
             </div>
           </li>
         }
+      </ul>
+      <!-- Lo resuelto, plegado (2026-10-20): no empuja Pendientes hacia abajo. -->
+      @if (resueltas().length) {
+      <details class="resueltas-surtir">
+        <summary>Resueltos de los últimos 30 días ({{ resueltas().length }})</summary>
+      <ul class="solicitudes-surtir">
         @for (s of resueltas(); track s.id) {
           <li class="solicitud-surtir">
             <div class="que">
@@ -85,8 +95,13 @@
           </li>
         }
       </ul>
+      </details>
+      }
     </section>
   }
+  </ng-template>
+  <!-- Para quien pide, arriba; para quien surte, debajo de Pendientes (2026-10-20, auditoría). -->
+  @if (!surte()) { <ng-container [ngTemplateOutlet]="pedidosAutorizacion" /> }
 
   <!--
     Lo que está esperando algo: es lo primero que hay que ver. Cada uno dice en
@@ -176,6 +191,8 @@
       </div>
     }
   </section>
+
+  @if (surte()) { <ng-container [ngTemplateOutlet]="pedidosAutorizacion" /> }
 
   <!-- Comprobante de la última solicitud -->
   @if (ultimo(); as u) {
@@ -385,7 +402,12 @@
           {{ lineas().length }} {{ lineas().length === 1 ? 'hilo' : 'hilos' }} ·
           <b>{{ totalPaquetes() }} {{ totalPaquetes() === 1 ? 'paquete' : 'paquetes' }}</b>
           (≈ {{ totalKg() | cantidad: 'kg' }}) de {{ nombreAlmacen(origen) }} a
-          {{ nombreAlmacen(destino) }}. Se aparta en {{ nombreAlmacen(origen) }}; el envío es el paso siguiente.
+          {{ nombreAlmacen(destino) }}.
+          @if (surteDirecto()) {
+            Se aparta en {{ nombreAlmacen(origen) }}; el envío es el paso siguiente.
+          } @else {
+            Se pide autorización: hasta que la acepten no se aparta nada.
+          }
         </span>
         <button type="button" class="btn btn-primary" [disabled]="enviando() || hayInsuficientes()"
                 (click)="solicitar()">
@@ -477,8 +499,8 @@
       <div class="modal-body">
         <p class="explica">
           Llegó de <b>{{ t.almacen_origen }}</b> a <b>{{ t.almacen_destino }}</b>. Revisa lo que de
-          verdad bajaron de la camioneta y corrige lo que falte: entra al inventario solo lo que
-          aceptes, y la diferencia queda asentada como merma con tu nombre.
+          verdad bajaron de la camioneta y marca los paquetes que <b>no</b> llegaron: entra al inventario
+          solo lo que aceptes, y lo que faltó queda asentado como merma con tu nombre.
         </p>
         @if (t.envio_notas) { <p class="aviso">Nota del envío: {{ t.envio_notas }}</p> }
 
@@ -495,18 +517,50 @@
                   <td>{{ l.etiqueta }}</td>
                   <td class="num muted">{{ l.enviado | cantidad: (l.enPaquetes ? 'paq' : 'kg') }}</td>
                   <td class="num">
-                    <span class="cant-kg">
-                      <input type="number" [step]="l.enPaquetes ? 1 : 0.001" min="0" [max]="l.enviado"
-                             [ngModel]="l.recibido"
-                             (ngModelChange)="cambiarRecibido(l.detalle_id, $event)"
-                             [attr.aria-label]="'Lo que llegó de ' + l.etiqueta" />
-                      <span class="muted">{{ l.enPaquetes ? 'paq' : 'kg' }}</span>
-                    </span>
-                    @if (l.recibido < l.enviado) {
-                      <div class="sub neg">faltan {{ l.enviado - l.recibido | cantidad }}</div>
+                    @if (l.paquetes.length) {
+                      <!-- Con sus códigos: lo que llegó sale de lo palomeado abajo. -->
+                      <b>{{ l.recibido | cantidad: 'paq' }}</b>
+                      @if (l.faltan.length) {
+                        <div class="sub neg">
+                          {{ l.faltan.length === 1 ? 'falta 1 paquete' : 'faltan ' + l.faltan.length + ' paquetes' }} ·
+                          {{ kgFaltan(l) | cantidad: 'kg' }}
+                        </div>
+                      }
+                    } @else {
+                      <span class="cant-kg">
+                        <input type="number" [step]="l.enPaquetes ? 1 : 0.001" min="0" [max]="l.enviado"
+                               [ngModel]="l.recibido"
+                               (ngModelChange)="cambiarRecibido(l.detalle_id, $event)"
+                               [attr.aria-label]="'Lo que llegó de ' + l.etiqueta" />
+                        <span class="muted">{{ l.enPaquetes ? 'paq' : 'kg' }}</span>
+                      </span>
+                      @if (l.recibido < l.enviado) {
+                        <div class="sub neg">faltan {{ l.enviado - l.recibido | cantidad }}</div>
+                      }
                     }
                   </td>
                 </tr>
+                @if (l.paquetes.length) {
+                  <!-- LOS QUE NO LLEGARON (2026-10-20): se palomean; la merma es su peso real. -->
+                  <tr class="fila-no-llegaron">
+                    <td colspan="3">
+                      <fieldset class="no-llegaron">
+                        <legend>¿Cuáles <b>no</b> llegaron? Márcalos; si llegaron todos, no marques nada.</legend>
+                        <div class="paquetes-llegaron">
+                          @for (b of l.paquetes; track b.codigo) {
+                            <label class="paquete-llego" [class.falta]="l.faltan.includes(b.codigo)">
+                              <input type="checkbox" [checked]="l.faltan.includes(b.codigo)"
+                                     (change)="marcarFalta(l.detalle_id, b.codigo, $any($event.target).checked)"
+                                     [attr.aria-label]="'No llegó el paquete ' + b.codigo + ' de ' + l.etiqueta" />
+                              <span class="mono">{{ b.codigo }}</span>
+                              <span class="muted">{{ b.peso_kg | cantidad: 'kg' }}</span>
+                            </label>
+                          }
+                        </div>
+                      </fieldset>
+                    </td>
+                  </tr>
+                }
               }
             </tbody>
           </table>
@@ -521,7 +575,8 @@
           <p class="aviso">
             {{ faltantesRecepcion().length }}
             {{ faltantesRecepcion().length === 1 ? 'línea llega incompleta' : 'líneas llegan incompletas' }}.
-            La diferencia se va a dar de baja como merma, con el folio del traspaso y tu nombre.
+            Lo que faltó se va a dar de baja como merma, con el folio del traspaso y tu nombre, y los
+            paquetes marcados ya no van a contar en la sucursal.
           </p>
         }
       </div>

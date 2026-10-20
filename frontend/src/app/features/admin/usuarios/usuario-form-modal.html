@@ -68,18 +68,34 @@
                   <span class="ayuda">Con este correo entra al sistema.</span>
                 }
               </label>
-              <label class="field full">
-                {{ pideCorreo() ? 'Contraseña' : 'Nueva contraseña' }}
-                <input
-                  type="password"
-                  formControlName="contrasena"
-                  autocomplete="new-password"
-                  [placeholder]="pideCorreo() ? 'Mínimo 8 caracteres' : 'Déjala vacía para no cambiarla'"
-                />
+              <!-- Un DIV y no un label: adentro va el botón del ojo (2026-10-20, usuario:
+                   "un ojito para ver la contraseña, nada más para verificar"). -->
+              <div class="field full">
+                <label for="usuario-contrasena">{{ pideCorreo() ? 'Contraseña' : 'Nueva contraseña' }}</label>
+                <span class="con-ojo">
+                  <input
+                    id="usuario-contrasena"
+                    [type]="verContrasena() ? 'text' : 'password'"
+                    formControlName="contrasena"
+                    autocomplete="new-password"
+                    [placeholder]="pideCorreo() ? 'Mínimo 8 caracteres' : 'Déjala vacía para no cambiarla'"
+                  />
+                  <button type="button" class="ojo" (click)="verContrasena.set(!verContrasena())"
+                          [attr.aria-pressed]="verContrasena()"
+                          [attr.aria-label]="verContrasena() ? 'Ocultar la contraseña' : 'Ver la contraseña'"
+                          [title]="verContrasena() ? 'Ocultar la contraseña' : 'Ver la contraseña'">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                      @if (verContrasena()) { <path d="M4 4l16 16"></path> }
+                    </svg>
+                  </button>
+                </span>
                 <span class="ayuda">
                   {{ pideCorreo() ? 'Dásela en persona; aquí no se vuelve a mostrar.' : 'Solo si hay que restablecerla. La actual no se puede ver.' }}
                 </span>
-              </label>
+              </div>
             }
             <!-- De qué tiendas es (2026-10-15): solo ve ventas, caja e inventario de las suyas. -->
             <fieldset class="field full otros-puestos">

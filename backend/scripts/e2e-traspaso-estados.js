@@ -177,13 +177,22 @@ async function main() {
       })
     );
 
+    // Salieron con su código: decir solo "llegaron 2" ya no basta, hay que decir
+    // CUÁL no llegó (2026-10-20); la merma es su peso real.
+    await esperaError('"llegaron 2" sin decir cuál no llegó', 'DI_CUALES_FALTARON', () =>
+      model.recibirTraspaso(sol.id, null, { recibido: [{ detalle_id: env.lineas[0].detalle_id, paquetes: 2 }] })
+    );
+    const noLlego = env.lineas[0].bultos[1];
     const rec = await model.recibirTraspaso(sol.id, null, {
-      recibido: [{ detalle_id: env.lineas[0].detalle_id, paquetes: 2 }],
+      recibido: [{ detalle_id: env.lineas[0].detalle_id, faltan: [noLlego.codigo] }],
       notas: 'Llegaron 2, uno se quedó en la camioneta',
     });
     check('queda recibido', rec.estado === 'recibido', rec.estado);
     check('reporta 1 línea con faltante', rec.faltantes === 1, rec.faltantes);
-    const esperadoRecibido = Math.round((enviadoKg * 2) / 3 * 1000) / 1000;
+    check('y 2 paquetes recibidos', Number(rec.lineas[0].paquetes_recibidos) === 2, rec.lineas[0].paquetes_recibidos);
+    const [[est]] = await pool.query('SELECT estado FROM variante_codigos WHERE codigo = :c', { c: noLlego.codigo });
+    check('el que no llegó queda "faltante"', est.estado === 'faltante', est.estado);
+    const esperadoRecibido = Math.round((enviadoKg - Number(noLlego.peso_kg)) * 1000) / 1000;
     check('entró al destino solo lo aceptado', rec.lineas[0].recibida === esperadoRecibido,
       { recibida: rec.lineas[0].recibida, esperado: esperadoRecibido });
     const d2 = await kg(paquete, destino);

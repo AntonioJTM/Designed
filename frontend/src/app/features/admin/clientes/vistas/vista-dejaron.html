@@ -59,7 +59,7 @@
                 <b>{{ c.total_comprado | dinero }}</b>
                 <div class="muted chico">
                   {{ c.num_compras }} {{ num(c.num_compras) === 1 ? 'compra' : 'compras' }}
-                  @if (c.cada_cuantos_dias) { · venía cada {{ c.cada_cuantos_dias }} días }
+                  @if (c.cada_cuantos_dias) { · venía cada {{ c.cada_cuantos_dias === 1 ? 'día' : c.cada_cuantos_dias + ' días' }} }
                 </div>
               </td>
               <td>{{ fechaCorta(c.ultima_compra) }}</td>

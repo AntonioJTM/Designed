@@ -107,9 +107,6 @@ export class CatalogoService {
   crearVariante(body: Partial<Variante>): Observable<Variante> {
     return this.http.post<ApiResponse<Variante>>(`${this.base}/variantes`, body).pipe(map(data));
   }
-  eliminarVariante(id: number): Observable<unknown> {
-    return this.http.delete<ApiResponse<unknown>>(`${this.base}/variantes/${id}`).pipe(map(data));
-  }
 
   // ---- Códigos de barras adicionales por variante ----
   listarCodigos(varianteId: number): Observable<VarianteCodigo[]> {

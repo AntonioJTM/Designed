@@ -16,12 +16,23 @@
           @if (pedido().pagado > 0) {
             <div><span>Ya dejó pagado</span><span>{{ pedido().pagado | dinero }}</span></div>
           }
+          @if (favor() > 0) {
+            <div><span>Con su saldo a favor</span><span>−{{ favor() | dinero }}</span></div>
+          }
           @if (aFavor() > 0) {
             <div class="renglon-falta"><span>Pesó menos: se le devuelven</span><b>{{ aFavor() | dinero }}</b></div>
           } @else {
             <div class="renglon-falta"><span>Falta</span><b>{{ falta() | dinero }}</b></div>
           }
         </div>
+
+        <!-- Su saldo a favor (anticipos, lo que regresó) paga primero (2026-10-20). -->
+        @if (aFavor() <= 0 && faltaNota() > 0 && saldoFavor() > 0) {
+          <label class="field check">
+            <input type="checkbox" [(ngModel)]="usarFavor" name="usar-favor" />
+            <span>Usar su saldo a favor <span class="muted">(tiene {{ saldoFavor() | dinero }})</span></span>
+          </label>
+        }
 
         @if (aFavor() > 0) {
           <!-- Pesó menos de lo que dejó pagado: la diferencia sale del cajón. -->

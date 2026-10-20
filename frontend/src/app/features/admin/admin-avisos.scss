@@ -92,3 +92,10 @@
 @media (max-width: 900px) {
   .avisos { left: 12px; right: 12px; width: auto; max-width: none; }
 }
+
+/* La ✕ del panel, a 44 px con el dedo (2026-10-20). */
+@media (max-width: 900px), (pointer: coarse) {
+  .avisos-cerrar { flex-basis: 44px; width: 44px; height: 44px; }
+}
+
+.avisos-mas { margin: 4px 12px 8px; font-size: 0.8125rem; color: var(--tinta-3); }

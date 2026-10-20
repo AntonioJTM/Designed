@@ -61,19 +61,21 @@ async function paraHacer(id) {
 
 /**
  * Guarda la solicitud. Si quien pide ya tiene una PENDIENTE idéntica (el mismo
- * retiro pedido dos veces), devuelve esa: aceptar las dos serían dos retiros.
+ * retiro pedido dos veces), devuelve esa con `ya_estaba`: aceptar las dos serían
+ * dos retiros. Mientras la primera ESPERA, la segunda igual casi siempre es la
+ * misma pedida otra vez (2026-10-20, auditoría: antes solo se juntaban las de
+ * los últimos 2 minutos y a los 3 salía otra). Ya resuelta, otra igual sí es otra.
  */
-async function crear({ operacion, metodo, ruta, cuerpo, resumen, almacenes, contexto, solicitanteId }) {
-  // Solo la de hace un momento (el doble clic): dos retiros iguales pedidos a
-  // distintas horas son dos retiros.
+async function crear({ operacion, metodo, ruta, cuerpo, resumen, almacenes, contexto, solicitanteId, venceElDia = false }) {
+  // La que vence el mismo día (lo de la caja) y es de otro día ya no cuenta.
   const [[igual]] = await pool.query(
     `SELECT id FROM autorizaciones
       WHERE estado = 'pendiente' AND solicitante_id = :yo AND metodo = :metodo AND ruta = :ruta AND cuerpo = :cuerpo
-        AND solicitado_en > NOW() - INTERVAL 2 MINUTE
-      LIMIT 1`,
-    { yo: solicitanteId, metodo, ruta, cuerpo }
+        AND (:venceElDia = 0 OR DATE(solicitado_en) = CURDATE())
+      ORDER BY id LIMIT 1`,
+    { yo: solicitanteId, metodo, ruta, cuerpo, venceElDia: venceElDia ? 1 : 0 }
   );
-  if (igual) return obtener(igual.id);
+  if (igual) return { ...(await obtener(igual.id)), ya_estaba: true };
   const [r] = await pool.query(
     `INSERT INTO autorizaciones (operacion, metodo, ruta, cuerpo, resumen, almacenes, contexto, solicitante_id)
      VALUES (:operacion, :metodo, :ruta, :cuerpo, :resumen, :almacenes, :contexto, :solicitante)`,
@@ -174,7 +176,7 @@ async function anotarAviso(id, aviso) {
 /** La solicitud que espera para una ruta (la de pagar una nómina), o null. */
 async function esperandoDe(operacion, ruta) {
   const [[r]] = await pool.query(
-    `SELECT a.id, us.nombre AS solicitante, DATE_FORMAT(a.solicitado_en, '%Y-%m-%d %H:%i:%s') AS solicitado_en
+    `SELECT a.id, a.estado, us.nombre AS solicitante, DATE_FORMAT(a.solicitado_en, '%Y-%m-%d %H:%i:%s') AS solicitado_en
        FROM autorizaciones a JOIN usuarios us ON us.id = a.solicitante_id
       WHERE a.operacion = :operacion AND a.ruta = :ruta AND a.estado IN ('pendiente', 'aprobando')
       ORDER BY a.id DESC LIMIT 1`,

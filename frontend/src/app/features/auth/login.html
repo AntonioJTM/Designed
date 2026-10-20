@@ -32,12 +32,28 @@
              [attr.aria-invalid]="form.controls.correo.touched && form.controls.correo.invalid" />
     </label>
 
-    <label class="field">
-      Contraseña
-      <input type="password" formControlName="contrasena" autocomplete="current-password"
-             [class.invalido]="form.controls.contrasena.touched && form.controls.contrasena.invalid"
-             [attr.aria-invalid]="form.controls.contrasena.touched && form.controls.contrasena.invalid" />
-    </label>
+    <!-- Con su ojito para revisar lo que se escribió (2026-10-20, usuario). Un DIV
+         y no un label: adentro va el botón. -->
+    <div class="field">
+      <label for="login-contrasena">Contraseña</label>
+      <span class="con-ojo">
+        <input id="login-contrasena" [type]="verContrasena() ? 'text' : 'password'" formControlName="contrasena"
+               autocomplete="current-password"
+               [class.invalido]="form.controls.contrasena.touched && form.controls.contrasena.invalid"
+               [attr.aria-invalid]="form.controls.contrasena.touched && form.controls.contrasena.invalid" />
+        <button type="button" class="ojo" (click)="verContrasena.set(!verContrasena())"
+                [attr.aria-pressed]="verContrasena()"
+                [attr.aria-label]="verContrasena() ? 'Ocultar la contraseña' : 'Ver la contraseña'"
+                [title]="verContrasena() ? 'Ocultar la contraseña' : 'Ver la contraseña'">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+            @if (verContrasena()) { <path d="M4 4l16 16"></path> }
+          </svg>
+        </button>
+      </span>
+    </div>
 
     @if (error()) {
       <p class="alert" role="alert">{{ error() }}</p>

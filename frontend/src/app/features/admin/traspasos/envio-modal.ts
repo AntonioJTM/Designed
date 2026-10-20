@@ -71,7 +71,8 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
   selector: 'app-envio-modal',
   imports: [FormsModule, CantidadPipe],
   templateUrl: './envio-modal.html',
-  styleUrl: './envio-modal.scss',
+  // La barra de cada hilo es la misma de Pendientes (traspasos-avance.scss).
+  styleUrls: ['./envio-modal.scss', './traspasos-avance.scss'],
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class EnvioModal implements OnInit {
@@ -163,12 +164,23 @@ export class EnvioModal implements OnInit {
     return p != null ? Number(p) : null;
   }
 
+  /**
+   * La barra del hilo: cuántos van de los pedidos (2026-10-20, auditoría). Solo
+   * con lo pedido en paquetes; nunca salen más de los pedidos.
+   */
+  avance(l: TraspasoLinea): { van: number; de: number; pct: number; completo: boolean } | null {
+    const de = Math.round(Number(this.pedidos(l) ?? 0));
+    if (!(de > 0)) return null;
+    const van = this.cuantos(l);
+    return { van, de, pct: Math.min(100, Math.round((van / de) * 100)), completo: van >= de };
+  }
+
   /** "Faltan 2" / "2 de más", contra lo pedido; nada si cuadra o no se ha escaneado. */
   diferencia(l: TraspasoLinea): string | null {
     const pedidos = this.pedidos(l);
     const n = this.cuantos(l);
     if (pedidos == null || n === 0 || n === pedidos) return null;
-    return n < pedidos ? `faltan ${pedidos - n}` : `${n - pedidos} de más`;
+    return n < pedidos ? (pedidos - n === 1 ? 'falta 1' : `faltan ${pedidos - n}`) : `${n - pedidos} de más`;
   }
 
   readonly totalPaquetes = computed(() => this.escaneados().length);
@@ -275,6 +287,8 @@ export class EnvioModal implements OnInit {
     const aqui = this.traspaso().almacen_origen;
     const kg = `${peso.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`;
     return this.confirmacion.pedir({
+      // A medio escaneo: el Enter de la siguiente lectura no lo acepta (2026-10-20).
+      enfocarCancelar: true,
       titulo: '¿Este paquete sí está aquí?',
       mensaje:
         `El sistema tiene el paquete ${cod} (${kg} de ${this.nombreDe(varianteId)}) en «${estabaEn}», no en «${aqui}». ` +
@@ -317,7 +331,9 @@ export class EnvioModal implements OnInit {
     if (b.estado && b.estado !== 'disponible' && b.estado !== 'apartado') {
       return b.estado === 'vendido'
         ? `El paquete ${cod} ya se vendió${b.consumido_folio ? ` (${b.consumido_folio})` : ''}.`
-        : `El paquete ${cod} ya se bajó a conos.`;
+        : b.estado === 'faltante'
+          ? `El paquete ${cod} se dio por faltante al recibir ${b.consumido_folio ?? 'un envío'} (no llegó).`
+          : `El paquete ${cod} ya se bajó a conos.`;
     }
     if (!(Number(b.peso_kg) > 0)) {
       return `El paquete ${cod} no tiene peso registrado: no se puede saber cuánto sale.`;

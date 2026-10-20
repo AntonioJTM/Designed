@@ -10,6 +10,16 @@
 .solicitud-surtir .arriba > b { font-size: 0.9375rem; font-weight: 600; }
 .solicitud-surtir .lleva { font-size: 0.8125rem; color: var(--tinta-2); overflow-wrap: anywhere; }
 .solicitud-surtir .quien { font-size: 0.8125rem; color: var(--tinta-3); }
-.solicitud-surtir .nota-menos { font-size: 0.8125rem; color: var(--aviso-t); }
-.solicitud-surtir .motivo-solicitud, .solicitud-surtir .aviso-chico { font-size: 0.8125rem; color: var(--peligro-t); }
+/* Los estados con su pareja de color (fondo + texto), no texto de color suelto (2026-10-20). */
+.solicitud-surtir .nota-menos, .solicitud-surtir .motivo-solicitud, .solicitud-surtir .aviso-chico {
+  align-self: flex-start; font-size: 0.8125rem; padding: 3px 8px; border-radius: 6px;
+}
+.solicitud-surtir .nota-menos { background: var(--aviso-f); color: var(--aviso-t); }
+.solicitud-surtir .motivo-solicitud, .solicitud-surtir .aviso-chico { background: var(--peligro-f); color: var(--peligro-t); }
+.resueltas-surtir { margin-top: 8px; }
+.resueltas-surtir > summary {
+  cursor: pointer; font-size: 0.875rem; font-weight: 500; color: var(--tinta-2);
+  min-height: 36px; display: flex; align-items: center;
+}
+@media (max-width: 900px), (pointer: coarse) { .resueltas-surtir > summary { min-height: 44px; } }
 .acciones-solicitud { display: flex; flex-wrap: wrap; gap: 8px; }

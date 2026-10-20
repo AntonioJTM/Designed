@@ -63,6 +63,8 @@ export class UsuarioFormModal implements OnInit {
    */
   readonly todas = signal(false);
   readonly tiendasSel = signal<number[]>([]);
+  /** El ojito: enseña lo que se ESCRIBIÓ, para revisarlo (2026-10-20). La de antes no se ve nunca. */
+  readonly verContrasena = signal(false);
 
   readonly form = this.fb.nonNullable.group({
     rol_id: [null as number | null, Validators.required],

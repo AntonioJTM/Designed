@@ -17,6 +17,9 @@ import { sumarDias } from './semana';
  *
  * NO se cierra al registrar: dar varios periodos seguidos es normal.
  */
+/** "1 día" / "3 días" (2026-10-20: decía "1 días"). */
+const dias = (n: number) => `${n} ${n === 1 ? 'día' : 'días'}`;
+
 @Component({
   selector: 'app-vacaciones-modal',
   imports: [FormsModule, FechaPipe],
@@ -80,6 +83,23 @@ export class VacacionesModal implements OnInit {
     return diasHabilesEnRango(d.horario, this.desde, this.hasta || this.desde);
   }
 
+  /**
+   * Cómo queda su saldo con las fechas elegidas (2026-10-20, auditoría): solo si
+   * empiezan en su año de vacaciones de ahora (cuentan contra el año donde
+   * EMPIEZAN). Método: lee campos con ngModel.
+   */
+  despues(): { restan: number; quedaran: number; pasa: boolean } | null {
+    const s = this.datos()?.saldo;
+    const n = this.diasElegidos();
+    if (!s || !this.desde || !(n > 0)) return null;
+    if (this.desde < s.desde || this.desde >= s.hasta) return null;
+    return { restan: s.restan, quedaran: s.restan - n, pasa: n > s.restan };
+  }
+
+  dia(n: number): string {
+    return dias(n);
+  }
+
   /** El último día de su año de vacaciones (el aniversario es exclusivo). */
   finDeAnio(hasta: string): string {
     return sumarDias(hasta, -1);
@@ -106,7 +126,7 @@ export class VacacionesModal implements OnInit {
           const reg = nuevo.registros.find((r) => r.fecha_inicio === this.desde);
           this.datos.set(nuevo);
           this.mensaje.set(
-            `Vacaciones registradas: ${Number(reg?.dias ?? 0)} días. Se pagan en la nómina de esa semana como días normales.`
+            `Vacaciones registradas: ${dias(Number(reg?.dias ?? 0))}. Se pagan en la nómina de esa semana como días normales.`
           );
           this.desde = '';
           this.hasta = '';
@@ -124,7 +144,7 @@ export class VacacionesModal implements OnInit {
   async quitar(r: VacacionesRegistro): Promise<void> {
     const si = await this.confirmacion.pedir({
       titulo: '¿Quitar estas vacaciones?',
-      mensaje: `Del ${new FechaPipe().transform(r.fecha_inicio)} al ${new FechaPipe().transform(r.fecha_fin)}: ${Number(r.dias)} días le regresan a su saldo.`,
+      mensaje: `Del ${new FechaPipe().transform(r.fecha_inicio)} al ${new FechaPipe().transform(r.fecha_fin)}: ${Number(r.dias) === 1 ? '1 día le regresa' : `${Number(r.dias)} días le regresan`} a su saldo.`,
       aceptar: 'Quitar',
       peligro: true,
     });

@@ -43,6 +43,8 @@ export interface ConfiguracionTienda {
   ticket_leyenda?: string | null;
   /** El ancho del rollo de la impresora de tickets: '58' u '80'. */
   ticket_papel_mm?: string | null;
+  /** Lo más que puede pesar el tubo de UN cono, en kg (2026-10-20). Vacío: sin tope propio. */
+  desarme_destare_max_kg?: string | null;
   /** Las cuentas ACTIVAS a las que se puede depositar (2026-10-06: pueden ser varias). */
   cuentas_bancarias?: CuentaBancariaPublica[];
 }

@@ -187,6 +187,8 @@ export interface Encargo {
   falta: number;
   /** Pesó menos de lo que dejó pagado: se le devuelve al entregarlo. */
   a_favor?: number;
+  /** Su SALDO A FAVOR (anticipos, lo que regresó): se puede usar al entregarla (2026-10-20). */
+  saldo_favor?: number;
   hilos: EncargoHilo[];
   kg: number;
 }
@@ -229,6 +231,8 @@ export interface NotaPendiente {
   dias: number;
   pagado: number;
   falta: number;
+  /** Su SALDO A FAVOR: se puede usar para pagarla (2026-10-20). */
+  saldo_favor?: number;
   hilos: NotaPendienteHilo[];
 }
 
@@ -386,6 +390,13 @@ export interface Pedido {
   cambio?: number;
   /** Al entregar un pedido que pesó menos de lo que dejó: lo que se le devolvió. */
   devuelto?: number;
+  /**
+   * Al cancelar (o devolver la diferencia) cuando en el cajón no había todo el
+   * efectivo: lo que le quedó A FAVOR al cliente (2026-10-20).
+   */
+  a_favor_sin_efectivo?: number;
+  /** Al cancelar una venta a crédito ya abonada: lo abonado que pasó a su saldo a favor (2026-10-20). */
+  abonado_a_favor?: number;
   /** Al modificarlo: el total de antes, lo que falta o lo que tiene a favor, y qué cambió. */
   total_antes?: number;
   a_favor?: number;

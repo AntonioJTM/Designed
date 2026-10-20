@@ -1,4 +1,5 @@
 import { Component, inject, input, output, signal } from '@angular/core';
+import { nuevaClave } from '../../../../core/clave-unica';
 import { RouterLink } from '@angular/router';
 import { ClientesService } from '../../../../core/services/clientes.service';
 import { TicketService } from '../../../../core/services/ticket.service';
@@ -19,7 +20,7 @@ const ETIQUETA: Record<MovimientoSaldoFavor['tipo'], string> = {
   anticipo: 'Dejó a cuenta',
   uso: 'Pagó una compra con él',
   aplicado: 'Se descontó de lo que debía',
-  reintegro: 'Le regresó (se canceló la compra)',
+  reintegro: 'Le regresó lo de una compra',
   ajuste: 'Ajuste a mano',
 };
 const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
@@ -99,8 +100,11 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
                       } @else { <span class="mono muted" [title]="m.numero_pedido">{{ m.numero_pedido | folio }}</span> }
                     }
                     <!-- Las notas que pone el sistema repiten el folio; solo se dicen si
-                         no hay venta a la cual ligarlo (su cuenta de crédito, un ajuste). -->
-                    @if (m.notas && !m.numero_pedido && m.tipo !== 'anticipo') { <br /><span class="muted">{{ m.notas }}</span> }
+                         no hay venta a la cual ligarlo (su cuenta de crédito, un ajuste), o si
+                         dicen por qué le regresó (se canceló, no había efectivo en la caja). -->
+                    @if (m.notas && (!m.numero_pedido || m.tipo === 'reintegro') && m.tipo !== 'anticipo') {
+                      <br /><span class="muted">{{ m.notas }}</span>
+                    }
                   </td>
                   <td class="num sf-monto" [class.entra]="efecto(m) > 0">{{ monto(m) }}</td>
                   <td class="muted">{{ m.registro || '—' }}</td>
@@ -135,6 +139,8 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
   `,
 })
 export class SaldoFavor {
+  /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
+  private clave = nuevaClave();
   private readonly clientes = inject(ClientesService);
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly tickets = inject(TicketService);
@@ -202,9 +208,10 @@ export class SaldoFavor {
     if (!si) return;
     this.aplicando.set(true);
     this.error.set(null);
-    this.clientes.aplicarSaldoFavor(this.clienteId()).subscribe({
+    this.clientes.aplicarSaldoFavor(this.clienteId(), undefined, this.clave).subscribe({
       next: (r) => {
         this.aplicando.set(false);
+        this.clave = nuevaClave();
         this.aplicado.emit(r);
       },
       error: (e) => {

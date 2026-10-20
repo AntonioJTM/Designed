@@ -91,7 +91,7 @@ describe('HiloModal', () => {
     expect(pedidoLote).toBe('0368427');
     expect(c.estado()).toBe('disponible');
     expect(c.bultosVistos().length).toBe(3);
-    expect(c.conteo()).toEqual({ disponible: 3, apartado: 0, desarmado: 0, vendido: 1, todos: 4 });
+    expect(c.conteo()).toEqual({ disponible: 3, apartado: 0, desarmado: 0, vendido: 1, faltante: 0, todos: 4 });
     c.estado.set('vendido');
     expect(c.bultosVistos().map((b) => b.codigo)).toEqual(['C-4']);
     c.estado.set('todos');

@@ -76,4 +76,19 @@ describe('MisVacacionesModal', () => {
     expect(el.textContent).toContain('Todavía no estás en la nómina');
     expect([...el.querySelectorAll('button')].some((b) => b.textContent?.includes('Pedir vacaciones'))).toBeFalse();
   });
+
+  it('más días de los que le quedan: lo dice y no deja pedirlas; si caben, dice cuántos le quedarán (2026-10-20)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    (c as unknown as { hoy: string }).hoy = '2026-10-19';
+    c.desde = '2026-11-02';
+    c.hasta = '2026-11-08';
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('Te quedan 12 días → te quedarán 6 días');
+    c.hasta = '2026-11-21'; // 3 semanas: 18 días de trabajo
+    expect(c.diasPedidos()).toBeGreaterThan(12);
+    expect(c.puedePedir()).toBeFalse();
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('son más de los que tienes');
+  });
 });

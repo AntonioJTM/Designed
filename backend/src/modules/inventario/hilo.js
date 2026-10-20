@@ -122,6 +122,8 @@ async function detalleHilo(productoId, almacenes = null) {
         // tienen dueño (salen al entregarlo).
         apartados: { bultos: 0, kg: 0 },
         desarmados: { bultos: 0, kg: 0, conos: 0, destare_kg: 0 },
+        // Se dieron por faltantes al recibir un envío (2026-10-20): no llegaron.
+        faltantes: { bultos: 0, kg: 0 },
         peso_min: null,
         peso_max: null,
         cargas: [],
@@ -156,6 +158,9 @@ async function detalleHilo(productoId, almacenes = null) {
     } else if (g.estado === 'vendido') {
       l.vendidos.bultos += bultos;
       l.vendidos.kg = round3(l.vendidos.kg + kg);
+    } else if (g.estado === 'faltante') {
+      l.faltantes.bultos += bultos;
+      l.faltantes.kg = round3(l.faltantes.kg + kg);
     }
   }
   for (const d of desarmes) {
@@ -244,7 +249,7 @@ async function bultosDeLote(productoId, lote, almacenes = null) {
        LEFT JOIN variante_conversiones cv ON vc.consumido_tipo = 'conversion' AND cv.id = vc.consumido_id
       WHERE pv.producto_id = :id
         AND ${lote === null ? "(vc.lote IS NULL OR TRIM(vc.lote) = '')" : 'vc.lote = :lote'}${fb.sql}
-      ORDER BY FIELD(vc.estado, 'disponible', 'apartado', 'desarmado', 'vendido'), a.nombre, vc.codigo`,
+      ORDER BY FIELD(vc.estado, 'disponible', 'apartado', 'desarmado', 'vendido', 'faltante'), a.nombre, vc.codigo`,
     { id: productoId, lote, ...fb.params }
   );
   return rows.map((b) => ({

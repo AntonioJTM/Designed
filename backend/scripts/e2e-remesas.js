@@ -161,7 +161,7 @@ async function subir() {
     ck('el movimiento aparece', !!mov, `${mov?.concepto} · +${mov?.cantidad} ${mov?.unidad}`);
     ck('el motivo dice bultos y lotes', /80 bultos/.test(mov?.motivo ?? ''), mov?.motivo);
     ck('dice que es una remesa y trae su folio',
-      mov?.concepto === 'Remesa del proveedor' && mov?.folio === folioRemesa, `${mov?.concepto} · ${mov?.folio}`);
+      mov?.concepto === 'Carga del proveedor' && mov?.folio === folioRemesa, `${mov?.concepto} · ${mov?.folio}`);
     r = await api('GET', `/inventario/movimientos?variante_id=${paq}&concepto=entradas&limit=5`);
     ck('y sale en el filtro "Entradas de mercancía"',
       r.data.items.some((x) => x.referencia_tipo === 'remesa'), `${r.data.items.length} movimientos`);

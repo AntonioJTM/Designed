@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
+const { unaVez } = require('../../middlewares/una-vez');
 const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
 const { autorizable } = require('../autorizaciones/autorizable');
 
@@ -150,7 +151,8 @@ router.put('/:id/limite-credito', ...soloStaff, validate(limiteSchema), autoriza
 
 // Crédito. El estado de cuenta viaja dentro del expediente (GET /:id) y la lista
 // de quién debe, en el tablero (GET /analisis/tablero).
-router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), controller.abonar);
+// Con su llave de un solo uso (`X-Clave-Unica`, 2026-10-20): un doble clic no registra dos.
+router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), unaVez(), controller.abonar);
 // Los datos de su ticket, al registrarlo o para reimprimirlo (2026-10-15).
 router.get('/:id/abonos/:movId/ticket', ...soloStaff, controller.ticketAbono);
 router.post('/:id/ajustes', ...soloStaff, validate(ajusteSchema), autorizable('corregir_deuda'), controller.ajustar);
@@ -160,7 +162,7 @@ router.post('/:id/ajustes', ...soloStaff, validate(ajusteSchema), autorizable('c
 const aplicarSaldoSchema = z
   .object({ monto: z.coerce.number().positive().max(99999999).optional() })
   .strict();
-router.post('/:id/saldo-favor/aplicar', ...soloStaff, validate(aplicarSaldoSchema), controller.aplicarSaldoFavor);
+router.post('/:id/saldo-favor/aplicar', ...soloStaff, validate(aplicarSaldoSchema), unaVez(), controller.aplicarSaldoFavor);
 // AJUSTE A MANO del saldo a favor (2026-10-16): sumarle (positivo) o quitarle
 // (negativo), con motivo. Con el permiso del ajuste de la deuda.
 const ajusteSaldoSchema = z
@@ -182,7 +184,7 @@ const anticipoSchema = z
     notas: z.string().trim().max(255).optional(),
   })
   .strict();
-router.post('/:id/anticipos', ...soloStaff, validate(anticipoSchema), controller.recibirAnticipo);
+router.post('/:id/anticipos', ...soloStaff, validate(anticipoSchema), unaVez(), controller.recibirAnticipo);
 router.get('/:id/anticipos/:movId/ticket', ...soloStaff, controller.ticketAnticipo);
 
 module.exports = router;

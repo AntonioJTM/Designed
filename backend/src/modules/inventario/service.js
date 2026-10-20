@@ -48,10 +48,17 @@ function _describir(m) {
 
   if (m.referencia_tipo === 'pedido') {
     const canal = m.pedido_canal === 'punto_venta' ? 'mostrador' : 'en línea';
+    // Lo que REGRESA al cancelar (o al marcar "devuelto") una venta no es una
+    // venta (2026-10-20, auditoría: salía "Venta mostrador" con +kg).
+    const regresoPorCancelar = !salida && m.tipo !== 'devolucion';
     return {
       // El cliente regresó mercancía y le quedó a favor (2026-10-13): el folio
       // DEV-… va en el motivo.
-      concepto: m.tipo === 'devolucion' ? 'Devolución del cliente' : `Venta ${canal}`,
+      concepto: m.tipo === 'devolucion'
+        ? 'Devolución del cliente'
+        : regresoPorCancelar
+          ? (/^devoluci/i.test(m.motivo ?? '') ? 'Regresó: se devolvió la venta' : 'Regresó: se canceló la venta')
+          : `Venta ${canal}`,
       folio: m.numero_pedido,
       detalle_tipo: 'pedido',
       detalle_id: m.referencia_id,
@@ -91,7 +98,7 @@ function _describir(m) {
 
   if (m.referencia_tipo === 'remesa') {
     return {
-      concepto: 'Remesa del proveedor',
+      concepto: 'Carga del proveedor',
       folio: m.remesa_folio,
       detalle_tipo: 'remesa',
       detalle_id: m.referencia_id,
@@ -161,8 +168,9 @@ async function previaDesarmeBulto(codigo, almacenes = null) {
   }
   if (bulto.estado && bulto.estado !== 'disponible') {
     const donde = bulto.consumido_folio ? ` en ${bulto.consumido_folio}` : '';
-    throw enOtraTienda(new AppError(409, 'BULTO_NO_DISPONIBLE',
-      `El bulto ${bulto.codigo} ya está ${bulto.estado}${donde}.`),
+    throw enOtraTienda(new AppError(409, 'BULTO_NO_DISPONIBLE', bulto.estado === 'faltante'
+      ? `El bulto ${bulto.codigo} se dio por faltante al recibir un envío${donde} (no llegó).`
+      : `El bulto ${bulto.codigo} ya está ${bulto.estado}${donde}.`),
     [bulto.almacen_id], `El bulto ${bulto.codigo} no está disponible en esta tienda.`);
   }
 

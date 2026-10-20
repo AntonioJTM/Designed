@@ -6,7 +6,8 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
  * sola vez, en la raíz de la aplicación.
  *
  * · Como todos los modales, NO se cierra al tocar el fondo.
- * · Escape = "Cancelar", Enter = el botón enfocado (el que acepta).
+ * · Escape = "Cancelar", Enter = el botón enfocado (el que acepta, o
+ *   "Cancelar" con `enfocarCancelar`, lo que se pregunta a medio escaneo).
  * · Va ENCIMA de cualquier otro modal (z-index 60 contra 50), porque muchas
  *   confirmaciones salen de adentro de uno (eliminar un almacén, una lista…).
  * · Su Escape no debe cerrar también el modal de abajo: se atiende en la fase
@@ -35,7 +36,7 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
             </div>
           </div>
           <div class="modal-foot">
-            <button type="button" class="btn btn-ghost" (click)="svc.responder(false)">{{ c.cancelar ?? 'Cancelar' }}</button>
+            <button #cancelar type="button" class="btn btn-ghost" (click)="svc.responder(false)">{{ c.cancelar ?? 'Cancelar' }}</button>
             <button #aceptar type="button" class="btn" [class.btn-primary]="!c.peligro" [class.btn-rojo]="c.peligro"
                     (click)="svc.responder(true)">
               {{ c.aceptar ?? 'Aceptar' }}
@@ -65,12 +66,14 @@ import { ConfirmacionService } from '../../core/services/confirmacion.service';
 export class ConfirmacionComponent {
   readonly svc = inject(ConfirmacionService);
   private readonly botonAceptar = viewChild<ElementRef<HTMLButtonElement>>('aceptar');
+  private readonly botonCancelar = viewChild<ElementRef<HTMLButtonElement>>('cancelar');
 
   constructor() {
     // Al abrir, el foco va al botón que acepta: Enter confirma, como en el
-    // cuadro del navegador.
+    // cuadro del navegador. A medio escaneo va a "Cancelar" (`enfocarCancelar`).
     effect(() => {
-      if (this.svc.actual()) setTimeout(() => this.botonAceptar()?.nativeElement.focus());
+      const c = this.svc.actual();
+      if (c) setTimeout(() => (c.enfocarCancelar ? this.botonCancelar() : this.botonAceptar())?.nativeElement.focus());
     });
 
     const alTeclear = (ev: KeyboardEvent) => {

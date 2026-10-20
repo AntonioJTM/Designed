@@ -7,14 +7,18 @@ const whatsapp = require('../whatsapp/conexion');
 
 // Cuándo un pendiente empieza a doler. Van aquí, con nombre, para poder
 // ajustarlos sin buscarlos dentro de una consulta.
-// Debe y lleva más de dos semanas sin abonar. Era 30; el 2026-10-16 el usuario lo
-// pidió de 15 al poner el aviso en la caja ("no fiarle a ciegas"): la campana y
-// la caja usan el MISMO plazo.
+// Su nota más vieja lleva más de dos semanas sin pagarse (2026-10-20; antes,
+// "sin abonar"). Era 30; el 2026-10-16 el usuario lo pidió de 15 al poner el
+// aviso en la caja ("no fiarle a ciegas"): la campana y la caja usan el MISMO plazo.
 const DIAS_SIN_ABONAR = 15;
 const DIAS_SIN_VENIR = 60;  // compraba seguido y lleva dos meses sin aparecer
 // Cuánto tiempo un cliente sigue siendo "nuevo" para el aviso. Pasado eso, si
 // nadie le autorizó crédito se entiende que es a propósito y el aviso estorba.
 const DIAS_CLIENTE_NUEVO = 15;
+// Un turno de caja abierto desde hace 2 días o más sin su corte (2026-10-20,
+// auditoría: en hitex dos llevaban 5 días). El corte es diario: el dinero de
+// varios días junto ya no se puede cuadrar.
+const DIAS_TURNO_ABIERTO = 2;
 
 /**
  * Lo que está esperando a alguien. Es la campana del panel: si la sucursal de
@@ -71,6 +75,21 @@ async function pendientes(almacenes = null) {
     fd.params
   );
 
+  // Turnos de caja abiertos de varios días, de SUS tiendas.
+  const ft = filtroAlmacen('c.almacen_id', almacenes);
+  const [turnosViejos] = await pool.query(
+    `SELECT s.id, s.caja_id, c.nombre AS caja, a.nombre AS almacen, u.nombre AS usuario,
+            DATE_FORMAT(s.fecha_apertura, '%Y-%m-%d %H:%i:%s') AS desde,
+            DATEDIFF(CURDATE(), DATE(s.fecha_apertura)) AS dias
+       FROM sesiones_caja s
+       JOIN cajas c          ON c.id = s.caja_id
+       JOIN almacenes a      ON a.id = c.almacen_id
+       LEFT JOIN usuarios u  ON u.id = s.usuario_id
+      WHERE s.estado = 'abierta' AND DATEDIFF(CURDATE(), DATE(s.fecha_apertura)) >= :diasTurno${ft.sql}
+      ORDER BY s.fecha_apertura`,
+    { diasTurno: DIAS_TURNO_ABIERTO, ...ft.params }
+  );
+
   // Existencias bajo su mínimo. Solo cuentan las que TIENEN mínimo capturado.
   const [[stock]] = await pool.query(
     `SELECT COUNT(*) AS n FROM inventario i
@@ -78,11 +97,10 @@ async function pendientes(almacenes = null) {
     fi.params
   );
 
-  // Cobranza: quién debe y lleva mucho sin dar señales.
+  // Cobranza: quién debe una nota que lleva mucho sin pagarse.
   //
-  // Se mide desde su ÚLTIMO ABONO, no desde el cargo: quien abonó la semana
-  // pasada está pagando, y avisar de él sería mandar a cobrarle a quien no toca.
-  // Se listan pocos —los de mayor saldo— porque esto es un aviso, no la
+  // Se mide desde su NOTA MÁS VIEJA sin pagar (2026-10-20; antes, desde el último
+  // abono, y un abono chiquito lo "renovaba"). Se listan pocos —los de mayor saldo— porque esto es un aviso, no la
   // pantalla de cobranza. Sale de la MISMA cartera que Cuánto debe y Cómo va el negocio (2026-10-17):
   // los mismos días y el mismo plazo que la caja, así el aviso y la lista nunca
   // se contradicen.
@@ -130,10 +148,12 @@ async function pendientes(almacenes = null) {
         AND c.limite_credito = 0
         AND c.contrasena_hash IS NULL
         AND DATEDIFF(NOW(), c.creado_en) <= :dias
-      ORDER BY c.creado_en DESC
-      LIMIT 8`,
+      ORDER BY c.creado_en DESC`,
     { dias: DIAS_CLIENTE_NUEVO, ...fp.params }
   );
+  // Cuántos son TODOS; la lista se recorta (2026-10-20: con 12 decía "8").
+  const numNuevosSinCredito = nuevosSinCredito.length;
+  nuevosSinCredito.splice(8);
 
   // Hilos que no se pueden vender porque no tienen precio. Los crea así la
   // lista completa del proveedor (Surtir inventario): entra la mercancía y el
@@ -193,10 +213,16 @@ async function pendientes(almacenes = null) {
       num_clientes: frios.num_clientes,
       dias: DIAS_SIN_VENIR,
     },
+    // Turnos de caja abiertos de varios días sin su corte (2026-10-20).
+    turnos_abiertos: {
+      turnos: turnosViejos.map((t) => ({ ...t, dias: Number(t.dias) })),
+      num: turnosViejos.length,
+      dias: DIAS_TURNO_ABIERTO,
+    },
     // Clientes nuevos a los que hay que decidir si se les fía.
     nuevos_sin_credito: {
       clientes: nuevosSinCredito,
-      num_clientes: nuevosSinCredito.length,
+      num_clientes: numNuevosSinCredito,
       dias: DIAS_CLIENTE_NUEVO,
     },
     // El globo rojo de la campana cuenta PENDIENTES, uno por asunto: los
@@ -206,6 +232,7 @@ async function pendientes(almacenes = null) {
     // globo a decenas y dejaría de significar nada.
     total:
       (avisoWhatsapp ? 1 : 0) +
+      (turnosViejos.length > 0 ? 1 : 0) +
       (Number(notas.num) > 0 ? 1 : 0) +
       porEnviar.length +
       porRecibir.length +

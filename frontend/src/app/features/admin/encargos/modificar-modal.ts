@@ -292,7 +292,9 @@ export class ModificarPedidoModal implements OnInit {
         const de = b.consumido_folio?.startsWith('TRA') ? 'un envío a sucursal' : 'otro pedido';
         return `El paquete ${cod} está apartado para ${de}${b.consumido_folio ? ` (${b.consumido_folio})` : ''}: escanea otro.`;
       }
-      return b.estado === 'vendido' ? `El paquete ${cod} ya se vendió.` : `El paquete ${cod} ya se bajó a conos.`;
+      return b.estado === 'vendido' ? `El paquete ${cod} ya se vendió.`
+        : b.estado === 'faltante' ? `El paquete ${cod} se dio por faltante al recibir un envío (no llegó).`
+          : `El paquete ${cod} ya se bajó a conos.`;
     }
     if (!(Number(b.peso_kg) > 0)) return `El paquete ${cod} no tiene peso registrado.`;
     // Solo los paquetes de la tienda del pedido (2026-10-07); los que ya eran

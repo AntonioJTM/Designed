@@ -70,16 +70,18 @@ async function movimientos(clienteId, { limit = 50, almacenes = null } = {}) {
 
 async function agregar(conn, {
   clienteId, tipo, monto, pedidoId = null, devolucionId = null, usuarioId = null, notas = null,
-  metodoPagoId = null, sesionCajaId = null, referencia = null,
+  metodoPagoId = null, sesionCajaId = null, referencia = null, creadoEn = null,
 }) {
   anotarCompartido('clientes');
   const [r] = await conn.query(
     `INSERT INTO saldo_favor_movimientos
-       (cliente_id, tipo, monto, pedido_id, devolucion_id, metodo_pago_id, sesion_caja_id, referencia, usuario_id, notas)
-     VALUES (:cliente, :tipo, :monto, :pedido, :devolucion, :metodo, :sesion, :referencia, :usuario, :notas)`,
+       (cliente_id, tipo, monto, pedido_id, devolucion_id, metodo_pago_id, sesion_caja_id, referencia, usuario_id, notas,
+        creado_en)
+     VALUES (:cliente, :tipo, :monto, :pedido, :devolucion, :metodo, :sesion, :referencia, :usuario, :notas,
+             COALESCE(:creado, CURRENT_TIMESTAMP))`,
     {
       cliente: clienteId, tipo, monto: round2(monto), pedido: pedidoId, devolucion: devolucionId,
-      metodo: metodoPagoId, sesion: sesionCajaId, referencia, usuario: usuarioId, notas,
+      metodo: metodoPagoId, sesion: sesionCajaId, referencia, usuario: usuarioId, notas, creado: creadoEn,
     }
   );
   return r.insertId;
@@ -126,12 +128,15 @@ async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 
   }
 
   const nota = notas ? String(notas).trim().slice(0, 255) || null : null;
+  // Las dos partes con LA MISMA hora (2026-10-20): su ticket las junta por el momento,
+  // y con la base lejos cada INSERT podía caer en otro segundo y salir partido.
+  const [[{ ahora }]] = await conn.query("SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS ahora");
   // El primer movimiento: con él se pide su ticket (las dos partes salen juntas).
   let primero = null;
   if (ef > 0) {
     const movId = await agregar(conn, {
       clienteId, tipo: 'anticipo', monto: ef, metodoPagoId: idEfectivo, sesionCajaId, usuarioId,
-      notas: nota ?? 'Anticipo en efectivo',
+      notas: nota ?? 'Anticipo en efectivo', creadoEn: ahora,
     });
     await conn.query(
       `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
@@ -145,7 +150,7 @@ async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 
     const movId = await agregar(conn, {
       clienteId, tipo: 'anticipo', monto: tr, metodoPagoId: idTransferencia, usuarioId,
       referencia: referencia ? String(referencia).trim().slice(0, 120) || null : null,
-      notas: nota ?? 'Anticipo por transferencia',
+      notas: nota ?? 'Anticipo por transferencia', creadoEn: ahora,
     });
     primero = primero ?? movId;
   }
@@ -175,6 +180,63 @@ async function usarEnVenta(conn, { clienteId, monto, pedidoId, numeroPedido, usu
   await agregar(conn, {
     clienteId, tipo: 'uso', monto, pedidoId, usuarioId, notas: `Pagó parte de ${numeroPedido}`,
   });
+}
+
+/**
+ * PAGAR UNA NOTA CON SU SALDO A FAVOR (2026-10-20, auditoría: "hoy el anticipo
+ * no paga la nota en espera para la que se dejó"). Al pagar una nota pendiente
+ * de pago o al entregar una nota en espera: un pago con el método interno
+ * "Saldo a favor" y un renglón `uso` en su libro, con la nota. Si la nota se
+ * cancela, el saldo le regresa (`reintegrarDeVenta`). Va dentro de la
+ * transacción de quien llama; quien llama revisa que no se pase de lo que falta.
+ */
+async function pagarConSaldo(conn, { clienteId, pedidoId, numeroPedido, monto, usuarioId = null }) {
+  const m = round2(monto);
+  if (!(m > 0)) throw new AppError(422, 'MONTO_INVALIDO', 'Pon cuánto se paga con su saldo a favor.');
+  const disponible = await saldoFavor(clienteId, conn, true);
+  if (m > disponible + 0.001) {
+    throw new AppError(409, 'SALDO_FAVOR_INSUFICIENTE',
+      `Tiene $${disponible.toFixed(2)} a favor y se quieren usar $${m.toFixed(2)}.`);
+  }
+  const metodo = await metodoSaldoFavor(conn);
+  const [ins] = await conn.query(
+    `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
+     VALUES (:p, :m, :monto, 'completado', 'Saldo a favor')`,
+    { p: pedidoId, m: metodo, monto: m }
+  );
+  await agregar(conn, {
+    clienteId, tipo: 'uso', monto: m, pedidoId, usuarioId, notas: `Pagó parte de ${numeroPedido} con su saldo a favor`,
+  });
+  return Number(ins.insertId);
+}
+
+/**
+ * UN SOLO "A FAVOR" (2026-10-20, auditoría). Al cancelar una venta a crédito que
+ * ya se había abonado, lo abonado que ya no paga nada dejaba la CUENTA en
+ * negativo: un "a favor" que no salía en Cuánto debe ni se podía usar al
+ * cobrar. Ahora ese sobrante pasa a su SALDO A FAVOR: un `ajuste` que deja la
+ * cuenta en $0 y un `reintegro` en su saldo con la venta. Va dentro de la
+ * transacción de quien llama; devuelve cuánto pasó.
+ */
+async function pasarSobranteAFavor(conn, { clienteId, pedidoId = null, numeroPedido = null, usuarioId = null }) {
+  const enCuenta = await clientesModel.saldo(clienteId, conn, true);
+  if (enCuenta > -0.004) return 0;
+  const monto = round2(-enCuenta);
+  await clientesModel.agregarMovimiento({
+    cliente_id: clienteId,
+    tipo: 'ajuste',
+    monto,
+    pedido_id: null,
+    // Sin el folio: este ajuste no lleva venta (no debe cambiar cómo se reparten
+    // los abonos) y así otra tienda no ve de qué venta fue (el `reintegro` sí la lleva).
+    notas: 'Lo abonado a una venta cancelada ya no paga nada: pasó a su saldo a favor',
+    usuario_id: usuarioId ?? null,
+  }, conn);
+  await agregar(conn, {
+    clienteId, tipo: 'reintegro', monto, pedidoId, usuarioId,
+    notas: `Lo abonado${numeroPedido ? ` a ${numeroPedido}` : ''} (se canceló) pasó a su saldo a favor`,
+  });
+  return monto;
 }
 
 /**
@@ -447,6 +509,6 @@ async function aFavorDeClientes() {
 module.exports = {
   aFavorDeClientes,
   saldoFavor, movimientos, agregar, metodoSaldoFavor, usarEnVenta, usadoEnVenta, reintegrarDeVenta, aplicarADeuda, deudaTotal,
-  ajustarSaldo,
+  ajustarSaldo, pagarConSaldo, pasarSobranteAFavor,
   debeDeVenta, descontarDeVenta, recibirAnticipo,
 };

@@ -58,7 +58,8 @@ export interface VarianteCodigo {
 }
 
 /** 'apartado': ligado a un pedido o un apartado que no se ha entregado (sigue en la tienda). */
-export type EstadoBulto = 'disponible' | 'apartado' | 'vendido' | 'desarmado';
+/** `faltante`: se dio por faltante al recibir un envío, no llegó (2026-10-20). */
+export type EstadoBulto = 'disponible' | 'apartado' | 'vendido' | 'desarmado' | 'faltante';
 
 /** Los bultos de un lote, para resumir la lista cuando son muchos. */
 export interface LoteDeBultos {

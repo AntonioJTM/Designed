@@ -112,8 +112,8 @@ export class Hoy {
         valor: this.pesos(p.cobranza?.monto ?? 0),
         pie:
           (p.cobranza?.num_clientes ?? 0) === 0
-            ? `nadie lleva más de ${p.cobranza?.dias ?? 15} días sin abonar`
-            : `${p.cobranza.num_clientes} ${p.cobranza.num_clientes === 1 ? 'cliente' : 'clientes'}, más de ${p.cobranza.dias} días sin abonar`,
+            ? `nadie debe una nota de más de ${p.cobranza?.dias ?? 15} días`
+            : `${p.cobranza.num_clientes} ${p.cobranza.num_clientes === 1 ? 'cliente' : 'clientes'} con notas de más de ${p.cobranza.dias} días sin pagar`,
         punto: 'var(--punto-alerta)',
       });
     }
@@ -188,6 +188,22 @@ export class Hoy {
       });
     }
 
+    // Turnos de caja abiertos de varios días sin su corte (2026-10-20).
+    const turnos = p.turnos_abiertos?.turnos ?? [];
+    if (this.puede('ver:caja') && turnos.length) {
+      const peor = turnos[0];
+      ventas.push({
+        icono: ICONO.cobro,
+        tono: 'naranja',
+        titulo: turnos.length === 1
+          ? `${peor.caja} lleva ${peor.dias} días abierta sin corte`
+          : `${turnos.length} cajas llevan ${p.turnos_abiertos!.dias} días o más abiertas sin corte`,
+        detalle: `${peor.almacen}${peor.usuario ? ' · la abrió ' + peor.usuario : ''} · el corte es diario: hazlo en Caja`,
+        accion: 'Hacer el corte',
+        ...DESTINO_AVISO.caja,
+      });
+    }
+
     const notas = p.notas_pendientes?.num ?? 0;
     if (this.veNotas() && notas > 0) {
       ventas.push({
@@ -212,8 +228,8 @@ export class Hoy {
         clientes.push({
           icono: ICONO.cobro,
           tono: 'naranja',
-          titulo: `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente lleva' : 'clientes llevan'} más de ${c.dias} días sin abonar · ${this.pesos(c.monto)}`,
-          detalle: peor ? `El que más: ${peor.nombre_comercial || peor.nombre}, ${peor.dias_sin_abonar} días` : '',
+          titulo: `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente debe una nota' : 'clientes deben notas'} de más de ${c.dias} días · ${this.pesos(c.monto)}`,
+          detalle: peor ? `La más vieja: ${peor.nombre_comercial || peor.nombre}, ${peor.dias_sin_abonar} días` : '',
           accion: 'Cobrar',
           ...DESTINO_AVISO.cobranza,
         });

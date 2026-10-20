@@ -23,7 +23,7 @@ describe('Kardex', () => {
   }
 
   const venta = mov({ id: 1, detalle_tipo: 'pedido', detalle_id: 91, folio: 'POS-91B0' });
-  const remesa = mov({ id: 2, tipo: 'entrada', cantidad: '1527.500', detalle_tipo: 'remesa', concepto: 'Remesa del proveedor' });
+  const remesa = mov({ id: 2, tipo: 'entrada', cantidad: '1527.500', detalle_tipo: 'remesa', concepto: 'Carga del proveedor' });
   const conos = mov({ id: 3, tipo: 'entrada', cantidad: '19.550', detalle_tipo: 'conversion', concepto: 'Conos producidos NEGRO-CONO', codigo_bulto: '00531340' });
   const desarme = mov({ id: 4, cantidad: '-19.050', detalle_tipo: 'conversion', concepto: 'Desarme de paquetes NEGRO' });
   const ajuste = mov({ id: 5, tipo: 'ajuste', cantidad: '-1.200', detalle_tipo: null, concepto: 'Ajuste de inventario' });

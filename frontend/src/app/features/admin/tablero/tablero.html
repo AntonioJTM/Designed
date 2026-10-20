@@ -216,7 +216,7 @@
                       }
                     </td>
                     <td class="num dias-parado">
-                      {{ x.dias_parado }} días{{ x.nunca_vendido ? ' desde que entró' : '' }}
+                      {{ x.dias_parado }} {{ x.dias_parado === 1 ? 'día' : 'días' }}{{ x.nunca_vendido ? ' desde que entró' : '' }}
                       @if (x.ultima_salida) {
                         <div class="muted chico">última venta {{ x.ultima_salida | fecha: true }}</div>
                       }
@@ -311,7 +311,7 @@
             <thead>
               <tr>
                 <th>Cliente</th><th>Teléfono</th><th class="num">Debe</th>
-                <th class="num">Sin abonar</th><th>Estado</th>
+                <th class="num">Nota más vieja</th><th>Estado</th>
                 @if (veClientes()) { <th><span class="oculto">Acciones</span></th> }
               </tr>
             </thead>
@@ -324,7 +324,7 @@
                   </td>
                   <td class="muted">{{ c.telefono || '—' }}</td>
                   <td class="num"><b>{{ c.saldo | dinero }}</b></td>
-                  <td class="num">{{ c.dias_sin_abonar }} días</td>
+                  <td class="num">{{ c.dias_sin_abonar }} {{ c.dias_sin_abonar === 1 ? 'día' : 'días' }}</td>
                   <td>
                     <!-- El estado se dice con ICONO + TEXTO, no solo con color: los
                          cuatro colores de semáforo no se distinguen bien entre sí. -->

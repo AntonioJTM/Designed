@@ -111,10 +111,16 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
 
     console.log('\n=== 6. Con un turno nuevo, el dinero sale de ahí ===');
     const s2 = (await api('POST', '/caja/sesiones', { caja_id: caja, monto_inicial: 0 })).data;
+    // El cajón nuevo está VACÍO y la venta no tiene cliente al cual dejarle a favor
+    // lo que no hay (2026-10-20): no se cancela, en vez de dejar el cajón en -$300.
+    r = await api('PATCH', '/pedidos/' + ped3 + '/estado', { estado: 'cancelado' });
+    ck('con el cajón vacío y sin cliente: 409 EFECTIVO_INSUFICIENTE', r.status === 409 && r.error?.code === 'EFECTIVO_INSUFICIENTE',
+      r.status + ' ' + (r.error?.message ?? ''));
+    await api('POST', '/caja/sesiones/' + s2.id + '/movimientos', { tipo: 'ingreso', monto: 300, motivo: 'TMPK cambio para devolver' });
     r = await api('PATCH', '/pedidos/' + ped3 + '/estado', { estado: 'cancelado' });
     ck('ahora sí se cancela', r.status === 200, r.data?.estado);
     ck('el turno CERRADO no se tocó', (await neto(s.id)) === netoFinal, '$' + (await neto(s.id)) + ' (su corte sigue cuadrado)');
-    ck('el dinero salió del turno NUEVO', (await neto(s2.id)) === -300, '$' + (await neto(s2.id)));
+    ck('el dinero salió del turno NUEVO (entraron 300, salieron 300)', (await neto(s2.id)) === 0, '$' + (await neto(s2.id)));
     ck('y ahora sí se repuso el inventario', (await stock(v, alm)) === stockAntes + 3, (await stock(v, alm)) + ' kg');
 
     console.log('\n=== 7. Paga con un billete: se guarda lo COBRADO, no el billete ===');

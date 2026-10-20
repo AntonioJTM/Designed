@@ -22,7 +22,7 @@ import { MisVacacionesModal } from './nomina/mis-vacaciones-modal';
   selector: 'app-admin-layout',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, CantidadPipe, MiClaveModal, MisVacacionesModal],
   templateUrl: './admin-layout.html',
-  styleUrls: ['./admin-layout.scss', './admin-avisos.scss'],
+  styleUrls: ['./admin-layout.scss', './admin-avisos.scss', './admin-cuenta.scss'],
   host: {
     '(document:keydown.escape)': 'abierto.set(false)',
     '(document:click)': 'clicAfuera($event)',
@@ -71,6 +71,8 @@ export class AdminLayout implements AfterViewInit {
   readonly veCatalogo = computed(() => { this.sesion(); return this.auth.puede('ver:catalogo'); });
   readonly veClientes = computed(() => { this.sesion(); return this.auth.puede('ver:clientes'); });
   readonly veNotas = computed(() => { this.sesion(); return this.auth.puede('ver:notas_pendientes'); });
+  /** Los turnos de caja abiertos de varios días: los atiende quien entra a Caja. */
+  readonly veCaja = computed(() => { this.sesion(); return this.auth.puede('ver:caja'); });
   readonly veHoy = computed(() => { this.sesion(); return this.auth.puede('ver:hoy'); });
   /** El aviso del WhatsApp de la tienda: lo atiende quien entra a Configuración. */
   readonly veConfig = computed(() => { this.sesion(); return this.auth.puede('ver:config'); });
@@ -109,6 +111,7 @@ export class AdminLayout implements AfterViewInit {
     if (this.veInventario() && p.alertas_stock > 0) n += 1;
     if (this.veCatalogo() && (p.sin_precio?.num ?? 0) > 0) n += 1;
     if (this.veNotas() && (p.notas_pendientes?.num ?? 0) > 0) n += 1;
+    if (this.veCaja() && (p.turnos_abiertos?.num ?? 0) > 0) n += 1;
     if (this.veClientes()) {
       if ((p.cobranza?.num_clientes ?? 0) > 0) n += 1;
       if ((p.enfriados?.num_clientes ?? 0) > 0) n += 1;

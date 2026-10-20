@@ -39,6 +39,10 @@
                 @for (m of metodos(); track m.id) {
                   <option [ngValue]="m.id">{{ m.nombre }}</option>
                 }
+                <!-- Lo que la tienda le guarda (anticipos, lo que regresó; 2026-10-20). -->
+                @if (saldoFavor() > 0) {
+                  <option [ngValue]="SALDO">Su saldo a favor (tiene {{ saldoFavor() | dinero }})</option>
+                }
               </select>
             </label>
 

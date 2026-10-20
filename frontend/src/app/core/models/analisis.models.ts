@@ -17,8 +17,10 @@ export interface ClienteConSaldo {
   telefono?: string | null;
   limite_credito?: Cifra;
   saldo: Cifra;
-  /** Días desde su último abono (como la caja). Es el dato para decidir a quién llamar. */
+  /** Días que lleva sin pagarse su nota más vieja (como la caja). Es el dato para decidir a quién llamar. */
   dias_sin_abonar: number;
+  /** Lo que le falta de esa nota. */
+  nota_vieja_por_pagar?: number;
   ultimo_movimiento?: string | null;
   ultimo_abono?: string | null;
   ultima_compra?: string | null;

@@ -13,6 +13,7 @@ import { TiendaService } from '../../../core/services/tienda.service';
 import { TicketService } from '../../../core/services/ticket.service';
 import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { Observable } from 'rxjs';
+import { nuevaClave } from '../../../core/clave-unica';
 import { Cotizacion } from '../../../core/models/tienda.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -89,14 +90,7 @@ export type ModoVenta = 'cobrar' | 'credito' | 'espera' | 'pendiente';
  * existe en páginas seguras (https); si algún día la caja se abre por http, se
  * arma igual con `getRandomValues`, que sí existe, en vez de dejar de cargar.
  */
-function nuevaClave(): string {
-  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
+// (Vive en core/clave-unica.ts desde el 2026-10-20: la usan también los abonos.)
 
 @Component({
   selector: 'app-pos',
@@ -281,6 +275,8 @@ export class Pos {
   readonly cobrando = signal(false);
   /** La llave de un solo uso de la venta en curso; cambia al registrarla. */
   private claveCobro = nuevaClave();
+  /** La del abono desde la caja (2026-10-20): un doble clic no abona dos veces. */
+  private claveAbono = nuevaClave();
   /**
    * Por qué no se pudo cotizar, cuando es algo que el cajero tiene que saber
    * ANTES de cobrar: "ROJO 2/30 está agotado", "quedan 80 para vender". Antes
@@ -321,22 +317,30 @@ export class Pos {
     // real. Va en un `effect` y no en cada punto donde se toca el carrito:
     // son cinco sitios distintos y era cuestión de tiempo que alguno se
     // olvidara.
+    // Solo el NÚMERO de turno (2026-10-20): la recarga en vivo trae el mismo
+    // turno como objeto nuevo y volvía a cotizar ("· calculando…" parpadeaba).
+    const sesionId = computed(() => this.sesion()?.id ?? null);
+    let cotizacionEnCurso: { unsubscribe(): void } | null = null;
     effect(() => {
       const items = this.carrito();
       const tipo = this.tipoClienteSel();
-      const s = this.sesion();
+      const sid = sesionId();
       const pedido = this.modo() === 'espera';
-      if (items.length === 0 || !s) {
+      // La anterior ya no sirve: si llegara tarde pisaría el total nuevo.
+      cotizacionEnCurso?.unsubscribe();
+      cotizacionEnCurso = null;
+      if (items.length === 0 || !sid) {
         this.totalReal.set(null);
         this.cotizacion.set(null);
         this.avisoCotizacion.set(null);
+        this.cotizando.set(false);
         return;
       }
       this.cotizando.set(true);
-      this.tienda
+      cotizacionEnCurso = this.tienda
         .cotizar({
           canal: 'punto_venta',
-          sesion_caja_id: s.id,
+          sesion_caja_id: sid,
           tipo_cliente_id: tipo ? Number(tipo) : undefined,
           items: items.map((i) => ({ variante_id: i.variante_id, cantidad: i.cantidad })),
           ...(pedido ? { encargo: true, metodo_entrega: 'recoger' as const } : {}),
@@ -362,9 +366,15 @@ export class Pos {
     });
 
     // En cuanto hay turno abierto (al entrar o al cambiar de caja), el lector
-    // queda listo para escanear.
+    // queda listo para escanear. Solo cuando CAMBIA el turno (2026-10-20,
+    // auditoría): la recarga en vivo trae el mismo turno otra vez, y seleccionaba
+    // lo que el cajero estaba escribiendo en el lector.
+    let turnoEnfocado: number | null = null;
     effect(() => {
-      if (this.sesion()) this.enfocarLector();
+      const id = this.sesion()?.id ?? null;
+      if (id == null || id === turnoEnfocado) return;
+      turnoEnfocado = id;
+      this.enfocarLector();
     });
 
     // La sesión puede venir vacía al recargar directo en /admin/pos.
@@ -544,7 +554,10 @@ export class Pos {
       this.avisarLector(
         r.bulto.estado === 'apartado'
           ? `El paquete ${r.bulto.codigo} está apartado${folio ? ' para ' + folio : ''}: ${deQue}. Escanea otro.`
-          : `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${folio ? ' en ' + folio : ''}. Escanea otro.`
+          : r.bulto.estado === 'faltante'
+            // No llegó en un envío (2026-10-20): en el sistema ya no está en ninguna tienda.
+            ? `El paquete ${r.bulto.codigo} se dio por faltante al recibir ${folio ?? 'un envío'} (no llegó). Escanea otro.`
+            : `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${folio ? ' en ' + folio : ''}. Escanea otro.`
       );
       return;
     }
@@ -671,7 +684,7 @@ export class Pos {
         // corregirlo o para que el siguiente escaneo lo reemplace.
         if (encontrados.length === 0) {
           this.avisoLector.set(`No encontré ningún hilo con «${q}». Revisa cómo se escribió o escanea el paquete.`);
-          this.enfocarLector();
+          this.enfocarLector(true);
         }
       },
       error: (e) => this.error.set(this.msg(e)),
@@ -733,6 +746,7 @@ export class Pos {
           credito_disponible: e.credito_disponible ?? 0,
           saldo_favor: e.saldo_favor ?? 0,
           dias_sin_abonar: e.dias_sin_abonar ?? null,
+          nota_vieja_por_pagar: e.nota_vieja_por_pagar ?? null,
           atrasado: !!e.atrasado,
         });
       },
@@ -1040,6 +1054,7 @@ export class Pos {
           credito_disponible: c.credito_disponible ?? 0,
           saldo_favor: c.saldo_favor ?? 0,
           dias_sin_abonar: c.dias_sin_abonar ?? null,
+          nota_vieja_por_pagar: c.nota_vieja_por_pagar ?? null,
           atrasado: !!c.atrasado,
         });
       },
@@ -1273,7 +1288,7 @@ export class Pos {
       const libre = Math.max(0, Math.round((this.creditoDisponible() - fiado) * 100) / 100);
       const hoy = this.aPagarHoy();
       const c = this.clienteSel();
-      const atraso = c?.atrasado ? ` Ojo: lleva ${c.dias_sin_abonar} días sin abonar.` : '';
+      const atraso = c?.atrasado ? ` Ojo: su nota más vieja lleva ${c.dias_sin_abonar} días sin pagarse.` : '';
       return {
         tono: c?.atrasado ? 'atrasado' : 'credito',
         texto: `Se lleva la mercancía hoy y ${this.dinero(fiado)} van a su cuenta` +
@@ -1410,7 +1425,7 @@ export class Pos {
     // debe y los días; el servidor también lo detiene si no se confirmó.
     const cli = this.clienteSel();
     if (fiado > 0 && cli?.atrasado && !this.auth.puedeOPide('hacer:fiar_atrasado')) {
-      this.error.set(`${cli.nombre_comercial || cli.nombre} lleva ${cli.dias_sin_abonar} días sin abonar y tu puesto no le ` +
+      this.error.set(`La nota más vieja de ${cli.nombre_comercial || cli.nombre} lleva ${cli.dias_sin_abonar} días sin pagarse y tu puesto no le ` +
         'puede dar a crédito así. Pídele un abono, o que le cobre alguien que lo pueda autorizar.');
       return false;
     }
@@ -1418,8 +1433,8 @@ export class Pos {
       return this.confirmacion
         .pedir({
           titulo: '¿Darle a crédito con la cuenta atrasada?',
-          mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y lleva ` +
-            `${cli.dias_sin_abonar} días sin abonar. Lo sano es pedirle un abono antes de darle más a crédito.`,
+          mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y su nota más vieja lleva ` +
+            `${cli.dias_sin_abonar} días sin pagarse. Lo sano es pedirle un abono antes de darle más a crédito.`,
           aceptar: 'Darle a crédito de todos modos',
           peligro: true,
         })
@@ -1789,10 +1804,11 @@ export class Pos {
         // esperaría menos de lo que hay en el cajón.
         sesion_caja_id: this.abonoEnEfectivo() ? s?.id : undefined,
         referencia: this.referenciaAbono.trim() || undefined,
-      })
+      }, this.claveAbono)
       .subscribe({
         next: (r) => {
           this.registrandoAbono.set(false);
+          this.claveAbono = nuevaClave();
           this.abonando.set(false);
           this.enfocarLector();
           const saldo = Number(r.saldo_nuevo);
@@ -1801,10 +1817,11 @@ export class Pos {
             ...c,
             saldo,
             credito_disponible: Math.max(0, Math.round((limite - saldo) * 100) / 100),
-            // Acaba de abonar: ya no está atrasado.
-            dias_sin_abonar: saldo > 0 ? 0 : null,
-            atrasado: false,
+            ...(saldo > 0 ? {} : { dias_sin_abonar: null, nota_vieja_por_pagar: null, atrasado: false }),
           });
+          // Si todavía debe, el atraso lo dice el servidor (2026-10-20): se mide por su
+          // nota más vieja, y un abono chiquito no la paga.
+          if (saldo > 0) this.refrescarCliente();
           const texto = saldo > 0
             ? `Abono de ${this.dinero(monto)} registrado. Todavía debe ${this.dinero(saldo)}.`
             : `Abono de ${this.dinero(monto)} registrado. Ya no debe nada.`;
@@ -1864,6 +1881,9 @@ export class Pos {
       if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return;
       const activo = document.activeElement;
       if (!forzar && activo !== campo && esCampoDeTexto(activo)) return;
+      // Ya estaba ahí: no se selecciona lo que se está escribiendo (2026-10-20),
+      // salvo que se pida (`forzar`: lo buscado que no salió, para reemplazarlo).
+      if (activo === campo && !forzar) return;
       campo.focus();
       campo.select();
     }, { injector: this.injector });

@@ -160,13 +160,53 @@ async function deuda() {
        FROM v_clientes_saldo s JOIN clientes c ON c.id = s.cliente_id
       WHERE c.limite_credito > 0 AND c.activo = 1`
   );
+  // Lo COBRADO: sin lo que se pagó con su saldo a favor (método interno: no es
+  // dinero que entró este mes) y un abono repartido en varias notas cuenta UNO
+  // (las partes llevan la misma hora) (2026-10-20, auditoría).
   const [[cobrado]] = await pool.query(
-    `SELECT COUNT(*) AS abonos, COALESCE(SUM(monto), 0) AS monto
-       FROM credito_movimientos
-      WHERE tipo = 'abono' AND creado_en >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`
+    `SELECT COUNT(DISTINCT m.cliente_id, m.creado_en, COALESCE(m.usuario_id, 0)) AS abonos, COALESCE(SUM(m.monto), 0) AS monto
+       FROM credito_movimientos m
+       LEFT JOIN metodos_pago mp ON mp.id = m.metodo_pago_id
+      WHERE m.tipo = 'abono' AND m.creado_en >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+        AND COALESCE(mp.interno, 0) = 0`
   );
+  // Lo que deben en NOTAS PENDIENTES DE PAGO (2026-10-20, auditoría): el
+  // expediente las suma en "debe en total" y aquí no salían. Con la misma cuenta
+  // que el expediente (`saldo-favor.js → deudaTotal`): lo que falta de cada nota
+  // pendiente que no se pasó a crédito.
+  const [porNota] = await pool.query(
+    `SELECT p.cliente_id, c.codigo, c.nombre, c.nombre_comercial, c.telefono,
+            DATE_FORMAT(p.creado_en, '%Y-%m-%d') AS dia,
+            p.total - COALESCE((SELECT SUM(pg.monto) FROM pagos pg
+                                 WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS falta
+       FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
+      WHERE p.nota_pendiente = 1 AND p.estado = 'pendiente'
+        AND NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')`
+  );
+  const notasPorCliente = new Map();
+  for (const n of porNota) {
+    const falta = Number(n.falta);
+    if (!(falta > 0.004)) continue;
+    const id = Number(n.cliente_id);
+    const x = notasPorCliente.get(id) ?? {
+      cliente_id: id, codigo: n.codigo, nombre: n.nombre, nombre_comercial: n.nombre_comercial,
+      telefono: n.telefono, monto: 0, notas: 0, desde: n.dia,
+    };
+    x.monto = r2(x.monto + falta);
+    x.notas += 1;
+    if (n.dia < x.desde) x.desde = n.dia;
+    notasPorCliente.set(id, x);
+  }
+  const conNotas = [...notasPorCliente.values()].sort((a, b) => b.monto - a.monto);
+  for (const r of cartera.clientes) r.notas_pendientes = notasPorCliente.get(Number(r.cliente_id))?.monto ?? 0;
   return {
     ...cartera,
+    notas_pendientes: {
+      monto: r2(conNotas.reduce((t, x) => t + x.monto, 0)),
+      num_notas: conNotas.reduce((t, x) => t + x.notas, 0),
+      num_clientes: conNotas.length,
+      clientes: conNotas,
+    },
     // Lo que la tienda les guarda: anticipos y lo que regresaron (2026-10-19).
     a_favor: await require('./saldo-favor').aFavorDeClientes(),
     credito_usado: r2(credito.usado),

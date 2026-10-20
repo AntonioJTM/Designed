@@ -76,6 +76,12 @@ export interface Pendientes {
     num_clientes: number;
     dias: number;
   };
+  /** Turnos de caja abiertos de varios días sin su corte (2026-10-20). */
+  turnos_abiertos?: {
+    turnos: { id: number; caja_id: number; caja: string; almacen: string; usuario: string | null; desde: string; dias: number }[];
+    num: number;
+    dias: number;
+  };
   /** Clientes nuevos a los que hay que decidir si se les fía. */
   nuevos_sin_credito: {
     clientes: NuevoSinCredito[];

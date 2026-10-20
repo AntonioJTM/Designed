@@ -1,8 +1,10 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
 import { VentasService } from '../../../core/services/ventas.service';
 import { MovimientoCaja, SesionCaja } from '../../../core/models/ventas.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 
 /**
  * RETIRO o INGRESO de efectivo a mano en el turno abierto: el dueño saca dinero
@@ -22,6 +24,8 @@ import { ApiError } from '../../../core/models/auth.models';
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class MovimientoCajaModal implements OnInit {
+  /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
+  private clave = nuevaClave();
   private readonly ventas = inject(VentasService);
 
   readonly sesion = input.required<SesionCaja>();
@@ -93,7 +97,7 @@ export class MovimientoCajaModal implements OnInit {
     this.error.set(null);
     this.guardando.set(true);
     this.ventas
-      .movimientoCaja(this.sesion().id, { tipo: this.tipo, monto, motivo: motivo || undefined })
+      .movimientoCaja(this.sesion().id, { tipo: this.tipo, monto, motivo: motivo || undefined }, this.clave)
       .subscribe({
         next: (s) => {
           this.guardando.set(false);
@@ -102,6 +106,11 @@ export class MovimientoCajaModal implements OnInit {
         },
         error: (e) => {
           this.guardando.set(false);
+          // Se pidió la autorización: ya se dijo; se cierra para no pedirla dos veces.
+          if (autorizacionPedida(e)) {
+            this.cerrar();
+            return;
+          }
           this.error.set(this.msg(e));
         },
       });
