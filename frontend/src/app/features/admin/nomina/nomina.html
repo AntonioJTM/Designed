@@ -70,7 +70,7 @@
     @if (p.recibos.length > 0) {
       <div class="kpis">
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" style="background: var(--acento)"></span>Sueldos</span>
+          <span class="kpi-label"><span class="punto tono-acento"></span>Sueldos</span>
           <span class="kpi-valor">{{ totales().sueldos | dinero }}</span>
           <span class="kpi-pie">
             {{ totales().empleados }} {{ totales().empleados === 1 ? 'persona' : 'personas' }}
@@ -78,12 +78,12 @@
           </span>
         </div>
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" style="background: var(--viz-series-3)"></span>Comisiones</span>
+          <span class="kpi-label"><span class="punto tono-serie-3"></span>Comisiones</span>
           <span class="kpi-valor">{{ totales().comisiones | dinero }}</span>
           <span class="kpi-pie">sobre {{ totales().ventas | dinero }} de venta neta</span>
         </div>
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" style="background: var(--punto-aviso)"></span>Extras y descuentos</span>
+          <span class="kpi-label"><span class="punto tono-aviso"></span>Extras y descuentos</span>
           <span class="kpi-valor">{{ conSigno(totales().percepciones - totales().deducciones) }}</span>
           <span class="kpi-pie">horas extra menos descuentos</span>
         </div>
@@ -114,7 +114,8 @@
       <div class="estado-periodo">
         @if (periodo(); as p) {
           @if (p.estado === 'borrador' && p.pago_pedido) {
-            <span class="pill info" [title]="'Lo pidió ' + p.pago_pedido.solicitante">Pedida para pagar: espera autorización</span>
+            <!-- Quién la pidió, a la vista (no solo al pasar el ratón; 2026-10-20). -->
+            <span class="pill info">Pedida para pagar por {{ p.pago_pedido.solicitante }}: espera autorización</span>
           } @else if (p.estado === 'borrador') {
             <span class="pill ambar">Borrador: se recalcula con las ventas</span>
           } @else if (p.estado === 'pagado') {

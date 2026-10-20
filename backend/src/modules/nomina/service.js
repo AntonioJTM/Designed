@@ -320,6 +320,13 @@ async function cambiarEstado(id, estado) {
     throw new AppError(409, 'PERIODO_PAGADO',
       'Un periodo ya pagado no se puede regresar a borrador');
   }
+  // Una CANCELADA no se paga directo (2026-10-20, auditoría): mientras estuvo
+  // cancelada, sus ventas pudieron entrar en otra semana y pagarse dos veces.
+  // Primero vuelve a borrador, donde se recalcula sola.
+  if (periodo.estado === 'cancelado' && estado === 'pagado') {
+    throw new AppError(409, 'NOMINA_CANCELADA',
+      'Esa nómina está cancelada: primero regrésala a borrador (se vuelve a calcular) y revísala antes de pagarla.');
+  }
   if (estado === 'pagado') {
     const recibos = await model.listarRecibos(id);
     if (recibos.length === 0) {
@@ -327,7 +334,17 @@ async function cambiarEstado(id, estado) {
         'Calcula la nómina antes de marcarla como pagada');
     }
   }
-  const cambiado = await model.cambiarEstadoPeriodo(id, estado);
+  let cambiado = await model.cambiarEstadoPeriodo(id, estado);
+  // De cancelada a borrador se RECALCULA: sus ventas se vuelven a repartir sin
+  // tomar las que ya entraron en otra semana (2026-10-20).
+  if (periodo.estado === 'cancelado' && estado === 'borrador') {
+    try {
+      await model.calcularPeriodo(id);
+      cambiado = await model.obtenerPeriodo(id);
+    } catch {
+      /* sin personal en la nómina: queda en borrador y se calcula a mano */
+    }
+  }
   // Si alguien había pedido que se pague y ya se pagó o se canceló, esa
   // solicitud ya no tiene caso (fase 3).
   if (estado !== 'borrador') {
@@ -463,9 +480,25 @@ async function _conRecibos(periodo) {
   const recibos = await model.listarRecibos(periodo.id);
   const total_nomina = round2(recibos.reduce((s, r) => s + Number(r.total_pagar), 0));
   // Si alguien ya pidió que se pague y espera autorización (fase 3, 2026-10-19).
-  const pago_pedido = periodo.estado === 'borrador'
+  let pago_pedido = periodo.estado === 'borrador'
     ? await require('../autorizaciones/model').esperandoDe('pagar_nomina', `/nomina/periodos/${periodo.id}/estado`).catch(() => null)
     : null;
+  // Si la nómina CAMBIÓ desde que se pidió (se recalculó, una falta, unas horas
+  // extra), esa solicitud ya no sirve: se cierra con el porqué y se puede volver
+  // a pedir (2026-10-20, auditoría: se quedaba "Ya se pidió" para siempre).
+  if (pago_pedido?.estado === 'pendiente') {
+    try {
+      const autModel = require('../autorizaciones/model');
+      const { OPERACIONES } = require('../autorizaciones/operaciones');
+      const porque = await OPERACIONES.pagar_nomina.revisarAntes(null, await autModel.contextoDe(pago_pedido.id));
+      if (porque) {
+        await autModel.cerrarPorCambio(pago_pedido.id, porque);
+        pago_pedido = null;
+      }
+    } catch {
+      /* si no se puede revisar, se enseña como estaba */
+    }
+  }
   return { ...periodo, recibos, total_nomina, pago_pedido };
 }
 

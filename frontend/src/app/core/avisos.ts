@@ -13,6 +13,8 @@ export const DESTINO_AVISO = {
   sinPrecio: { ruta: '/admin/productos', query: { falta: 'precio' } },
   traspasos: { ruta: '/admin/traspasos' },
   notasPendientes: { ruta: '/admin/notas-pendientes' },
+  // Un turno abierto de varios días: se corta en Caja (2026-10-20).
+  caja: { ruta: '/admin/caja' },
   cobranza: { ruta: '/admin/clientes/deuda' },
   dejaronDeVenir: { ruta: '/admin/clientes/dejaron' },
   autorizaciones: { ruta: '/admin/autorizaciones' },

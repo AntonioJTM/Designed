@@ -126,7 +126,7 @@ async function _crearRemesaEn(conn, datos, usuarioId, alAvanzar = null) {
       usuario: usuarioId ?? null,
       motivo:
         datos.notas ??
-        `Remesa ${folio}: ${bultos.length} bultos${lotes.length ? `, lote(s) ${lotes.join(', ')}` : ''}`,
+        `Carga ${folio}: ${bultos.length} bultos${lotes.length ? `, lote(s) ${lotes.join(', ')}` : ''}`,
     }
   );
 

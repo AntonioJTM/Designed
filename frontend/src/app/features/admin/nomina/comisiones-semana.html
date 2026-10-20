@@ -72,7 +72,8 @@
                     @if (x.tipo === 'devolucion') {
                       <div class="sub3">ya había pagado comisión: se descuenta</div>
                     } @else {
-                      @if (+(x.devuelto ?? 0) > 0) { <div class="sub3">regresaron {{ x.devuelto | dinero }}</div> }
+                      @if (devueltaCompleta(x)) { <div class="sub3">regresó completa: no cuenta como venta</div> }
+                      @else if (+(x.devuelto ?? 0) > 0) { <div class="sub3">regresaron {{ x.devuelto | dinero }}</div> }
                       @if (noCuenta(x) > 0) { <div class="sub3">sin {{ noCuenta(x) | dinero }} de envío o IVA</div> }
                     }
                   </td>

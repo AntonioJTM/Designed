@@ -61,14 +61,18 @@ function resolver(
             const pedida = resp.status === 202 || resp.headers.has('X-Autorizacion-Pedida');
             if (!pedida) {
               dialogo.cerrar();
-              return of(resp);
+              return of({ resp, yaEstaba: false });
             }
-            return from(dialogo.avisarPedida()).pipe(map(() => resp));
+            // Ya había una igual esperando (2026-10-20): no se pidió otra, y se dice.
+            const yaEstaba = !!(resp.body as { data?: { autorizacion?: { ya_estaba?: boolean } } } | null)
+              ?.data?.autorizacion?.ya_estaba;
+            return from(dialogo.avisarPedida(yaEstaba)).pipe(map(() => ({ resp, yaEstaba })));
           }),
-          map((resp) => {
+          map(({ resp, yaEstaba }): HttpEvent<unknown> => {
             if (resp.status === 202) {
-              throw comoError(req, 202, 'AUTORIZACION_PEDIDA',
-                `Se pidió la autorización para «${info.nombre}». Se hace cuando la acepten; la ves en Autorizaciones.`);
+              throw comoError(req, 202, 'AUTORIZACION_PEDIDA', yaEstaba
+                ? `Ya habías pedido la autorización para «${info.nombre}» y sigue esperando: no se pidió otra. La ves en Autorizaciones.`
+                : `Se pidió la autorización para «${info.nombre}». Se hace cuando la acepten; la ves en Autorizaciones.`);
             }
             return resp;
           }),

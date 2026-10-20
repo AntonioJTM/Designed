@@ -213,50 +213,59 @@ async function obtener(id) {
  * MOMENTO de elegirlo, si a esta persona se le puede fiar.
  */
 /**
- * Desde qué día corre el reloj "sin abonar", con sus movimientos de crédito en
- * orden ({ tipo, monto, dia }); null si al final no debe. Pura: se prueba sola.
+ * LA NOTA MÁS VIEJA QUE SIGUE SIN PAGARSE (2026-10-20, auditoría; el usuario
+ * eligió "por la nota más vieja"): con sus movimientos de crédito en orden
+ * ({ tipo, monto, pedido_id, dia }), reparte lo pagado como se cobra —de lo más
+ * viejo a lo más nuevo, y el abono a una nota a ESA nota (`repartirAbonos`)— y
+ * devuelve la primera deuda que todavía debe algo: `{ dia, porPagar, pedidoId }`,
+ * o null si no debe. Pura: se prueba sola.
+ *
+ * Antes el reloj volvía a empezar con CUALQUIER abono: quien abonaba $50 cada
+ * dos semanas nunca salía atrasado aunque debiera una nota de hace tres meses.
  */
-function desdeSinAbonar(movs) {
-  let saldoCorriente = 0;
-  let desde = null;
-  for (const m of movs) {
-    const antes = saldoCorriente;
-    saldoCorriente = Math.round((saldoCorriente + SIGNO_CREDITO[m.tipo] * Number(m.monto)) * 100) / 100;
-    if (m.tipo === 'abono') desde = m.dia;                 // abonó: el reloj vuelve a empezar
-    else if (antes <= 0.004 && saldoCorriente > 0.004) desde = m.dia; // volvió a deber desde cero
-  }
-  return saldoCorriente > 0.004 ? desde : null;
+function deudaMasVieja(movs) {
+  const d = repartirAbonos(movs).find((x) => x.porPagar > 0.004);
+  return d ? { dia: d.dia, porPagar: d.porPagar, pedidoId: d.pedidoId } : null;
+}
+
+/** Los días que lleva sin pagarse su nota más vieja, a partir de sus movimientos (null si no debe). */
+function diasDeLaMasVieja(movs, hoy = hoyLocal()) {
+  const d = deudaMasVieja(movs);
+  if (!d?.dia) return null;
+  // Las dos fechas como medianoche UTC: la resta da días enteros, igual que
+  // DATEDIFF(CURDATE(), dia) con la hora de la tienda.
+  return { dias: Math.max(0, Math.round((Date.parse(hoy) - Date.parse(d.dia)) / 86400000)), porPagar: d.porPagar };
 }
 
 /**
- * CUÁNTOS DÍAS LLEVA SIN ABONAR quien debe (2026-10-16, el aviso de la caja):
- * desde su último abono o, si después de él la deuda volvió a empezar desde cero
- * (lo pagó todo y luego se le fió otra vez), desde ese nuevo cargo. Así un
- * cliente que abonó la semana pasada no sale atrasado, y uno que compra fiado
- * seguido sin pagar nunca no se "renueva" con cada compra. null si no debe.
+ * CUENTA ATRASADA de quien debe (la caja, el expediente y el candado de fiar):
+ * cuántos días lleva sin pagarse su NOTA MÁS VIEJA (`deudaMasVieja`) y cuánto
+ * le falta de ella: `{ dias, porPagar }`, o null si no debe. El campo sigue
+ * llamándose `dias_sin_abonar` en las respuestas (2026-10-20).
  */
-async function diasSinAbonar(clienteId, ejecutor = pool) {
+async function atrasoDe(clienteId, ejecutor = pool) {
   const [movs] = await ejecutor.query(
-    `SELECT tipo, monto, DATE_FORMAT(creado_en, '%Y-%m-%d') AS dia
+    `SELECT tipo, monto, pedido_id, DATE_FORMAT(creado_en, '%Y-%m-%d') AS dia
        FROM credito_movimientos WHERE cliente_id = :id ORDER BY creado_en, id`,
     { id: clienteId }
   );
-  const desde = desdeSinAbonar(movs);
-  if (!desde) return null;
-  const [[d]] = await ejecutor.query('SELECT DATEDIFF(CURDATE(), :desde) AS dias', { desde });
-  return Number(d.dias);
+  return diasDeLaMasVieja(movs);
+}
+
+/** Solo los días de `atrasoDe` (null si no debe). */
+async function diasSinAbonar(clienteId, ejecutor = pool) {
+  return (await atrasoDe(clienteId, ejecutor))?.dias ?? null;
 }
 
 /**
- * Los días sin abonar de TODOS los que deben, con la MISMA cuenta que la caja
- * (`desdeSinAbonar`): Map cliente_id → días. Una consulta para todos (2026-10-17):
- * la campana, Cuánto debe y Cómo va el negocio contaban desde el ÚLTIMO
- * MOVIMIENTO —también un cargo nuevo— y con otro plazo, así que quien compraba
- * fiado seguido sin pagar salía "al día" ahí y "atrasado" en la caja.
+ * El atraso de TODOS los que deben, con la MISMA cuenta que la caja
+ * (`deudaMasVieja`): Map cliente_id → { dias, porPagar }. Una consulta para todos
+ * (2026-10-17): la campana, Cuánto debe y Cómo va el negocio salen de aquí, así
+ * nunca contradicen a la caja.
  */
 async function diasSinAbonarDeTodos(ejecutor = pool) {
   const [movs] = await ejecutor.query(
-    `SELECT m.cliente_id, m.tipo, m.monto, DATE_FORMAT(m.creado_en, '%Y-%m-%d') AS dia
+    `SELECT m.cliente_id, m.tipo, m.monto, m.pedido_id, DATE_FORMAT(m.creado_en, '%Y-%m-%d') AS dia
        FROM credito_movimientos m
       WHERE m.cliente_id IN (SELECT s.cliente_id FROM v_clientes_saldo s WHERE s.saldo > 0)
       ORDER BY m.cliente_id, m.creado_en, m.id`
@@ -267,15 +276,13 @@ async function diasSinAbonarDeTodos(ejecutor = pool) {
     if (!porCliente.has(id)) porCliente.set(id, []);
     porCliente.get(id).push(m);
   }
-  // Las dos fechas como medianoche UTC: la resta da días enteros, igual que
-  // DATEDIFF(CURDATE(), desde) con la hora de la tienda.
-  const hoy = Date.parse(hoyLocal());
-  const dias = new Map();
+  const hoy = hoyLocal();
+  const atrasos = new Map();
   for (const [id, lista] of porCliente) {
-    const desde = desdeSinAbonar(lista);
-    if (desde) dias.set(id, Math.round((hoy - Date.parse(desde)) / 86400000));
+    const a = diasDeLaMasVieja(lista, hoy);
+    if (a) atrasos.set(id, a);
   }
-  return dias;
+  return atrasos;
 }
 
 async function buscarParaVenta(q, limite = 10) {
@@ -299,10 +306,13 @@ async function buscarParaVenta(q, limite = 10) {
       LIMIT :limite`,
     { q: `%${q}%`, limite }
   );
-  // Si debe, cuántos días lleva sin abonar: la caja avisa antes de fiarle a ciegas.
+  // Si debe, cuántos días lleva sin pagarse su nota más vieja y cuánto le falta
+  // de ella: la caja avisa antes de fiarle a ciegas.
   const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
   for (const r of rows) {
-    r.dias_sin_abonar = Number(r.saldo) > 0 ? await diasSinAbonar(r.id) : null;
+    const a = Number(r.saldo) > 0 ? await atrasoDe(r.id) : null;
+    r.dias_sin_abonar = a?.dias ?? null;
+    r.nota_vieja_por_pagar = a?.porPagar ?? null;
     r.atrasado = r.dias_sin_abonar != null && r.dias_sin_abonar > DIAS_SIN_ABONAR;
   }
   return rows;
@@ -708,21 +718,26 @@ async function registrarAbono(clienteId, datos, usuarioId, { almacenes = null } 
         creado_en: ahora,
       }, conn);
       movimientos.push(movId);
+    }
 
-      if (esEfectivo) {
-        await conn.query(
-          `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
-           VALUES (:sesion, 'ingreso', :monto, :ref, :motivo)`,
-          {
-            sesion: sesionId,
-            monto: parte.monto,
-            // `referencia_id` apunta al movimiento de crédito, no al cliente:
-            // así desde el corte se puede llegar al abono exacto.
-            ref: movId,
-            motivo: `Abono de ${cli ? cli.nombre : 'cliente'}${parte.numero ? ` a la nota ${parte.numero}` : ''}`,
-          }
-        );
-      }
+    // Al cajón entra UN movimiento por el abono, aunque vaya a varias notas
+    // (2026-10-20, auditoría: un abono a 3 notas salía como "3 abonos" en Caja).
+    if (esEfectivo) {
+      const notas = partes.filter((x) => x.numero).map((x) => x.numero);
+      const aQue = notas.length === 1 ? ` a la nota ${notas[0]}`
+        : notas.length > 1 ? ` a ${notas.length} notas (${notas.join(', ')})` : '';
+      await conn.query(
+        `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
+         VALUES (:sesion, 'ingreso', :monto, :ref, :motivo)`,
+        {
+          sesion: sesionId,
+          monto: Math.round(partes.reduce((t, x) => t + Number(x.monto), 0) * 100) / 100,
+          // `referencia_id` apunta al (primer) movimiento de crédito, no al
+          // cliente: así desde el corte se puede llegar al abono exacto.
+          ref: movimientos[0],
+          motivo: `Abono de ${cli ? cli.nombre : 'cliente'}${aQue}`.slice(0, 255),
+        }
+      );
     }
 
     // Las ventas fiadas que este abono termina de pagar pasan a 'pagado'. Se
@@ -768,10 +783,12 @@ function repartirAbonos(movs) {
   // Lo que debe cada venta, en el orden de su primer movimiento.
   const porPedido = new Map();
   const deudas = [];
-  const deLaVenta = (pedidoId) => {
+  // El día de su primer movimiento (el cargo): de ahí cuenta la nota más vieja.
+  const diaDe = (m) => (m.dia ?? (m.creado_en ? String(m.creado_en).slice(0, 10) : null));
+  const deLaVenta = (pedidoId, m) => {
     let d = porPedido.get(pedidoId);
     if (!d) {
-      d = { pedidoId: Number(pedidoId), monto: 0, directo: 0 };
+      d = { pedidoId: Number(pedidoId), monto: 0, directo: 0, dia: diaDe(m) };
       porPedido.set(pedidoId, d);
       deudas.push(d);
     }
@@ -782,11 +799,11 @@ function repartirAbonos(movs) {
     const firmado = SIGNO_CREDITO[m.tipo] * Number(m.monto);
     if (m.pedido_id != null && m.tipo === 'abono') {
       // ABONO A ESA NOTA (2026-10-19): es lo pagado de ella, no baja lo que debía.
-      deLaVenta(m.pedido_id).directo += Number(m.monto);
+      deLaVenta(m.pedido_id, m).directo += Number(m.monto);
     } else if (m.pedido_id != null) {
-      deLaVenta(m.pedido_id).monto += firmado;
+      deLaVenta(m.pedido_id, m).monto += firmado;
     } else if (firmado > 0) {
-      deudas.push({ pedidoId: null, monto: firmado, directo: 0 });
+      deudas.push({ pedidoId: null, monto: firmado, directo: 0, dia: diaDe(m) });
     } else {
       pago += -firmado;
     }
@@ -806,7 +823,8 @@ function repartirAbonos(movs) {
     d.porPagar = r2(d.monto - d.pagado);
     pago -= aplica;
   }
-  return deudas.map(({ directo, ...d }) => d);
+  // El día solo cuando se sabe (los movimientos lo traen): de ahí la nota más vieja.
+  return deudas.map(({ directo, dia, ...d }) => (dia == null ? d : { ...d, dia }));
 }
 
 /**
@@ -1173,7 +1191,7 @@ module.exports = {
   // Expediente
   listar,
   obtener,
-  buscarParaVenta, diasSinAbonar, desdeSinAbonar, diasSinAbonarDeTodos,
+  buscarParaVenta, diasSinAbonar, atrasoDe, deudaMasVieja, diasDeLaMasVieja, diasSinAbonarDeTodos,
   crearDesdeStaff,
   actualizar,
   fijarLimiteCredito,

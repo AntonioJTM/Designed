@@ -225,8 +225,9 @@
               <div class="aviso aviso-cliente" [class.atrasado]="c.atrasado">
                 <span>
                   @if (num(c.saldo) > 0 && c.atrasado) {
-                    <b>Cuenta atrasada:</b> debe <b>{{ c.saldo | dinero }}</b> y lleva
-                    <b>{{ c.dias_sin_abonar }} días sin abonar</b>. Pídele un abono antes de darle más a crédito.
+                    <b>Cuenta atrasada:</b> debe <b>{{ c.saldo | dinero }}</b> y su nota más vieja lleva
+                    <b>{{ c.dias_sin_abonar }} días sin pagarse</b>@if (num(c.nota_vieja_por_pagar) > 0) { (le faltan
+                    {{ c.nota_vieja_por_pagar | dinero }}) }. Pídele un abono antes de darle más a crédito.
                     @if (apartadoCliente()) { También tiene }
                   } @else if (num(c.saldo) > 0) {
                     Debe <b>{{ c.saldo | dinero }}</b>@if (apartadoCliente()) { y tiene } @else {.}

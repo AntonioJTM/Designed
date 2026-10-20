@@ -156,6 +156,25 @@ describe('UsuarioFormModal (cargador)', () => {
     expect(enviado).toEqual({ rol_id: 6, otros_roles: [], nombre: 'Beto', telefono: undefined, todas_las_tiendas: false, tiendas: [1] });
   });
 
+  it('el ojito enseña la contraseña que se escribió y la vuelve a ocultar (2026-10-20)', async () => {
+    const f = await montar(toño);
+    const el = f.nativeElement as HTMLElement;
+    const input = campo(f, 'contrasena') as HTMLInputElement;
+    const ojo = el.querySelector('.ojo') as HTMLButtonElement;
+    expect(input.type).toBe('password');
+    expect(ojo.getAttribute('aria-label')).toBe('Ver la contraseña');
+    ojo.click();
+    f.detectChanges();
+    expect(input.type).toBe('text');
+    expect(ojo.getAttribute('aria-pressed')).toBe('true');
+    expect(ojo.getAttribute('aria-label')).toBe('Ocultar la contraseña');
+    ojo.click();
+    f.detectChanges();
+    expect(input.type).toBe('password');
+    // El botón no manda el formulario.
+    expect(enviado).toBeNull();
+  });
+
   it('el cargador no se ofrece como otro puesto', async () => {
     const f = await montar(null);
     expect(f.componentInstance.otrosDisponibles().map((r) => r.nombre)).toEqual(['almacenista']);

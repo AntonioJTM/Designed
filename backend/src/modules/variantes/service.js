@@ -6,7 +6,6 @@ const tiposModel = require('../tipos-cliente/model');
 const almacenesModel = require('../almacenes/model');
 const inventarioModel = require('../inventario/model');
 const { AppError } = require('../../middlewares/error');
-const { motivosCarga, enLista } = require('../../utils/cargado');
 const { paginado } = require('../../utils/query');
 
 async function listar(filtros) {
@@ -233,24 +232,16 @@ async function actualizar(id, datos) {
   return model.obtener(id);
 }
 
+/**
+ * LAS PRESENTACIONES NO SE ELIMINAN (2026-10-20, usuario: "que no se puedan
+ * eliminar las presentaciones"). Del 2026-10-16 a esa fecha se borraba la que
+ * no tenía nada cargado; ahora ninguna: se desactiva en «Precio y peso». Un
+ * producto vacío sí se borra completo (con su presentación) en Productos.
+ */
 async function eliminar(id) {
   const variante = await obtener(id);
-  if (variante.tipo_presentacion === 'paquete') {
-    const conos = await model.derivadasDe(id);
-    if (conos.length > 0) {
-      throw new AppError(409, 'PAQUETE_CON_CONOS',
-        'No se puede eliminar: hay conos que se desarman de este paquete. Bórralos primero.');
-    }
-  }
-  // Con algo cargado (bultos, existencias, cargas, kardex, ventas, traspasos,
-  // desarmes…) no se borra: se desactiva (2026-10-16, el candado del producto).
-  const resultado = await model.eliminarSiVacia(id);
-  if (resultado?.noExiste) throw new AppError(404, 'NO_ENCONTRADO', 'Variante no encontrada');
-  if (resultado) {
-    throw new AppError(409, 'PRESENTACION_CON_MOVIMIENTOS',
-      `No se puede eliminar la presentación ${variante.sku}: tiene ${enLista(motivosCarga(resultado))}. ` +
-      'Para dejar de venderla, desactívala en «Precio y peso».');
-  }
+  throw new AppError(409, 'PRESENTACION_NO_SE_ELIMINA',
+    `Las presentaciones no se eliminan. Para dejar de vender ${variante.sku}, desactívala en «Precio y peso».`);
 }
 
 // ---- Precios por tipo de cliente ----
@@ -371,7 +362,10 @@ async function eliminarCodigo(codigoId, usuarioId = null, almacenes = null) {
     return { salieron_kg: 0 };
   }
   if (c.estado && c.estado !== 'disponible') {
-    const que = { vendido: 'ya se vendió', apartado: 'está apartado para un pedido', desarmado: 'ya se bajó a conos' };
+    const que = {
+      vendido: 'ya se vendió', apartado: 'está apartado para un pedido', desarmado: 'ya se bajó a conos',
+      faltante: 'se dio por faltante al recibir un envío',
+    };
     throw new AppError(409, 'BULTO_NO_DISPONIBLE', `El bulto ${c.codigo} ${que[c.estado] ?? 'no está disponible'}: ya no se puede quitar.`);
   }
   const u = await inventarioModel.ubicacionBulto(null, codigoId);

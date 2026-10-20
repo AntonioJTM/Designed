@@ -11,6 +11,7 @@ import {
 } from '../../../core/models/ventas.models';
 import { ClienteParaVenta } from '../../../core/models/clientes.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
@@ -382,6 +383,11 @@ export class DevolucionModal implements OnInit, OnDestroy {
         },
         error: (e) => {
           this.guardando.set(false);
+          // Se pidió la autorización: ya se dijo; se cierra para no pedirla dos veces.
+          if (autorizacionPedida(e)) {
+            this.cerrar();
+            return;
+          }
           this.error.set(this.msg(e));
         },
       });

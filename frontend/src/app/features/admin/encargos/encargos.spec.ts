@@ -131,6 +131,18 @@ describe('EntregarPedidoModal', () => {
 
   afterEach(() => TestBed.resetTestingModule());
 
+  it('con su saldo a favor: paga primero con él y se cobra solo el resto (2026-10-20)', async () => {
+    const c = await montar({ ...porPreparar, saldo_favor: 300 });
+    const falta = c.faltaNota();
+    expect(c.saldoFavor()).toBe(300);
+    c.usarFavor = true;
+    expect(c.favor()).toBe(Math.min(300, falta));
+    expect(c.falta()).toBe(Math.round((falta - c.favor()) * 100) / 100);
+    c.entregar();
+    expect(enviado!['saldo_favor']).toBe(c.favor());
+    expect((enviado!['pagos'] as { monto: number }[])[0].monto).toBe(c.falta());
+  });
+
   it('cobra lo que falta en efectivo, con cambio, al turno abierto', async () => {
     const c = await montar(porPreparar);
     expect(c.metodoId).toBe(1);

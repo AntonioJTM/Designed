@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { conClave } from '../clave-unica';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -152,10 +153,11 @@ export class VentasService {
   /** Retiro o ingreso de efectivo a mano. El retiro exige motivo. */
   movimientoCaja(
     id: number,
-    body: { tipo: 'retiro' | 'ingreso'; monto: number; motivo?: string }
+    body: { tipo: 'retiro' | 'ingreso'; monto: number; motivo?: string },
+    clave?: string
   ): Observable<SesionCaja> {
     return this.http
-      .post<ApiResponse<SesionCaja>>(`${this.base}/caja/sesiones/${id}/movimientos`, body)
+      .post<ApiResponse<SesionCaja>>(`${this.base}/caja/sesiones/${id}/movimientos`, body, conClave(clave))
       .pipe(map(data));
   }
   cerrarSesion(id: number, monto_final: number): Observable<SesionCaja> {
@@ -295,10 +297,12 @@ export class VentasService {
    */
   pagarNota(
     pedidoId: number,
-    body: { monto: number; metodo_pago_id: number; sesion_caja_id?: number; referencia?: string }
+    // Sin método si se paga con su saldo a favor (`con_saldo_favor`, 2026-10-20).
+    body: { monto: number; metodo_pago_id?: number; con_saldo_favor?: boolean; sesion_caja_id?: number; referencia?: string },
+    clave?: string
   ): Observable<ResultadoAbono> {
     return this.http
-      .post<ApiResponse<ResultadoAbono>>(`${this.base}/pedidos/${pedidoId}/abonos`, body)
+      .post<ApiResponse<ResultadoAbono>>(`${this.base}/pedidos/${pedidoId}/abonos`, body, conClave(clave))
       .pipe(map(data));
   }
 
@@ -344,9 +348,14 @@ export class VentasService {
    */
   entregarPedido(
     pedidoId: number,
-    body: { pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number; pendiente_pago?: boolean; fiar_con_atraso?: boolean }
+    body: {
+      pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number; pendiente_pago?: boolean; fiar_con_atraso?: boolean;
+      // Lo que se paga con su saldo a favor antes de cobrar lo demás (2026-10-20).
+      saldo_favor?: number;
+    },
+    clave?: string
   ): Observable<Pedido> {
-    return this.http.post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/entregar`, body).pipe(map(data));
+    return this.http.post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/entregar`, body, conClave(clave)).pipe(map(data));
   }
 
   /**

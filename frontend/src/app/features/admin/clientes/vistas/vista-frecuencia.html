@@ -58,19 +58,19 @@
         <div class="ritmo-fila">
           <div class="quien">
             <a [routerLink]="['/admin/clientes', f.c.cliente_id]" [title]="f.c.nombre_comercial || f.c.nombre">{{ f.c.nombre }}</a>
-            <span>compra cada {{ f.c.ritmo }} días</span>
+            <span>compra cada {{ f.c.ritmo === 1 ? 'día' : f.c.ritmo + ' días' }}</span>
             <!-- Y cuánto se lleva cada vez: es lo que se pierde si no vuelve. -->
             <span>unos {{ kg1(f.c.kg_por_visita) }} · {{ pesos(f.c.dinero_por_visita) }} por visita</span>
           </div>
           <div class="pista" role="img"
-               [attr.aria-label]="'Compra cada ' + f.c.ritmo + ' días y lleva ' + f.c.dias_sin_venir + ' sin venir'">
+               [attr.aria-label]="'Compra cada ' + (f.c.ritmo === 1 ? 'día' : f.c.ritmo + ' días') + ' y lleva ' + f.c.dias_sin_venir + (f.c.dias_sin_venir === 1 ? ' día' : ' días') + ' sin venir'">
             <div class="base"></div>
             <div class="tramo" [style.left.%]="f.desde" [style.width.%]="f.ancho" [style.background]="f.suave"></div>
             <div class="marca" [style.left.%]="f.posRitmo"></div>
             <div class="punto" [style.left.%]="f.posSin" [style.background]="f.color"></div>
           </div>
           <div class="cola">
-            <span class="num">{{ f.c.dias_sin_venir }} días</span>
+            <span class="num">{{ f.c.dias_sin_venir }} {{ f.c.dias_sin_venir === 1 ? 'día' : 'días' }}</span>
             <span [class]="'pill ' + f.pill">{{ veces(f.c.veces) }} su ritmo</span>
           </div>
         </div>
@@ -155,7 +155,7 @@
               </td>
               <td class="num">{{ r.ritmo ? r.ritmo + ' días' : '—' }}</td>
               <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ fechaCorta(r.ultima) }}</td>
-              <td class="num" style="font-weight: 600">{{ r.dias_sin_venir }} días</td>
+              <td class="num" style="font-weight: 600">{{ r.dias_sin_venir }} {{ r.dias_sin_venir === 1 ? 'día' : 'días' }}</td>
               <td><span [class]="'pill ' + ESTADO[r.estado].pill">{{ ESTADO[r.estado].texto }}</span></td>
               <td class="mono" style="white-space: nowrap">{{ r.telefono || '—' }}</td>
               <td class="acciones">

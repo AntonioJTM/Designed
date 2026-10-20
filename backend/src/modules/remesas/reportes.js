@@ -29,7 +29,10 @@ const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const pdf = require('../../utils/pdf');
 
-const ESTADO = { disponible: 'En existencia', apartado: 'Apartado (pedido o envío)', vendido: 'Vendido', desarmado: 'Bajado a conos' };
+const ESTADO = {
+  disponible: 'En existencia', apartado: 'Apartado (pedido o envío)', vendido: 'Vendido', desarmado: 'Bajado a conos',
+  faltante: 'No llegó (faltó en un envío)',
+};
 
 /** "REM-1789814460000-D0B2" → "REM-D0B2", como en las listas de la pantalla. */
 function folioCorto(folio) {
@@ -51,6 +54,40 @@ async function quienYCuando(usuarioId) {
 }
 
 // ---------------------------------------------------------------- una carga
+
+/**
+ * Los bultos de una carga por LOTE (2026-10-20, usuario: "igual eso lo requiero
+ * en el reporte"): cada lote con cuántos bultos, kilos y conos trae, y sus
+ * bultos en el orden en que entraron. Los lotes, como en la pantalla.
+ */
+function _porLote(bultos) {
+  const m = new Map();
+  for (const b of bultos) {
+    const l = b.lote ?? '(sin lote)';
+    if (!m.has(l)) m.set(l, []);
+    m.get(l).push(b);
+  }
+  return [...m.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([lote, lista]) => ({
+      lote,
+      bultos: lista,
+      kg: Math.round(lista.reduce((s, b) => s + Number(b.peso_kg), 0) * 1000) / 1000,
+      conos: lista.reduce((s, b) => s + Number(b.conos ?? 0), 0),
+      sinConos: lista.filter((b) => b.conos == null).length,
+    }));
+}
+
+/** "20 bultos · 390.5 kg · 240 conos" (y cuántos no dicen sus conos). */
+function _cifrasLote(l) {
+  const partes = [
+    `${pdf.numero(l.bultos.length)} ${l.bultos.length === 1 ? 'bulto' : 'bultos'}`,
+    pdf.kg(l.kg),
+    l.conos ? `${pdf.numero(l.conos)} ${l.conos === 1 ? 'cono' : 'conos'}` : 'sin conos',
+  ];
+  if (l.conos && l.sinConos) partes.push(`${l.sinConos} sin conos en el archivo`);
+  return partes.join(' · ');
+}
 
 async function _carga(id) {
   const [[r]] = await pool.query(
@@ -135,29 +172,30 @@ function _dibujarCarga(doc, c, veCostos) {
     ['Conos que rinden', conos ? pdf.numero(conos) : '—'],
   ]);
 
-  pdf.seccion(doc, 'Bultos que entraron');
-  const filas = c.bultos.map((b, i) => [
-    String(i + 1),
-    b.codigo,
-    pdf.kg(b.peso_kg),
-    b.lote ?? '',
-    b.conos != null ? String(b.conos) : '',
-    b.estado === 'disponible' && b.almacen ? `${ESTADO.disponible} · ${b.almacen}` : ESTADO[b.estado] ?? b.estado,
-  ]);
-  const kgRegistrados = c.bultos.reduce((s, b) => s + Number(b.peso_kg), 0);
-  pdf.tabla(
-    doc,
-    [
-      { titulo: '#', ancho: 0.5, alin: 'right' },
-      { titulo: 'Código del bulto', ancho: 1.7 },
-      { titulo: 'Peso real', ancho: 1.1, alin: 'right' },
-      { titulo: 'Lote', ancho: 1.2 },
-      { titulo: 'Conos', ancho: 0.7, alin: 'right' },
-      { titulo: 'Hoy', ancho: 2.3 },
-    ],
-    filas,
-    { total: ['', `${c.bultos.length} bultos`, pdf.kg(Math.round(kgRegistrados * 1000) / 1000), '', conos ? String(conos) : '', ''] }
-  );
+  // Por LOTE (2026-10-20): cada lote con sus cifras y sus bultos uno por uno.
+  const lotes = _porLote(c.bultos);
+  pdf.seccion(doc, lotes.length > 1 ? `Bultos que entraron, por lote (${lotes.length} lotes)` : 'Bultos que entraron');
+  for (const l of lotes) {
+    pdf.subseccion(doc, `Lote ${l.lote}`, _cifrasLote(l));
+    pdf.tabla(
+      doc,
+      [
+        { titulo: '#', ancho: 0.5, alin: 'right' },
+        { titulo: 'Código del bulto', ancho: 1.8 },
+        { titulo: 'Peso real', ancho: 1.1, alin: 'right' },
+        { titulo: 'Conos', ancho: 0.7, alin: 'right' },
+        { titulo: 'Hoy', ancho: 2.6 },
+      ],
+      l.bultos.map((b, i) => [
+        String(i + 1),
+        b.codigo,
+        pdf.kg(b.peso_kg),
+        b.conos != null ? String(b.conos) : '',
+        b.estado === 'disponible' && b.almacen ? `${ESTADO.disponible} · ${b.almacen}` : ESTADO[b.estado] ?? b.estado,
+      ]),
+      { total: ['', `${l.bultos.length} ${l.bultos.length === 1 ? 'bulto' : 'bultos'}`, pdf.kg(l.kg), l.conos ? String(l.conos) : '', ''] }
+    );
+  }
 
   // Un bulto capturado por error se puede quitar a mano: la carga conserva su
   // total, pero ese bulto ya no sale en la lista. Se dice para que cuadre.
@@ -244,7 +282,32 @@ async function pdfCargas(ids, { usuarioId, veCostos }) {
       `Sin precio de venta todavía: ${sinPrecio.join(', ')}. No se pueden vender hasta que se les ponga ` +
       'su precio por kilo en Productos.');
   }
-  pdf.nota(doc, 'En las páginas siguientes va cada hilo con sus bultos: código, peso real, lote y conos.');
+  // Los lotes de cada hilo, de un vistazo (2026-10-20).
+  pdf.seccion(doc, 'Lotes de cada hilo');
+  const filasLotes = [];
+  for (const c of cargas) {
+    _porLote(c.bultos).forEach((l, i) => {
+      filasLotes.push([
+        i === 0 ? nombreHilo(c) : '',
+        l.lote,
+        pdf.numero(l.bultos.length),
+        pdf.kg(l.kg),
+        l.conos ? pdf.numero(l.conos) : '',
+      ]);
+    });
+  }
+  pdf.tabla(
+    doc,
+    [
+      { titulo: 'Hilo', ancho: 2.2 },
+      { titulo: 'Lote', ancho: 1.6 },
+      { titulo: 'Bultos', ancho: 0.9, alin: 'right' },
+      { titulo: 'Kilos', ancho: 1.2, alin: 'right' },
+      { titulo: 'Conos', ancho: 0.9, alin: 'right' },
+    ],
+    filasLotes
+  );
+  pdf.nota(doc, 'En las páginas siguientes va cada hilo, lote por lote, con sus bultos: código, peso real y conos.');
 
   for (const c of cargas) {
     doc.addPage();
@@ -288,7 +351,8 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
             COALESCE(e.disp, 0) AS disp, COALESCE(e.disp_kg, 0) AS disp_kg,
             COALESCE(e.apar, 0) AS apar, COALESCE(e.apar_kg, 0) AS apar_kg,
             COALESCE(e.vend, 0) AS vend, COALESCE(e.vend_kg, 0) AS vend_kg,
-            COALESCE(e.des, 0) AS des, COALESCE(e.des_kg, 0) AS des_kg
+            COALESCE(e.des, 0) AS des, COALESCE(e.des_kg, 0) AS des_kg,
+            COALESCE(e.fal, 0) AS fal, COALESCE(e.fal_kg, 0) AS fal_kg
        FROM remesas r
        JOIN producto_variantes pv ON pv.id = r.variante_id
        JOIN almacenes a           ON a.id = r.almacen_id
@@ -298,7 +362,8 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
                 SUM(estado = 'disponible') AS disp, SUM(IF(estado = 'disponible', peso_kg, 0)) AS disp_kg,
                 SUM(estado = 'apartado')   AS apar, SUM(IF(estado = 'apartado', peso_kg, 0))   AS apar_kg,
                 SUM(estado = 'vendido')    AS vend, SUM(IF(estado = 'vendido', peso_kg, 0))    AS vend_kg,
-                SUM(estado = 'desarmado')  AS des,  SUM(IF(estado = 'desarmado', peso_kg, 0))  AS des_kg
+                SUM(estado = 'desarmado')  AS des,  SUM(IF(estado = 'desarmado', peso_kg, 0))  AS des_kg,
+                SUM(estado = 'faltante')   AS fal,  SUM(IF(estado = 'faltante', peso_kg, 0))   AS fal_kg
            FROM variante_codigos WHERE remesa_id IS NOT NULL GROUP BY remesa_id
        ) e ON e.remesa_id = r.id
       WHERE ${where.join(' AND ')}
@@ -419,8 +484,74 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
         ...(suma('apar') > 0 ? [[ESTADO.apartado, pdf.numero(suma('apar')), pdf.kg(r3(suma('apar_kg')))]] : []),
         [ESTADO.vendido, pdf.numero(suma('vend')), pdf.kg(r3(suma('vend_kg')))],
         [ESTADO.desarmado, pdf.numero(suma('des')), pdf.kg(r3(suma('des_kg')))],
+        ...(suma('fal') > 0 ? [[ESTADO.faltante, pdf.numero(suma('fal')), pdf.kg(r3(suma('fal_kg')))]] : []),
       ]
     );
+
+    // POR LOTE, como en la revisión de la carga (2026-10-20, usuario: "sí, igual
+    // en el reporte"): cuánto trajo cada lote y sus bultos uno por uno. Un bulto
+    // que hoy está en una tienda que quien pide no ve dice "otra tienda".
+    const [bultos] = await pool.query(
+      `SELECT vc.codigo, vc.peso_kg, vc.lote, vc.conos, vc.estado, vc.almacen_id, vc.remesa_id,
+              a.nombre AS almacen
+         FROM variante_codigos vc
+         LEFT JOIN almacenes a ON a.id = vc.almacen_id
+        WHERE vc.remesa_id IN (:ids)
+        ORDER BY vc.id`,
+      { ids: cargas.map((c) => c.id) }
+    );
+    if (bultos.length) {
+      const folioDe = new Map(cargas.map((c) => [c.id, folioCorto(c.folio)]));
+      const ve = (almacenId) => !Array.isArray(almacenes) || almacenes.includes(Number(almacenId));
+      const hoy = (b) =>
+        b.estado === 'disponible' && b.almacen ? `${ESTADO.disponible} · ${ve(b.almacen_id) ? b.almacen : 'otra tienda'}`
+          : ESTADO[b.estado] ?? b.estado;
+      const lotesHilo = _porLote(bultos);
+
+      pdf.seccion(doc, 'Por lote');
+      pdf.tabla(
+        doc,
+        [
+          { titulo: 'Lote', ancho: 1.6 },
+          { titulo: 'Bultos', ancho: 0.8, alin: 'right' },
+          { titulo: 'Kilos', ancho: 1.1, alin: 'right' },
+          { titulo: 'Conos', ancho: 0.8, alin: 'right' },
+          { titulo: 'En existencia', ancho: 1.1, alin: 'right' },
+        ],
+        lotesHilo.map((l) => [
+          l.lote,
+          pdf.numero(l.bultos.length),
+          pdf.kg(l.kg),
+          l.conos ? pdf.numero(l.conos) : '',
+          `${pdf.numero(l.bultos.filter((b) => b.estado === 'disponible').length)} bultos`,
+        ])
+      );
+
+      pdf.seccion(doc, 'Bultos por lote');
+      for (const l of lotesHilo) {
+        pdf.subseccion(doc, `Lote ${l.lote}`, _cifrasLote(l));
+        pdf.tabla(
+          doc,
+          [
+            { titulo: '#', ancho: 0.5, alin: 'right' },
+            { titulo: 'Código del bulto', ancho: 1.6 },
+            { titulo: 'Peso real', ancho: 1.0, alin: 'right' },
+            { titulo: 'Conos', ancho: 0.6, alin: 'right' },
+            { titulo: 'Carga', ancho: 0.9 },
+            { titulo: 'Hoy', ancho: 2.2 },
+          ],
+          l.bultos.map((b, i) => [
+            String(i + 1),
+            b.codigo,
+            pdf.kg(b.peso_kg),
+            b.conos != null ? String(b.conos) : '',
+            folioDe.get(b.remesa_id) ?? '',
+            hoy(b),
+          ]),
+          { total: ['', `${l.bultos.length} ${l.bultos.length === 1 ? 'bulto' : 'bultos'}`, pdf.kg(l.kg), l.conos ? String(l.conos) : '', '', ''] }
+        );
+      }
+    }
   }
 
   pdf.nota(doc,

@@ -12,6 +12,12 @@ export interface Confirmacion {
   cancelar?: string;
   /** Borra o pierde algo: el botón va en rojo y el icono avisa. */
   peligro?: boolean;
+  /**
+   * El cursor empieza en "Cancelar" (2026-10-20, auditoría): para lo que se
+   * pregunta A MEDIO ESCANEO, donde el Enter de la siguiente lectura de la
+   * pistola aceptaba sin que nadie lo leyera. Aceptar pide un clic (o Tab).
+   */
+  enfocarCancelar?: boolean;
 }
 
 interface Pendiente extends Confirmacion {

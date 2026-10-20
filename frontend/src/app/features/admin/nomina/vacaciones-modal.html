@@ -42,9 +42,9 @@
                 }
               </p>
               <div class="saldo">
-                <div><span>Le tocan por ley</span><b>{{ s.corresponden }}</b></div>
-                <div><span>Ha tomado</span><b>{{ s.tomados }}</b></div>
-                <div class="queda"><span>Le quedan</span><b>{{ s.restan }}</b></div>
+                <div><span>Le tocan por ley</span><b>{{ s.corresponden }} {{ s.corresponden === 1 ? 'día' : 'días' }}</b></div>
+                <div><span>Ha tomado</span><b>{{ s.tomados }} {{ s.tomados === 1 ? 'día' : 'días' }}</b></div>
+                <div class="queda"><span>Le quedan</span><b>{{ s.restan }} {{ s.restan === 1 ? 'día' : 'días' }}</b></div>
               </div>
             </div>
           }
@@ -66,7 +66,7 @@
                   Nota
                   <input type="text" [(ngModel)]="notas" name="notas" maxlength="255" placeholder="Opcional" />
                 </label>
-                <button type="button" class="btn btn-primary" [disabled]="ocupado() || !desde" (click)="registrar()">
+                <button type="button" class="btn btn-primary" [disabled]="ocupado() || !desde || despues()?.pasa" (click)="registrar()">
                   Registrar
                 </button>
               </div>
@@ -77,8 +77,27 @@
                     no cuentan). Se pagan como días normales en la nómina de esa semana.
                   </span>
                 </p>
+                <!-- Antes → después (2026-10-20, auditoría), si caen en su año de vacaciones de ahora. -->
+                @if (despues(); as q) {
+                  <!-- Sin región viva: cambia con cada fecha que se escribe (ver CLAUDE.md). -->
+                  @if (q.pasa) {
+                    <p class="aviso" style="margin: 10px 0 0">
+                      Le quedan {{ dia(q.restan) }}: son más de los que tiene. Registrar se apaga.
+                    </p>
+                  } @else {
+                    <p class="muted" style="margin: 8px 0 0">
+                      Le quedan {{ dia(q.restan) }} → <b>le quedarán {{ dia(q.quedaran) }}</b>.
+                    </p>
+                  }
+                }
               }
             </section>
+          } @else if (d.fecha_ingreso && d.horario.length > 0) {
+            <!-- Sin permiso no hay formulario: se dice por qué (2026-10-20). -->
+            <p class="muted">
+              Las vacaciones las registra quien tiene «Autorizar vacaciones». Cada quien pide las suyas en
+              «Mis vacaciones», bajo su nombre.
+            </p>
           }
 
           <section>

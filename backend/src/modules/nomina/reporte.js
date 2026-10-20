@@ -414,9 +414,15 @@ const COLS_PENDIENTES = [
  */
 function cuantas(lista) {
   const dev = lista.filter((v) => v.tipo === 'devolucion').length;
-  const ventas = lista.length - dev;
+  // La que regresó completa tampoco es venta (2026-10-20): "2 ventas" eran 1.
+  const completas = lista.filter(comisiones.devueltaCompleta).length;
+  const ventas = lista.length - dev - completas;
   const txt = `${ventas} ${ventas === 1 ? 'venta' : 'ventas'}`;
-  return { ventas, dev, txt, conDev: dev ? `${txt} y ${dev} ${dev === 1 ? 'devolución' : 'devoluciones'}` : txt };
+  const extra = [
+    dev ? `${dev} ${dev === 1 ? 'devolución' : 'devoluciones'}` : '',
+    completas ? `${completas} ${completas === 1 ? 'devuelta completa' : 'devueltas completas'}` : '',
+  ].filter(Boolean).join(' y ');
+  return { ventas, dev: dev + completas, txt, conDev: extra ? `${txt} y ${extra}` : txt };
 }
 
 /** El folio corto y el cliente; el tipo y cuándo se vendió. */
@@ -462,7 +468,8 @@ function hojaComisiones(doc, periodo, recibos, { reglaAnterior }) {
       const sum = (k) => r2(cm.ventas.reduce((a, v) => a + n(v[k]), 0));
       // El total de una devolución no es dinero de esta semana (es el de la venta
       // de donde regresó): no se suma, como en la pantalla.
-      const sumTotal = r2(cm.ventas.filter((v) => v.tipo !== 'devolucion').reduce((a, v) => a + n(v.total), 0));
+      const sumTotal = r2(cm.ventas.filter((v) => v.tipo !== 'devolucion' && !comisiones.devueltaCompleta(v))
+        .reduce((a, v) => a + n(v.total), 0));
       tabla(doc, COLS_PAGADAS,
         cm.ventas.map((v) => [
           ...ventaYTipo(v),
@@ -653,7 +660,7 @@ function hojaRecibo(doc, periodo, r) {
         // El tipo arriba y qué es abajo: en un renglón se cortaba con "…".
         grupos.map((g) => [
           { t: comisiones.NOMBRE_TIPO[g.tipo], sub: r.reglaAnterior ? 'por la fecha de venta' : QUE[g.tipo] },
-          String(g.ventas.length),
+          String(g.ventas.filter((v) => !comisiones.devueltaCompleta(v)).length),
           pdf.dinero(sum(g.ventas, 'venta_neta')),
           { t: pdf.dinero(sum(g.ventas, 'comision')), bold: true },
         ]),

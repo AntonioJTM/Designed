@@ -7,6 +7,7 @@ import {
   PreviaDesarme,
 } from '../../../core/services/inventario.service';
 import { Almacen } from '../../../core/models/inventario.models';
+import { TiendaService } from '../../../core/services/tienda.service';
 
 /**
  * Lo que importa del modal: que escanear muestre lo que trae el bulto, que al
@@ -48,6 +49,8 @@ describe('DesarmeModal', () => {
   };
 
   let enviado: DesarmeInput | null = null;
+  /** El tope del destare que puso la tienda en Configuración (2026-10-20). */
+  let tope: string | null = null;
 
   const invFalso = {
     previaDesarme: (codigo: string) =>
@@ -75,7 +78,10 @@ describe('DesarmeModal', () => {
   async function montar() {
     await TestBed.configureTestingModule({
       imports: [DesarmeModal],
-      providers: [{ provide: InventarioService, useValue: invFalso }],
+      providers: [
+        { provide: InventarioService, useValue: invFalso },
+        { provide: TiendaService, useValue: { configuracion: () => of({ desarme_destare_max_kg: tope }) } },
+      ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(DesarmeModal);
@@ -182,6 +188,32 @@ describe('DesarmeModal', () => {
     // El tubo es el mismo para el siguiente paquete: el destare se queda.
     expect(c.destarePorCono).toBe(0.05);
     expect(localStorage.getItem('destare_por_cono')).toBe('0.05');
+  });
+
+  it('con el tope de la tienda, un destare de 0.8 kg por cono no se manda ni se recuerda (2026-10-20)', async () => {
+    tope = '0.05';
+    localStorage.setItem('destare_por_cono', '0.8');
+    enviado = null;
+    const fixture = await montar();
+    const c = fixture.componentInstance;
+    // Lo recordado pasaba del tope: no se propone.
+    expect(c.topeDestare()).toBe(0.05);
+    expect(c.destarePorCono).toBeNull();
+
+    c.codigo = 'B-001';
+    c.escanear();
+    c.destarePorCono = 0.8;
+    expect(c.pasaDelTope()).toBeTrue();
+    c.bajar();
+    expect(enviado).toBeNull();
+    expect(c.error()).toContain('el tope es de 50 g');
+
+    c.destarePorCono = 0.035;
+    expect(c.pasaDelTope()).toBeFalse();
+    c.bajar();
+    expect(enviado!.destare_por_cono_kg).toBe(0.035);
+    tope = null;
+    localStorage.removeItem('destare_por_cono');
   });
 
   it('solo se baja con el codigo del paquete: ya no hay captura a mano (2026-10-18)', async () => {

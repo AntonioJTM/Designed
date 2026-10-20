@@ -22,7 +22,7 @@ export interface HiloElegido {
 }
 
 /** Qué bultos del lote se ven. */
-type FiltroEstado = 'disponible' | 'apartado' | 'desarmado' | 'vendido' | 'todos';
+type FiltroEstado = 'disponible' | 'apartado' | 'desarmado' | 'vendido' | 'faltante' | 'todos';
 
 /**
  * EL DETALLE DE UN HILO (2026-10-06): "cuando doy clic en cualquier hilo, que me
@@ -173,7 +173,7 @@ export class HiloModal implements OnInit {
 
   /** Cuántos bultos del lote hay en cada estado (para los botones del filtro). */
   readonly conteo = computed(() => {
-    const c = { disponible: 0, apartado: 0, desarmado: 0, vendido: 0, todos: 0 };
+    const c = { disponible: 0, apartado: 0, desarmado: 0, vendido: 0, faltante: 0, todos: 0 };
     for (const b of this.bultos()) {
       c[b.estado]++;
       c.todos++;

@@ -285,7 +285,7 @@ CREATE TABLE `variante_codigos` (
   KEY `idx_variante_codigos_almacen` (`almacen_id`),
   CONSTRAINT `fk_variante_codigos_almacen` FOREIGN KEY (`almacen_id`) REFERENCES `almacenes` (`id`),
   CONSTRAINT `variante_codigos_ibfk_1` FOREIGN KEY (`variante_id`) REFERENCES `producto_variantes` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `variante_codigos_chk_1` CHECK (`estado` in (_utf8mb4'disponible',_utf8mb4'apartado',_utf8mb4'vendido',_utf8mb4'desarmado'))
+  CONSTRAINT `variante_codigos_chk_1` CHECK (`estado` in (_utf8mb4'disponible',_utf8mb4'apartado',_utf8mb4'vendido',_utf8mb4'desarmado',_utf8mb4'faltante'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- Tabla: variante_precios ----------
@@ -1266,6 +1266,24 @@ CREATE TABLE `cuentas_bancarias` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_cuentas_bancarias_clabe` (`clabe`),
   CONSTRAINT `cuentas_bancarias_dato` CHECK (`numero_cuenta` is not null or `clabe` is not null)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: operaciones_unicas ----------
+-- Llave de un solo uso de una operación de dinero (abono, anticipo, pago de
+-- nota, entrega, movimiento de caja): se registra UNA vez (2026-10-20).
+DROP TABLE IF EXISTS `operaciones_unicas`;
+CREATE TABLE `operaciones_unicas` (
+  `clave` varchar(64) NOT NULL,
+  `usuario_id` bigint(20) unsigned DEFAULT NULL,
+  `metodo` varchar(8) NOT NULL,
+  `ruta` varchar(255) NOT NULL,
+  `estado` varchar(10) NOT NULL DEFAULT 'en_curso',
+  `status` smallint(6) DEFAULT NULL,
+  `respuesta` mediumtext DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`clave`),
+  KEY `idx_ou_creado` (`creado_en`),
+  CONSTRAINT `chk_ou_estado` CHECK (`estado` in ('en_curso','hecha'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP VIEW IF EXISTS `v_ventas_por_empleado`;

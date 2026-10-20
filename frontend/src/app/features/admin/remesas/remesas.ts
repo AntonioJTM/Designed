@@ -10,6 +10,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Variante } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { cotejarArchivo, hiloDelArchivo, textoAviso } from '../../../shared/remesa-archivo';
@@ -330,8 +331,18 @@ export class Remesas {
           this.cargarHistorial();
         },
         error: (e) => {
-          this.error.set(this.msg(e));
           this.enviando.set(false);
+          // Se pidió la autorización: en verde y la captura limpia (entra cuando la acepten).
+          const pedida = autorizacionPedida(e);
+          if (pedida) {
+            this.mensaje.set(pedida);
+            this.previa.set(null);
+            this.archivo = null;
+            this.notas = '';
+            this.datosCarga.set(datosCargaVacios());
+            return;
+          }
+          this.error.set(this.msg(e));
         },
       });
   }

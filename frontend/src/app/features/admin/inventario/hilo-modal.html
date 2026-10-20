@@ -132,7 +132,12 @@
                       @if (l.vendidos.bultos > 0) {
                         <div>{{ paquetes(l.vendidos.bultos) }} vendidos</div>
                       }
-                      @if (l.desarmados.bultos === 0 && l.vendidos.bultos === 0) { <span class="muted">ninguno</span> }
+                      @if ((l.faltantes?.bultos ?? 0) > 0) {
+                        <div>{{ paquetes(l.faltantes!.bultos) }} no llegaron <span class="muted">· faltaron en un envío</span></div>
+                      }
+                      @if (l.desarmados.bultos === 0 && l.vendidos.bultos === 0 && !(l.faltantes?.bultos ?? 0)) {
+                        <span class="muted">ninguno</span>
+                      }
                     </td>
                     <td>
                       @for (c of l.cargas; track c.remesa_id) {
@@ -284,6 +289,13 @@
                                 {{ b.consumido_en | cuando }}
                                 @if (b.conos_generados !== null) { · {{ b.conos_generados }} conos }
                                 @if (b.almacen) { · {{ b.almacen }} }
+                              </span>
+                            }
+                            @case ('faltante') {
+                              <span class="pill rojo">No llegó</span>
+                              <span class="donde">
+                                {{ b.consumido_en | cuando }}
+                                @if (b.pedido_folio) { · faltó en <span class="mono" [title]="b.pedido_folio">{{ b.pedido_folio | folio }}</span> }
                               </span>
                             }
                             @case ('vendido') {

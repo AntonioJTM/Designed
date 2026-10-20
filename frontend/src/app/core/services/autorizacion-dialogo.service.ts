@@ -15,6 +15,8 @@ interface Estado {
   ocupado: boolean;
   /** Se pidió: la ventana dice "Listo" hasta que la persona lo lea. */
   pedida: boolean;
+  /** Ya había una igual esperando: no se pidió otra (2026-10-20). */
+  yaEstaba?: boolean;
   responder: (e: EleccionAutorizacion) => void;
   enterado?: () => void;
 }
@@ -46,10 +48,10 @@ export class AutorizacionDialogoService {
   }
 
   /** Se mandó a autorizar: lo dice hasta que la persona dé "Entendido". */
-  avisarPedida(): Promise<void> {
+  avisarPedida(yaEstaba = false): Promise<void> {
     const a = this.actual();
     if (!a) return Promise.resolve();
-    return new Promise((resolve) => this.actual.set({ ...a, ocupado: false, pedida: true, enterado: resolve }));
+    return new Promise((resolve) => this.actual.set({ ...a, ocupado: false, pedida: true, yaEstaba, enterado: resolve }));
   }
 
   enterado(): void {

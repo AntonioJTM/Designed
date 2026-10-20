@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject, of } from 'rxjs';
-import { Autorizaciones } from './autorizaciones';
+import { provideRouter } from '@angular/router';
+import { Subject, of, throwError } from 'rxjs';
+import { Autorizaciones, partirResumen } from './autorizaciones';
 import { AutorizacionesService } from '../../../core/services/autorizaciones.service';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 import { Autorizacion } from '../../../core/models/autorizaciones.models';
@@ -35,6 +36,7 @@ describe('Autorizaciones', () => {
           provide: AutorizacionesService,
           useValue: {
             listar: () => of({ vista: 'por_autorizar', por_autorizar: 1, filas: [PEDIDO] }),
+            rechazar: () => throwError(() => ({ error: { error: { code: 'YA_RESUELTA', message: 'Esa solicitud ya se resolvió.' } } })),
             aprobar: (id: number, ajustes?: unknown) => {
               aprobados.push({ id, ajustes });
               return of({ ...PEDIDO, estado: 'aprobada', nota_aprobacion: 'Autorizó menos de lo pedido: NEGRO 2/30: 10 de 20 paquetes.' });
@@ -42,6 +44,7 @@ describe('Autorizaciones', () => {
           },
         },
         { provide: TiempoRealService, useValue: { cambios: () => new Subject<void>() } },
+        provideRouter([]),
       ],
     }).compileComponents();
     const f = TestBed.createComponent(Autorizaciones);
@@ -88,5 +91,40 @@ describe('Autorizaciones', () => {
     expect(c.ajusteValido(PEDIDO)).toBeFalse();
     c.autorizarAjustado();
     expect(aprobados.length).toBe(0);
+  });
+
+  it('cada solicitud dice de qué tipo es (2026-10-20, ronda 4)', async () => {
+    const f = await montar();
+    expect((f.nativeElement as HTMLElement).querySelector('.tipo-op')?.textContent?.trim()).toBe('Inventario');
+    expect(f.componentInstance.tipoDe({ ...PEDIDO, operacion: 'mover_efectivo' })).toBe('Dinero');
+    expect(f.componentInstance.tipoDe({ ...PEDIDO, operacion: 'pagar_nomina' })).toBe('Personal');
+    expect(f.componentInstance.tipoDe({ ...PEDIDO, operacion: 'algo_nuevo' })).toBe('Otra');
+  });
+
+  it('el resumen separa el monto y el folio, sin perder ni una letra (2026-10-20, ronda 4)', () => {
+    const texto = 'Cancelar POS-1790864580000-79FA ($1,234.50) · Juan · sale -$80.00 de efectivo de la caja · C-0007';
+    const p = partirResumen(texto);
+    expect(p.map((x) => x.t).join('')).toBe(texto);
+    expect(p.filter((x) => x.k === 'dinero').map((x) => x.t)).toEqual(['$1,234.50', '-$80.00']);
+    const folios = p.filter((x) => x.k === 'folio');
+    expect(folios.map((x) => x.titulo)).toEqual(['POS-1790864580000-79FA', 'C-0007']);
+    expect(folios[0].corto).toBe('POS-79FA');
+    // Una palabra con guion que no es folio se queda como texto.
+    expect(partirResumen('NEGRO 2/30 · 20 paquetes').every((x) => x.k === 'txt')).toBeTrue();
+  });
+
+  it('el error al rechazar sale DENTRO de su ventana y Escape la cierra (2026-10-20)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    c.abrirRechazo(PEDIDO);
+    c.motivo = 'Ya no hace falta';
+    c.rechazar();
+    f.detectChanges();
+    const ventana = (f.nativeElement as HTMLElement).querySelector('[aria-labelledby="rechazo-titulo"]')!;
+    expect(ventana.querySelector('.alert')?.textContent).toContain('ya se resolvió');
+    expect(c.rechazando()).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    f.detectChanges();
+    expect(c.rechazando()).toBeNull();
   });
 });

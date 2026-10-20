@@ -107,10 +107,25 @@ describe('EnvioModal', () => {
     expect(c.ultimo()).toContain('A2');
   });
 
+  it('cada hilo lleva su barra: "1 de 2" y, completo, en verde (2026-10-20, ronda 4)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    const l = traspaso.lineas[0];
+    escanear(c, 'A1');
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(c.avance(l)).toEqual({ van: 1, de: 2, pct: 50, completo: false });
+    expect(el.querySelector('.avance-linea .avance-texto')?.textContent).toContain('1 de 2');
+    escanear(c, 'A2');
+    f.detectChanges();
+    expect(el.querySelector('.avance-linea.completo .avance-texto')?.textContent).toContain('completo');
+    expect(el.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')).toBe('2');
+  });
+
   it('dice cuántos faltan, y no deja escanear más de lo pedido (2026-10-19)', async () => {
     const c = (await montar()).componentInstance;
     escanear(c, 'A1');
-    expect(c.diferencia(traspaso.lineas[0])).toBe('faltan 1');
+    expect(c.diferencia(traspaso.lineas[0])).toBe('falta 1');
     escanear(c, 'A2');
     expect(c.diferencia(traspaso.lineas[0])).toBeNull();
     escanear(c, 'A3');

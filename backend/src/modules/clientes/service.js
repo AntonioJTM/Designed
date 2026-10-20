@@ -132,13 +132,15 @@ async function expediente(id, { limitePedidos = 20, almacenes = null } = {}) {
     saldoFavor.deudaTotal(id),
   ]);
 
-  // Si debe: cuántos días lleva sin abonar (la caja lo dice al elegirlo desde aquí).
+  // Si debe: cuántos días lleva sin pagarse su nota más vieja (la caja lo dice al
+  // elegirlo desde aquí).
   const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
-  const diasSinAbonar = Number(cliente.saldo ?? 0) > 0 ? await model.diasSinAbonar(id) : null;
+  const atraso = Number(cliente.saldo ?? 0) > 0 ? await model.atrasoDe(id) : null;
   return {
     ...sanitizar(cliente),
-    dias_sin_abonar: diasSinAbonar,
-    atrasado: diasSinAbonar != null && diasSinAbonar > DIAS_SIN_ABONAR,
+    dias_sin_abonar: atraso?.dias ?? null,
+    nota_vieja_por_pagar: atraso?.porPagar ?? null,
+    atrasado: atraso != null && atraso.dias > DIAS_SIN_ABONAR,
     estadisticas: stats,
     colores_mas_comprados: colores,
     pedidos: pedidos.rows,

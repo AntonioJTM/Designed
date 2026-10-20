@@ -5,7 +5,7 @@ import { DineroPipe } from '../../../../shared/dinero.pipe';
 import { COLOR, fechaCorta, pesos, plural } from '../clientes-ui';
 
 /**
- * Cómo va cada cuenta según los días sin abonar (los tramos de `cartera`).
+ * Cómo va cada cuenta según los días de su nota más vieja sin pagar (los tramos de `cartera`).
  * "Al día" llega hasta los 15 días de la caja y la campana (2026-10-17): pasado
  * eso, la caja ya avisa antes de fiarle.
  */
@@ -58,8 +58,8 @@ export class VistaDeuda {
         etiqueta: 'Atrasado',
         valor: pesos(d.vencido),
         pie: d.num_vencidos
-          ? `${plural(d.num_vencidos, 'cliente lleva', 'clientes llevan')} más de ${d.dias_aviso} días sin abonar`
-          : `nadie lleva más de ${d.dias_aviso} días sin abonar`,
+          ? `${plural(d.num_vencidos, 'cliente debe una nota', 'clientes deben notas')} de más de ${d.dias_aviso} días`
+          : `nadie debe una nota de más de ${d.dias_aviso} días`,
         punto: COLOR.alerta,
       },
       {
@@ -137,7 +137,7 @@ export class VistaDeuda {
     return { resto: Math.max(0, filas.length - TOPE_BARRAS), filas: filas.slice(0, TOPE_BARRAS) };
   });
 
-  /** La tabla ya viene del que más tiempo lleva sin abonar al más reciente. */
+  /** La tabla ya viene de la nota más vieja sin pagar a la más reciente. */
   readonly porAntiguedad = computed(() => this.datos().clientes);
 
   num(v: unknown): number {

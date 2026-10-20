@@ -71,7 +71,8 @@ async function apartados(filtros = {}, almacenes = null) {
 }
 
 async function abonarApartado(id, datos, usuarioId) {
-  if (!datos.metodo_pago_id) {
+  // Con su saldo a favor no lleva método (2026-10-20).
+  if (!datos.metodo_pago_id && datos.con_saldo_favor !== true) {
     throw new AppError(422, 'FALTA_METODO_PAGO', 'Di con qué está pagando el abono');
   }
   return model.abonarApartado(id, datos, usuarioId);

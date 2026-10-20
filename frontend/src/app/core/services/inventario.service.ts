@@ -184,6 +184,8 @@ export interface LoteHilo {
   /** Apartados para un pedido: siguen ahí, pero ya tienen dueño. */
   apartados: { bultos: number; kg: number };
   desarmados: { bultos: number; kg: number; conos: number; destare_kg: number };
+  /** Se dieron por faltantes al recibir un envío: no llegaron (2026-10-20). */
+  faltantes?: { bultos: number; kg: number };
   peso_min: number | null;
   peso_max: number | null;
   cargas: { remesa_id: number; folio: string; fecha_ingreso: string; proveedor: string | null; bultos: number }[];
@@ -195,7 +197,7 @@ export interface BultoLote {
   codigo: string;
   peso_kg: number | null;
   conos: number | null;
-  estado: 'disponible' | 'apartado' | 'vendido' | 'desarmado';
+  estado: 'disponible' | 'apartado' | 'vendido' | 'desarmado' | 'faltante';
   almacen_id: number | null;
   almacen: string | null;
   sku: string;
@@ -534,6 +536,11 @@ export interface TraspasoLinea {
    * Están apartados para este envío (no se venden) hasta que salga o se cancele.
    */
   guardados?: { codigo: string; peso_kg: string; lote?: string | null; variante_id: number }[];
+  /**
+   * Ya enviado (en camino o recibido): los paquetes que salieron, y si al
+   * recibirlo se dijo que no llegó (2026-10-20).
+   */
+  enviados?: { codigo: string; peso_kg: string; lote?: string | null; falto: boolean }[];
   /** Lo que se PIDIÓ; `paquetes` y `cantidad` dicen lo que salió, ya enviado. */
   paquetes_solicitados?: number | string | null;
   cantidad_solicitada?: number | string | null;
@@ -600,7 +607,8 @@ export interface ResultadoTraspaso {
 /** Lo que el responsable declara al aceptar el traspaso. */
 export interface RecepcionInput {
   notas?: string;
-  recibido?: { detalle_id: number; paquetes?: number; cantidad?: number }[];
+  /** `faltan`: los códigos de los paquetes que NO llegaron (2026-10-20). */
+  recibido?: { detalle_id: number; paquetes?: number; cantidad?: number; faltan?: string[] }[];
 }
 
 export interface Traspaso {

@@ -10,7 +10,13 @@
 
 @if (datos().num_clientes === 0) {
   <section class="card">
-    <p class="vacio">Nadie te debe nada. Cuando se dé una venta a crédito, aquí aparece quién y desde cuándo.</p>
+    <p class="vacio">
+      @if ((datos().notas_pendientes?.num_clientes ?? 0) > 0) {
+        Nadie debe a crédito. Lo que deben en notas pendientes de pago está abajo.
+      } @else {
+        Nadie te debe nada. Cuando se dé una venta a crédito, aquí aparece quién y desde cuándo.
+      }
+    </p>
   </section>
 } @else {
   <!-- ==================================================== Desde cuándo te deben -->
@@ -19,8 +25,8 @@
       <div>
         <h2>Desde cuándo te deben</h2>
         <p>
-          Se cuenta desde su último abono, no desde la venta: quien abonó la semana pasada está
-          pagando, y quien sigue comprando a crédito sin abonar no se renueva con cada compra.
+          Se cuenta desde su nota más vieja que sigue sin pagarse: lo que abona paga primero lo más
+          viejo, así que abonar poquito no rejuvenece una deuda de hace meses.
         </p>
       </div>
     </div>
@@ -105,7 +111,7 @@
     <div class="card-head">
       <div>
         <h2>A quién cobrarle primero</h2>
-        <p>Del que más tiempo lleva sin abonar al más reciente. El abono se registra aquí mismo.</p>
+        <p>De la nota más vieja sin pagar a la más reciente. El abono se registra aquí mismo.</p>
       </div>
     </div>
     <div class="tabla-scroll">
@@ -114,9 +120,10 @@
           <tr>
             <th>Cliente</th>
             <th class="num">Debe</th>
+            <th class="num">En notas</th>
             <th class="num">Límite</th>
             <th>Último abono</th>
-            <th class="num">Sin abonar</th>
+            <th class="num">Nota más vieja</th>
             <th>Cómo va</th>
             <th><span class="oculto">Acciones</span></th>
           </tr>
@@ -129,9 +136,11 @@
                 <div class="mono muted">{{ r.telefono || r.nombre_comercial || '—' }}</div>
               </td>
               <td class="num" style="font-weight: 600">{{ r.saldo | dinero }}</td>
+              <!-- Lo que además debe en notas pendientes de pago (no es crédito). -->
+              <td class="num">{{ num(r.notas_pendientes) > 0 ? (r.notas_pendientes | dinero) : '—' }}</td>
               <td class="num muted">{{ num(r.limite_credito) > 0 ? (r.limite_credito | dinero) : 'sin límite' }}</td>
               <td style="white-space: nowrap">{{ r.ultimo_abono ? fechaCorta(r.ultimo_abono) : 'nunca ha abonado' }}</td>
-              <td class="num">{{ r.dias_sin_abonar }} días</td>
+              <td class="num">{{ r.dias_sin_abonar }} {{ r.dias_sin_abonar === 1 ? 'día' : 'días' }}</td>
               <td><span [class]="'pill ' + TRAMO[r.tramo].pill">{{ TRAMO[r.tramo].texto }}</span></td>
               <td class="acciones">
                 <button type="button" class="btn btn-primary btn-sm" (click)="abonar.emit(r)">Abonar</button>
@@ -143,6 +152,54 @@
       </table>
     </div>
   </section>
+}
+
+<!-- ============================================ Lo que deben en notas pendientes -->
+<!-- No es crédito (no usa su límite ni cuenta para el atraso), pero se debe: el
+     expediente lo suma en "debe en total" y aquí no salía (2026-10-20). -->
+@if (datos().notas_pendientes; as np) {
+  @if (np.num_clientes > 0) {
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>En notas pendientes de pago · {{ np.monto | dinero }}</h2>
+          <p>
+            {{ np.num_notas }} {{ np.num_notas === 1 ? 'nota' : 'notas' }} de {{ np.num_clientes }}
+            {{ np.num_clientes === 1 ? 'cliente' : 'clientes' }}. Se llevaron la mercancía y pagan después; no es crédito.
+          </p>
+        </div>
+      </div>
+      <div class="tabla-scroll">
+        <table class="grid" style="min-width: 640px">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th class="num">Le falta</th>
+              <th class="num">Notas</th>
+              <th>La más vieja</th>
+              <th><span class="oculto">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of np.clientes; track c.cliente_id) {
+              <tr>
+                <td>
+                  <div style="font-weight: 500">{{ c.nombre }}</div>
+                  <div class="mono muted">{{ c.codigo || '—' }}{{ c.telefono ? ' · ' + c.telefono : '' }}</div>
+                </td>
+                <td class="num" style="font-weight: 600">{{ c.monto | dinero }}</td>
+                <td class="num">{{ c.notas }}</td>
+                <td style="white-space: nowrap">{{ fechaCorta(c.desde) }}</td>
+                <td class="acciones">
+                  <a class="btn btn-ghost btn-sm" routerLink="/admin/notas-pendientes" [queryParams]="{ q: c.codigo || c.nombre }">Cobrar ›</a>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
 }
 
 <!-- ===================================================== Lo que tienen a su favor -->

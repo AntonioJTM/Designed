@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Subject, of } from 'rxjs';
-import { CargaLista } from './carga-lista';
+import { CargaLista, lotesConPaquetes, sinRenglon } from './carga-lista';
 import { EventoCarga, InventarioService, PreviaLista, ResultadoLista } from '../../../core/services/inventario.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -130,6 +130,59 @@ describe('CargaLista', () => {
     spyOn(HTMLAnchorElement.prototype, 'click');
   });
   afterEach(() => TestBed.resetTestingModule());
+
+  it('tocar un color abre sus lotes y cada paquete: renglón, código, peso y conos (2026-10-20)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    subir(c);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.fila-paquetes')).toBeNull();
+    const boton = el.querySelector('.hilo-abrir') as HTMLButtonElement;
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    boton.click();
+    f.detectChanges();
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    const panel = el.querySelector('.fila-paquetes') as HTMLElement;
+    expect(panel.textContent).toContain('Lote L1');
+    expect(panel.textContent).toContain('2 paquetes');
+    expect(panel.textContent).toContain('24 conos');
+    const filas = panel.querySelectorAll('.paquetes-lista li');
+    expect(filas.length).toBe(2);
+    expect(filas[0].textContent).toContain('001');
+    expect(filas[0].textContent).toContain('19 kg');
+    expect(filas[0].textContent).toContain('12 conos');
+    // El renglón 4 tiene un aviso: va marcado y dice qué revisar.
+    expect(filas[1].classList).toContain('con-aviso');
+    expect(filas[1].textContent).toContain('Revisar: AVISO: NET releído');
+    expect(panel.textContent).toContain('1 por revisar');
+    // Otra vez lo cierra; y un archivo nuevo empieza con todo cerrado.
+    boton.click();
+    f.detectChanges();
+    expect(el.querySelector('.fila-paquetes')).toBeNull();
+    c.alternarHilo('CAMEL|2/30');
+    subir(c);
+    expect(c.abiertos().size).toBe(0);
+  });
+
+  it('agrupa por lote en el orden del Excel y quita el "Renglón N (bulto X):" del mensaje', () => {
+    const lotes = lotesConPaquetes({
+      ...previa.hilos[0],
+      lotes: [{ lote: 'A', bultos: 1, kg: 10 }, { lote: 'B', bultos: 2, kg: 20 }],
+      bultos: [
+        { fila: 9, codigo: 'X3', peso_kg: 10.25, lote: 'B', conos: 7 },
+        { fila: 3, codigo: 'X1', peso_kg: 10, lote: 'A', conos: null },
+        { fila: 5, codigo: 'X2', peso_kg: 9.75, lote: 'B', conos: 6 },
+      ],
+    });
+    expect(lotes.map((l) => l.lote)).toEqual(['A', 'B']);
+    expect(lotes[1].bultos.map((b) => b.codigo)).toEqual(['X2', 'X3']);
+    expect(lotes[1].kg).toBe(20);
+    expect(lotes[1].conos).toBe(13);
+    expect(lotes[0].sinConos).toBe(1);
+    expect(sinRenglon('Renglón 3 (bulto 00529777): ya está registrado en «VERDE».')).toBe('ya está registrado en «VERDE».');
+    expect(sinRenglon('Renglón 12: neto vacío.')).toBe('neto vacío.');
+  });
 
   it('enseña cada hilo: el nuevo se crea sin precio y el que existe recibe bultos', async () => {
     const f = await montar();

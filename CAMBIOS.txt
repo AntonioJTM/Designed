@@ -53,6 +53,39 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  PRESENTACIONES: ya no se eliminan, y el Reporte de entradas del hilo va por
+  lote (2026-10-20, entrada 93; DESPLEGADO en 20261020-122727, sin base).
+  Antes:
+  SURTIR INVENTARIO: en la revisión de la lista con varios colores, cada color
+  se abre con sus lotes y cada paquete (renglón, código, peso y conos), y el PDF
+  de la carga va igual, POR LOTE (2026-10-20, entrada 92; pantalla DESPLEGADA en
+  20261020-120926 y PDF en 20261020-121555, sin base).
+  Antes:
+  PERSONAL Y ENTRAR: el ojito para ver la contraseña que se escribe (2026-10-20,
+  entrada 91; Personal DESPLEGADO en 20261020-114511 y Entrar en 20261020-114915,
+  sin base).
+  Antes:
+  AUDITORÍA, RONDA 4 (bloque B, diseño): barra por hilo al enviar, "Salir"
+  aparte bajo el nombre, Autorizaciones con su tipo y el monto y el folio a la
+  vista, "Abonar $X" y "le quedan → le quedarán" en las vacaciones de Nómina
+  (2026-10-20, entrada 90; DESPLEGADO en 20261020-113358, sin base). Con esto se
+  cerraron las 4 rondas de la auditoría.
+  Antes:
+  AUDITORÍA, RONDA 3 (bloque A): un solo "a favor", llave de un solo uso en
+  toda operación de dinero, aviso del turno abierto de varios días y pagar con
+  saldo a favor al entregar o pagar una nota (2026-10-20, entrada 89;
+  DESPLEGADO en 20261020-111549, migración 2026-10_operaciones_unicas en las dos
+  bases). Sigue la ronda 4 (bloque B).
+  Antes:
+  AUDITORÍA, RONDA 2: los detalles menores (2026-10-20, entrada 88;
+  DESPLEGADO en 20261020-104912, sin base).
+  Antes:
+  AUDITORÍA, RONDA 1: las 10 fallas importantes del /verificar (2026-10-20,
+  entrada 87; DESPLEGADO en 20261020-102113, migraciones 2026-10_bulto_faltante y
+  2026-10_destare_tope en las dos bases). FALTA que el usuario ponga el tope
+  del destare en Configuración → Bajar conos (nace vacío). Siguen las rondas
+  2 (menores), 3 (bloque A) y 4 (bloque B).
+  Antes:
   SURTIR SUCURSAL enseña los PEDIDOS CON AUTORIZACIÓN: esperando, autorizado
   (o por menos, con su traspaso y en qué va) o rechazado (2026-10-20, entrada
   86; DESPLEGADO en 20261020-085755, sin base).
@@ -757,6 +790,387 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (93) · Las presentaciones no se eliminan; el Reporte de entradas por lote
+-------------------------------------------------------------------------------
+
+"Sí, igual en el reporte, y otra cosa: que no se puedan eliminar las
+presentaciones; y el botón de precio y peso creo que sobra porque eso mismo lo
+tengo en la parte de abajo" (usuario, con la captura de A.ALECRICO 2/30 ·
+Presentaciones). DESPLEGADO en 20261020-122727; no toca la base.
+
+1 · LAS PRESENTACIONES NO SE ELIMINAN
+  · Se quitó "Eliminar presentación" de la tarjeta (y `eliminarVariante` de la
+    pantalla y de catalogo.service).
+  · El servidor tampoco: `DELETE /variantes/:id` contesta SIEMPRE 409
+    PRESENTACION_NO_SE_ELIMINA ("Para dejar de vender X, desactívala en «Precio
+    y peso»"); 404 si no existe. Se borraron `eliminarSiVacia` y `cargada` del
+    model (ya nadie las usa). Un producto VACÍO sí se sigue borrando completo en
+    Productos (con su presentación), como siempre.
+
+2 · «PRECIO Y PESO» SE QUEDA
+  Se le explicó que no está repetido abajo: es lo único que cambia el precio
+  PÚBLICO (en «Precios por lista» el Público solo se ve), el PESO de un paquete
+  y la casilla «Activa: se vende» (la única forma de dejar de vender una
+  presentación). El usuario eligió "dejarlo como está".
+
+3 · EL REPORTE DE ENTRADAS, POR LOTE
+  El PDF "Reporte de entradas" del hilo (Presentaciones, `pdfProducto`) trae,
+  después de "Cómo están hoy esos bultos":
+  · "Por lote": lote, bultos, kilos, conos y cuántos siguen en existencia;
+  · "Bultos por lote": cada lote con sus cifras y sus bultos (#, código, peso
+    real, conos, de qué carga y cómo están hoy).
+  Un bulto que hoy está en una tienda que quien pide NO ve dice "en existencia
+  · otra tienda" (comprobado: con solo la bodega, 6 "otra tienda" y ningún
+  nombre).
+
+PRUEBAS
+  Backend 66/66, pantallas 555/555, verificar-sistema.js 0 hallazgos. El
+  servicio rechaza borrar (409) y la presentación sigue ahí. PDF de VINO 2/30 de
+  la base de pruebas (3 cargas, 4 lotes, 104 bultos, 5 páginas) revisado.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (92) · Surtir inventario: los paquetes de cada color, antes de cargar
+-------------------------------------------------------------------------------
+
+"En la parte de surtir inventario quisiera separar por color y al darle clic me
+diga qué lotes tiene y sus códigos de barras, cuántos bultos, cuánto pesa cada
+bulto y cuántos conos trae, para que pueda verificar previo yo" (usuario, con la
+captura de "2 · Revisa y confirma"; los "ya está registrado" eran suyos: volvió
+a subir una lista ya cargada, no se tocaron). DESPLEGADO en 20261020-120926; no toca
+la base: la vista previa ya traía cada paquete.
+
+  · En la tabla de "Revisa y confirma", el nombre de cada color es un botón con
+    flechita: lo tocas y debajo se abren SUS LOTES. Cada lote dice cuántos
+    paquetes, kilos y conos trae (y cuántos vienen sin conos en el Excel), y
+    abajo cada paquete: renglón del Excel, código de barras, peso y conos, en
+    el orden del Excel, de arriba abajo por columnas (como la lista impresa).
+    Se pueden abrir varios a la vez; un archivo nuevo empieza con todo cerrado.
+  · Un paquete con ERROR (no entra) va en rojo y uno con AVISO (revisar) en
+    ámbar, con el motivo en un renglón (completo al pasar el ratón); el lote
+    dice "16 no entran" / "3 por revisar".
+  · En el celular el panel mide lo que se ve de la pantalla y no se corre con
+    la tabla (container query + sticky): antes los conos quedaban fuera.
+  · carga-lista.ts → `abiertos`, `paquetes` (lotesConPaquetes), `problemas`
+    (sinRenglon); hoja aparte carga-lista-paquetes.scss (el límite de 4 kB).
+  · Pantallas 555/555 (nuevas: abrir, cerrar, lo marcado y el agrupado por
+    lote), verificar-sistema.js 0 hallazgos; visto en Chrome con la lista real
+    "HTX 1.ARAC FFAU 721502-4" (718 paquetes, 3 colores, OPTIK con 3 lotes) a
+    1280 y 390 px. Solo vista previa: no se cargó nada.
+  · Y EL REPORTE ("igual eso lo requiero en el reporte", usuario; DESPLEGADO en
+    20261020-121555): el PDF de la carga (el de una carga y el de toda la lista)
+    pone los bultos de cada hilo POR LOTE: "Lote 0347373  14 bultos · 310.51 kg
+    · 224 conos" y su tabla (#, código, peso real, conos, hoy) con su total; el
+    lote ya no es columna. La hoja de resumen de la lista trae además "Lotes de
+    cada hilo" (hilo, lote, bultos, kilos, conos). `reportes.js → _porLote /
+    _cifrasLote` y `utils/pdf.js → subseccion` (pide lugar para no dejar el
+    título solo al pie). Revisado con el PDF de 3 cargas de la base de pruebas
+    (7 páginas); e2e-carga-lista y e2e-surtir-inventario pasan.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (91) · Personal: el ojito de la contraseña
+-------------------------------------------------------------------------------
+
+"En esta parte en la contraseña que tenga un ojito para ver la contraseña, nada
+más para verificar" (usuario, con la captura de Editar empleado). DESPLEGADO en
+20261020-114511; no toca la base.
+
+  · En Personal → Editar empleado (y Nuevo), el campo "Nueva contraseña" /
+    "Contraseña" lleva un ojito a la derecha, dentro del campo: lo aprietas y
+    se ve lo que escribiste; otra vez y se oculta (`verContrasena` en
+    usuario-form-modal.ts; el campo cambia de password a texto). Enseña SOLO lo
+    que se acaba de escribir: la contraseña de antes sigue sin poderse ver.
+  · El botón dice "Ver la contraseña" / "Ocultar la contraseña" al lector de
+    pantalla (aria-pressed), mide 44 px y no manda el formulario. El campo pasó
+    de <label> a <div> con su <label for>: un botón dentro de un label se
+    confundía con el campo.
+  · Pantallas 551/551 (nueva: el ojito enseña, oculta y no guarda),
+    verificar-sistema.js 0 hallazgos; visto en Chrome con el campo lleno, oculto
+    y a la vista.
+  · Y EN ENTRAR ("igual quiero que esté en el login en la contraseña", usuario;
+    DESPLEGADO en 20261020-114915): el mismo ojito en la contraseña de la
+    pantalla de entrar (login.html/.ts, `verContrasena`). La pieza (.con-ojo y
+    .ojo) pasó a styles.scss: la usan las dos. login.spec.ts nuevo (2):
+    enseña, tapa, no intenta entrar y el campo sigue llamándose "Contraseña".
+    Pantallas 553/553; visto en Chrome a 1280 y 390 px.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (90) · Auditoría, ronda 4 (bloque B): el diseño
+-------------------------------------------------------------------------------
+
+"Vamos a hacer ahora la 4" (usuario). DESPLEGADO en 20261020-113358; no toca la
+base. Con esto quedan hechas las 4 rondas. Lo demás del bloque B (Surtir
+plegado, ventana de autorización, Aceptar en verde, motivos con su color,
+"días", abono por nota y Mis vacaciones) ya iba en la ronda 2.
+
+1 · VENTANA DE ENVÍO: UNA BARRA POR HILO
+  La misma de Pendientes (traspasos-avance.scss, que ahora también usa
+  envio-modal): "2 de 3" en azul y, al completarse, "3 de 3 · completo ✓" en
+  verde. Así se sabe cuándo cerrar el bulto sin contar a mano
+  (`envio-modal.ts → avance`).
+
+2 · BAJO EL NOMBRE DEL MENÚ
+  "Mi clave" y "Mis vacaciones" en una fila de botones chicos ("Mi cuenta"), y
+  "Salir" APARTE, abajo de una línea y con su ícono: antes eran tres botones
+  iguales uno sobre otro. Hoja nueva `admin-cuenta.scss` (el límite de 4 kB por
+  hoja). La ventana de autorización ahora dice que la clave se pone en «Mi
+  clave».
+
+3 · AUTORIZACIONES
+  · Cada solicitud lleva su TIPO: Dinero, Precios, Inventario o Personal
+    (`TIPO_OPERACION` en autorizaciones.ts; una operación nueva se agrega ahí,
+    si no sale "Otra"). Neutro: el color es del estado.
+  · En el resumen, el MONTO va en negrita con números de ancho fijo y el FOLIO
+    en letra de código, corto (POS-7710) con el completo al pasar el ratón
+    (`partirResumen`, sin innerHTML: el texto lo arma el servidor).
+
+4 · SURTIR SUCURSAL
+  Para quien SURTE (envía desde la matriz), "Pedidos con autorización" va
+  DEBAJO de Pendientes: lo primero es lo que hay que enviar. Para quien pide,
+  sigue arriba (`traspasos.ts → surte`).
+
+5 · ANTES → DESPUÉS
+  · Abonar: el botón dice "Abonar $400.00" también "A su cuenta" (antes solo
+    "A notas").
+  · Vacaciones en Nómina: "Le quedan 12 días → le quedarán 9"; con más días de
+    los que tiene lo dice y "Registrar" se apaga. Solo opina si las fechas
+    empiezan en su año de vacaciones de ahora (cuentan contra el año donde
+    EMPIEZAN).
+
+PRUEBAS
+  Pantallas 550/550 (nuevas: el tipo y el resumen partido, la barra del envío,
+  "Abonar $X" y tres de las vacaciones), verificar-sistema.js 0 hallazgos.
+  Visto en Chrome con datos TMP en la base de pruebas (se borraron; la base
+  quedó igual): el menú, Autorizaciones a 1280 y 390 px y la ventana de envío
+  a medias y completa.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (89) · Auditoría, ronda 3 (bloque A): dinero a prueba de doble clic
+-------------------------------------------------------------------------------
+
+"Vamos con ronda 3" (usuario). DESPLEGADO en 20261020-111549. Migración
+2026-10_operaciones_unicas.sql en LAS DOS bases (respaldo previo de hitex:
+/root/respaldos/hitex_antes_ronda3_auditoria_20261020-111450.sql.gz).
+
+1 · UN SOLO "A FAVOR"
+  Al cancelar una venta a crédito que ya se había abonado, lo abonado que ya no
+  pagaba nada dejaba la CUENTA en negativo: un "a favor" que no salía en Cuánto
+  debe ni se podía usar al cobrar (había dos "a favor" distintos). Ahora pasa
+  al SALDO A FAVOR (`saldo-favor.js → pasarSobranteAFavor`, en la misma
+  transacción de cambiarEstado): un ajuste que deja la cuenta en $0 y un
+  reintegro "Lo abonado a X (se canceló) pasó a su saldo a favor". La
+  respuesta trae `abonado_a_favor` y esa venta ya no se reactiva (409
+  VENTA_CON_SALDO_FAVOR). Ejemplo: fiada de $300, abonó $100, se cancela →
+  cuenta $0 y $100 a favor; la próxima fiada de $50 nace pendiente y
+  «Descontar de lo que debe» la paga (quedan $50 a favor).
+  `e2e-clientes-credito.js` se ajustó a la regla (decía que la cuenta quedaba
+  en -$100 y pagaba sola la siguiente).
+
+2 · LLAVE DE UN SOLO USO EN TODA OPERACIÓN DE DINERO
+  La auditoría encontró 3 anticipos de $1,000 en 98 segundos (doble clic). Como
+  la venta (clave_cobro), ahora mandan `X-Clave-Unica`: abonos (cuenta, notas y
+  desde la caja), anticipos, «Descontar de lo que debe», pagos de nota,
+  entregar una nota en espera y sacar o meter efectivo. `middlewares/una-vez.js`
+  la anota en `operaciones_unicas`; la segunda petición con la misma llave
+  recibe LA MISMA respuesta (X-Repetida) sin registrar nada; si la primera
+  sigue trabajando, 409 YA_SE_ESTA_REGISTRANDO; si falló, se puede reintentar.
+  En la pantalla, `core/clave-unica.ts` (nuevaClave salió de pos.ts).
+
+3 · TURNO DE CAJA ABIERTO DE VARIOS DÍAS
+  En hitex dos turnos llevaban 5 días sin corte. La campana (grupo "Caja") y
+  Hoy avisan "X lleva N días abierta sin corte · Hacer el corte ›" desde los 2
+  días (DIAS_TURNO_ABIERTO), a quien ve Caja y solo de sus tiendas.
+
+4 · PAGAR CON SALDO A FAVOR AL ENTREGAR O PAGAR UNA NOTA
+  · Entregar una nota en espera: casilla "Usar su saldo a favor (tiene $X)";
+    paga primero eso y lo demás se cobra, se da a crédito o queda pendiente
+    (`saldo_favor` en POST /pedidos/:id/entregar; 422 SALDO_FAVOR_EXCEDE si es
+    más de lo que falta).
+  · Nota pendiente de pago: forma de pago "Su saldo a favor (tiene $X)"
+    (`con_saldo_favor: true` en POST /pedidos/:id/abonos, sin método).
+  Las dos listas traen el saldo a favor del cliente. No toca la caja.
+
+PRUEBAS
+  Backend 66/66, pantallas 543/543 (nueva: entregar con saldo a favor),
+  verificar-sistema.js 0 hallazgos. De punta a punta con la base de pruebas
+  (27 comprobaciones, datos TMP que se borran; la base quedó igual) y las E2E
+  del repositorio: clientes-credito, notas-pendientes, pedidos-encargo,
+  cancelacion-caja, devoluciones, apartados, tiendas y permisos.
+
+LO QUE ENCONTRÓ EL REVISOR DE TIENDAS (corregido antes de subir)
+  · La REPETICIÓN de una entrega le mandaba el COSTO a quien no lo ve: la
+    llave guardaba la respuesta antes de que se le quitara el costo y la
+    repetía con res.send. Ahora se repite con res.json y pasa por
+    sinCostosEnRespuesta como la primera.
+  · El ajuste que deja la cuenta en $0 nombraba el folio ("Lo abonado a
+    POS-…"), y como no lleva venta otra tienda lo veía completo. Ahora dice
+    "Lo abonado a una venta cancelada…" (el reintegro sí lleva la venta).
+  Y dos más: un 202 (solo se PIDIÓ autorización) ya no deja la llave gastada
+  —al volver a apretar se pregunta otra vez en lugar de repetir un "listo"
+  falso—, y al cancelar, el aviso dice "Lo que había abonado, $X, le quedó
+  como saldo a favor".
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (88) · Auditoría, ronda 2: los detalles menores
+-------------------------------------------------------------------------------
+
+"Vamos con ronda 2" (usuario). DESPLEGADO en 20261020-104912; no toca la base.
+
+DINERO Y CUENTAS
+  · NÓMINA: una venta que regresó COMPLETA antes de pagarse su comisión ya no
+    cuenta como venta ni suma su total (el recibo decía "2 ventas · $17,487"
+    con una de $2,726 devuelta completa); sigue en la lista, "regresó completa"
+    (`comisiones.devueltaCompleta`). Y una semana CANCELADA no se paga directo
+    (409 NOMINA_CANCELADA): regresa a borrador, donde se recalcula sola.
+  · CAJA: un abono repartido en varias notas entra al cajón como UN movimiento
+    ("Abono de X a 3 notas (…)"); salía como 3 abonos.
+  · CUÁNTO DEBE: trae lo que deben en NOTAS PENDIENTES DE PAGO (columna "En
+    notas" y su tarjeta con "Cobrar ›"), como el expediente. "Cobrado este mes"
+    ya no suma lo pagado con saldo a favor y cuenta un abono repartido como uno.
+  · HOY Y CAMPANA: los clientes nuevos sin crédito se cuentan TODOS (con 12
+    decía 8); la lista va hasta 8 y dice "Y N más".
+  · KARDEX: "Carga del proveedor" (no "Remesa"), y lo que regresa al cancelar
+    una venta dice "Regresó: se canceló la venta" (decía "Venta mostrador").
+
+PANTALLAS
+  · Plurales: "Ver el recibo", "Se autoriza 1 de 20", "1 día", "falta 1"
+    (Autorizaciones, Vacaciones, Cuánto debe, Frecuencia, Dejaron de venir,
+    Cómo va el negocio y la ventana de envío).
+  · MIS VACACIONES: "días" junto a cada cifra; con más días de los que le
+    quedan, "Pedir vacaciones" se apaga; si caben, "Te quedan 12 días → te
+    quedarán 6 días". Las Vacaciones sin permiso explican quién las registra, y
+    el recibo ya no promete un botón que no está.
+  · SURTIR SUCURSAL: lo resuelto va plegado ("Resueltos de los últimos 30 días
+    (N)"); "Autorizar o rechazar ›" lleva a ESA solicitud y ya no es azul;
+    "Retirar" se apaga mientras responde; el pie de la solicitud dice "Se pide
+    autorización" a quien no surte directo.
+  · AUTORIZACIONES: `?id=` resalta la solicitud; "Aceptar" en verde (un solo
+    azul); pagar una nómina pregunta antes; Enter en una cantidad pasa al
+    siguiente renglón; "Retirar" se apaga; motivos y "autorizó por menos" con
+    su color de fondo.
+  · VENTANA "NECESITA AUTORIZACIÓN": sin nadie con clave, "Pedirla" es el azul
+    (sin "O"); se desplaza por dentro; una clave que no son 4-6 números (la
+    pistola) ni se manda, así no gasta un intento de quien autoriza.
+  · ABONO A NOTAS: cada nota dice cómo queda ("debe $500 → le faltarán $200" o
+    "queda pagada"); la que se pasa sale en rojo (aria-invalid) y el "quedará
+    debiendo" ya no se enseña como si estuviera bien. El aviso de una nota que
+    ya no se puede escoger va en azul, no como error.
+  · Enlaces directos: "Registrar su pago" y "Entregar o cobrar" abren su lista
+    ya buscada (`?q=` con el folio); también encuentran por el número C-0001.
+  · 44 px con el dedo: "Salir", "Mi clave", "Mis vacaciones", los enlaces del
+    menú y la ✕ del panel de avisos.
+  · "La tuya" y quién pidió pagar la nómina, a la vista (no solo al pasar el
+    ratón). Los puntos de color de Nómina y Notas en espera, por clase.
+  · PUNTO DE VENTA: una cotización vieja ya no puede pisar el total nuevo, y la
+    recarga en vivo del mismo turno ya no vuelve a cotizar.
+
+PRUEBAS
+  Backend 66/66, pantallas 542/542 (nuevas: el abono que se pasa de su nota,
+  vacaciones de más y la venta devuelta completa), verificar-sistema.js 0
+  hallazgos. De punta a punta con la base de pruebas (13, datos TMP que se
+  borran; la base quedó igual): abono a 3 notas = 1 movimiento, Cuánto debe con
+  notas pendientes, cobrado del mes, kardex al cancelar, nómina cancelada y los
+  clientes nuevos. E2E del repositorio: nómina PDF y jornada, crédito, notas
+  pendientes, cancelación de caja, devoluciones, notas en espera, traspasos
+  (42), tiendas y permisos: todas pasan. En Chrome: Cuánto debe, Nómina y Hoy
+  en celular.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (87) · Auditoría, ronda 1: las 10 fallas importantes
+-------------------------------------------------------------------------------
+
+"Vamos a solucionar todo" (usuario, tras el /verificar). Ronda 1 de 4: las diez
+importantes. DESPLEGADO en 20261020-102113; migraciones 2026-10_bulto_faltante.sql y
+2026-10_destare_tope.sql en LAS DOS bases (respaldo previo de hitex en
+/root/respaldos/). Decisiones del usuario: atraso "por la nota más vieja";
+recibir "marcar cuáles faltaron"; destare "este yo lo pongo"; cancelar sin
+efectivo "dejarlo a favor del cliente".
+
+  1. SUBIR CAPTURA ya no da por pagado lo que se debe. Pegarla a la
+     transferencia de una venta a crédito la daba por "pagada" con la deuda
+     viva: ahora solo se da por pagado si con eso queda cubierto y no es a
+     crédito. Una NOTA PENDIENTE DE PAGO sin transferencia: 409
+     NOTA_PENDIENTE_USA_ABONOS (el pago por todo lo que faltaba la daba por
+     pagada aunque depositara una parte; va en «Registrar su pago»). La
+     pantalla dice "Se le pega a la transferencia que ya tiene: no cambia lo
+     que debe" y, a una nota pendiente, dónde se registra el depósito.
+  2. UNA AUTORIZACIÓN PEDIDA ya no sale en rojo ni se pide dos veces. Cada
+     ventana reconoce el "se pidió" (`shared/autorizacion/pedida.ts`): caja,
+     deuda, saldo a favor, devolución y cancelar la venta se cierran (la
+     ventana de la autorización ya dijo "Listo"); merma, cargas, bulto a mano
+     y precios lo dicen en verde y limpian la captura. Los precios por lista
+     van uno tras otro (con forkJoin, dos que pedían autorización abrían dos
+     ventanas encimadas y una se quedaba sin contestar). En el servidor, una
+     solicitud IDÉNTICA que sigue esperando se devuelve con `ya_estaba` ("Ya la
+     habías pedido") en vez de crear otra (antes solo las de 2 minutos).
+  3. EL ATRASO SE MIDE POR LA NOTA MÁS VIEJA que todavía se debe (lo pagado se
+     reparte de lo más viejo a lo más nuevo, y el abono a una nota, a esa):
+     un abono de $50 ya no reinicia el reloj de una nota de hace 40 días. La
+     misma cuenta en la caja, el candado de fiar, la campana, Hoy, Cuánto debe,
+     Cómo va el negocio y el expediente (`clientes/model.js → deudaMasVieja /
+     atrasoDe`). La caja dice "su nota más vieja lleva N días sin pagarse (le
+     faltan $X)"; después de un abono en la caja se vuelve a preguntar.
+  4. RECIBIR UN ENVÍO: se MARCAN los paquetes que no llegaron. El acuse
+     enseña cada paquete que salió con su casilla; la merma es su peso real y
+     pasan al estado nuevo `faltante` (antes se daban de baja kilos con el
+     promedio y los paquetes seguían "disponibles" en la sucursal). Decir
+     "llegaron 2 de 3" sin cuáles es 422 DI_CUALES_FALTARON. El detalle del
+     hilo, Presentaciones y el PDF de la carga dicen "No llegó".
+  5. "¿ESTE PAQUETE SÍ ESTÁ AQUÍ?" (al surtir) empieza en "No, dejarlo": el
+     Enter de la siguiente lectura de la pistola ya no lo acepta
+     (`ConfirmacionService.pedir({ enfocarCancelar: true })`).
+  6. EL TOPE DEL DESTARE lo pone la tienda: Configuración → "Bajar conos"
+     (`desarme_destare_max_kg`, de más de 0 a 1 kg; nace VACÍO = sin tope
+     propio). Pasarlo es 422 DESTARE_MUY_ALTO; la ventana de bajar conos lo
+     dice antes de mandar y ya no recuerda un destare que lo pase.
+  7. LA CAJA ya no selecciona lo que el cajero está escribiendo en el lector
+     cuando la pantalla se pone al día sola: el cursor se acomoda solo cuando
+     cambia el turno, y si ya está en el lector no se toca.
+  8. NÓMINA: si la semana cambió después de pedir que se pague (se recalculó,
+     un bono), la solicitud se cierra sola con el porqué al abrirla y el
+     botón vuelve a "Pedir que se pague" (antes se quedaba "Ya se pidió").
+  9. CANCELAR SIN EFECTIVO EN EL CAJÓN: sale lo que hay y lo que NO hay le
+     queda A FAVOR al cliente (reintegro, "En la caja no había efectivo…"; la
+     pantalla lo dice). Sin cliente: 409 EFECTIVO_INSUFICIENTE y no se
+     cancela. Ya no se reactiva (VENTA_CON_SALDO_FAVOR). Igual la diferencia
+     de una nota en espera que pesó menos. Antes el cajón quedaba en negativo.
+ 10. AUTORIZACIONES: el error al rechazar se dice dentro de su ventana, y
+     Escape cierra las dos ventanas de la pantalla.
+
+  De paso: el ANTICIPO "parte y parte" guardaba cada parte con su propia hora
+  y, con la base lejos, a veces caían en segundos distintos y su ticket salía
+  partido (lo encontró e2e-devoluciones): ahora llevan la misma hora. Y el
+  revisor de tiendas pidió dos ajustes, hechos: "no llegó" se dice solo del
+  envío donde faltó (un paquete puede viajar en dos), y decir lo recibido en
+  KILOS de una línea con paquetes también exige decir cuáles faltaron.
+
+POR DECIDIR CON EL USUARIO
+  · Un paquete marcado "no llegó" no tiene vuelta: si aparece después (nunca
+    se subió a la camioneta), no se vende, no se baja ni se envía. ¿Se agrega
+    "Apareció" (regresa a disponible con sus kilos como entrada)?
+  · El tope del destare nace VACÍO: ponerlo en Configuración → Bajar conos.
+
+PRUEBAS
+  Backend 66/66 (nuevas: la nota más vieja con abonos a la cuenta y a una
+  nota), pantallas 539/539 (nuevas: tope del destare, paquetes que no
+  llegaron, el error del rechazo y Escape), verificar-sistema.js 0 hallazgos.
+  De punta a punta con la base de pruebas (39, con datos TMP que se borran;
+  la base quedó igual): las diez. E2E del repositorio: comprobante,
+  cancelación de caja (ajustada: cajón vacío y sin cliente ya no cancela),
+  crédito, notas pendientes, devoluciones, notas en espera, traspasos
+  (ajustada: se marca cuál no llegó; 42), surtir a medias, paquete de otra
+  tienda, detalle del hilo, tiendas, permisos, nómina PDF, venta de conos y
+  bulto a mano: todas pasan. Huellas nuevas en estado-migraciones.js. En
+  Chrome: el acuse con sus casillas (escritorio y celular), la tarjeta
+  "Bajar conos" de Configuración y el aviso del tope al bajar conos.
 
 
 -------------------------------------------------------------------------------

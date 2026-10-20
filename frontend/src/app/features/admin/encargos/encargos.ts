@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Encargo, EncargoHilo, Encargos, Pedido } from '../../../core/models/ventas.models';
@@ -81,6 +81,9 @@ export class EncargosPantalla {
   });
 
   constructor() {
+    // El enlace puede traer la nota ya buscada (`?q=`, 2026-10-20): "Entregar o
+    // cobrar" del detalle de la venta.
+    this.q = inject(ActivatedRoute).snapshot.queryParamMap.get('q') ?? '';
     this.cargar();
     // EN VIVO (2026-10-19, etapa 2): una nota que se guarda, modifica, abona o
     // entrega en otra caja se ve aquí sin recargar.
@@ -183,7 +186,10 @@ export class EncargosPantalla {
           : ': lo que faltaba quedó a crédito en su cuenta.'
         : '.') +
       (cambio > 0 ? ` Su cambio: ${this.dinero(cambio)}.` : '') +
-      (devuelto > 0 ? ` Se le devolvieron ${this.dinero(devuelto)} (pesó menos de lo que pagó).` : '');
+      (devuelto > 0 ? ` Se le devolvieron ${this.dinero(devuelto)} (pesó menos de lo que pagó).` : '') +
+      (Number(p.a_favor_sin_efectivo ?? 0) > 0
+        ? ` En la caja no había efectivo para devolverle todo: ${this.dinero(Number(p.a_favor_sin_efectivo))} le quedaron a favor.`
+        : '');
     const extras = cambio > 0 ? { cambio } : undefined;
     this.ticketAviso.poner(
       texto,

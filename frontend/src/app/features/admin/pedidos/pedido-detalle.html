@@ -60,10 +60,10 @@
             <app-boton-whatsapp [etiqueta]="'Mandar por WhatsApp el ticket de ' + p.numero_pedido" (mandar)="whatsappTicket()" />
           }
           @if (esEncargo(p) && esApartadoSinEntregar(p) && !inactivo(p) && veEncargos()) {
-            <a class="btn btn-ghost" routerLink="/admin/notas-en-espera">Entregar o cobrar</a>
+            <a class="btn btn-ghost" routerLink="/admin/notas-en-espera" [queryParams]="{ q: p.numero_pedido }">Entregar o cobrar</a>
           }
           @if (esNotaPendiente(p) && p.estado === 'pendiente' && fiado(p) <= 0 && veNotas()) {
-            <a class="btn btn-ghost" routerLink="/admin/notas-pendientes">Registrar su pago</a>
+            <a class="btn btn-ghost" routerLink="/admin/notas-pendientes" [queryParams]="{ q: p.numero_pedido }">Registrar su pago</a>
           }
           @if (abonaANota(p)) {
             <!-- Una venta a crédito que todavía se debe: el abono va a ESTA nota (2026-10-19). -->
@@ -344,7 +344,11 @@
               </div>
             } @else {
               <p class="muted" style="margin: 0">
-                Todavía no hay captura. Al subirla, el pedido queda marcado como <b>pagado</b>.
+                @if (capturaSoloPrueba()) {
+                  Todavía no hay captura. Se le pega a la transferencia que ya tiene: no cambia lo que debe.
+                } @else {
+                  Todavía no hay captura. Al subirla, el pedido queda marcado como <b>pagado</b>.
+                }
               </p>
               <div>
                 <label class="btn btn-primary btn-sm">
@@ -362,6 +366,13 @@
           <p class="muted ayuda deposito-abono">
             Es una venta a crédito: si el cliente deposita, regístralo con «Abonar a esta nota» (arriba), por
             transferencia. Así baja lo que debe esta nota y se da por pagada sola cuando la cubre.
+          </p>
+        }
+        <!-- Una nota pendiente de pago se paga en abonos; la captura se pega después (2026-10-20). -->
+        @if (depositoComoPagoDeNota()) {
+          <p class="muted ayuda deposito-abono">
+            Es una nota pendiente de pago: si el cliente deposita, regístralo con «Registrar su pago» (arriba), por
+            transferencia y con lo que depositó. Después aquí le pegas la captura.
           </p>
         }
       </section>
@@ -483,6 +494,11 @@
         @if (efectivoADevolver() > 0) {
           <p class="aviso">
             Salen <b>{{ efectivoADevolver() | dinero }}</b> en efectivo de la caja, para que el corte cuadre.
+            @if (p.cliente_id) {
+              Si en el cajón no hay tanto, lo que falte le queda a favor al cliente.
+            } @else {
+              Si en el cajón no hay tanto, no se cancela: la venta no tiene cliente al cual dejárselo a favor.
+            }
             Si el turno de la venta ya cerró, se registra en el turno abierto.
           </p>
         }

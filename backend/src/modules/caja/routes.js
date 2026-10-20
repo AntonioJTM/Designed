@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
+const { unaVez } = require('../../middlewares/una-vez');
 const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
 const { autorizable } = require('../autorizaciones/autorizable');
 
@@ -59,7 +60,8 @@ router.post('/sesiones', validate(abrirSchema), controller.abrirSesion);
 router.get('/sesiones/abierta', controller.sesionAbierta); // ?caja_id=
 router.get('/sesiones/:id', controller.obtenerSesion);
 // Con AUTORIZACIÓN (2026-10-19): quien no lo hace directo lo pide.
-router.post('/sesiones/:id/movimientos', validate(movimientoSchema), autorizable('mover_efectivo'), controller.registrarMovimiento);
+// Con su llave de un solo uso (`X-Clave-Unica`, 2026-10-20): un doble clic no saca dos veces.
+router.post('/sesiones/:id/movimientos', validate(movimientoSchema), unaVez(), autorizable('mover_efectivo'), controller.registrarMovimiento);
 router.post('/sesiones/:id/cerrar', validate(cerrarSchema), controller.cerrarSesion);
 
 module.exports = router;

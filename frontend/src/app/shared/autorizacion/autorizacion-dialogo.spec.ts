@@ -52,7 +52,7 @@ describe('AutorizacionDialogo', () => {
     const { f } = await montar({ ...INFO, autorizadores: INFO.autorizadores.map((u) => ({ ...u, con_clave: false })) });
     const el = f.nativeElement as HTMLElement;
     expect(el.querySelector('input[type=password]')).toBeNull();
-    expect(el.textContent).toContain('Mi clave para autorizar');
+    expect(el.textContent).toContain('«Mi clave»');
   });
 
   it('dice qué se pide y a quién le llega si se pide', async () => {

@@ -115,4 +115,17 @@ describe('ComisionesSemanaComponent', () => {
     expect(texto).not.toContain('una vez, completa');
     expect(f.componentInstance.suma(datos.vendedores[0].ventas, 'comision')).toBe(54);
   });
+
+  it('una venta que regresó completa no cuenta como venta ni suma su total (2026-10-20)', async () => {
+    const c = (await montar()).componentInstance;
+    const lista = [
+      { pedido_id: 1, numero_pedido: 'POS-1-AAAA', cliente: null, tipo: 'contado', vendida_en: '2026-10-19 10:00:00',
+        liquidada_en: '2026-10-19 10:00:00', total: 2726, venta_neta: 0, devuelto: 2350, comision: 0 },
+      { pedido_id: 2, numero_pedido: 'POS-1-BBBB', cliente: null, tipo: 'contado', vendida_en: '2026-10-19 11:00:00',
+        liquidada_en: '2026-10-19 11:00:00', total: 14761, venta_neta: 12725, comision: 381.75 },
+    ] as unknown as Parameters<typeof c.ventasDe>[0];
+    expect(c.ventasDe(lista)).toBe(1);
+    expect(c.suma(lista, 'total')).toBe(14761);
+    expect(c.devueltaCompleta(lista[0])).toBeTrue();
+  });
 });

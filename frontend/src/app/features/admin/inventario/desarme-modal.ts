@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Conversion, InventarioService, PreviaDesarme } from '../../../core/services/inventario.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { TiendaService } from '../../../core/services/tienda.service';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { FechaPipe } from '../../../shared/fecha.pipe';
 import { CuandoPipe } from './cuando.pipe';
@@ -32,6 +33,12 @@ import { CuandoPipe } from './cuando.pipe';
 })
 export class DesarmeModal implements OnInit {
   private readonly inv = inject(InventarioService);
+  private readonly tiendaSvc = inject(TiendaService);
+  /**
+   * El tope del destare por cono que puso la tienda (Configuración → Bajar
+   * conos, 2026-10-20). null: sin tope propio (el servidor deja hasta 1 kg).
+   */
+  readonly topeDestare = signal<number | null>(null);
 
   readonly almacenes = input<Almacen[]>([]);
   /** Últimas bajadas, para contestar "¿ya lo bajé?" sin salir del modal. */
@@ -83,18 +90,34 @@ export class DesarmeModal implements OnInit {
 
   /** Los inputs se leen aquí, no en el constructor: ahí todavía no están puestos. */
   ngOnInit(): void {
-    // El tubo casi siempre es el mismo: se propone el último destare usado.
+    // El tubo casi siempre es el mismo: se propone el último destare usado, si no
+    // pasa del tope (2026-10-20: se recordaba 0.8 kg por cono y se volvía a usar).
     try {
       const d = Number(localStorage.getItem('destare_por_cono'));
-      if (d > 0) this.destarePorCono = d;
+      if (d > 0 && d <= 1) this.destarePorCono = d;
     } catch {
       /* sin almacenamiento: se captura cada vez */
     }
+    this.tiendaSvc.configuracion().subscribe({
+      next: (c) => {
+        const t = Number(c.desarme_destare_max_kg);
+        this.topeDestare.set(c.desarme_destare_max_kg && t > 0 ? t : null);
+        if (this.pasaDelTope()) this.destarePorCono = null;
+      },
+      error: () => {},
+    });
+  }
+
+  /** ¿El destare escrito pasa del tope? (el servidor también lo rechaza). */
+  pasaDelTope(): boolean {
+    const t = this.topeDestare();
+    const d = Number(this.destarePorCono ?? 0);
+    return d > 1 || (t != null && d > t + 0.0005);
   }
 
   private recordarDestare(): void {
     try {
-      if (this.destarePorCono && this.destarePorCono > 0) {
+      if (this.destarePorCono && this.destarePorCono > 0 && !this.pasaDelTope()) {
         localStorage.setItem('destare_por_cono', String(this.destarePorCono));
       }
     } catch {
@@ -188,6 +211,15 @@ export class DesarmeModal implements OnInit {
     const problema = this.problemaUbicacion();
     if (problema) {
       this.error.set(problema);
+      return;
+    }
+    if (this.pasaDelTope()) {
+      const t = this.topeDestare();
+      this.error.set(
+        `El destare por cono es de ${this.gramos().toLocaleString('es-MX')} g` +
+          (t != null ? ` y el tope es de ${Math.round(t * 1000).toLocaleString('es-MX')} g (Configuración → Bajar conos)` : ' y no puede pasar de 1 kg') +
+          '. Pesa el tubo de UN cono vacío y escribe eso, en kilos.'
+      );
       return;
     }
     this.bajando.set(true);

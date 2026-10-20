@@ -78,6 +78,18 @@ function seccion(doc, texto) {
   doc.moveDown(0.5);
 }
 
+/**
+ * Un subtítulo dentro de una sección ("Lote 0094853") con sus cifras a un lado,
+ * en gris. Pide lugar para él y unos renglones: un subtítulo solo al pie de la
+ * página, con su tabla en la siguiente, no se entiende.
+ */
+function subseccion(doc, texto, cifras = '') {
+  asegurar(doc, 90);
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR.tinta).text(texto, MARGEN, doc.y, { continued: !!cifras });
+  if (cifras) doc.font('Helvetica').fontSize(9.5).fillColor(COLOR.tinta2).text(`   ${cifras}`);
+  doc.moveDown(0.35);
+}
+
 /** Nota en gris (una explicación, un aviso). */
 function nota(doc, texto) {
   asegurar(doc, 30);
@@ -280,6 +292,6 @@ function dinero(n) {
 }
 
 module.exports = {
-  crear, encabezado, seccion, nota, datos, cifras, tabla, pie, aBuffer, enviar, linea,
+  crear, encabezado, seccion, subseccion, nota, datos, cifras, tabla, pie, aBuffer, enviar, linea,
   fecha, fechaCorta, kg, numero, dinero, COLOR,
 };

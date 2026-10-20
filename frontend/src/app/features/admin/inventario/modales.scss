@@ -46,3 +46,6 @@
 .ayuda.aviso-tienda { color: var(--aviso-t); }
 .modal-body > .alert.alerta-ubicacion { margin: 12px 0 16px; }
 .previa + .campos { margin-top: 16px; }
+
+// El destare que pasa del tope de la tienda (2026-10-20): en rojo, junto al campo.
+.ayuda.destare-alto { color: var(--peligro-t); font-weight: 500; }

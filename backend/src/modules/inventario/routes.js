@@ -100,6 +100,9 @@ const recepcionSchema = z
             detalle_id: z.coerce.number().int().positive(),
             paquetes: z.coerce.number().min(0).max(1000000).optional(),
             cantidad: z.coerce.number().min(0).max(1000000).optional(),
+            // Los códigos de los paquetes que NO llegaron (2026-10-20): con ellos
+            // la merma es su peso real y dejan de estar disponibles.
+            faltan: z.array(z.string().trim().min(1).max(60)).max(2000).optional(),
           })
           .strict()
       )

@@ -18,14 +18,14 @@ const ESTADOS_MUERTOS = "('cancelado', 'devuelto')";
 // ---------------------------------------------------------------------------
 
 /**
- * La cartera por ANTIGÜEDAD. Los días se miden desde su ÚLTIMO ABONO (o desde
- * que volvió a deber, si lo había pagado todo): si abonó hace una semana, su
- * saldo no es "viejo" aunque el cargo sea de hace meses — está pagando. Es la
- * MISMA cuenta y el MISMO plazo que la caja y la campana (2026-10-17): antes aquí
- * contaba cualquier movimiento (también un cargo nuevo) y el aviso era a 30 días,
- * así que un cliente de 16 días salía "al día" aquí y "atrasado" en la caja.
+ * La cartera por ANTIGÜEDAD. Los días son los que lleva sin pagarse su NOTA MÁS
+ * VIEJA (2026-10-20, auditoría; el usuario eligió "por la nota más vieja"): lo
+ * pagado se reparte de lo más viejo a lo más nuevo, así que abonar poquito no
+ * "rejuvenece" una deuda de hace meses. Es la MISMA cuenta y el MISMO plazo que
+ * la caja y la campana (`clientes/model.js → diasSinAbonarDeTodos`).
  *
- * `dias_sin_abonar` es lo que de verdad importa para decidir a quién llamar.
+ * `dias_sin_abonar` (se quedó el nombre) es lo que de verdad importa para
+ * decidir a quién llamar; `nota_vieja_por_pagar`, lo que le falta de esa nota.
  */
 async function cartera({ diasAviso } = {}) {
   const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
@@ -48,8 +48,12 @@ async function cartera({ diasAviso } = {}) {
       WHERE s.saldo > 0`
   );
   const dias = await diasSinAbonarDeTodos();
-  for (const r of rows) r.dias_sin_abonar = dias.get(Number(r.cliente_id)) ?? 0;
-  // Del que más tiempo lleva sin abonar al más reciente; con los mismos días, el que debe más.
+  for (const r of rows) {
+    const a = dias.get(Number(r.cliente_id));
+    r.dias_sin_abonar = a?.dias ?? 0;
+    r.nota_vieja_por_pagar = a?.porPagar ?? Number(r.saldo);
+  }
+  // De la nota más vieja a la más reciente; con los mismos días, el que debe más.
   rows.sort((a, b) => b.dias_sin_abonar - a.dias_sin_abonar || Number(b.saldo) - Number(a.saldo));
 
   // Los tramos se arman aquí y no en SQL: el corte lo decide el negocio y así

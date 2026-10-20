@@ -514,9 +514,10 @@ async function _calcular(conn, periodoId) {
     const ventasNetas = alLiquidar
       ? round2(pagadas.reduce((s, v) => s + v.venta_neta, 0))
       : venta ? round2(venta.ventas_netas) : 0;
-    // Los renglones de devolución (lo que regresó de una venta ya pagada) no son ventas.
+    // Los renglones de devolución (lo que regresó de una venta ya pagada) no son
+    // ventas, ni la que regresó completa (2026-10-20).
     const numPedidos = alLiquidar
-      ? pagadas.filter((v) => v.tipo !== 'devolucion').length
+      ? pagadas.filter((v) => v.tipo !== 'devolucion' && !comisiones.devueltaCompleta(v)).length
       : venta ? Number(venta.num_pedidos) : 0;
     // Con la regla nueva, la suma de la comisión de cada venta (y de cada
     // descuento por devolución): así el recibo cuadra centavo a centavo con el

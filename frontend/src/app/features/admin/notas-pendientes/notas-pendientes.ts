@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
 import { TicketService } from '../../../core/services/ticket.service';
 import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
@@ -61,6 +61,9 @@ export class NotasPendientesPantalla {
   private temporizador: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
+    // El enlace puede traer la nota o el cliente ya buscado (`?q=`, 2026-10-20):
+    // "Registrar su pago" del detalle de la venta y "Cobrar" de Cuánto debe.
+    this.q = inject(ActivatedRoute).snapshot.queryParamMap.get('q') ?? '';
     this.cargar();
     // EN VIVO (2026-10-19, etapa 2): un pago o un paso a crédito hecho en otra
     // computadora quita o cambia la nota aquí sin recargar.

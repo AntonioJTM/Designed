@@ -1,0 +1,49 @@
+// LOS PAQUETES DE CADA COLOR antes de cargar (2026-10-20, usuario): tocar el
+// color abre sus lotes y, en cada lote, sus paquetes con renglón, código, peso
+// y conos. Se leen de arriba abajo por columnas, como la lista del Excel.
+.pista-paquetes { margin: 0 0 8px; font-size: 0.8125rem; color: var(--tinta-3); }
+
+.hilo-abrir {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; margin: -4px -6px;
+  min-height: 36px; border: 0; border-radius: 6px; background: transparent;
+  font: inherit; color: var(--tinta); text-align: left; cursor: pointer;
+}
+.hilo-abrir:hover { background: var(--superficie-2); }
+.hilo-abrir svg { flex: 0 0 auto; color: var(--tinta-3); transition: transform 0.15s; }
+tr.abierto .hilo-abrir svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .hilo-abrir svg { transition: none; } }
+
+// La celda de los paquetes ocupa todo el renglón y no hereda los topes de la primera columna.
+table.grid.hilos tr.fila-paquetes > td { max-width: none; white-space: normal; padding: 4px 12px 16px; background: var(--superficie-2); }
+// Lo de adentro mide lo que se VE de la tabla y se queda quieto al desplazarla
+// de lado: en el celular la tabla mide 740 px y los conos quedaban fuera.
+.con-paquetes { container-type: inline-size; }
+.paquetes-hilo { position: sticky; left: 12px; width: calc(100cqw - 24px); }
+.lote-paquetes + .lote-paquetes { margin-top: 14px; }
+.lote-paquetes h4 {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin: 10px 0 8px; font-size: 0.875rem; font-weight: 600;
+}
+.lote-cifras { font-weight: 400; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+
+.paquetes-lista {
+  list-style: none; margin: 0; padding: 0;
+  column-width: 270px; column-gap: 20px;
+}
+.paquetes-lista li {
+  break-inside: avoid;
+  display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 10px;
+  padding: 4px 8px; border-radius: 6px; font-size: 0.8125rem; font-variant-numeric: tabular-nums;
+}
+.paquetes-lista li:nth-child(odd) { background: var(--superficie); }
+.paquetes-lista .renglon { color: var(--tinta-3); text-align: right; }
+.paquetes-lista .codigo { color: var(--tinta); overflow-wrap: anywhere; }
+.paquetes-lista .kg { text-align: right; font-weight: 600; }
+.paquetes-lista .conos { text-align: right; color: var(--tinta-2); white-space: nowrap; }
+// El problema en UN renglón (el mensaje completo, al pasar el ratón): repetido
+// entero en cada paquete tapaba la lista.
+.paquetes-lista .problema { grid-column: 2 / -1; font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.paquetes-lista li.con-error { background: var(--peligro-f); color: var(--peligro-t); }
+.paquetes-lista li.con-aviso { background: var(--aviso-f); color: var(--aviso-t); }
+.paquetes-lista li.con-error .codigo, .paquetes-lista li.con-error .conos,
+.paquetes-lista li.con-aviso .codigo, .paquetes-lista li.con-aviso .conos { color: inherit; }

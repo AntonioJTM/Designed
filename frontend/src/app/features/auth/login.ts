@@ -25,6 +25,8 @@ export class Login {
 
   readonly cargando = signal(false);
   readonly error = signal<string | null>(null);
+  /** El ojito: enseña la contraseña que se escribió, para revisarla (2026-10-20). */
+  readonly verContrasena = signal(false);
 
   readonly form = this.fb.nonNullable.group({
     correo: ['', [Validators.required, Validators.email]],

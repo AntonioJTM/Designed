@@ -5,6 +5,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
+const { unaVez } = require('../../middlewares/una-vez');
 const { authRequired, requireTipo, requirePermiso, requirePermisoAlguno } = require('../../middlewares/auth');
 const { autorizable } = require('../autorizaciones/autorizable');
 const { sinCostosEnRespuesta } = require('../permisos/service');
@@ -177,14 +178,17 @@ router.patch('/:id/estado', ...soloStaff, validate(estadoSchema), autorizable('c
 const abonoApartadoSchema = z
   .object({
     monto: z.coerce.number().positive().max(99999999),
-    metodo_pago_id: z.coerce.number().int().positive(),
+    // Sin método si se paga CON SU SALDO A FAVOR (2026-10-20).
+    metodo_pago_id: z.coerce.number().int().positive().optional(),
+    con_saldo_favor: z.boolean().optional(),
     // Obligatoria si el abono es en efectivo: el dinero entra al turno.
     sesion_caja_id: z.coerce.number().int().positive().optional(),
     referencia: z.string().trim().max(120).optional(),
   })
   .strict();
 
-router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), controller.abonarApartado);
+// Con su llave de un solo uso (`X-Clave-Unica`, 2026-10-20).
+router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), unaVez(), controller.abonarApartado);
 // Los datos del ticket de uno de sus pagos, al registrarlo o para reimprimirlo (2026-10-15).
 router.get('/:id/pagos/:pagoId/ticket', ...soloStaff, controller.ticketPago);
 // Pasar a crédito lo que falta de una nota pendiente de pago (es vender a crédito: pide su permiso).
@@ -208,9 +212,11 @@ const entregaSchema = z
     pendiente_pago: z.boolean().optional(),
     // Fiarle lo que falta aunque traiga su cuenta atrasada (se autoriza, 2026-10-19).
     fiar_con_atraso: z.boolean().optional(),
+    // Lo que se paga con su SALDO A FAVOR antes de cobrar lo demás (2026-10-20).
+    saldo_favor: z.coerce.number().positive().max(99999999).optional(),
   })
   .strict();
-router.post('/:id/entregar', ...soloStaff, validate(entregaSchema), autorizable('fiar_atrasado'), controller.entregarApartado);
+router.post('/:id/entregar', ...soloStaff, validate(entregaSchema), unaVez(), autorizable('fiar_atrasado'), controller.entregarApartado);
 
 // MODIFICAR un pedido en espera (2026-10-07: "hay casos donde el cliente quiere
 // modificar su pedido, agregar o quitar cosas"): la lista COMPLETA de lo que

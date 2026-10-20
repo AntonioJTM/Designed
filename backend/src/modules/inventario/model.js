@@ -7,6 +7,7 @@ const { porPalabras } = require('../../utils/query');
 const { AppError, enOtraTienda } = require('../../middlewares/error');
 const { filtroAlmacen } = require('../permisos/service');
 const { anotarAlmacen } = require('../tiempo-real/contexto');
+const configuracionModel = require('../configuracion/model');
 
 /**
  * CADA QUIEN, SUS TIENDAS (2026-10-15): agrega al WHERE el filtro de los
@@ -664,8 +665,9 @@ async function desarmar(datos, usuarioId) {
           `El bulto ${datos.codigo_bulto} no está registrado`);
       }
       if (bulto.estado !== 'disponible') {
-        throw new AppError(409, 'BULTO_NO_DISPONIBLE',
-          `El bulto ${bulto.codigo} ya está ${bulto.estado}; no se puede desarmar.`);
+        throw new AppError(409, 'BULTO_NO_DISPONIBLE', bulto.estado === 'faltante'
+          ? `El bulto ${bulto.codigo} se dio por faltante al recibir un envío (no llegó); no se puede desarmar.`
+          : `El bulto ${bulto.codigo} ya está ${bulto.estado}; no se puede desarmar.`);
       }
       // EL PAQUETE TIENE QUE ESTAR EN ESA TIENDA (usuario, 2026-10-06: "si no,
       // que mande una alerta de que el paquete en esa sucursal no existe"). Es
@@ -722,6 +724,16 @@ async function desarmar(datos, usuarioId) {
         : datos.destare_kg != null ? round3(datos.destare_kg) : null;
     if (destareKg != null && destareKg < 0) {
       throw new AppError(422, 'DESTARE_INVALIDO', 'El destare no puede ser negativo');
+    }
+    // EL TOPE QUE PONE LA TIENDA (2026-10-20, auditoría: dos bajadas llevaban 0.8 kg
+    // por cono). Lo fija en Configuración → Bajar conos; sin él, vale el de 1 kg.
+    const tope = await configuracionModel.numero('desarme_destare_max_kg', null, conn);
+    const porCono = destareKg != null && piezasGeneradas > 0 ? destareKg / piezasGeneradas : 0;
+    if (tope != null && tope > 0 && porCono > tope + 0.0005) {
+      const g = (kg) => `${Math.round(kg * 1000).toLocaleString('es-MX')} g`;
+      throw new AppError(422, 'DESTARE_MUY_ALTO',
+        `El destare por cono es de ${g(porCono)} y el tope es de ${g(tope)} (Configuración → Bajar conos). ` +
+        'Pesa el tubo de UN cono vacío y escribe eso, en kilos.', { tope_kg: tope });
     }
     const kgEnconados = round3(kgConsumidos + (destareKg ?? 0));
 
@@ -1044,7 +1056,10 @@ async function _bultosEscaneados(conn, codigos, variantesDelTraspaso, nombreDe, 
       const apartadoPara = b.consumido_tipo === 'traspaso'
         ? `está apartado para el envío ${b.traspaso_folio ?? ''} a otra sucursal`
         : `está apartado para ${b.pedido_folio ? 'el pedido ' + b.pedido_folio : 'un pedido de un cliente'}`;
-      const que = { vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: apartadoPara };
+      const que = {
+        vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: apartadoPara,
+        faltante: 'se dio por faltante al recibir un envío (no llegó)',
+      };
       throw enOtraTienda(new AppError(409, 'BULTO_NO_DISPONIBLE',
         `El paquete ${c} de ${nombreDe(b.variante_id)} ${que[b.estado] ?? 'no está disponible'}.`),
       [b.almacen_id], `El paquete ${c} no está disponible en esta tienda: escanea otro.`);
@@ -1416,6 +1431,7 @@ async function guardarEscaneos(id, usuarioId, codigos = [], encontrados = []) {
  * `l.guardados = [{ codigo, peso_kg, lote, variante_id }]`.
  */
 async function _conGuardados(ejecutor, traspasos) {
+  await _conEnviados(ejecutor, traspasos);
   const porEnviar = traspasos.filter((t) => t.estado === 'solicitado');
   const lineas = porEnviar.flatMap((t) => t.lineas ?? []);
   for (const l of lineas) l.guardados = [];
@@ -1436,6 +1452,35 @@ async function _conGuardados(ejecutor, traspasos) {
 }
 
 /**
+ * LOS PAQUETES QUE SALIERON en un envío ya enviado (en camino o recibido), en
+ * cada línea (`enviados`, con `falto` si al recibirlo se dijo que no llegó). Con
+ * ellos quien recibe palomea los que no llegaron (2026-10-20).
+ */
+async function _conEnviados(ejecutor, traspasos) {
+  const salieron = traspasos.filter((t) => t.estado === 'en_transito' || t.estado === 'recibido');
+  const lineas = salieron.flatMap((t) => t.lineas ?? []);
+  for (const l of lineas) l.enviados = [];
+  if (!lineas.length) return;
+  const [rows] = await ejecutor.query(
+    // "No llegó" solo en el envío donde faltó: el mismo paquete pudo viajar antes en otro.
+    `SELECT tb.detalle_id, vc.codigo, vc.peso_kg, vc.lote,
+            (vc.estado = 'faltante' AND vc.consumido_tipo = 'traspaso' AND vc.consumido_id = td.traspaso_id) AS falto
+       FROM traspaso_bultos tb
+       JOIN traspaso_detalle td ON td.id = tb.detalle_id
+       JOIN variante_codigos vc ON vc.id = tb.variante_codigo_id
+      WHERE tb.detalle_id IN (:ids)
+      ORDER BY vc.codigo`,
+    { ids: lineas.map((l) => l.detalle_id) }
+  );
+  const porLinea = new Map(lineas.map((l) => [Number(l.detalle_id), l]));
+  for (const r of rows) {
+    porLinea.get(Number(r.detalle_id))?.enviados.push({
+      codigo: r.codigo, peso_kg: r.peso_kg, lote: r.lote, falto: Boolean(Number(r.falto)),
+    });
+  }
+}
+
+/**
  * RECIBIR: el responsable de la sucursal acepta y dice QUÉ llegó.
  *
  * Entra al destino lo que se envió, y si llegó menos, la diferencia se asienta
@@ -1444,6 +1489,12 @@ async function _conGuardados(ejecutor, traspasos) {
  * Queda guardado quién aceptó y cuándo, que es el punto de todo esto.
  *
  * `recibido` es opcional: sin él se acepta el envío completo.
+ *
+ * LOS PAQUETES QUE NO LLEGARON (2026-10-20, auditoría; el usuario eligió "marcar
+ * cuáles faltaron"): de una línea que viajó con sus paquetes escaneados se dice
+ * CUÁLES no llegaron (`faltan`, sus códigos). La merma es su peso real y pasan a
+ * 'faltante': antes se decía "llegaron 18 de 20", los kilos de 2 se daban de
+ * baja con el promedio y los 20 paquetes seguían disponibles en la sucursal.
  */
 async function recibirTraspaso(id, usuarioId, datos = {}) {
   return withTransaction(async (conn) => {
@@ -1480,10 +1531,41 @@ async function recibirTraspaso(id, usuarioId, datos = {}) {
         continue;
       }
 
+      // Los paquetes que viajaron en esta línea (los escaneados al surtir).
+      const [viajaron] = await conn.query(
+        `SELECT vc.id, vc.codigo, vc.peso_kg, vc.estado
+           FROM traspaso_bultos tb JOIN variante_codigos vc ON vc.id = tb.variante_codigo_id
+          WHERE tb.detalle_id = :d FOR UPDATE`,
+        { d: d.id }
+      );
+      const faltan = [...new Set((dicho?.faltan ?? []).map((c) => String(c).trim()).filter(Boolean))];
+      const porCodigo = new Map(viajaron.map((b) => [b.codigo, b]));
+      const noLlegaron = [];
+      for (const c of faltan) {
+        const b = porCodigo.get(c);
+        if (!b) {
+          throw new AppError(422, 'BULTO_NO_ES_DEL_ENVIO',
+            `El paquete ${c} no viene en este envío de ${v.producto} · ${v.sku}.`);
+        }
+        noLlegaron.push(b);
+      }
+
       // Lo que llegó, en la unidad que sea más natural: paquetes si así se pidió.
       let recibida = enviado;
       let paquetesRecibidos = d.paquetes != null ? Number(d.paquetes) : null;
-      if (dicho) {
+      if (noLlegaron.length) {
+        // Se sabe CUÁLES faltaron: la merma es su peso real.
+        const kgFaltan = round3(noLlegaron.reduce((s, b) => s + Number(b.peso_kg ?? 0), 0));
+        recibida = round3(Math.max(0, enviado - kgFaltan));
+        if (paquetesRecibidos != null) paquetesRecibidos = Math.max(0, paquetesRecibidos - noLlegaron.length);
+      } else if (dicho && viajaron.length &&
+                 ((dicho.paquetes != null && d.paquetes != null && Number(dicho.paquetes) < Number(d.paquetes)) ||
+                  (dicho.paquetes == null && dicho.cantidad != null && round3(Number(dicho.cantidad)) < enviado))) {
+        // Viajó con sus paquetes escaneados: hay que decir cuáles no llegaron, o
+        // quedarían "disponibles" en la sucursal paquetes que no están.
+        throw new AppError(422, 'DI_CUALES_FALTARON',
+          `De ${v.producto} · ${v.sku} salieron ${Number(d.paquetes)} paquetes con su código: marca cuáles no llegaron.`);
+      } else if (dicho) {
         if (dicho.paquetes != null && d.paquetes != null) {
           paquetesRecibidos = Number(dicho.paquetes);
           const porPaquete = Number(d.paquetes) > 0 ? enviado / Number(d.paquetes) : 0;
@@ -1522,6 +1604,10 @@ async function recibirTraspaso(id, usuarioId, datos = {}) {
       // que el kardex cuadre: entró lo enviado y se dio de baja la diferencia.
       const faltante = round3(enviado - recibida);
       if (faltante > 0) {
+        const cuales = noLlegaron.length
+          ? `; no llegaron ${noLlegaron.length === 1 ? 'el paquete' : `${noLlegaron.length} paquetes:`} ` +
+            noLlegaron.map((b) => b.codigo).slice(0, 12).join(', ') + (noLlegaron.length > 12 ? '…' : '')
+          : '';
         await _insertarMovimiento(conn, {
           variante_id: v.id,
           almacen_id: t.almacen_destino_id,
@@ -1532,8 +1618,18 @@ async function recibirTraspaso(id, usuarioId, datos = {}) {
           referencia_id: t.id,
           usuario_id: usuarioId ?? null,
           motivo:
-            `Faltante en el traspaso ${t.folio}: se enviaron ${enviado} kg y llegaron ${recibida} kg`,
+            `Faltante en el traspaso ${t.folio}: se enviaron ${enviado} kg y llegaron ${recibida} kg${cuales}`.slice(0, 255),
         });
+      }
+      // Los que no llegaron dejan de estar en la sucursal: ya no se venden ni se
+      // bajan a conos, y el detalle del hilo dice que faltaron en este envío.
+      if (noLlegaron.length) {
+        await conn.query(
+          `UPDATE variante_codigos
+              SET estado = 'faltante', consumido_en = NOW(), consumido_tipo = 'traspaso', consumido_id = :t
+            WHERE id IN (:ids)`,
+          { t: t.id, ids: noLlegaron.map((b) => b.id) }
+        );
       }
 
       await conn.query(
@@ -1553,6 +1649,7 @@ async function recibirTraspaso(id, usuarioId, datos = {}) {
         faltante,
         paquetes: d.paquetes != null ? Number(d.paquetes) : null,
         paquetes_recibidos: paquetesRecibidos,
+        no_llegaron: noLlegaron.map((b) => b.codigo),
         saldo_destino: round3(saldo + recibida),
       });
     }

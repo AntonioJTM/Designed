@@ -1,8 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { forkJoin, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { concat, forkJoin, of, throwError } from 'rxjs';
+import { catchError, map, toArray } from 'rxjs/operators';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { AuthService } from '../../../core/services/auth.service';
 import {
@@ -22,6 +22,7 @@ import {
   VarianteCodigo,
 } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { cotejarArchivo, textoAviso } from '../../../shared/remesa-archivo';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -466,8 +467,17 @@ export class ProductoPresentaciones {
           this.recargar();
         },
         error: (e) => {
-          this.error.set(this.msg(e));
           this.cargandoRemesa.set(false);
+          // Se pidió la autorización: en verde y la captura limpia (entra cuando la acepten).
+          const pedida = autorizacionPedida(e);
+          if (pedida) {
+            this.mensaje.set(pedida);
+            this.previa.set(null);
+            this.datosCarga.set(datosCargaVacios());
+            this.archivo = null;
+            return;
+          }
+          this.error.set(this.msg(e));
         },
       });
   }
@@ -704,6 +714,9 @@ export class ProductoPresentaciones {
     if (b.estado === 'apartado') {
       return { texto: 'Apartado' + (b.consumido_folio ? ' · ' + b.consumido_folio : ''), clase: 'ambar' };
     }
+    if (b.estado === 'faltante') {
+      return { texto: 'No llegó' + (b.consumido_folio ? ' · ' + b.consumido_folio : ''), clase: 'rojo' };
+    }
     return { texto: 'Bajado a conos', clase: 'gris' };
   }
 
@@ -822,24 +835,6 @@ export class ProductoPresentaciones {
       });
   }
 
-  async eliminarVariante(v: Variante): Promise<void> {
-    const si = await this.confirmacion.pedir({
-      titulo: `¿Eliminar la presentación ${v.sku}?`,
-      mensaje: 'Se van con ella sus bultos y sus precios por lista.',
-      aceptar: 'Eliminar',
-      peligro: true,
-    });
-    if (!si) return;
-    this.error.set(null);
-    this.catalogo.eliminarVariante(v.id).subscribe({
-      next: () => {
-        this.mensaje.set(`Presentación ${v.sku} eliminada.`);
-        this.recargar();
-      },
-      error: (e) => this.error.set(this.msg(e)),
-    });
-  }
-
   // ---- Bultos ----
 
   abrirBulto(): void {
@@ -931,6 +926,15 @@ export class ProductoPresentaciones {
           // El lote y el lugar se quedan: los bultos que se capturan juntos suelen ser del mismo.
         },
         error: (e) => {
+          // Se pidió la autorización: en verde y el campo listo para el siguiente bulto.
+          const pedida = autorizacionPedida(e);
+          if (pedida) {
+            this.avisoBulto.set(pedida);
+            this.nuevoCodigo = '';
+            this.nuevoPeso = null;
+            this.nuevoConos = null;
+            return;
+          }
           this.avisoBulto.set(null);
           this.error.set(this.msg(e));
         },
@@ -1069,6 +1073,12 @@ export class ProductoPresentaciones {
       },
       error: (e) => {
         this.guardandoPublico.set(false);
+        const pedida = autorizacionPedida(e);
+        if (pedida) {
+          this.cerrarModal();
+          this.mensaje.set(pedida);
+          return;
+        }
         this.error.set(this.msg(e));
       },
     });
@@ -1116,12 +1126,33 @@ export class ProductoPresentaciones {
     }
     this.error.set(null);
     this.guardandoListas.set(true);
-    forkJoin(cambios.map((c) => this.catalogo.fijarPrecioTipo(c.v.id, c.tipoId, c.precio))).subscribe({
+    // Uno tras otro (2026-10-20): con forkJoin, dos que pedían autorización a la vez
+    // abrían dos ventanas encimadas y una se quedaba sin contestar. El que se PIDIÓ
+    // no detiene a los demás.
+    let guardados = 0;
+    let pedidos = 0;
+    concat(
+      ...cambios.map((c) =>
+        this.catalogo.fijarPrecioTipo(c.v.id, c.tipoId, c.precio).pipe(
+          map(() => guardados++),
+          catchError((e) => {
+            if (!autorizacionPedida(e)) return throwError(() => e);
+            pedidos++;
+            return of(0);
+          })
+        )
+      )
+    ).pipe(toArray()).subscribe({
       next: () => {
         this.guardandoListas.set(false);
-        this.mensaje.set(
-          cambios.length === 1 ? 'Precio por lista guardado.' : `${cambios.length} precios por lista guardados.`
-        );
+        const partes: string[] = [];
+        if (guardados) partes.push(guardados === 1 ? 'Precio por lista guardado.' : `${guardados} precios por lista guardados.`);
+        if (pedidos) {
+          partes.push(pedidos === 1
+            ? 'Un precio quedó esperando autorización (lo ves en Autorizaciones).'
+            : `${pedidos} precios quedaron esperando autorización (los ves en Autorizaciones).`);
+        }
+        this.mensaje.set(partes.join(' '));
         this.recargar();
       },
       error: (e) => {

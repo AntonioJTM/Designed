@@ -1,0 +1,61 @@
+// El acuse de recibo: los paquetes que salieron, para palomear los que NO
+// llegaron (2026-10-20). Va aparte de traspasos.scss por el límite de 4 kB.
+
+.fila-no-llegaron td {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.no-llegaron {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+
+  legend {
+    padding: 0;
+    margin-bottom: 6px;
+    font-size: 0.8125rem;
+    color: var(--tinta-2);
+  }
+}
+
+.paquetes-llegaron {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.paquete-llego {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--superficie);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+
+  input {
+    margin: 0;
+  }
+
+  &.falta {
+    border-color: var(--peligro-borde);
+    background: var(--peligro-f);
+    color: var(--peligro-t);
+
+    .muted {
+      color: inherit;
+    }
+  }
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .paquete-llego {
+    min-height: 44px;
+  }
+}

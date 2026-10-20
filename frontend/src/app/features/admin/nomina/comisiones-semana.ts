@@ -125,12 +125,22 @@ export class ComisionesSemanaComponent {
     return partes.length ? `${partes.join(' y ')} en la próxima nómina que se calcule` : '';
   }
 
-  /** Las ventas de verdad (sin los descuentos por devolución), para contarlas. */
+  /**
+   * Las ventas de verdad, para contarlas: sin los descuentos por devolución ni la
+   * que regresó COMPLETA (su venta neta quedó en $0; 2026-10-20).
+   */
   ventasDe(lista: VentaComision[]): number {
-    return lista.filter((x) => x.tipo !== 'devolucion').length;
+    return lista.filter((x) => x.tipo !== 'devolucion' && !this.devueltaCompleta(x)).length;
+  }
+
+  /** Regresó completa antes de pagarse su comisión: está en la lista, pero ya no es venta. */
+  devueltaCompleta(x: VentaComision): boolean {
+    return x.tipo !== 'devolucion' && Number(x.venta_neta) <= 0.004 && Number(x.devuelto ?? 0) > 0.004;
   }
 
   suma(lista: VentaComision[], k: 'total' | 'venta_neta' | 'comision'): number {
-    return Math.round(lista.reduce((s, v) => s + Number(v[k]), 0) * 100) / 100;
+    // El total de la que regresó completa no se suma (como en el PDF).
+    const cuentan = k === 'total' ? lista.filter((x) => x.tipo !== 'devolucion' && !this.devueltaCompleta(x)) : lista;
+    return Math.round(cuentan.reduce((s, v) => s + Number(v[k]), 0) * 100) / 100;
   }
 }

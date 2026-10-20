@@ -63,6 +63,25 @@ export interface DeudorCartera {
   ultimo_abono?: string | null;
   ultima_compra?: string | null;
   tramo: 'al_dia' | 'atrasado' | 'un_mes' | 'vencido';
+  /** Lo que además debe en notas pendientes de pago (2026-10-20). */
+  notas_pendientes?: number;
+}
+
+/** Quién debe en NOTAS PENDIENTES DE PAGO (2026-10-20): no es crédito, pero se debe. */
+export interface NotasPendientesDeuda {
+  monto: number;
+  num_notas: number;
+  num_clientes: number;
+  clientes: {
+    cliente_id: number;
+    codigo: string | null;
+    nombre: string;
+    nombre_comercial: string | null;
+    telefono: string | null;
+    monto: number;
+    notas: number;
+    desde: string;
+  }[];
 }
 
 export interface Deuda {
@@ -76,6 +95,8 @@ export interface Deuda {
   credito_usado: number;
   credito_autorizado: number;
   cobrado_mes: { monto: number; abonos: number };
+  /** Lo que deben en notas pendientes de pago, aparte del crédito (2026-10-20). */
+  notas_pendientes?: NotasPendientesDeuda;
   /** Lo que la tienda les guarda: anticipos y lo que regresaron (2026-10-19). */
   a_favor?: AFavorClientes;
 }

@@ -33,22 +33,22 @@
 
   <div class="kpis">
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--aviso-t)"></span>En espera</span>
+      <span class="kpi-label"><span class="punto tono-ambar"></span>En espera</span>
       <span class="kpi-valor">{{ cuantos().todos }}</span>
       <span class="kpi-pie">notas por entregar</span>
     </div>
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--ok-t)"></span>Para hoy</span>
+      <span class="kpi-label"><span class="punto tono-ok"></span>Para hoy</span>
       <span class="kpi-valor">{{ cuantos().hoy }}</span>
       <span class="kpi-pie">los quieren hoy</span>
     </div>
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--peligro-t)"></span>Atrasados</span>
+      <span class="kpi-label"><span class="punto tono-peligro"></span>Atrasados</span>
       <span class="kpi-valor">{{ cuantos().atrasados }}</span>
       <span class="kpi-pie">ya pasó el día en que los querían</span>
     </div>
     <div class="kpi">
-      <span class="kpi-label"><span class="punto" style="background: var(--tinta-3)"></span>Por cobrar</span>
+      <span class="kpi-label"><span class="punto tono-suave"></span>Por cobrar</span>
       <span class="kpi-valor">{{ datos()?.por_cobrar ?? 0 | dinero }}</span>
       <span class="kpi-pie">de las notas que se ven</span>
     </div>

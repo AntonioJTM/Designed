@@ -441,7 +441,16 @@ function siguienteDia(iso) {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Una venta que REGRESÓ COMPLETA antes de pagarse su comisión (2026-10-20,
+ * auditoría): su venta neta quedó en $0 por lo devuelto. Se queda en la lista
+ * (así ya no aparece por liquidar), pero no cuenta como venta ni suma su total.
+ */
+const devueltaCompleta = (v) =>
+  v.tipo !== 'devolucion' && Number(v.venta_neta) <= 0.004 && Number(v.devuelto ?? 0) > 0.004;
+
 module.exports = {
+  devueltaCompleta,
   DESDE, NOMBRE_TIPO, ventasSinPagarComision, devolucionesPorDescontar, liquidadasEnSemana, anotar, comisionDe,
   comisionDeLinea, reporte,
 };

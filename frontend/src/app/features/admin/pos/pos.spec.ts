@@ -328,7 +328,7 @@ describe('Pos', () => {
     await c.cobrar();
     expect(preguntado).toBeNull();
     expect(pedidoEnviado).toBeNull();
-    expect(c.error()).toContain('22 días sin abonar');
+    expect(c.error()).toContain('22 días sin pagarse');
   });
 
   it('al corriente, fía sin preguntar', async () => {
@@ -347,7 +347,7 @@ describe('Pos', () => {
     fixture.detectChanges();
     const aviso = (fixture.nativeElement as HTMLElement).querySelector('.aviso-cliente');
     expect(aviso?.classList.contains('atrasado')).toBe(true);
-    expect(aviso?.textContent).toContain('22 días sin abonar');
+    expect(aviso?.textContent).toContain('22 días sin pagarse');
   });
 
   /*
@@ -395,7 +395,7 @@ describe('Pos', () => {
     c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
     c.elegirModo('credito');
     expect(c.cintillo().tono).toBe('atrasado');
-    expect(c.cintillo().texto).toContain('lleva 22 días sin abonar');
+    expect(c.cintillo().texto).toContain('lleva 22 días sin pagarse');
   });
 
   it('con saldo a favor: se usa solo si lo pide, y paga hoy lo que falte (2026-10-13)', async () => {

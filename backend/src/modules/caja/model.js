@@ -171,6 +171,24 @@ async function obtenerSesion(id) {
 }
 
 /**
+ * LO QUE DEBERÍA HABER EN EL CAJÓN de una sesión, con la sesión BLOQUEADA
+ * (2026-10-20, auditoría): lo usan el retiro, lo que sale al cancelar una venta y
+ * la diferencia de una nota en espera, para no dejar el cajón en negativo.
+ */
+async function efectivoEnCajon(conn, sesionId) {
+  const [[s]] = await conn.query('SELECT monto_inicial FROM sesiones_caja WHERE id = :id FOR UPDATE', { id: sesionId });
+  if (!s) return 0;
+  const [tot] = await conn.query(
+    `SELECT tipo, COALESCE(SUM(monto),0) AS suma
+       FROM movimientos_caja WHERE sesion_caja_id = :id GROUP BY tipo`,
+    { id: sesionId }
+  );
+  let neto = 0;
+  for (const row of tot) neto += (SIGNO_CAJA[row.tipo] ?? 0) * Number(row.suma);
+  return round2(Number(s.monto_inicial) + neto);
+}
+
+/**
  * Retiro o ingreso de efectivo a mano: el dueño saca dinero para depositar, se
  * paga una compra chica con el cajón, se mete cambio a media mañana.
  *
@@ -249,6 +267,7 @@ async function cerrarSesion(id, monto_final) {
 
 module.exports = {
   totalesSesion,
+  efectivoEnCajon,
   listarCajas,
   crearCaja,
   actualizarCaja,

@@ -8,6 +8,7 @@ const almacenesModel = require('../almacenes/model');
 const configuracionModel = require('../configuracion/model');
 const clientesModel = require('../clientes/model');
 const saldoFavor = require('../clientes/saldo-favor');
+const cajaModel = require('../caja/model');
 // Se pide al usarse: devoluciones.js carga variantes/service → inventario/model,
 // que pide este archivo (se haría un ciclo al arrancar).
 const devoluciones = {
@@ -1394,7 +1395,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
 
   return withTransaction(async (conn) => {
     const [prev] = await conn.query(
-      `SELECT id, estado, numero_pedido, almacen_id, sesion_caja_id, canal,
+      `SELECT id, estado, numero_pedido, almacen_id, sesion_caja_id, canal, cliente_id,
               inventario_descontado, total, encargo, nota_pendiente, metodo_entrega
          FROM pedidos WHERE id = :id FOR UPDATE`,
       { id }
@@ -1427,14 +1428,26 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
       await saldoFavor.reintegrarDeVenta(conn, { pedidoId: id, numeroPedido: numero, usuarioId });
     }
     if (eraInactivo && !esInactivo) {
+      // También si al cancelarla le quedó a favor lo que no había en el cajón
+      // (2026-10-20): ese dinero ya es suyo, reactivarla no lo vuelve a tomar.
       const [[usado]] = await conn.query(
-        `SELECT 1 AS si FROM saldo_favor_movimientos
-          WHERE pedido_id = :id AND tipo IN ('uso', 'aplicado') LIMIT 1`,
+        `SELECT MAX(tipo IN ('uso', 'aplicado')) AS uso, MAX(tipo = 'reintegro') AS regreso,
+                MAX(tipo = 'reintegro' AND notas LIKE 'Lo abonado%') AS abonado
+           FROM saldo_favor_movimientos WHERE pedido_id = :id AND tipo IN ('uso', 'aplicado', 'reintegro')`,
         { id }
       );
-      if (usado) {
+      if (Number(usado?.abonado)) {
+        throw new AppError(409, 'VENTA_CON_SALDO_FAVOR',
+          `Al cancelar ${numero}, lo que había abonado le quedó a favor al cliente. No se reactiva: vuelve a hacer la venta.`);
+      }
+      if (Number(usado?.uso)) {
         throw new AppError(409, 'VENTA_CON_SALDO_FAVOR',
           `${numero} se pagó con saldo a favor y al cancelarla ese saldo le regresó al cliente. ` +
+          'No se reactiva: vuelve a hacer la venta.');
+      }
+      if (Number(usado?.regreso)) {
+        throw new AppError(409, 'VENTA_CON_SALDO_FAVOR',
+          `Al cancelar ${numero} no había efectivo en la caja para devolverle todo y le quedó a favor al cliente. ` +
           'No se reactiva: vuelve a hacer la venta.');
       }
     }
@@ -1457,6 +1470,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     // ---- El dinero: se devuelve el efectivo al cancelar, se reingresa al
     // reactivar. Va antes de tocar inventario para que un 409 por caja cerrada
     // no deje nada movido.
+    let aFavorSinEfectivo = 0;
     if (eraInactivo !== esInactivo && pedido.canal === 'punto_venta') {
       const efectivo = await _efectivoDelPedido(
         conn,
@@ -1473,17 +1487,39 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
         }
 
         if (esInactivo) {
+          // LO QUE NO HAY EN EL CAJÓN QUEDA A FAVOR DEL CLIENTE (2026-10-20,
+          // auditoría; lo eligió el usuario): devolver más efectivo del que hay
+          // dejaba el cajón en negativo. Sale lo que hay y lo demás se le deja
+          // como saldo a favor. Sin cliente no hay a quién dejárselo: no se cancela.
+          const hay = Math.max(0, await cajaModel.efectivoEnCajon(conn, sesionId));
+          const sale = round2(Math.min(efectivo, hay));
+          aFavorSinEfectivo = round2(efectivo - sale);
+          if (aFavorSinEfectivo > 0.004 && !pedido.cliente_id) {
+            throw new AppError(409, 'EFECTIVO_INSUFICIENTE',
+              `Hay que devolverle $${efectivo.toFixed(2)} en efectivo de ${numero} y en el cajón hay ` +
+              `$${sale.toFixed(2)}. La venta no tiene cliente al cual dejarle a favor lo que falta: mete ` +
+              'efectivo a la caja (Caja → Sacar o meter efectivo) y vuelve a cancelarla.',
+              { efectivo, en_cajon: sale });
+          }
           // 'devolucion' ya resta en el corte (ver SIGNO_CAJA en caja/model.js).
-          await conn.query(
-            `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
-             VALUES (:sesion, 'devolucion', :monto, :pedido, :motivo)`,
-            {
-              sesion: sesionId,
-              monto: efectivo,
-              pedido: id,
-              motivo: `${estado === 'devuelto' ? 'Devolución' : 'Cancelación'} de ${numero}`,
-            }
-          );
+          if (sale > 0.004) {
+            await conn.query(
+              `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
+               VALUES (:sesion, 'devolucion', :monto, :pedido, :motivo)`,
+              {
+                sesion: sesionId,
+                monto: sale,
+                pedido: id,
+                motivo: `${estado === 'devuelto' ? 'Devolución' : 'Cancelación'} de ${numero}`,
+              }
+            );
+          }
+          if (aFavorSinEfectivo > 0.004) {
+            await saldoFavor.agregar(conn, {
+              clienteId: pedido.cliente_id, tipo: 'reintegro', monto: aFavorSinEfectivo, pedidoId: id, usuarioId,
+              notas: `En la caja no había efectivo para devolverle todo: $${aFavorSinEfectivo.toFixed(2)} le quedaron a favor`,
+            });
+          }
           await conn.query(
             `UPDATE pagos SET estado = 'reembolsado'
               WHERE pedido_id = :id AND estado = 'completado'`,
@@ -1759,11 +1795,23 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     // Cancelar o reactivar una fiada cambia lo que se debe: los abonos se
     // vuelven a repartir. Cancelar la más antigua deja libre lo que se le había
     // abonado y eso paga la siguiente; si no hay siguiente, queda a su favor.
+    let sobranteAFavor = 0;
     if (clienteFiado && eraInactivo !== esInactivo) {
       await clientesModel.liquidarVentasACredito(conn, clienteFiado);
+      // UN SOLO "A FAVOR" (2026-10-20): lo abonado que ya no paga nada pasa a su
+      // saldo a favor, en vez de dejar su cuenta en negativo.
+      if (esInactivo) {
+        sobranteAFavor = await saldoFavor.pasarSobranteAFavor(conn, {
+          clienteId: clienteFiado, pedidoId: id, numeroPedido: numero, usuarioId,
+        });
+      }
     }
 
-    return _obtenerConn(conn, id);
+    const resultado = await _obtenerConn(conn, id);
+    if (sobranteAFavor > 0.004) resultado.abonado_a_favor = sobranteAFavor;
+    // Lo que no hubo en el cajón y le quedó a favor (la pantalla lo dice).
+    if (aFavorSinEfectivo > 0.004) resultado.a_favor_sin_efectivo = aFavorSinEfectivo;
+    return resultado;
   });
 }
 
@@ -1832,8 +1880,8 @@ async function _revisarReactivarFiada(conn, { id, numero, estado, clienteFiado, 
 
 /**
  * CUENTA ATRASADA (2026-10-16: "no fiarle a ciegas cuando trae cuenta vencida"):
- * si debe y lleva más de DIAS_SIN_ABONAR días sin abonar, no se le fía sin que se
- * confirme (`fiar_con_atraso`). Desde el 2026-10-19 confirmarlo pide AUTORIZACIÓN
+ * si su nota más vieja lleva más de DIAS_SIN_ABONAR días sin pagarse (2026-10-20;
+ * antes, días sin abonar), no se le fía sin que se confirme (`fiar_con_atraso`). Desde el 2026-10-19 confirmarlo pide AUTORIZACIÓN
  * (`autorizable('fiar_atrasado')`) a quien no fía atrasados directo. Vale para
  * los TRES caminos de fiar: la venta, pasar una nota pendiente a crédito y
  * entregar una nota en espera a crédito (antes estos dos ni lo revisaban).
@@ -1841,12 +1889,14 @@ async function _revisarReactivarFiada(conn, { id, numero, estado, clienteFiado, 
 async function _exigirSinAtraso(conn, clienteId, fiarConAtraso) {
   if (fiarConAtraso === true || !clienteId) return;
   const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
-  const dias = await clientesModel.diasSinAbonar(clienteId, conn);
+  const atraso = await clientesModel.atrasoDe(clienteId, conn);
+  const dias = atraso?.dias ?? null;
   if (dias != null && dias > DIAS_SIN_ABONAR) {
+    const falta = atraso.porPagar.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
     throw new AppError(409, 'CREDITO_ATRASADO',
-      `Debe y lleva ${dias} días sin abonar (el plazo es de ${DIAS_SIN_ABONAR}). ` +
-      'Pídele un abono, o confirma que se le da a crédito de todos modos.',
-      { dias, plazo: DIAS_SIN_ABONAR });
+      `Su nota más vieja lleva ${dias} días sin pagarse y le faltan ${falta} (el plazo es de ` +
+      `${DIAS_SIN_ABONAR} días). Pídele un abono, o confirma que se le da a crédito de todos modos.`,
+      { dias, plazo: DIAS_SIN_ABONAR, por_pagar: atraso.porPagar });
   }
 }
 
@@ -1940,7 +1990,7 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
 
   return withTransaction(async (conn) => {
     const [prows] = await conn.query(
-      'SELECT id, numero_pedido, estado, total FROM pedidos WHERE id = :id FOR UPDATE',
+      'SELECT id, numero_pedido, estado, total, nota_pendiente FROM pedidos WHERE id = :id FOR UPDATE',
       { id: pedidoId }
     );
     const pedido = prows[0];
@@ -1989,21 +2039,33 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
     );
     let pagoId = pgrows[0]?.id ?? null;
 
+    const [[fiada]] = await conn.query(
+      "SELECT COUNT(*) AS n FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo'",
+      { id: pedidoId }
+    );
+    const esFiada = Number(fiada.n) > 0;
+
     if (!pagoId) {
       // UNA VENTA A CRÉDITO se paga con abonos a la cuenta del cliente
       // (2026-10-17): "lo que falta" de esta venta ES lo que se cargó a su
       // cuenta, así que crear un pago por eso la dejaba "pagada" con la deuda
       // todavía en su cuenta (el dinero contado dos veces en los papeles). Sí
       // se le puede pegar la prueba a una transferencia que ya tenga (arriba).
-      const [[fiada]] = await conn.query(
-        "SELECT COUNT(*) AS n FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo'",
-        { id: pedidoId }
-      );
-      if (Number(fiada.n) > 0) {
+      if (esFiada) {
         await archivos.borrar(CARPETA_COMPROBANTES, guardado.nombre);
         throw new AppError(409, 'VENTA_A_CREDITO_USA_ABONOS',
           `${pedido.numero_pedido} es una venta a crédito: el depósito se registra como abono a su cuenta ` +
-          '(en su expediente, «Registrar abono», por transferencia), para que baje lo que debe.');
+          '(«Abonar a esta nota», por transferencia), para que baje lo que debe.');
+      }
+      // UNA NOTA PENDIENTE DE PAGO se paga en abonos (2026-10-20, auditoría): un
+      // pago nuevo por TODO lo que falta la daba por pagada aunque el depósito
+      // fuera de una parte. El depósito se registra en «Registrar su pago», por
+      // transferencia y con lo que depositó; después se le pega aquí la captura.
+      if (Number(pedido.nota_pendiente)) {
+        await archivos.borrar(CARPETA_COMPROBANTES, guardado.nombre);
+        throw new AppError(409, 'NOTA_PENDIENTE_USA_ABONOS',
+          `${pedido.numero_pedido} es una nota pendiente de pago: el depósito se registra en ` +
+          '«Registrar su pago», por transferencia y con lo que depositó. Después le pegas aquí la captura.');
       }
       const cobrado = await _abonado(conn, pedidoId);
       const falta = round2(Number(pedido.total) - cobrado);
@@ -2058,10 +2120,14 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
       }
     );
 
-    // Y el pedido queda pagado. De 'pendiente' a 'pagado' no se mueve
-    // inventario ni caja —ambos son estados activos— así que basta el UPDATE;
-    // `cambiarEstado` solo actúa al cruzar la frontera activo/inactivo.
-    if (pedido.estado === 'pendiente') {
+    // Y el pedido queda pagado, SOLO si con eso ya está cubierto (2026-10-20,
+    // auditoría): pegarle la prueba a la transferencia de una venta a crédito o
+    // de una nota pendiente que todavía se debe la daba por pagada con la deuda
+    // viva. A crédito, la da por pagada el reparto de los abonos, nunca esto.
+    // De 'pendiente' a 'pagado' no se mueve inventario ni caja —ambos son
+    // estados activos— así que basta el UPDATE.
+    if (pedido.estado === 'pendiente' && !esFiada &&
+        (await _abonado(conn, pedidoId)) >= round2(Number(pedido.total)) - 0.004) {
       await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id", { id: pedidoId });
     }
 
@@ -2146,7 +2212,7 @@ async function _abonado(conn, pedidoId) {
 async function abonarApartado(pedidoId, datos, usuarioId) {
   return withTransaction(async (conn) => {
     const [prows] = await conn.query(
-      `SELECT id, numero_pedido, estado, total, encargo, nota_pendiente, inventario_descontado
+      `SELECT id, numero_pedido, estado, total, encargo, nota_pendiente, inventario_descontado, cliente_id
          FROM pedidos WHERE id = :id FOR UPDATE`,
       { id: pedidoId }
     );
@@ -2177,6 +2243,26 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
     if (monto > pendiente + 0.0001) {
       throw new AppError(422, 'ABONO_EXCEDE_PENDIENTE',
         `Le faltan $${pendiente.toFixed(2)} y el abono es de $${monto.toFixed(2)}.`);
+    }
+
+    // CON SU SALDO A FAVOR (2026-10-20): un pago "Saldo a favor" y su `uso` en el
+    // libro; no toca la caja.
+    if (datos.con_saldo_favor === true) {
+      if (!pedido.cliente_id) {
+        throw new AppError(422, 'FALTA_CLIENTE', `${pedido.numero_pedido} no tiene cliente: no hay saldo a favor que usar.`);
+      }
+      const pagoId = await saldoFavor.pagarConSaldo(conn, {
+        clienteId: pedido.cliente_id, pedidoId, numeroPedido: pedido.numero_pedido, monto, usuarioId,
+      });
+      const abonadoSf = round2(abonado + monto);
+      const pendienteSf = round2(Number(pedido.total) - abonadoSf);
+      if (esNota && pendienteSf <= 0.0001) {
+        await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id", { id: pedidoId });
+      }
+      return {
+        pedido_id: pedidoId, pago_id: pagoId, numero_pedido: pedido.numero_pedido, total: round2(pedido.total),
+        abonado: abonadoSf, pendiente: pendienteSf, liquidado: pendienteSf <= 0.0001, con_saldo_favor: true,
+      };
     }
 
     // ¿Entra al cajón? Lo decide el nombre del método, como en la venta.
@@ -2324,13 +2410,15 @@ async function listarNotasPendientes({ q, almacenes } = {}) {
   _deSusTiendas(where, params, almacenes);
   if (q && String(q).trim()) {
     where.push(`(p.numero_pedido LIKE :q OR c.nombre LIKE :q OR c.nombre_comercial LIKE :q
-                 OR c.telefono LIKE :q OR c.telefono_alt LIKE :q)`);
+                 OR c.codigo LIKE :q OR c.telefono LIKE :q OR c.telefono_alt LIKE :q)`);
     params.q = `%${String(q).trim()}%`;
   }
   const [rows] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.total, p.creado_en, p.almacen_id, a.nombre AS almacen,
             p.cliente_id, c.nombre AS cliente, c.nombre_comercial, c.telefono,
             c.limite_credito, u.nombre AS vendedor,
+            (SELECT COALESCE(SUM(CASE WHEN f.tipo IN ('uso', 'aplicado') THEN -f.monto ELSE f.monto END), 0)
+               FROM saldo_favor_movimientos f WHERE f.cliente_id = p.cliente_id) AS saldo_favor,
             DATEDIFF(CURDATE(), DATE(p.creado_en)) AS dias,
             COALESCE((SELECT SUM(pg.monto) FROM pagos pg WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS pagado
        FROM pedidos p
@@ -2415,11 +2503,32 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
         `${pedido.numero_pedido} no es un apartado vigente (está ${pedido.estado}).`);
     }
 
+    // CON SU SALDO A FAVOR (2026-10-20, auditoría: "el anticipo no paga la nota
+    // en espera para la que se dejó"): se usa ANTES de cobrar o fiar lo demás.
+    const usaFavor = round2(Number(datos.saldo_favor ?? 0));
+    if (usaFavor > 0) {
+      if (!esEncargo) {
+        throw new AppError(422, 'SALDO_FAVOR_SOLO_NOTAS', 'El saldo a favor se usa al entregar una nota en espera.');
+      }
+      if (!pedido.cliente_id) {
+        throw new AppError(422, 'FALTA_CLIENTE', `${pedido.numero_pedido} no tiene cliente: no hay saldo a favor que usar.`);
+      }
+      const falta0 = round2(Number(pedido.total) - (await _abonado(conn, pedidoId)));
+      if (usaFavor > falta0 + 0.004) {
+        throw new AppError(422, 'SALDO_FAVOR_EXCEDE',
+          `Le faltan $${Math.max(0, falta0).toFixed(2)}: no se usan $${usaFavor.toFixed(2)} de su saldo a favor.`);
+      }
+      await saldoFavor.pagarConSaldo(conn, {
+        clienteId: pedido.cliente_id, pedidoId, numeroPedido: pedido.numero_pedido, monto: usaFavor, usuarioId,
+      });
+    }
+
     const abonado = await _abonado(conn, pedidoId);
     const pendiente = round2(Number(pedido.total) - abonado);
     let cambio = 0;
     let aCredito = 0;
     let devuelto = 0;
+    let aFavorSinEfectivo = 0;
     // Se entrega como NOTA PENDIENTE DE PAGO: se lleva la mercancía y lo que
     // falta se cobra después, en Notas pendientes de pago.
     const comoNota = datos.pendiente_pago === true && esEncargo && pendiente > 0.004;
@@ -2434,7 +2543,7 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
     }
     if (esEncargo && pendiente < -0.004) {
       // Pesó MENOS de lo que dejó pagado: se le devuelve la diferencia.
-      devuelto = await _devolverDiferencia(conn, pedido, round2(-pendiente), datos);
+      ({ devuelto, a_favor: aFavorSinEfectivo } = await _devolverDiferencia(conn, pedido, round2(-pendiente), { ...datos, usuario_id: usuarioId }));
     } else if (comoNota) {
       // Nada que cobrar ahora.
     } else if (esEncargo) {
@@ -2511,6 +2620,7 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
     const resultado = await _obtenerConn(conn, pedidoId);
     resultado.cambio = cambio;
     resultado.devuelto = devuelto;
+    if (aFavorSinEfectivo > 0.004) resultado.a_favor_sin_efectivo = aFavorSinEfectivo;
     return resultado;
   });
 }
@@ -2537,11 +2647,28 @@ async function _devolverDiferencia(conn, pedido, monto, datos) {
   if (!srows[0]) throw new AppError(404, 'SESION_NO_ENCONTRADA', 'Sesión de caja no encontrada');
   if (srows[0].estado !== 'abierta') throw new AppError(409, 'CAJA_CERRADA', 'La sesión de caja está cerrada');
 
-  await conn.query(
-    `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
-     VALUES (:sesion, 'devolucion', :monto, :pedido, :motivo)`,
-    { sesion: datos.sesion_caja_id, monto, pedido: pedido.id, motivo: `Diferencia del pedido ${num}: pesó menos de lo que dejó pagado` }
-  );
+  // Lo que no hay en el cajón le queda a favor (2026-10-20, como al cancelar):
+  // una nota en espera siempre tiene cliente.
+  const hay = Math.max(0, await cajaModel.efectivoEnCajon(conn, datos.sesion_caja_id));
+  const sale = round2(Math.min(monto, hay));
+  const aFavor = round2(monto - sale);
+  if (aFavor > 0.004 && !pedido.cliente_id) {
+    throw new AppError(409, 'EFECTIVO_INSUFICIENTE',
+      `Hay que devolverle $${monto.toFixed(2)} y en el cajón hay $${sale.toFixed(2)}: mete efectivo a la caja.`);
+  }
+  if (sale > 0.004) {
+    await conn.query(
+      `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
+       VALUES (:sesion, 'devolucion', :monto, :pedido, :motivo)`,
+      { sesion: datos.sesion_caja_id, monto: sale, pedido: pedido.id, motivo: `Diferencia del pedido ${num}: pesó menos de lo que dejó pagado` }
+    );
+  }
+  if (aFavor > 0.004) {
+    await saldoFavor.agregar(conn, {
+      clienteId: pedido.cliente_id, tipo: 'reintegro', monto: aFavor, pedidoId: pedido.id, usuarioId: datos.usuario_id ?? null,
+      notas: `Pesó menos de lo que dejó pagado y en la caja no había efectivo para devolverle todo: $${aFavor.toFixed(2)} le quedaron a favor`,
+    });
+  }
   const [pagos] = await conn.query(
     `SELECT pg.id, pg.monto, (LOWER(mp.nombre) LIKE '%efectivo%') AS efectivo
        FROM pagos pg JOIN metodos_pago mp ON mp.id = pg.metodo_pago_id
@@ -2562,7 +2689,7 @@ async function _devolverDiferencia(conn, pedido, monto, datos) {
     }
     resta = round2(resta - quita);
   }
-  return monto;
+  return { devuelto: sale, a_favor: aFavor };
 }
 
 /**
@@ -2645,8 +2772,9 @@ async function _errorBultoTomadoDetalle(conn, codigo, bulto) {
       : '';
     return new AppError(409, 'BULTO_NO_DISPONIBLE', `El paquete ${codigo} está apartado${de}: escanea otro.`);
   }
+  const ya = { desarmado: 'se bajó a conos', faltante: 'se dio por faltante al recibir un envío (no llegó)' };
   return new AppError(409, 'BULTO_NO_DISPONIBLE',
-    `El paquete ${codigo} ya ${bulto.estado === 'desarmado' ? 'se bajó a conos' : 'se vendió'}: escanea otro.`);
+    `El paquete ${codigo} ya ${ya[bulto.estado] ?? 'se vendió'}: escanea otro.`);
 }
 
 /**
@@ -3069,7 +3197,7 @@ async function listarEncargos({ estado, q, almacenes } = {}) {
   }
   if (q && String(q).trim()) {
     where.push(`(p.numero_pedido LIKE :q OR c.nombre LIKE :q OR c.nombre_comercial LIKE :q
-                 OR c.telefono LIKE :q OR p.entrega_direccion LIKE :q)`);
+                 OR c.codigo LIKE :q OR c.telefono LIKE :q OR p.entrega_direccion LIKE :q)`);
     params.q = `%${String(q).trim()}%`;
   }
   const [rows] = await pool.query(
@@ -3077,6 +3205,8 @@ async function listarEncargos({ estado, q, almacenes } = {}) {
             DATE_FORMAT(p.entrega_para, '%Y-%m-%d') AS entrega_para,
             p.total, p.costo_envio, p.notas, p.creado_en, p.almacen_id, a.nombre AS almacen,
             p.cliente_id, c.nombre AS cliente, c.nombre_comercial, c.telefono,
+            (SELECT COALESCE(SUM(CASE WHEN f.tipo IN ('uso', 'aplicado') THEN -f.monto ELSE f.monto END), 0)
+               FROM saldo_favor_movimientos f WHERE f.cliente_id = p.cliente_id) AS saldo_favor,
             u.nombre AS vendedor,
             COALESCE((SELECT SUM(pg.monto) FROM pagos pg WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS pagado
        FROM pedidos p

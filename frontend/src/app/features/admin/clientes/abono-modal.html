@@ -21,6 +21,7 @@
           </p>
 
           <!-- A su cuenta o a notas (2026-10-19). Sin notas que escoger, solo a la cuenta. -->
+          @if (avisoNota()) { <p class="nota-info" role="status">{{ avisoNota() }}</p> }
           @if (!filas.length && ocultas()) {
             <p class="nota-info">
               Sus notas a crédito son de otra tienda donde no compra aquí: el abono va a su cuenta y paga
@@ -73,8 +74,21 @@
                     <span aria-hidden="true">$</span>
                     <input type="number" min="0.01" step="0.01" [max]="f.nota.por_pagar"
                            [(ngModel)]="f.monto" [name]="'monto-' + f.nota.pedido_id" [disabled]="!f.elegida"
+                           [class.invalido]="pasaDeNota(f)" [attr.aria-invalid]="pasaDeNota(f)"
                            [attr.aria-label]="'Cuánto abona a la nota ' + f.nota.numero_pedido" />
                   </span>
+                  <!-- Cómo queda ESA nota (2026-10-20): antes → después, o que se pasa. -->
+                  @if (f.elegida && +(f.monto ?? 0) > 0) {
+                    <span class="nota-queda" [class.pasa]="pasaDeNota(f)">
+                      @if (pasaDeNota(f)) {
+                        Le faltan {{ f.nota.por_pagar | dinero }}: no se le puede abonar más.
+                      } @else if (quedaNota(f) <= 0.004) {
+                        debe {{ f.nota.por_pagar | dinero }} → queda pagada
+                      } @else {
+                        debe {{ f.nota.por_pagar | dinero }} → le faltarán {{ quedaNota(f) | dinero }}
+                      }
+                    </span>
+                  }
                 </div>
               }
             </div>
@@ -139,7 +153,8 @@
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
         <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando()">
-          {{ guardando() ? 'Registrando…' : modo === 'notas' ? 'Abonar ' + (montoAbono() | dinero) : 'Registrar el abono' }}
+          <!-- Con el monto en el botón, en los dos modos (2026-10-20, auditoría). -->
+          {{ guardando() ? 'Registrando…' : montoAbono() > 0 ? 'Abonar ' + (montoAbono() | dinero) : 'Registrar el abono' }}
         </button>
       </div>
     </form>

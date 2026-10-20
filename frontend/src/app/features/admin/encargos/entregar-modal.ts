@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -31,6 +32,8 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class EntregarPedidoModal implements OnInit {
+  /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
+  private clave = nuevaClave();
   private readonly ventas = inject(VentasService);
   private readonly auth = inject(AuthService);
   private readonly confirmacion = inject(ConfirmacionService);
@@ -60,6 +63,8 @@ export class EntregarPedidoModal implements OnInit {
    * registra después, en Notas pendientes de pago.
    */
   comoNota = false;
+  /** Pagar primero con su SALDO A FAVOR (anticipos, lo que regresó; 2026-10-20). */
+  usarFavor = false;
 
   ngOnInit(): void {
     forkJoin({
@@ -74,8 +79,25 @@ export class EntregarPedidoModal implements OnInit {
     });
   }
 
-  falta(): number {
+  /** Lo que falta de la nota, sin contar su saldo a favor. */
+  faltaNota(): number {
     return Number(this.pedido().falta);
+  }
+
+  /** Su saldo a favor (lo que la tienda le guarda). */
+  saldoFavor(): number {
+    return Math.max(0, Number(this.pedido().saldo_favor ?? 0));
+  }
+
+  /** Lo que se paga con su saldo a favor: todo lo que alcance, hasta lo que falta. */
+  favor(): number {
+    if (!this.usarFavor || this.aFavor() > 0) return 0;
+    return Math.round(Math.min(this.saldoFavor(), this.faltaNota()) * 100) / 100;
+  }
+
+  /** Lo que falta por cobrar (o dar a crédito) después de su saldo a favor. Método: lee ngModel. */
+  falta(): number {
+    return Math.max(0, Math.round((this.faltaNota() - this.favor()) * 100) / 100);
   }
 
   /** Pagó de más (el pedido pesó menos): se le devuelve al entregar. */
@@ -143,8 +165,10 @@ export class EntregarPedidoModal implements OnInit {
       this.enviar({ sesion_caja_id: Number(this.turnoId) });
       return;
     }
+    // Solo se manda si se usa (el cuerpo va igual que antes si no).
+    const conFavor = this.favor() > 0 ? { saldo_favor: this.favor() } : {};
     if (this.comoNota && this.falta() > 0) {
-      this.enviar({ pendiente_pago: true });
+      this.enviar({ pendiente_pago: true, ...conFavor });
       return;
     }
     const cobra = this.aCobrar();
@@ -155,6 +179,7 @@ export class EntregarPedidoModal implements OnInit {
       pagos: cobra > 0 ? [{ metodo_pago_id: Number(this.metodoId), monto: recibido }] : undefined,
       sesion_caja_id: cobra > 0 && efectivo ? Number(this.turnoId) : undefined,
       a_credito: fiado > 0 ? fiado : undefined,
+      ...conFavor,
     });
   }
 
@@ -162,10 +187,11 @@ export class EntregarPedidoModal implements OnInit {
     this.guardando.set(true);
     this.error.set(null);
     this.ventas
-      .entregarPedido(this.pedido().id, body)
+      .entregarPedido(this.pedido().id, body, this.clave)
       .subscribe({
         next: (p) => {
           this.guardando.set(false);
+          this.clave = nuevaClave();
           this.entregado.emit(p);
         },
         error: async (e) => {

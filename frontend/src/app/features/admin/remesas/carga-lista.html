@@ -234,7 +234,8 @@
       </div>
     }
 
-    <div class="tabla-scroll">
+    <p class="pista-paquetes">Toca un color para revisar sus lotes y cada paquete: código de barras, peso y conos.</p>
+    <div class="tabla-scroll con-paquetes">
       <table class="grid hilos">
         <thead>
           <tr>
@@ -247,11 +248,17 @@
           </tr>
         </thead>
         <tbody>
-          @for (h of p.hilos; track h.clave) {
-            <tr>
-              <!-- El hilo y qué le pasa: si ya existe recibe bultos; si no, se crea sin precio. -->
+          @for (h of p.hilos; track h.clave; let i = $index) {
+            <tr [class.abierto]="estaAbierto(h.clave)">
+              <!-- El hilo y qué le pasa: si ya existe recibe bultos; si no, se crea sin precio.
+                   El nombre abre sus lotes y paquetes (2026-10-20). -->
               <td>
-                <b>{{ h.nombre }} {{ h.calibre }}</b>
+                <button type="button" class="hilo-abrir" (click)="alternarHilo(h.clave)"
+                        [attr.aria-expanded]="estaAbierto(h.clave)" [attr.aria-controls]="'paquetes-hilo-' + i">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"
+                       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+                  <b>{{ h.nombre }} {{ h.calibre }}</b>
+                </button>
                 @switch (h.estado) {
                   @case ('existe') { <span class="pill verde">Ya existe</span> }
                   @case ('nuevo') { <span class="pill azul">Nuevo</span> }
@@ -287,12 +294,53 @@
                 </td>
               }
             </tr>
+            <!-- Sus lotes y sus paquetes, uno por uno, para revisarlos antes de cargar. -->
+            @if (estaAbierto(h.clave)) {
+              <tr class="fila-paquetes">
+                <td [attr.colspan]="veCostos() ? 6 : 5" [id]="'paquetes-hilo-' + i">
+                  <!-- Del ancho de lo que se ve (en el celular la tabla se desplaza de lado). -->
+                  <div class="paquetes-hilo">
+                  @for (l of paquetes().get(h.clave) ?? []; track l.lote) {
+                    <section class="lote-paquetes" [attr.aria-label]="'Lote ' + l.lote + ' de ' + h.nombre + ' ' + h.calibre">
+                      <h4>
+                        <span>Lote <span class="mono">{{ l.lote }}</span></span>
+                        <span class="lote-cifras">
+                          {{ l.bultos.length }} {{ l.bultos.length === 1 ? 'paquete' : 'paquetes' }} ·
+                          {{ l.kg | cantidad: 'kg' }} ·
+                          {{ l.conos | cantidad }} {{ l.conos === 1 ? 'cono' : 'conos' }}
+                          @if (l.sinConos) { <span class="muted">({{ l.sinConos }} sin conos en el Excel)</span> }
+                        </span>
+                        @if (problemasDe(l); as pr) {
+                          @if (pr.errores) { <span class="pill rojo">{{ pr.errores }} no {{ pr.errores === 1 ? 'entra' : 'entran' }}</span> }
+                          @if (pr.avisos) { <span class="pill ambar">{{ pr.avisos }} por revisar</span> }
+                        }
+                      </h4>
+                      <ol class="paquetes-lista">
+                        @for (b of l.bultos; track $index) {
+                          @let pb = b.fila ? problemas().get(b.fila) : undefined;
+                          <li [class.con-error]="pb?.tipo === 'error'" [class.con-aviso]="pb?.tipo === 'aviso'"
+                              [title]="pb ? pb.texto : ''">
+                            <span class="renglon" [attr.aria-label]="'Renglón ' + b.fila">{{ b.fila }}</span>
+                            <span class="mono codigo">{{ b.codigo }}</span>
+                            <span class="kg">{{ b.peso_kg | cantidad: 'kg' }}</span>
+                            <span class="conos">{{ b.conos != null ? (b.conos + (b.conos === 1 ? ' cono' : ' conos')) : 'sin conos' }}</span>
+                            @if (pb) { <span class="problema">{{ pb.tipo === 'error' ? 'No entra: ' : 'Revisar: ' }}{{ pb.texto }}</span> }
+                          </li>
+                        }
+                      </ol>
+                    </section>
+                  }
+                  </div>
+                </td>
+              </tr>
+            }
           }
         </tbody>
       </table>
     </div>
 
     @if (errorCarga()) { <p class="alert error-carga" role="alert">{{ errorCarga() }}</p> }
+    @if (pedida()) { <p class="ok-msg" role="status">{{ pedida() }}</p> }
 
     <!--
       Mientras carga, en vez de un botón apagado que dice "Cargando…" (parecía que

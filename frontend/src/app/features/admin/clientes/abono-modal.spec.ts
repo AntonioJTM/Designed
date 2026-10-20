@@ -116,6 +116,18 @@ describe('AbonoModal', () => {
     expect(c.quedaDebiendo()).toBeNull();
   });
 
+  it('el botón dice cuánto se abona también "A su cuenta" (2026-10-20, ronda 4)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    c.monto = 400;
+    f.detectChanges();
+    const boton = (f.nativeElement as HTMLElement).querySelector('button[type=submit]')!;
+    expect(boton.textContent).toContain('Abonar $400.00');
+    c.monto = null;
+    f.detectChanges();
+    expect(boton.textContent).toContain('Registrar el abono');
+  });
+
   it('propone abonar todo lo que debe', async () => {
     const f = await montar();
     expect(f.componentInstance.monto).toBe(1000);
@@ -196,5 +208,25 @@ describe('AbonoModal', () => {
     c.monto = 200;
     c.registrar();
     expect(enviados[0].sesion_caja_id).toBeUndefined();
+  });
+
+  it('a una nota no se le abona más de lo que debe: el renglón sale en rojo y no "queda bien" (2026-10-20)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    c.modo = 'notas';
+    const fila = c.filas[0];
+    c.marcar(fila, true);
+    fila.monto = 300;
+    expect(c.pasaDeNota(fila)).toBeFalse();
+    expect(c.quedaNota(fila)).toBe(200);
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('le faltarán $200.00');
+    fila.monto = 700;
+    expect(c.pasaDeNota(fila)).toBeTrue();
+    expect(c.quedaDebiendo()).toBeNull();
+    f.detectChanges();
+    const campo = (f.nativeElement as HTMLElement).querySelector('input[aria-invalid="true"]');
+    expect(campo).not.toBeNull();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('no se le puede abonar más');
   });
 });

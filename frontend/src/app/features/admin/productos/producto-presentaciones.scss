@@ -36,7 +36,6 @@
 // El valor de "Hay" puede traer varios almacenes, uno por renglón.
 .dato .lineas { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
 .dato .lineas .muted { font-weight: 400; font-size: 0.8125rem; }
-.pres-pie { display: flex; justify-content: flex-end; margin-top: auto; }
 .btn-enlace.peligro { color: var(--peligro-t); font-size: 0.8125rem; }
 
 // Zona para soltar la lista de empaque del proveedor.

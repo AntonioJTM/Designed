@@ -153,17 +153,7 @@
   text-align: center;
 }
 
-.salir {
-  min-height: 40px;
-  background: transparent;
-  border: 1px solid var(--barra-borde);
-  color: var(--barra-claro);
-  border-radius: 8px;
-  font: inherit;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-.salir:hover { background: var(--barra-hover); }
+/* "Salir" y la fila de "Mi cuenta" viven en admin-cuenta.scss. */
 
 .main {
   background: var(--fondo);
@@ -191,4 +181,10 @@
   /* Cerrado, solo se ve la barra de arriba. */
   .side:not(.abierta) nav, .side:not(.abierta) .user { display: none; }
   .main { padding: 20px 16px 40px; }
+}
+
+/* Con el dedo, a 44 px (2026-10-20, auditoría): "Salir", "Mi clave", "Mis
+   vacaciones" y los enlaces del menú medían 38-40 px. */
+@media (max-width: 900px), (pointer: coarse) {
+  .side nav a { min-height: 44px; }
 }

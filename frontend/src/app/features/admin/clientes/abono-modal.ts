@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, from, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -65,9 +66,14 @@ interface FilaNota {
     .nota-abono .marca input { margin-top: 3px; }
     .nota-abono .folio { font-family: var(--mono); font-weight: 600; }
     .nota-abono .debe { font-variant-numeric: tabular-nums; }
+    /* Cómo queda esa nota: a todo lo ancho del renglón; en rojo con su fondo si se pasa. */
+    .nota-abono .nota-queda { grid-column: 1 / -1; font-size: 0.8125rem; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+    .nota-abono .nota-queda.pasa { color: var(--peligro-t); background: var(--peligro-f); padding: 4px 8px; border-radius: 6px; }
   `,
 })
 export class AbonoModal implements OnInit {
+  /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
+  private clave = nuevaClave();
   private readonly clientes = inject(ClientesService);
   private readonly ventas = inject(VentasService);
 
@@ -131,9 +137,23 @@ export class AbonoModal implements OnInit {
         this.modo = 'notas';
         this.marcar(fila, true);
       } else {
-        this.error.set('Esa nota ya no debe nada o no es de las que puedes cobrar aquí: el abono va a su cuenta.');
+        // Es informativo, no un error (2026-10-20): no va en rojo.
+        this.avisoNota.set('Esa nota ya no debe nada o no es de las que puedes cobrar aquí: el abono va a su cuenta.');
       }
     }
+  }
+
+  /** Un aviso que no es error (la nota que se pidió ya no se puede escoger). */
+  readonly avisoNota = signal<string | null>(null);
+
+  /** El renglón se pasa de lo que debe ESA nota (2026-10-20: se marca en rojo al teclear). */
+  pasaDeNota(f: FilaNota): boolean {
+    return f.elegida && Number(f.monto ?? 0) > f.nota.por_pagar + 0.001;
+  }
+
+  /** Lo que le quedará debiendo a esa nota con lo tecleado (antes → después). */
+  quedaNota(f: FilaNota): number {
+    return Math.max(0, Math.round((f.nota.por_pagar - Number(f.monto ?? 0)) * 100) / 100);
   }
 
   /** Al marcar una nota se propone lo que debe; al desmarcarla, deja de contar. */
@@ -157,6 +177,8 @@ export class AbonoModal implements OnInit {
     const m = this.montoAbono();
     const debe = this.debe();
     if (!(m > 0) || m > debe + 0.001) return null;
+    // Con un renglón que se pasa de su nota, no se enseña como si estuviera bien.
+    if (this.modo === 'notas' && this.filas.some((f) => this.pasaDeNota(f))) return null;
     return { queda: Math.round((debe - m) * 100) / 100 };
   }
 
@@ -214,10 +236,11 @@ export class AbonoModal implements OnInit {
         metodo_pago_id: Number(this.metodoId),
         sesion_caja_id: this.esEfectivo() ? Number(this.turnoId) : undefined,
         referencia: this.referencia.trim() || undefined,
-      })
+      }, this.clave)
       .subscribe({
         next: (r) => {
           this.guardando.set(false);
+          this.clave = nuevaClave();
           this.registrado.emit({ saldo_nuevo: Number(r.saldo_nuevo), movimiento_id: Number(r.movimiento_id) });
           this.cerrar();
         },

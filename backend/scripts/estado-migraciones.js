@@ -111,6 +111,9 @@ const MIGRACIONES = [
   ['2026-10_autorizaciones_fase2', 'autorizaciones.nota_aprobacion'],
   ['2026-10_autorizaciones_fase2 (permisos)', 'permisos#clave=pedir:surtir_sucursal'],
   ['2026-10_autorizaciones_fase3', 'permisos#clave=pedir:pagar_nomina'],
+  ['2026-10_bulto_faltante', "variante_codigos^'faltante'"],
+  ['2026-10_destare_tope', 'configuracion#clave=desarme_destare_max_kg'],
+  ['2026-10_operaciones_unicas', 'operaciones_unicas'],
 ];
 
 (async () => {

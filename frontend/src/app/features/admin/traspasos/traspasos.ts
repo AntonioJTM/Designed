@@ -1,4 +1,5 @@
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
   EquivalenciaPaquetes,
@@ -48,6 +49,12 @@ interface LineaRecepcion {
   enPaquetes: boolean;
   enviado: number;
   recibido: number;
+  /**
+   * Los paquetes que salieron con su código (2026-10-20): se palomean los que NO
+   * llegaron (`faltan`). Vacío en un envío viejo, que se dice con el número.
+   */
+  paquetes: { codigo: string; peso_kg: number }[];
+  faltan: string[];
 }
 
 /** Un paso del avance (Pedido → En camino → Recibido) y si ya se dio. */
@@ -79,9 +86,9 @@ const HISTORIAL = 100;
  */
 @Component({
   selector: 'app-traspasos',
-  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe, EnvioModal, RouterLink],
+  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, CuandoPipe, EnvioModal, RouterLink, NgTemplateOutlet],
   templateUrl: './traspasos.html',
-  styleUrls: ['./traspasos.scss', './traspasos-avance.scss', './traspasos-solicitudes.scss'],
+  styleUrls: ['./traspasos.scss', './traspasos-avance.scss', './traspasos-solicitudes.scss', './traspasos-recepcion.scss'],
   // Los dos modales (acuse y cancelación) se cierran con Escape, nunca al
   // tocar el fondo: se perdería lo capturado.
   host: { '(document:keydown.escape)': 'alEscape()' },
@@ -96,6 +103,10 @@ export class Traspasos {
    * Sin el permiso no se ofrece el botón (el servidor lo rechazaría con 403).
    */
   readonly puedeEnviar = computed(() => this.auth.puede('hacer:enviar_traspaso'));
+  /** Pide directo a otra tienda (sin autorización): si no, su pedido espera autorización (2026-10-20). */
+  readonly surteDirecto = computed(() => this.auth.puede('hacer:surtir_sucursal'));
+  /** La solicitud que se está retirando: su botón se apaga mientras responde. */
+  readonly retirando = signal<number | null>(null);
   readonly puedeRecibir = computed(() => this.auth.puede('hacer:recibir_traspaso'));
 
   /** El buscador de "Nueva solicitud", para llevar ahí el foco desde el encabezado. */
@@ -169,6 +180,15 @@ export class Traspasos {
   puedeFirmar(t: Traspaso): boolean {
     return this.puedeRecibir() && this.esMio(t.almacen_destino_id);
   }
+
+  /**
+   * Quien SURTE (envía desde la matriz, una de sus tiendas): para él lo primero
+   * es Pendientes y los pedidos con autorización van debajo (2026-10-20).
+   */
+  readonly surte = computed(() => {
+    const m = this.matriz();
+    return this.puedeEnviar() && !!m && this.esMio(m.id);
+  });
 
   /** La matriz, para señalarla en el selector de origen. */
   readonly matriz = computed(() => this.almacenes().find((a) => a.es_matriz) ?? null);
@@ -279,13 +299,19 @@ export class Traspasos {
 
   /** Quien la pidió la retira mientras espera. */
   retirarSolicitud(s: SolicitudTraspaso): void {
+    if (this.retirando() !== null) return;
     this.error.set(null);
+    this.retirando.set(s.id);
     this.autorizacionesApi.cancelar(s.id).subscribe({
       next: () => {
+        this.retirando.set(null);
         this.mensaje.set(`Se retiró el pedido a ${s.origen}.`);
         this.cargarHistorial();
       },
-      error: (e) => this.error.set(this.msg(e)),
+      error: (e) => {
+        this.retirando.set(null);
+        this.error.set(this.msg(e));
+      },
     });
   }
 
@@ -571,14 +597,17 @@ export class Traspasos {
     this.lineasRecepcion.set(
       // Lo que no salió (no había) no se recibe: no viene en la camioneta.
       (t.lineas ?? []).filter((l) => !this.noSalio(l)).map((l) => {
-        const enPaquetes = l.paquetes != null;
-        const enviado = enPaquetes ? Number(l.paquetes) : Number(l.cantidad);
+        const paquetes = (l.enviados ?? []).map((b) => ({ codigo: b.codigo, peso_kg: Number(b.peso_kg) }));
+        const enPaquetes = l.paquetes != null || paquetes.length > 0;
+        const enviado = paquetes.length || (enPaquetes ? Number(l.paquetes) : Number(l.cantidad));
         return {
           detalle_id: Number(l.detalle_id),
           etiqueta: this.etiquetaHilo(l),
           enPaquetes,
           enviado,
           recibido: enviado,
+          paquetes,
+          faltan: [],
         };
       })
     );
@@ -595,9 +624,26 @@ export class Traspasos {
     );
   }
 
+  /** Palomea (o quita) un paquete que NO llegó: lo recibido baja solo. */
+  marcarFalta(detalleId: number, codigo: string, falta: boolean): void {
+    this.lineasRecepcion.update((arr) =>
+      arr.map((l) => {
+        if (l.detalle_id !== detalleId) return l;
+        const faltan = falta ? [...new Set([...l.faltan, codigo])] : l.faltan.filter((c) => c !== codigo);
+        return { ...l, faltan, recibido: l.paquetes.length - faltan.length };
+      })
+    );
+  }
+
+  /** Los kilos de los paquetes palomeados: es la merma que se va a asentar. */
+  kgFaltan(l: LineaRecepcion): number {
+    const faltan = new Set(l.faltan);
+    return Math.round(l.paquetes.filter((b) => faltan.has(b.codigo)).reduce((s, b) => s + b.peso_kg, 0) * 1000) / 1000;
+  }
+
   /** Cuántas líneas llegan incompletas: se avisa antes de firmar. */
   readonly faltantesRecepcion = computed(() =>
-    this.lineasRecepcion().filter((l) => l.recibido < l.enviado)
+    this.lineasRecepcion().filter((l) => (l.paquetes.length ? l.faltan.length > 0 : l.recibido < l.enviado))
   );
 
   confirmarRecepcion(): void {
@@ -614,9 +660,11 @@ export class Traspasos {
       .recibirTraspaso(t.id, {
         notas: this.notasRecepcion.trim() || undefined,
         recibido: lineas.map((l) =>
-          l.enPaquetes
-            ? { detalle_id: l.detalle_id, paquetes: l.recibido }
-            : { detalle_id: l.detalle_id, cantidad: l.recibido }
+          l.paquetes.length
+            ? { detalle_id: l.detalle_id, faltan: l.faltan }
+            : l.enPaquetes
+              ? { detalle_id: l.detalle_id, paquetes: l.recibido }
+              : { detalle_id: l.detalle_id, cantidad: l.recibido }
         ),
       })
       .subscribe({
@@ -624,7 +672,8 @@ export class Traspasos {
           this.mensaje.set(
             `Traspaso ${r.folio} recibido.` +
               (r.faltantes
-                ? ` ${r.faltantes} línea(s) llegaron incompletas: la diferencia quedó como faltante en el kardex.`
+                ? ` ${r.faltantes === 1 ? 'Un hilo llegó incompleto' : `${r.faltantes} hilos llegaron incompletos`}: ` +
+                  'lo que faltó quedó como merma en el kardex y esos paquetes ya no cuentan en la sucursal.'
                 : ' Llegó completo.')
           );
           this.enviando.set(false);

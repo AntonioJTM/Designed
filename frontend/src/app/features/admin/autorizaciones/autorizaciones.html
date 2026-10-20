@@ -38,13 +38,17 @@
     } @else {
       <ul class="solicitudes">
         @for (a of filas(); track a.id) {
-          <li class="solicitud" [class.esperando]="a.estado === 'pendiente'">
+          <li class="solicitud" [class.esperando]="a.estado === 'pendiente'" [class.resaltada]="a.id === resaltar"
+              [id]="'solicitud-' + a.id">
             <div class="que">
               <div class="arriba">
+                <!-- De qué tipo es, para leer la lista de un vistazo (2026-10-20, auditoría). -->
+                <span class="tipo-op">{{ tipoDe(a) }}</span>
                 <span class="operacion">{{ a.operacion_nombre }}</span>
                 <span [class]="'pill ' + estado(a).tono">{{ estado(a).texto }}</span>
               </div>
-              <p class="resumen">{{ a.resumen }}</p>
+              <!-- El monto con números alineados y los folios en letra de código (2026-10-20). -->
+              <p class="resumen">@for (x of partes(a.resumen); track $index) {@switch (x.k) {@case ('dinero') {<b class="dinero-res">{{ x.t }}</b>} @case ('folio') {<span class="mono" [title]="x.titulo">{{ x.corto }}</span>} @default {{{ x.t }}}}}</p>
               <p class="quien muted">
                 @if (a.tiendas.length) { {{ a.tiendas.join(', ') }} · }
                 Lo pidió <b>{{ a.solicitante }}</b> {{ cuando(a.solicitado_en) }}
@@ -59,7 +63,7 @@
               @if (a.detalle?.recibos?.length) {
                 <!-- Pagar una nómina: qué se paga a cada quien, antes de aceptarla. -->
                 <details class="recibos">
-                  <summary>Ver los {{ a.detalle!.recibos!.length }} recibos</summary>
+                  <summary>{{ a.detalle!.recibos!.length === 1 ? 'Ver el recibo' : 'Ver los ' + a.detalle!.recibos!.length + ' recibos' }}</summary>
                   <ul>
                     @for (r of a.detalle!.recibos; track $index) {
                       <li><span>{{ r.nombre }} <span class="muted">· {{ r.dias === null ? 'sin horario' : r.dias + (r.dias === 1 ? ' día' : ' días') }}</span></span><b>{{ r.total | dinero }}</b></li>
@@ -88,11 +92,14 @@
                 <button type="button" class="btn btn-ghost" (click)="abrirRechazo(a)">Cerrar</button>
               } @else if (vista() === 'por_autorizar' && a.estado === 'pendiente') {
                 <button type="button" class="btn btn-ghost" (click)="abrirRechazo(a)" [disabled]="aceptando() !== null">Rechazar</button>
-                <button type="button" class="btn btn-primary" (click)="aceptar(a)" [disabled]="aceptando() !== null">
+                <!-- Verde, como un cobro: aceptar es confirmar. Un solo azul por pantalla (2026-10-20). -->
+                <button type="button" class="btn btn-ok" (click)="aceptar(a)" [disabled]="aceptando() !== null">
                   {{ aceptando() === a.id ? 'Haciéndolo…' : (a.ajustable && a.detalle?.lineas?.length ? 'Aceptar…' : 'Aceptar') }}
                 </button>
               } @else if (vista() === 'mias' && a.estado === 'pendiente') {
-                <button type="button" class="btn btn-ghost" (click)="retirar(a)">Retirar</button>
+                <button type="button" class="btn btn-ghost" (click)="retirar(a)" [disabled]="retirando() === a.id">
+                  {{ retirando() === a.id ? 'Retirando…' : 'Retirar' }}
+                </button>
               }
             </div>
           </li>
@@ -112,7 +119,8 @@
       </div>
       <form (ngSubmit)="rechazar()">
         <div class="modal-body columna">
-          <p><b>{{ a.operacion_nombre }}</b> · {{ a.resumen }}</p>
+          @if (errorRechazo()) { <p class="alert" role="alert">{{ errorRechazo() }}</p> }
+          <p><b>{{ a.operacion_nombre }}</b> · @for (x of partes(a.resumen); track $index) {@switch (x.k) {@case ('dinero') {<b class="dinero-res">{{ x.t }}</b>} @case ('folio') {<span class="mono" [title]="x.titulo">{{ x.corto }}</span>} @default {{{ x.t }}}}}</p>
           @if (a.interrumpida) {
             <p class="muted">Se interrumpió y no se sabe si se hizo: revísalo antes. Cerrarla no hace ni deshace nada.</p>
           } @else {
@@ -168,6 +176,7 @@
                       <span class="cant-paq">
                       <input type="number" class="cuanto" min="0" [max]="l.pedido" [step]="l.unidad === 'paquetes' ? 1 : 0.001"
                              [name]="'v' + l.variante_id" [(ngModel)]="cuanto[l.variante_id]" [attr.aria-invalid]="malo(l)"
+                             (keydown.enter)="siguienteCampo($event)"
                              [class.invalido]="malo(l)" [attr.aria-label]="'Cuánto se autoriza de ' + l.hilo" />
                       <span class="muted">{{ l.unidad === 'paquetes' ? 'paq' : 'kg' }}</span>
                       </span>

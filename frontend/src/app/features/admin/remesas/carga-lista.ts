@@ -2,6 +2,7 @@ import { Component, OnDestroy, computed, effect, inject, input, output, signal }
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import {
+  BultoRemesa,
   DatosCarga,
   EventoCarga,
   HiloLista,
@@ -15,6 +16,7 @@ import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Almacen } from '../../../core/models/inventario.models';
 import { Categoria, Opcion } from '../../../core/models/catalogo.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
@@ -46,7 +48,8 @@ interface Avance {
   selector: 'app-carga-lista',
   imports: [FormsModule, RouterLink, CantidadPipe, DineroPipe, FolioPipe, DatosCargaCampos],
   templateUrl: './carga-lista.html',
-  styleUrl: './carga-lista.scss',
+  // Los paquetes de cada color, aparte: la hoja pasaba del límite de 4 kB (ver CLAUDE.md).
+  styleUrls: ['./carga-lista.scss', './carga-lista-paquetes.scss'],
 })
 export class CargaLista implements OnDestroy {
   private readonly inv = inject(InventarioService);
@@ -79,6 +82,12 @@ export class CargaLista implements OnDestroy {
   readonly arrastrando = signal(false);
   readonly verTodosErrores = signal(false);
   readonly verTodosAvisos = signal(false);
+  /**
+   * Los colores abiertos para revisar sus lotes y paquetes antes de confirmar
+   * (2026-10-20, usuario: "al darle clic me diga qué lotes tiene, sus códigos
+   * de barras, cuánto pesa cada bulto y cuántos conos trae").
+   */
+  readonly abiertos = signal<ReadonlySet<string>>(new Set());
 
   almacenSel: number | '' = '';
   materialSel: number | '' = '';
@@ -94,6 +103,8 @@ export class CargaLista implements OnDestroy {
   readonly segundos = signal(0);
   /** Por qué no entró la lista; se pinta junto al botón, que es donde se está mirando. */
   readonly errorCarga = signal<string | null>(null);
+  /** Se pidió la autorización para cargarla (2026-10-20): entra cuando la acepten. */
+  readonly pedida = signal<string | null>(null);
   private reloj: ReturnType<typeof setInterval> | null = null;
   /** El almacén y el archivo de la última lista, para el comprobante y su PDF. */
   almacenUltima = '';
@@ -105,6 +116,47 @@ export class CargaLista implements OnDestroy {
     const e = this.previa()?.errores ?? [];
     return this.verTodosErrores() ? e : e.slice(0, RENGLONES_A_LA_VISTA);
   });
+
+  /** Lo que tiene cada renglón del Excel: un error (no entra) o un aviso (revisar). */
+  readonly problemas = computed(() => {
+    const p = this.previa();
+    const m = new Map<number, Problema>();
+    // Primero los avisos: si el renglón también tiene error, gana el error.
+    for (const a of p?.avisos ?? []) if (a.fila) m.set(a.fila, { tipo: 'aviso', texto: sinRenglon(a.mensaje) });
+    for (const e of p?.errores ?? []) if (e.fila) m.set(e.fila, { tipo: 'error', texto: sinRenglon(e.mensaje) });
+    return m;
+  });
+
+  /** Cada color con sus lotes y, en cada lote, sus paquetes en el orden del Excel. */
+  readonly paquetes = computed(() => {
+    const m = new Map<string, LotePaquetes[]>();
+    for (const h of this.previa()?.hilos ?? []) m.set(h.clave, lotesConPaquetes(h));
+    return m;
+  });
+
+  alternarHilo(clave: string): void {
+    const s = new Set(this.abiertos());
+    if (s.has(clave)) s.delete(clave);
+    else s.add(clave);
+    this.abiertos.set(s);
+  }
+
+  estaAbierto(clave: string): boolean {
+    return this.abiertos().has(clave);
+  }
+
+  /** ¿Algún paquete del lote tiene error o aviso? Así se dice arriba del lote. */
+  problemasDe(l: LotePaquetes): { errores: number; avisos: number } {
+    const m = this.problemas();
+    let errores = 0;
+    let avisos = 0;
+    for (const b of l.bultos) {
+      const p = b.fila ? m.get(b.fila) : undefined;
+      if (p?.tipo === 'error') errores++;
+      else if (p?.tipo === 'aviso') avisos++;
+    }
+    return { errores, avisos };
+  }
 
   readonly avisosVisibles = computed(() => {
     const a = this.previa()?.avisos ?? [];
@@ -198,6 +250,7 @@ export class CargaLista implements OnDestroy {
     this.errorCarga.set(null);
     this.verTodosErrores.set(false);
     this.verTodosAvisos.set(false);
+    this.abiertos.set(new Set());
     if (!f) return;
     this.leyendo.set(true);
     this.inv.previaLista(f).subscribe({
@@ -281,6 +334,18 @@ export class CargaLista implements OnDestroy {
         },
         error: (e) => {
           termino = true;
+          const pedida = autorizacionPedida(e);
+          if (pedida) {
+            // En verde y la captura limpia, para no pedirla dos veces.
+            this.terminar(null);
+            this.pedida.set(pedida);
+            this.previa.set(null);
+            this.archivo = null;
+            this.notas = '';
+            this.datosCarga.set(datosCargaVacios());
+            this.costos = {};
+            return;
+          }
           this.terminar(this.msg(e));
         },
         complete: () => {
@@ -323,6 +388,7 @@ export class CargaLista implements OnDestroy {
   }
 
   private terminar(error: string | null): void {
+    this.pedida.set(null);
     this.pararReloj();
     this.enviando.set(false);
     this.avance.set(null);
@@ -372,4 +438,49 @@ export class CargaLista implements OnDestroy {
   private msg(e: unknown): string {
     return (e as { error?: { error?: ApiError } })?.error?.error?.message ?? 'Ocurrió un error.';
   }
+}
+
+/** Lo que tiene un renglón del Excel. */
+export interface Problema { tipo: 'error' | 'aviso'; texto: string }
+
+/** Un lote de un color con sus paquetes, para revisarlos antes de cargar. */
+export interface LotePaquetes {
+  lote: string;
+  bultos: BultoRemesa[];
+  kg: number;
+  conos: number;
+  /** Paquetes que no dicen sus conos en el Excel. */
+  sinConos: number;
+}
+
+/** "Renglón 3 (bulto 00529777): ya está registrado…" → "ya está registrado…". */
+export function sinRenglon(mensaje: string): string {
+  return String(mensaje ?? '').replace(/^Renglón \d+(?:\s*\([^)]*\))?:\s*/, '');
+}
+
+/** Los lotes del color con sus paquetes en el orden del Excel; los lotes, como los ordena el servidor. */
+export function lotesConPaquetes(h: HiloLista): LotePaquetes[] {
+  const porLote = new Map<string, BultoRemesa[]>();
+  for (const b of h.bultos ?? []) {
+    const l = b.lote ?? '(sin lote)';
+    if (!porLote.has(l)) porLote.set(l, []);
+    porLote.get(l)!.push(b);
+  }
+  const orden = h.lotes.map((l) => l.lote);
+  return [...porLote.entries()]
+    .sort((a, b) => {
+      const ia = orden.indexOf(a[0]);
+      const ib = orden.indexOf(b[0]);
+      return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib) || a[0].localeCompare(b[0]);
+    })
+    .map(([lote, bultos]) => {
+      const lista = [...bultos].sort((a, b) => (a.fila ?? 0) - (b.fila ?? 0));
+      return {
+        lote,
+        bultos: lista,
+        kg: Math.round(lista.reduce((s, b) => s + Number(b.peso_kg ?? 0), 0) * 1000) / 1000,
+        conos: lista.reduce((s, b) => s + Number(b.conos ?? 0), 0),
+        sinConos: lista.filter((b) => b.conos == null).length,
+      };
+    });
 }

@@ -15,9 +15,19 @@
 .solicitud .que { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .arriba { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .operacion { font-weight: 600; }
+/* El tipo (Dinero, Precios, Inventario, Personal), neutro: el color es del estado. */
+.tipo-op {
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--tinta-2); background: var(--superficie-2); padding: 2px 8px; border-radius: 4px;
+}
+/* El monto, con números de ancho fijo; el folio va en .mono (global). */
+.dinero-res { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .resumen { margin: 0; font-size: 0.9375rem; overflow-wrap: anywhere; }
 .quien { margin: 0; font-size: 0.8125rem; }
-.motivo { margin: 0; font-size: 0.875rem; color: var(--peligro-t); }
+/* Los estados con su pareja de color: fondo + texto, no texto de color suelto (2026-10-20). */
+.motivo { margin: 0; font-size: 0.875rem; color: var(--peligro-t); background: var(--peligro-f); padding: 4px 8px; border-radius: 6px; align-self: flex-start; }
+/* La solicitud a la que llevó el enlace (`?id=`). */
+.solicitud.resaltada { background: var(--acento-tenue); border-radius: 8px; }
 .solicitud .aviso { margin: 4px 0 0; }
 .acciones { display: flex; gap: 8px; flex: 0 0 auto; }
 
@@ -27,7 +37,7 @@
 }
 
 /* Lo que se autorizó si fue menos de lo pedido (fase 2). */
-.nota-aprobacion { margin: 0; font-size: 0.875rem; color: var(--aviso-t); }
+.nota-aprobacion { margin: 0; font-size: 0.875rem; color: var(--aviso-t); background: var(--aviso-f); padding: 4px 8px; border-radius: 6px; align-self: flex-start; }
 /* La ventana para autorizar un pedido por renglón. */
 /* Como los de Surtir sucursal: el mismo campo, a la medida de la celda. */
 .cuanto {
@@ -39,7 +49,7 @@
 .cant-paq { display: inline-flex; align-items: center; gap: 6px; }
 /* En el celular la unidad ya la dice "Pidió": el campo se queda con su ancho. */
 @media (max-width: 520px) { .cant-paq .muted { display: none; } }
-.poco { color: var(--peligro-t); font-weight: 600; }
+.poco { color: var(--peligro-t); background: var(--peligro-f); font-weight: 600; }
 .resumen-ajuste { margin: 0; font-weight: 600; }
 
 /* Los recibos de una nómina que se pide pagar (fase 3). */

@@ -1,0 +1,44 @@
+// BAJO EL NOMBRE DEL MENÚ (2026-10-20, auditoría): lo de SU cuenta ("Mi clave",
+// "Mis vacaciones") en una fila de botones chicos, y "Salir" APARTE, abajo de
+// una línea, con su ícono: antes eran tres botones iguales, uno sobre otro, y
+// "Salir" quedaba pegado a "Mis vacaciones". Aparte de admin-layout.scss por el
+// límite de 4 kB por hoja (ver CLAUDE.md).
+.cuenta { display: flex; flex-wrap: wrap; gap: 6px; }
+.cuenta-btn {
+  flex: 1 1 0;
+  min-width: max-content;
+  min-height: 36px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--barra-borde);
+  border-radius: 6px;
+  color: var(--barra-claro);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.cuenta-btn:hover { background: var(--barra-hover); color: #fff; }
+
+.salir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px -10px 0;
+  min-height: 44px;
+  padding: 0 14px;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--barra-linea);
+  border-radius: 0;
+  color: var(--barra-suave);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+.salir:hover { background: var(--barra-hover); color: #fff; }
+
+// Con el dedo, todo a 44 px.
+@media (max-width: 900px), (pointer: coarse) {
+  .cuenta-btn { min-height: 44px; }
+}
