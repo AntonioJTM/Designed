@@ -107,13 +107,15 @@ describe('EnvioModal', () => {
     expect(c.ultimo()).toContain('A2');
   });
 
-  it('dice si van de más o faltan contra lo pedido', async () => {
+  it('dice cuántos faltan, y no deja escanear más de lo pedido (2026-10-19)', async () => {
     const c = (await montar()).componentInstance;
     escanear(c, 'A1');
     expect(c.diferencia(traspaso.lineas[0])).toBe('faltan 1');
     escanear(c, 'A2');
+    expect(c.diferencia(traspaso.lineas[0])).toBeNull();
     escanear(c, 'A3');
-    expect(c.diferencia(traspaso.lineas[0])).toBe('1 de más');
+    expect(c.escaneados().length).toBe(2);
+    expect(c.error()).toContain('no sale más de lo pedido');
   });
 
   it('avisa en el momento lo que no puede salir, sin agregarlo', async () => {

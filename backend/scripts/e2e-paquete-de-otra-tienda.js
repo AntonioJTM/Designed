@@ -173,8 +173,10 @@ const ck = (n, ok, d) => {
     await api('POST', `/variantes/${v.id}/codigos`, { codigo: cod6, peso_kg: 17.5, almacen_id: tienda.id });
     ck(`dos paquetes más en ${tienda.nombre} (35.5 kg)`, (await inventario(v.id)) === saldos({ [bodega.id]: 19.95, [tienda.id]: 35.5 }),
       await inventario(v.id));
+    // Pedido en KILOS (un aproximado, no se topa): salen los dos paquetes encontrados.
+    // En paquetes no saldrían más de los pedidos (2026-10-19, MAS_DE_LO_PEDIDO).
     r = await api('POST', '/inventario/traspasos', {
-      almacen_origen_id: bodega.id, almacen_destino_id: tienda.id, notas: 'TMPOT', items: [{ variante_id: v.id, paquetes: 1 }],
+      almacen_origen_id: bodega.id, almacen_destino_id: tienda.id, notas: 'TMPOT', items: [{ variante_id: v.id, cantidad: 19 }],
     });
     traspasos.push(r.data?.id);
     const tra2 = r.data;

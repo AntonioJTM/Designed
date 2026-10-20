@@ -20,7 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 
@@ -762,6 +762,30 @@ function verificarModulosEnCodigo() {
   revisar('modulos', cuentasJs.includes('clabeValida'), 'Las cuentas bancarias en Configuración deben validar el dígito de control de la CLABE (clabeValida).', 'IMPORTANTE', M12);
   revisar('modulos', prodGuard.includes('hitex') && dbConfig.includes('time_zone'), 'Debe estar activo el candado que protege la base "hitex" y la hora de México centro en la conexión.', 'GRAVE', M12);
   revisar('modulos', !/dado de alta/i.test(usuTs) && !/cinco pesta[ñn]as/i.test(permTs), 'En Personal y Permisos no deben quedar textos viejos ("dado de alta" en masculino fijo o "las cinco pestañas").', 'AVISO', M12);
+
+  // EJECUCIÓN REAL DE LAS PRUEBAS MATEMÁTICAS Y DE NEGOCIO (backend/src/**/*.test.js)
+  const archivosTest = listarArchivos(path.join(BACKEND, 'src')).filter((f) => f.endsWith('.test.js'));
+  if (archivosTest.length > 0) {
+    const resTest = spawnSync(process.execPath, ['--test', ...archivosTest], {
+      cwd: BACKEND,
+      encoding: 'utf8',
+    });
+    const salida = `${resTest.stdout || ''}\n${resTest.stderr || ''}`;
+    const pasadas = (salida.match(/^[✔✓]\s+/gm) || []).length;
+    const fallidas = (salida.match(/^[✖✗]\s+.*$/gm) || []);
+    for (let i = 0; i < pasadas; i++) {
+      revisar('modulos', true, '', 'GRAVE', M12);
+    }
+    if (resTest.status !== 0 || fallidas.length > 0) {
+      revisar(
+        'modulos',
+        false,
+        `Fallaron pruebas unitarias de ejecución real en el backend: ${fallidas.join(' | ') || 'revisa npm test en backend/'}`,
+        'GRAVE',
+        M12
+      );
+    }
+  }
 }
 
 // ============================================================================

@@ -32,8 +32,9 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
  * Al surtir se escanea cada paquete que sale (usuario, 2026-10-06: "aquí cuando
  * se surte sí se escanean los paquetes que salen"). Con eso de cada hilo sale el
  * peso REAL de sus paquetes y ESOS quedan en la sucursal, en vez del aproximado
- * que se apartó al pedir. Pueden ser más o menos de los pedidos: sale lo que se
- * subió, y el modal lo dice.
+ * que se apartó al pedir. Pueden ser menos de los pedidos (sale lo que hay),
+ * nunca más (2026-10-19: "si autorizo 10, solo salen 10"): el que sobra se
+ * rechaza al escanearlo.
  *
  * Cada código se revisa al escanearlo (que sea un paquete, de un hilo del
  * traspaso, disponible y con peso) para avisar en el momento y no al final; el
@@ -297,6 +298,13 @@ export class EnvioModal implements OnInit {
     if (!this.lineas().some((l) => l.variante_id === Number(b.variante_id))) {
       const v = r.variante;
       return `El paquete ${cod} es de ${v.producto}${v.calibre ? ' ' + v.calibre : ''}, que no está en este traspaso.`;
+    }
+    // No sale más de lo pedido (o autorizado): el que sobra no se agrega.
+    const linea = this.lineas().find((l) => l.variante_id === Number(b.variante_id))!;
+    const pedidos = this.pedidos(linea);
+    if (pedidos != null && this.cuantos(linea) >= pedidos) {
+      return `De ${this.nombreDe(linea.variante_id)} se ${pedidos === 1 ? 'pidió 1 paquete' : `pidieron ${pedidos} paquetes`} ` +
+        `y ya van ${this.cuantos(linea)}: no sale más de lo pedido.`;
     }
     if (b.estado && b.estado !== 'disponible') {
       // Uno apartado para ESTE mismo envío (se guardó antes y se quitó de la lista) sí vale.

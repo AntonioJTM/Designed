@@ -236,6 +236,57 @@ async function rechazar(id, auth, motivo) {
 }
 
 /**
+ * LOS PEDIDOS A OTRA TIENDA EN SURTIR SUCURSAL (2026-10-20: "que salgan las
+ * solicitudes y cuál ya está aprobada y cuál está por aprobar o rechazar"). Los
+ * de SUS tiendas (las del origen o del destino): los que esperan y los resueltos
+ * de los últimos 30 días, cada uno con qué se pidió, en qué quedó y, si se
+ * autorizó, el traspaso que nació y en qué va. Solo lo pedido: nada de cuánto
+ * hay en el origen (pedir a ciegas).
+ */
+async function pedidosASucursal(auth, { dias = 30 } = {}) {
+  const { lineasPedido, nombreAlmacen } = require('./operaciones');
+  const mias = await almacenesDe(auth);
+  const filas = (await model.deOperacion('surtir_sucursal', dias))
+    .filter((f) => mias === null || !f.almacenes || f.almacenes.some((a) => mias.includes(Number(a))));
+  const vivas = new Set((await vigentes(filas.filter((f) => f.estado === 'pendiente'))).map((f) => f.id));
+  const lista = [];
+  for (const f of filas) {
+    if (f.estado === 'pendiente' && !vivas.has(f.id)) continue; // se acaba de cerrar sola
+    let cuerpo = {};
+    try { cuerpo = JSON.parse(f.cuerpo ?? '{}'); } catch { /* vacío */ }
+    let traspaso = null;
+    if (f.estado === 'aprobada') {
+      let creado = null;
+      try { creado = JSON.parse(f.resultado ?? 'null'); } catch { /* sin resultado */ }
+      if (creado?.id) {
+        const [[t]] = await pool.query('SELECT id, folio, estado FROM traspasos WHERE id = :id', { id: Number(creado.id) });
+        traspaso = t ?? null;
+      }
+    }
+    lista.push({
+      id: f.id,
+      estado: f.estado,
+      interrumpida: f.interrumpida,
+      origen: await nombreAlmacen(cuerpo.almacen_origen_id),
+      destino: await nombreAlmacen(cuerpo.almacen_destino_id),
+      lineas: (await lineasPedido(cuerpo.items)).map(({ hilo, unidad, pedido }) => ({ hilo, unidad, pedido })),
+      notas: cuerpo.notas ?? null,
+      solicitante: f.solicitante,
+      solicitado_en: f.solicitado_en,
+      autorizador: f.autorizador,
+      resuelto_en: f.resuelto_en,
+      motivo: f.motivo,
+      nota_aprobacion: f.nota_aprobacion,
+      ultimo_error: f.estado === 'pendiente' ? f.ultimo_error : null,
+      traspaso,
+      es_mia: Number(f.solicitante_id) === Number(auth.sub),
+      puedo_autorizar: f.estado === 'pendiente' && (await puedeAutorizar(auth, f)),
+    });
+  }
+  return lista;
+}
+
+/**
  * Lo que sigue al aceptarla o rechazarla (el WhatsApp de las vacaciones). Corre
  * DESPUÉS de contestar —mandar un WhatsApp tarda— y deja dicho qué se avisó;
  * las pantallas abiertas se ponen al día solas.
@@ -339,4 +390,5 @@ async function revisarClave(cabecera, op, { solicitanteId, tiendas }) {
 
 module.exports = {
   listar, cuantasPorAutorizar, aprobar, rechazar, cancelar, autorizadores, revisarClave, puedeAutorizar, alResolver,
+  pedidosASucursal,
 };

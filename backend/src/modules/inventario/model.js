@@ -1131,9 +1131,11 @@ async function _traerAlOrigen(conn, bultos, t, encontrados, usuarioId, nombreDe)
  * SOLO con los paquetes ESCANEADOS (`codigos`): "aquí cada cosa que sale se
  * escanea, no se puede enviar si no se escanea" (usuario, 2026-10-06). De cada
  * hilo sale EXACTAMENTE el peso real de sus paquetes escaneados, y esos —no
- * otros— pasan a la sucursal. Pueden ser más o menos de los que se pidieron:
- * sale lo que se subió a la camioneta, y la línea queda con esos paquetes y esos
- * kilos. Sin ningún código, 422 SIN_ESCANEAR: lo que no se escanea no sale.
+ * otros— pasan a la sucursal. Pueden ser MENOS de los que se pidieron (sale lo
+ * que hay), NUNCA MÁS (2026-10-19: con la autorización se pide y se autoriza una
+ * cantidad, "si autorizo 10, solo salen 10"; 422 MAS_DE_LO_PEDIDO). La línea
+ * queda con esos paquetes y esos kilos. Sin ningún código, 422 SIN_ESCANEAR: lo
+ * que no se escanea no sale.
  *
  * SE MANDA LO QUE HAY (usuario, 2026-10-06): "si pido 20 de negro 1/30 y solo
  * tengo 15, que se envíen esos y nada más". Un hilo con menos paquetes que los
@@ -1144,6 +1146,27 @@ async function _traerAlOrigen(conn, bultos, t, encontrados, usuarioId, nombreDe)
  *
  * Se vuelve a validar la existencia; si ya no alcanza, 409 y no se envía nada.
  */
+/**
+ * NO SALE MÁS DE LO PEDIDO (2026-10-19, autorizaciones: "si autorizas 10, que
+ * solo se puedan mandar 10"). De cada hilo pedido en PAQUETES, no más paquetes
+ * escaneados que los pedidos (o autorizados: el traspaso nace con lo que se
+ * autorizó). Lo pedido en kilos (presentación suelta o una solicitud vieja) no
+ * se topa: sus kilos son un aproximado. Antes de mover nada.
+ */
+function _exigirNoMasDeLoPedido(det, escaneados, nombreDe) {
+  const demas = [];
+  for (const d of det) {
+    const pedidos = d.paquetes_solicitados != null ? Number(d.paquetes_solicitados)
+      : d.paquetes != null ? Number(d.paquetes) : null;
+    if (pedidos == null) continue;
+    const n = escaneados.filter((b) => Number(b.variante_id) === Number(d.variante_id)).length;
+    if (n > pedidos) demas.push(`${nombreDe(d.variante_id)}: se pidieron ${pedidos} y van ${n} (quita ${n - pedidos})`);
+  }
+  if (demas.length) {
+    throw new AppError(422, 'MAS_DE_LO_PEDIDO', `No sale más de lo pedido. ${demas.join('; ')}.`);
+  }
+}
+
 async function enviarTraspaso(id, usuarioId, datos = {}) {
   return withTransaction(async (conn) => {
     const [trows] = await conn.query('SELECT * FROM traspasos WHERE id = :id FOR UPDATE', { id });
@@ -1177,6 +1200,7 @@ async function enviarTraspaso(id, usuarioId, datos = {}) {
       throw new AppError(422, 'SIN_ESCANEAR',
         'Escanea los paquetes que salen: sin escanear no se puede enviar.');
     }
+    _exigirNoMasDeLoPedido(det, escaneados, nombreDe);
     // Los que el sistema tenía en otro almacén: confirmados, pasan aquí con sus kilos.
     await _traerAlOrigen(conn, escaneados, t, datos.encontrados, usuarioId, nombreDe);
 
@@ -1333,7 +1357,8 @@ async function guardarEscaneos(id, usuarioId, codigos = [], encontrados = []) {
       throw new AppError(409, 'ESTADO_INVALIDO',
         `El traspaso ${t.folio} está "${t.estado}": solo se guarda lo escaneado de una solicitud por enviar.`);
     }
-    const [det] = await conn.query('SELECT id, variante_id FROM traspaso_detalle WHERE traspaso_id = :id ORDER BY id', { id });
+    const [det] = await conn.query(
+      'SELECT id, variante_id, paquetes_solicitados, paquetes FROM traspaso_detalle WHERE traspaso_id = :id ORDER BY id', { id });
     const variantes = new Map();
     for (const d of det) variantes.set(Number(d.variante_id), await _varianteParaTraspaso(conn, d.variante_id));
     const nombreDe = (vid) => {
@@ -1341,6 +1366,7 @@ async function guardarEscaneos(id, usuarioId, codigos = [], encontrados = []) {
       return v ? `${v.producto}${v.calibre ? ' ' + v.calibre : ''}` : 'otro hilo';
     };
     const bultos = await _bultosEscaneados(conn, codigos, new Set(variantes.keys()), nombreDe, t.id);
+    _exigirNoMasDeLoPedido(det, bultos, nombreDe);
     // Igual que al enviar: el que estaba en otro almacén y se confirmó, pasa aquí con sus kilos.
     await _traerAlOrigen(conn, bultos, t, encontrados, usuarioId, nombreDe);
 

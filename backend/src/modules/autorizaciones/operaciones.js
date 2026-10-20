@@ -686,4 +686,4 @@ async function describir(op, req) {
   }
 }
 
-module.exports = { OPERACIONES, describir, resumenNomina };
+module.exports = { OPERACIONES, describir, resumenNomina, lineasPedido, nombreAlmacen };

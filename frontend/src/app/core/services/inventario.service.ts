@@ -560,6 +560,30 @@ export interface TraspasoLinea {
 /** Por dónde va un traspaso. */
 export type EstadoTraspaso = 'solicitado' | 'en_transito' | 'recibido' | 'cancelado';
 
+/**
+ * Un pedido a otra tienda que pasó por autorización (2026-10-20): lo que se
+ * pidió, en qué quedó y, si se autorizó, el traspaso que nació.
+ */
+export interface SolicitudTraspaso {
+  id: number;
+  estado: 'pendiente' | 'aprobando' | 'aprobada' | 'rechazada' | 'cancelada' | 'vencida' | 'cerrada';
+  interrumpida: boolean;
+  origen: string;
+  destino: string;
+  lineas: { hilo: string; unidad: 'paquetes' | 'kg'; pedido: number }[];
+  notas: string | null;
+  solicitante: string;
+  solicitado_en: string;
+  autorizador: string | null;
+  resuelto_en: string | null;
+  motivo: string | null;
+  nota_aprobacion: string | null;
+  ultimo_error: string | null;
+  traspaso: { id: number; folio: string; estado: EstadoTraspaso } | null;
+  es_mia: boolean;
+  puedo_autorizar: boolean;
+}
+
 export interface ResultadoTraspaso {
   id: number;
   folio: string;
@@ -1019,6 +1043,13 @@ export class InventarioService {
       .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/cancelar`, {
         motivo,
       })
+      .pipe(map(data));
+  }
+
+  /** Los pedidos a otra tienda con autorización: los que esperan y los resueltos (30 días). */
+  solicitudesTraspaso(): Observable<SolicitudTraspaso[]> {
+    return this.http
+      .get<ApiResponse<SolicitudTraspaso[]>>(`${this.base}/inventario/traspasos/autorizaciones`)
       .pipe(map(data));
   }
 
