@@ -62,7 +62,10 @@ function avisarAlTerminar(req, res, next) {
     let notas;
     res.on('finish', async () => {
       if (res.statusCode >= 400) return;
-      const tipos = tiposDeRuta(req.method, ruta, req.body);
+      // Una ruta puede decir otra cosa: pedir una autorización no cambia lo de
+      // su ruta, solo avisa que hay una solicitud (`autorizable.js`).
+      const tipos = res.locals?.tiposAviso
+        ?? [...tiposDeRuta(req.method, ruta, req.body), ...(res.locals?.tiposAvisoExtra ?? [])];
       if (!tipos.length) return;
       let despues;
       try {

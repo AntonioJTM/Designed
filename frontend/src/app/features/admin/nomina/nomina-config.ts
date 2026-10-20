@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { AuthService } from '../../../core/services/auth.service';
 import { RouterLink } from '@angular/router';
 import { NominaService } from '../../../core/services/nomina.service';
 import { EmpleadoNomina } from '../../../core/models/nomina.models';
@@ -24,6 +25,13 @@ import { DIAS_CORTOS, ORDEN_SEMANA } from './jornada';
 })
 export class NominaConfig {
   private readonly api = inject(NominaService);
+  private readonly auth = inject(AuthService);
+  /** Nadie toca su propio sueldo, salvo el administrador (fase 3). */
+  esSuya(e: EmpleadoNomina): boolean {
+    return !this.auth.esAdmin() && e.usuario_id === this.auth.miId();
+  }
+  /** Las vacaciones en Nómina las registra solo quien las autoriza. */
+  readonly registraVacaciones = computed(() => this.auth.puede('hacer:autorizar_vacaciones'));
 
   readonly empleados = signal<EmpleadoNomina[]>([]);
   readonly cargando = signal(true);

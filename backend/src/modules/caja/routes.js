@@ -5,6 +5,7 @@ const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
 const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
+const { autorizable } = require('../autorizaciones/autorizable');
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -57,7 +58,8 @@ router.delete('/cajas/:id', soloAdmin, controller.eliminarCaja);
 router.post('/sesiones', validate(abrirSchema), controller.abrirSesion);
 router.get('/sesiones/abierta', controller.sesionAbierta); // ?caja_id=
 router.get('/sesiones/:id', controller.obtenerSesion);
-router.post('/sesiones/:id/movimientos', requirePermiso('hacer:mover_efectivo'), validate(movimientoSchema), controller.registrarMovimiento);
+// Con AUTORIZACIÓN (2026-10-19): quien no lo hace directo lo pide.
+router.post('/sesiones/:id/movimientos', validate(movimientoSchema), autorizable('mover_efectivo'), controller.registrarMovimiento);
 router.post('/sesiones/:id/cerrar', validate(cerrarSchema), controller.cerrarSesion);
 
 module.exports = router;

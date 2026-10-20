@@ -105,8 +105,8 @@ async function notasPendientes(filtros = {}, almacenes = null) {
 }
 
 /** Lo que falta de una nota pendiente de pago, a la cuenta de crédito del cliente. */
-async function pasarACredito(id, usuarioId) {
-  return model.pasarACredito(id, usuarioId);
+async function pasarACredito(id, usuarioId, datos = {}) {
+  return model.pasarACredito(id, usuarioId, datos);
 }
 
 /** Lo que se puede devolver de una nota (solo lee). */

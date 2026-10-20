@@ -39,6 +39,7 @@ export const ADMIN_ROUTES: Routes = [
       // Un enlace viejo a "Pregúntame" lleva a la pantalla de inicio de cada quien.
       { path: 'asistente', redirectTo: '' },
       { path: 'hoy', ...p('ver:hoy'), title: nombreDe('hoy'), loadComponent: () => import('./hoy/hoy').then((m) => m.Hoy) },
+      { path: 'autorizaciones', ...p('ver:autorizaciones'), title: nombreDe('autorizaciones'), loadComponent: () => import('./autorizaciones/autorizaciones').then((m) => m.Autorizaciones) },
 
       // ---- Vender
       { path: 'pos', ...p('ver:pos'), title: nombreDe('pos'), loadComponent: () => import('./pos/pos').then((m) => m.Pos) },

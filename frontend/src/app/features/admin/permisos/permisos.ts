@@ -62,6 +62,8 @@ export class PermisosPantalla {
 
   readonly pantallas = computed(() => this.agrupar('pantalla'));
   readonly acciones = computed(() => this.agrupar('accion'));
+  /** Lo que se PIDE con autorización (2026-10-19). */
+  readonly pedidos = computed(() => this.agrupar('pedir'));
 
   /** Puestos con cambios sin guardar. */
   readonly pendientes = computed(() => {
@@ -89,7 +91,7 @@ export class PermisosPantalla {
     });
   }
 
-  private agrupar(tipo: 'pantalla' | 'accion'): GrupoFilas[] {
+  private agrupar(tipo: 'pantalla' | 'accion' | 'pedir'): GrupoFilas[] {
     const grupos: GrupoFilas[] = [];
     for (const p of this.matriz()?.catalogo ?? []) {
       if (p.tipo !== tipo) continue;

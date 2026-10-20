@@ -89,7 +89,7 @@ export class PedidoDetalle implements OnDestroy {
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
 
-  readonly puedeCancelar = computed(() => this.auth.puede('hacer:cancelar_venta'));
+  readonly puedeCancelar = computed(() => this.auth.puedeOPide('hacer:cancelar_venta'));
   readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
   readonly veEncargos = computed(() => this.auth.puede('ver:encargos'));
   readonly veNotas = computed(() => this.auth.puede('ver:notas_pendientes'));

@@ -108,7 +108,7 @@ export class CajaPantalla {
 
   readonly puedeMoverEfectivo = computed(() => {
     this.auth.sesion();
-    return this.auth.puede('hacer:mover_efectivo');
+    return this.auth.puedeOPide('hacer:mover_efectivo');
   });
   readonly administraCajas = computed(() => {
     this.auth.sesion();

@@ -26,6 +26,21 @@
   · Una MIGRACIÓN nueva se aplica en LAS DOS bases.
   Ver la entrada "2026-10-05 · Base de producción hitex y sistema de pruebas".
 
+POR DECIDIR CON EL USUARIO (entradas 82 a 84)
+  · Que le avise a quien pidió cuando se acepta o rechaza lo que no es
+    vacaciones (hoy lo ve en Autorizaciones → Mis solicitudes; el WhatsApp
+    eligió que fuera solo para vacaciones).
+  · Surtir sucursal: la pantalla todavía no enseña los pedidos que esperan
+    autorización (se ven en Autorizaciones).
+  · Surtir sucursal: al ENVIAR se pueden mandar más paquetes que los pedidos
+    ("se manda lo que hay"). Con la autorización por menos, ¿se topa el envío
+    a lo autorizado? (la revisión lo señaló; no se cambió sin preguntar).
+  · Personal: quien lo tenga puede cambiarle la contraseña a otra persona o dar
+    de alta una cuenta y entrar con ella (saltaría "nadie toca su propia
+    nómina" y cualquier autorización). Hoy en hitex solo el administrador
+    tiene Personal. ¿Solo el administrador cambia contraseñas de quien ya
+    entra al sistema? (entrada 84)
+
 POR DECIDIR CON EL USUARIO (entradas 79 y 80)
   · Anotado, sin hacer: un tope de conexiones en vivo por persona (hoy cada
     pestaña abierta es una) y que cambiar "Trabaja en" en Personal avise a esa
@@ -41,6 +56,23 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  AUTORIZACIONES, FASE 3 (la nómina): la prepara la gerente o Contabilidad y
+  PAGARLA lo autoriza el administrador; nadie toca su propia nómina
+  (2026-10-19, entrada 84; DESPLEGADO en 20261019-173742, migración
+  2026-10_autorizaciones_fase3 en las dos bases).
+  Antes:
+  AUTORIZACIONES, FASE 2: cargar mercancía (la lista del proveedor, un hilo o
+  un paquete a mano), pedir mercancía a otra tienda —se puede autorizar MENOS,
+  renglón por renglón— y las vacaciones ("Mis vacaciones", con WhatsApp al
+  aprobarlas o rechazarlas) (2026-10-19, entrada 83; DESPLEGADO en 20261019-162220,
+  migración 2026-10_autorizaciones_fase2 en las dos bases).
+  Antes:
+  AUTORIZACIONES, FASE 1: quien no hace una operación directo la PIDE y quien
+  sí la hace la acepta (y se hace en ese momento) o la rechaza; o la autoriza
+  con su clave en la pantalla de quien pide. 9 operaciones de dinero y
+  mostrador (2026-10-19, entrada 82; DESPLEGADO en 20261019-144852, migración
+  2026-10_autorizaciones en las dos bases).
+  Antes:
   ABONO A NOTAS: el abono a crédito va a la cuenta (de la más vieja a la más
   nueva, como siempre) o a las notas que diga el cliente, varias a la vez; y
   reactivar una venta a crédito ya regresa su deuda (2026-10-19, entrada 81;
@@ -721,6 +753,362 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (84) · Autorizaciones, fase 3: la nómina la prepara la gerente o Contabilidad
+-------------------------------------------------------------------------------
+
+"La prepara algún gerente o Contabilidad" (usuario). Eligió: solo PAGAR la
+semana necesita autorización (no cambiar sueldos ni cancelar una pagada ni los
+bonos); nadie toca SU propia nómina; las vacaciones en Nómina las registra solo
+quien las autoriza; y autoriza solo él (el administrador). DESPLEGADO en 20261019-173742;
+migración 2026-10_autorizaciones_fase3.sql en LAS DOS bases (solo permisos;
+respaldo de hitex antes).
+
+CÓMO QUEDÓ
+  · La gerente y Contabilidad ven Nómina (`ver:nomina`) y la preparan: crean la
+    semana, calculan, capturan días, horas extra, bonos y descuentos, cambian
+    sueldos de los demás, cancelan y bajan el PDF.
+  · PAGAR (`pagar_nomina` en PATCH /nomina/periodos/:id/estado → 'pagado'):
+    quien la prepara aprieta "Pedir que se pague"; Nómina dice "Pedida para
+    pagar: espera autorización" y el botón "Ya se pidió que se pague". El
+    administrador la ve en Autorizaciones con "Ver los N recibos" (cada quien
+    con sus días y su total) y la acepta; o en Nómina, "Marcar como pagada"
+    ACEPTA la pedida (queda dicho que se autorizó). Lo que se autoriza es lo
+    que se pidió: la solicitud guarda una FIRMA de los recibos (totales, días,
+    conceptos); si se recalcula o se toca un recibo, al aceptarla no se paga y
+    la solicitud se CIERRA SOLA con el porqué (`cerrarSiCambio`), así se puede
+    volver a pedir; pedirla otra vez reemplaza la anterior (`unaPorRuta`). No
+    se pide una que no existe, ya pagada o sin calcular. Cancelar una ya
+    PAGADA o reabrir una cancelada lo hace solo quien paga la nómina.
+  · NADIE TOCA SU PROPIA NÓMINA (`nomina/routes.js → noEsSuya`, 403
+    ES_TU_NOMINA): ni su recibo (días, horas extra, bonos, descuentos, quitar
+    un concepto) ni su sueldo; el administrador sí. En la pantalla su recibo
+    abre para mirar y su renglón de Configuración dice "La tuya".
+  · Vacaciones en Nómina: registrarlas o quitarlas pide «Autorizar vacaciones»
+    (el administrador); los demás las ven.
+
+LOS PUESTOS AL SUBIRLO
+  · Gerente y Contabilidad: ven Nómina y piden que se pague.
+  · Pagar: solo el administrador (`hacer:pagar_nomina`, se da en Permisos).
+
+REVISIÓN ANTES DE SUBIR (revisor-tiendas): ninguna fuga de sueldos (la cajera
+que pide vacaciones no ve nada de nómina) y "nadie toca su propia nómina" se
+sostiene por las rutas de la nómina. Lo que señaló y se arregló:
+  · GRAVE: con Nómina abierta, por una ruta que la pantalla no ofrece, quien la
+    prepara podía CANCELAR una semana ya pagada o REABRIR una cancelada:
+    cancelar suelta sus comisiones y el siguiente "Calcular" las vuelve a
+    pagar (también las suyas). Ahora cancelar una pagada o sacar una de
+    cancelada lo hace solo quien paga la nómina (403 SOLO_QUIEN_PAGA). La
+    pantalla solo cancelaba las de borrador: nadie pierde nada.
+  · Una semana cancelada (o ya pagada) no se paga al aceptar su solicitud: se
+    cierra sola con el porqué. Y si se paga o se cancela por otro camino, sus
+    solicitudes que esperaban se cierran.
+  · La firma se revisa otra vez justo antes de marcarla pagada.
+  · La autoriza solo quien ve la nómina y TODAS las tiendas (`autorizaSoloSi`),
+    aunque algún día se le dé «Pagar la nómina» a otro puesto.
+  · No se acepta con la clave en la computadora de quien la prepara
+    (`soloADistancia`): se acepta en Autorizaciones, viendo los recibos.
+  · La solicitud no guarda la semana con todos los sueldos (`sinResultado`).
+  · En Configuración, su propio renglón ya no ofrece registrarse vacaciones.
+  QUEDA DICHO AL USUARIO (no se cambió, es de Personal): quien tuviera
+  «Personal» podría cambiarle la contraseña a otra persona o dar de alta una
+  cuenta y entrar con ella. En hitex nadie más que el administrador tiene
+  Personal ni Nómina.
+
+PRUEBAS
+  Backend 63/63, pantallas 535/535 (nueva: Nómina pide / acepta lo pedido /
+  nadie toca el suyo), verificar-sistema.js 0 hallazgos, e2e-permisos al día
+  (la gerente ya entra a Nómina), e2e-tiendas, e2e-nomina-pdf. De punta a punta
+  con la base de pruebas: fase 3, 26 comprobaciones (prepara, su recibo, su
+  sueldo y vacaciones 403, 428 al pagar, pedida y en borrador, Nómina la
+  enseña, el admin ve los recibos, cambió → 409 y se cierra, pedirla otra vez,
+  la gerente no se la autoriza, el admin la paga, cancelar una pagada o
+  reabrir una cancelada 403, con la clave 403, cancelada no se pide, pagada o
+  cancelada por otro lado cierra la pedida); fases 1 y 2 otra vez (63 y 37). La base quedó igual. En Chrome: Nómina de la gerente con la pedida, su
+  renglón "La tuya" y la tarjeta del administrador con los recibos.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (83) · Autorizaciones, fase 2: cargar, pedir a otra tienda y vacaciones
+-------------------------------------------------------------------------------
+
+DECIDIDO ANTES DE EMPEZAR (de la entrada 82): el anticipo por transferencia y
+el abono por transferencia SE QUEDAN COMO ESTÁN, sin autorización ("así se
+queda como está", usuario). No los "arregles".
+
+LO QUE ELIGIÓ EL USUARIO
+  · Ingreso de inventario: directo la gerente y el administrador; el
+    almacenista y Contabilidad lo piden. Incluye el paquete capturado a mano.
+  · Surtir sucursal: la autorización va AL PEDIR la mercancía, y quien
+    autoriza puede dar menos: "de esos 20, que solo autorice 10".
+  · Vacaciones: cada quien pide las suyas; WhatsApp al aprobarlas Y al
+    rechazarlas (con el motivo).
+DESPLEGADO en 20261019-162220; migración 2026-10_autorizaciones_fase2.sql en LAS DOS
+bases (respaldo de hitex antes).
+
+CÓMO QUEDÓ
+  · CARGAR (`cargar_inventario` en POST /remesas y /remesas/lista;
+    `bulto_a_mano` en POST /variantes/:id/codigos). La carga pedida entra
+    COMPLETA al aceptarla, con sus paquetes; su PDF se saca del historial. La
+    lista del proveedor contesta por partes (`?progreso=1`): se guarda sin la
+    consulta y al aceptarla se hace de una (`sinConsulta`); si en el momento
+    falla a media lista, `res.locals.fallo` dice que no se hizo. El paquete a
+    mano decide su almacén al pedirlo (la misma regla de siempre,
+    `variantes/service.js → almacenDelBulto`) y un código repetido se rechaza
+    antes de pedirlo.
+  · PEDIR A OTRA TIENDA (`surtir_sucursal` en POST /inventario/traspasos). Hasta
+    aceptarla no hay traspaso: no se aparta nada ni lo ve quien surte. Es de
+    DOS tiendas: basta que una sea de quien pide (`conTienda: 'alguna'`; la
+    sucursal le pide a la Matriz a ciegas). "Aceptar…" abre "Autorizar el
+    pedido": cada hilo con lo que pidió, lo que hay libre en el origen (solo a
+    quien ve ese almacén) y "Se autoriza" (0 = ese no). El servidor no deja
+    más de lo pedido, paquetes con decimales ni todo en cero
+    (`operaciones.js → ajustar`); se hace con lo autorizado, la solicitud
+    conserva lo pedido y `nota_aprobacion` dice "Autorizó menos de lo pedido:
+    BLACK 2/30: 10 de 20 paquetes".
+  · VACACIONES ("Mis vacaciones", botón bajo el nombre; GET/POST
+    /nomina/mis-vacaciones). Cada quien ve cuántos días le tocan por ley,
+    cuántos tomó y cuántos le quedan, y las pide; la ventana cuenta los días de
+    trabajo al escribir las fechas. Al pedirlas se revisan las MISMAS reglas que
+    al registrarlas (`nomina/service.js → revisarVacaciones`, con mensajes que
+    le hablan a ella), que sean de hoy en adelante y que no se encimen con
+    otras que esperan. Las autoriza quien tiene «Autorizar vacaciones» (de
+    fábrica, solo el administrador) y NADIE las suyas (`noASiMismo`; el
+    administrador sí, es el dueño). Al aceptarlas se registran como si las
+    capturara el administrador; al aceptarlas o rechazarlas le llega un
+    WhatsApp de TEXTO (`whatsapp/conexion.js → enviarTexto`) y queda dicho en
+    la solicitud (`aviso`: "Se le avisó por WhatsApp al 775…", o por qué no:
+    sin teléfono en Personal, WhatsApp sin enlazar). Sin estar en la nómina,
+    sin fecha de ingreso, sin horario o sin su primer año, la ventana dice qué
+    falta y no ofrece pedirlas. Las de quien no entra al sistema se siguen
+    capturando en Nómina.
+  · LO DE TODAS: `alPedir` (revisa antes de guardar o preguntar), `completar`,
+    `detalle`/`ajustar`, `alResolver` (corre después de contestar y avisa en
+    vivo), `siempreSePide`/`noASiMismo`. El interceptor reconoce el 428 aunque
+    la petición sea de texto (la lista del proveedor).
+
+LOS PUESTOS AL SUBIRLO (la migración; se cambian en Permisos)
+  · Gerente: carga y pide a otra tienda directo, y autoriza las dos.
+  · Almacenista: pide cargar (ahora ve Surtir inventario) y pedir a otra tienda.
+  · Contabilidad: pide cargar (antes cargaba directo).
+  · Todos los que entran: piden sus vacaciones. Las autoriza el administrador.
+
+REVISIÓN ANTES DE SUBIR (revisor-tiendas): ningún camino para cargar, pedir a
+otra tienda o registrar vacaciones sin el candado, nadie se autoriza a sí
+mismo, sin costo en lo que se enseña y `ajustes` solo baja cantidades. Lo que
+señaló y se arregló:
+  · GRAVE: a quien solo era de la sucursal, el porqué de "no alcanza" al
+    aceptar le decía cuánto hay en la Matriz (se rompía pedir a ciegas). Ahora
+    un pedido a otra tienda lo AUTORIZA quien ve el almacén que SURTE
+    (`tiendasQueAutorizan`), en la lista, al aceptar, en la ventana del 428 y
+    con la clave.
+  · Paquetes contra kilos: lo que se enseñaba y se ajustaba decidía por
+    `paquetes`; ahora con la misma regla del traspaso (es paquete Y trae
+    paquetes), así lo autorizado es lo que se aparta.
+  · Se revisa AL PEDIR lo que fallaría al aceptar: a ciegas solo a la Matriz, el
+    mismo hilo dos veces, el costo de quien no lo ve en una carga, el paquete a
+    mano (que exista, que no sea cono, que el código no sea de nadie ni esté ya
+    pedido) y vacaciones encimadas con unas ya registradas.
+  · Autorizar con clave en el momento también corre esas revisiones, guarda lo
+    que se pidió (el WhatsApp de unas vacaciones salía sin fechas) y se cierra
+    solo si la respuesta terminó completa (a media lista del proveedor queda
+    para revisar).
+  · Desde Nómina nadie se registra ni se quita sus propias vacaciones (403
+    SON_TUS_VACACIONES; el administrador sí).
+  · "Agregar bulto a mano" solo se ofrece a quien lo hace o lo pide.
+  · Lo que hay en el origen en kilos es lo LIBRE (sin lo apartado).
+  QUEDA POR DECIDIR (el usuario): al ENVIAR se pueden mandar más paquetes que
+  los pedidos ("se manda lo que hay", 2026-10-06). Con la autorización, ¿se topa
+  el envío a lo autorizado?
+
+PRUEBAS
+  Backend 63/63, pantallas 531/531 (nuevas: la ventana de autorizar menos, Mis
+  vacaciones y el 428 en texto), verificar-sistema.js 0 hallazgos, e2e-permisos
+  y e2e-tiendas al día. De punta a punta contra el servidor local con la base de
+  pruebas: fase 2, 37 comprobaciones (cargar pedida y aceptada, con costo de
+  quien no lo ve, la lista sin "?progreso", código repetido o ya pedido, cono,
+  autorizar 10 de 20, más de lo pedido y todo en cero, el traspaso nace con lo
+  autorizado, de dos tiendas 202/404, a ciegas solo a la Matriz, el mismo hilo
+  dos veces, solo autoriza quien ve el origen, vacaciones en el pasado, sin
+  días, encimadas con pedidas y con registradas, la gerente no las ve, aceptadas
+  y registradas, el aviso de WhatsApp, rechazadas con motivo); fase 1 otra vez,
+  63. La base quedó igual en las dos. En Chrome (escritorio y celular): la
+  ventana "Autorizar el pedido" y Mis vacaciones (con y sin datos de nómina).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-19 (82) · Autorizaciones, fase 1: pedir, aceptar o autorizar con clave
+-------------------------------------------------------------------------------
+
+"Que se haga la solicitud y el administrador o quien tenga el permiso autorice
+la operación; mientras, no se puede hacer" (usuario). Decidió: autoriza QUIEN
+LA HACE DIRECTO (el administrador, todo); a distancia Y con clave en el
+momento; las operaciones que dijo más ajuste y merma, corregir deuda, cambiar
+precios y fiar con cuenta atrasada; y el WhatsApp solo para las vacaciones.
+Fase 1 (dinero y mostrador): sacar o meter efectivo, cancelar una venta,
+devolución, corregir la deuda, ajustar el saldo a favor, cambiar precio/peso/si
+se vende, precio de una lista, ajuste o merma, fiar con cuenta atrasada (solo
+en el momento) y darle o subirle el crédito a un cliente. DESPLEGADO en 20261019-144852;
+migración 2026-10_autorizaciones.sql en LAS DOS bases (respaldo de hitex antes).
+
+CÓMO FUNCIONA (backend/src/modules/autorizaciones/)
+  · Cada operación tiene su permiso de HACERLA (`hacer:*`, que también
+    AUTORIZA) y el de PEDIRLA (`pedir:*`), en `operaciones.js` (con lo que se
+    pide en palabras: "Sacar $500.00 de Caja Moroleón · «luz»").
+  · El candado `autorizable('<op>')` va en la ruta DESPUÉS de validar: la
+    solicitud solo se guarda completa y de las tiendas de quien pide. Quien la
+    hace directo pasa; quien solo la pide recibe 428 NECESITA_AUTORIZACION
+    (con el resumen y quién puede autorizarla); con `X-Pedir-Autorizacion`
+    queda la solicitud (202); con `X-Autoriza` (quién autoriza + su clave) se
+    hace en ese momento y queda anotada; sin ninguno de los dos permisos, 403.
+  · ACEPTAR (`POST /autorizaciones/:id/aprobar`): la toma con candado (dos que
+    aceptan a la vez: la segunda 409) y REPITE la petición guardada como quien
+    la pidió, con una llave de un solo uso (`X-Autorizacion`), así pasa por
+    todo lo de siempre (tiendas, existencias, caja). Si ya no se puede, sigue
+    pendiente con el porqué (`ultimo_error`). Rechazar pide motivo; quien pidió
+    la retira mientras espera. Autoriza quien hace la operación directo y ve
+    alguna tienda de la solicitud.
+  · La clave en el momento es la CLAVE DE AUTORIZACIÓN (4 a 6 números), APARTE
+    de la contraseña de entrar (el usuario lo eligió tras la revisión: si la
+    cajera la ve en su computadora, no puede entrar al sistema con ella). Cada
+    quien la pone en "Mi clave para autorizar" (bajo su nombre en el menú, solo
+    a quien autoriza algo), confirmando con su contraseña:
+    `PUT /usuarios/perfil/clave-autorizacion`, `usuarios.clave_autorizacion_hash`
+    (bcrypt). La revisa `usuarios/service.js → claveDe` (el hash no sale de ahí)
+    y SOLO la de alguien que está entre quienes pueden autorizar eso, con clave
+    puesta (no se puede probar la de cualquiera). 5 equivocadas seguidas en un
+    minuto, por quien pide O contra la misma persona: hay que esperar; cada
+    fallo queda en la bitácora del servidor. "Autorizar aquí" solo ofrece a
+    quien ya la puso; si nadie, dice dónde se pone.
+
+LO QUE CUIDA (de la revisión de "cada quien, sus tiendas", antes de subirlo)
+  · TIENDAS: lo que es de una tienda (la caja, la venta, el almacén) tiene que
+    ser de las de quien pide; si no, o si no se sabe de cuál es, "no existe"
+    (404) y no se guarda nada; si la consulta falla, 503. Lo que no es de una
+    tienda (un cliente, un precio) queda con las tiendas de quien pide. La
+    lista dice de qué tienda es cada solicitud.
+  · UNA SOLA VEZ: la llave se gasta en un solo UPDATE al usarla; la misma
+    solicitud pedida dos veces no se duplica; una que se interrumpió a media
+    aprobación (más de 5 minutos "aprobando") NO se reabre sola: dice "Se
+    interrumpió: revisa si se hizo" y solo se cierra.
+  · EN EL MOMENTO se anota ANTES de hacerse y se cierra al contestar (si
+    falló, se borra: no pasó nada).
+  · EL AJUSTE guarda el saldo que había al contarlo; si al aceptarlo ya cambió
+    (se vendió, llegó mercancía), no se hace y dice "que se vuelva a contar".
+  · LO DE LA CAJA Y EL MOSTRADOR (efectivo, cancelar, devolución) vence si no
+    se aceptó el mismo día ("Venció").
+  · EL CRÉDITO: desde la ficha se guarda la ficha y queda pedido SOLO el
+    límite, en su propia ruta (`PUT /clientes/:id/limite-credito`); así, al
+    aceptarlo días después, no se regresa lo que se corrigió mientras. Un
+    cliente NUEVO con crédito solo se autoriza en el momento (o se da de alta
+    sin crédito y se pide desde su ficha). Bajarlo o dejarlo igual no pide nada.
+  · FIAR A UN ATRASADO se revisaba solo en la caja: ahora también al pasar una
+    nota pendiente a crédito y al entregar una nota en espera a crédito
+    (`pedidos/model.js → _exigirSinAtraso`, 409 CREDITO_ATRASADO); las dos
+    ventanas preguntan y, si no lo hace directo, se autoriza.
+  · La campana solo cuenta las solicitudes a quien abre Autorizaciones.
+
+LAS PANTALLAS
+  · Ningún modal cambió su lógica: un interceptor (`autorizacion.interceptor`)
+    atrapa el 428, abre la ventana "Hace falta autorización" (una sola, en la
+    raíz) y vuelve a mandar la petición: "Autorizar aquí" (quién + clave; la
+    pantalla recibe su respuesta normal) o "Pedir autorización" (la pantalla
+    recibe "Se pidió la autorización…", no un éxito falso). Fiar con cuenta
+    atrasada solo ofrece "Autorizar aquí": el cliente está enfrente.
+  · Autorizaciones (menú Inicio): Por autorizar (con su cuenta), Mis
+    solicitudes e Historial; en vivo. La campana avisa "N solicitudes esperan
+    tu autorización", hasta arriba.
+  · La ficha del cliente apaga el crédito a quien no lo da ni lo pide (y dice
+    "Subirlo lo autoriza quien da crédito" a quien lo pide). La caja no le
+    pregunta "¿darle a crédito con la cuenta atrasada?" a quien no puede ni
+    pedirlo: le dice por qué.
+  · Permisos: sección "Qué puede pedir, con autorización". Los cinco botones
+    que se escondían a quien no lo hace directo ya se enseñan también a quien
+    lo puede pedir (`AuthService.puedeOPide`).
+
+LOS PUESTOS AL SUBIRLO (la migración; se cambian en Permisos)
+  · Gerente: hace todo directo y autoriza, también darle crédito y fiar a
+    quien está atrasado (permisos nuevos).
+  · Cajero: sacar o meter efectivo pasa a PEDIRLO (lo hacía directo); pide
+    también cancelar o devolver, corregir deuda o saldo a favor, fiar a un
+    atrasado y subir el crédito. Fiar normal, directo como siempre.
+  · Almacenista: ajuste y merma pasa a PEDIRLO.
+  · Todos los que entran ven Autorizaciones.
+
+SE ENCONTRÓ Y SE ARREGLÓ AL PROBAR
+  · En la ventana, el campo de la clave se llamaba igual que su referencia en
+    la plantilla y quedaba atado al elemento: salía "[object HTMLInputElement]"
+    y el botón activo sin escribir nada. Prueba nueva que lo cuida.
+  · El verificador: la clave se leía en autorizaciones (se movió a usuarios);
+    reconoce `pedir:*` y el candado `autorizable` cuando su operación exige el
+    mismo permiso que pedía la regla (`exigePermiso`).
+
+SEGUNDA REVISIÓN (revisor-tiendas, antes de subir): no encontró ningún camino
+para hacer la operación sin una autorización válida (validación estricta antes
+del candado, llave gastada en un UPDATE, rutas raras fallan cerrado), ni costo u
+otra tienda en el resumen. Lo que señaló y se arregló:
+  · LA CLAVE SE ADIVINABA A LA FUERZA (5 por minuto, sin tope, en memoria: una
+    de 4 números salía en ~17 horas). Ahora las equivocadas SEGUIDAS contra la
+    misma persona se cuentan EN LA BASE (`usuarios.clave_autorizacion_fallos`) y
+    a las 10 la clave se APAGA (`clave_autorizacion_apagada_en/_por`): su dueño
+    la vuelve a poner. La campana se lo dice ("Tu clave para autorizar se apagó…
+    la última vez, en la sesión de X") y lo lleva a ponerla. Una buena vuelve el
+    conteo a cero. (`usuarios/service.js → claveDe`, LIMITE_CLAVE = 10.)
+  · LA DEVOLUCIÓN no decía a quién le quedaba el saldo ni cuánto (en una venta
+    de mostrador el cliente lo escoge quien pide). Ahora: "… · $118.00 quedan a
+    favor de Doña Lupe (lo eligió quien lo pide)", con el precio con que se
+    vendió (`operaciones.js → valorDevolucion`).
+  · CANCELAR dice "Devolver completa" cuando es eso y cuánto efectivo sale de la
+    caja.
+  · EL CRÉDITO que alguien cambió mientras se pedía ya no se pisa al aceptarlo
+    (se guarda el de ese momento y se revisa, como el saldo del ajuste).
+  · QUIEN PIDIÓ YA NO PUEDE PEDIRLO (baja, otro puesto u otra tienda): la
+    solicitud se cierra sola ("Quien lo pidió ya no lo puede pedir…") en vez de
+    quedarse pendiente para siempre con un error que parecía del autorizador.
+  · CERRAR UNA INTERRUMPIDA ya no es "rechazarla": queda 'cerrada' (estado
+    nuevo), con quien la estaba autorizando y "La cerró X: …". La autorizada en
+    el momento también se cierra si el navegador corta después de contestar.
+  · SI AL ACEPTARLA NO CONTESTA (se cortó la conexión) se queda "aprobando"
+    —pudo hacerse— y no regresa a pendiente (sería la única forma de hacerla dos
+    veces).
+  · LA PANTALLA: si al pedirla resulta que ya lo podía hacer directo (le dieron
+    el permiso mientras), dice que SE HIZO y no "se pidió".
+  · UN COSTO de quien no lo ve se rechaza ANTES de guardar la solicitud (antes
+    se guardaba y al aceptarla siempre fallaba).
+  · Dos solicitudes iguales solo se juntan si son de hace 2 minutos (el doble
+    clic); dos retiros iguales a distintas horas son dos.
+  DECIDIDO (entrada 83: "así se queda como está"): el anticipo por transferencia y el abono por
+  transferencia (a la cuenta o a una nota) no piden autorización ni comprobante
+  y tienen el mismo efecto que un ajuste de saldo a favor o de deuda.
+
+  · OJO al probar: en esta computadora seguía vivo un servidor VIEJO en el
+    puerto 3210 y el nuevo no arrancaba (EADDRINUSE): las primeras pruebas
+    contestaban con el código anterior. Antes de una prueba en vivo, revisar
+    que el puerto esté libre.
+
+PRUEBAS
+  Backend 63/63, pantallas 523/523 (nuevas: el interceptor —lo pedido a
+  medias y lo que ya se hizo—, la ventana con la clave, el crédito de la ficha
+  y la caja con un atrasado), verificar-sistema.js 0 hallazgos, e2e-permisos al
+  día (la cajera ya no recibe "no" sino "pídelo") y e2e-tiendas 53/53. De punta
+  a punta contra el servidor local con la base de pruebas: 63 comprobaciones
+  (la clave aparte y su alta, pedir y no duplicar, la campana, llave inventada,
+  aceptar una vez, la contraseña de entrar ya no autoriza, lo que falla no
+  queda a medias, otra tienda 404, autorizadores por tienda, vencida, una que ya
+  no se puede, rechazar, el crédito a medias y al aceptarlo, cliente nuevo con
+  crédito, retirar, sin permiso, fiar atrasado por los tres caminos, la clave
+  que se apaga a las 10 y su aviso, el resumen de la devolución, el crédito que
+  cambió, dos pedidas a distinta hora, quien ya no puede pedir, cerrar una
+  interrumpida y el costo ajeno); la base quedó igual. En Chrome (escritorio y celular): la ventana sin nadie con clave, con
+  clave (solo ofrece a quien la puso, Enter la manda, la equivocada se
+  rechaza), "Mi clave para autorizar" con la contraseña equivocada y el aviso
+  de la campana "Tu clave para autorizar se apagó" (lleva a ponerla).
+
+FALTA (el usuario)
+  · Que CADA quien autoriza ponga su clave en "Mi clave para autorizar" (bajo
+    su nombre): sin ella solo puede aceptar desde Autorizaciones.
 
 
 -------------------------------------------------------------------------------

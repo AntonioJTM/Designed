@@ -142,7 +142,7 @@ export class ClienteExpediente implements OnInit {
 
   // --- Lo que el puesto puede hacer o ver. El servidor también lo exige: esconder
   // es solo para no ofrecer lo que va a fallar.
-  readonly puedeCorregir = computed(() => this.auth.puede('hacer:corregir_deuda'));
+  readonly puedeCorregir = computed(() => this.auth.puedeOPide('hacer:corregir_deuda'));
   readonly vePedidos = computed(() => this.auth.puede('ver:pedidos'));
   readonly vePos = computed(() => this.auth.puede('ver:pos'));
 

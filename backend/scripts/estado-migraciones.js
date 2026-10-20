@@ -105,6 +105,12 @@ const MIGRACIONES = [
   ['2026-10_tiendas_por_persona (tiendas)', 'usuario_almacenes'],
   ['2026-10_efectivo_recibido', 'pagos.recibido'],
   ['2026-10_clave_cobro', 'pedidos.clave_cobro'],
+  ['2026-10_autorizaciones', 'autorizaciones'],
+  ['2026-10_autorizaciones (clave)', 'usuarios.clave_autorizacion_hash'],
+  ['2026-10_autorizaciones (candado de la clave)', 'usuarios.clave_autorizacion_fallos'],
+  ['2026-10_autorizaciones_fase2', 'autorizaciones.nota_aprobacion'],
+  ['2026-10_autorizaciones_fase2 (permisos)', 'permisos#clave=pedir:surtir_sucursal'],
+  ['2026-10_autorizaciones_fase3', 'permisos#clave=pedir:pagar_nomina'],
 ];
 
 (async () => {

@@ -1,0 +1,49 @@
+.tabs { margin-bottom: 8px; }
+.cuenta {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 11px; background: var(--punto-alerta); color: #fff; font-size: 0.75rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.vacio { padding: 16px 4px; margin: 0; }
+
+.solicitudes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.solicitud {
+  display: flex; gap: 16px; align-items: flex-start; justify-content: space-between;
+  padding: 16px 4px; border-bottom: 1px solid var(--borde);
+}
+.solicitud:last-child { border-bottom: 0; }
+.solicitud .que { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.arriba { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.operacion { font-weight: 600; }
+.resumen { margin: 0; font-size: 0.9375rem; overflow-wrap: anywhere; }
+.quien { margin: 0; font-size: 0.8125rem; }
+.motivo { margin: 0; font-size: 0.875rem; color: var(--peligro-t); }
+.solicitud .aviso { margin: 4px 0 0; }
+.acciones { display: flex; gap: 8px; flex: 0 0 auto; }
+
+@media (max-width: 640px) {
+  .solicitud { flex-direction: column; }
+  .acciones { width: 100%; justify-content: flex-end; }
+}
+
+/* Lo que se autorizó si fue menos de lo pedido (fase 2). */
+.nota-aprobacion { margin: 0; font-size: 0.875rem; color: var(--aviso-t); }
+/* La ventana para autorizar un pedido por renglón. */
+/* Como los de Surtir sucursal: el mismo campo, a la medida de la celda. */
+.cuanto {
+  width: 4.5rem; flex: 0 0 auto; height: 36px; padding: 0 8px; border: 1px solid var(--borde-campo); border-radius: 6px;
+  font: inherit; font-size: 0.875rem; text-align: right; font-variant-numeric: tabular-nums;
+  background: var(--superficie); color: var(--tinta);
+}
+.cuanto:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }
+.cant-paq { display: inline-flex; align-items: center; gap: 6px; }
+/* En el celular la unidad ya la dice "Pidió": el campo se queda con su ancho. */
+@media (max-width: 520px) { .cant-paq .muted { display: none; } }
+.poco { color: var(--peligro-t); font-weight: 600; }
+.resumen-ajuste { margin: 0; font-weight: 600; }
+
+/* Los recibos de una nómina que se pide pagar (fase 3). */
+.recibos { font-size: 0.875rem; }
+.recibos summary { cursor: pointer; color: var(--acento); }
+.recibos ul { list-style: none; margin: 6px 0 0; padding: 0; max-width: 28rem; }
+.recibos li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--borde); font-variant-numeric: tabular-nums; }

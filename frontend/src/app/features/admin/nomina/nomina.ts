@@ -16,6 +16,8 @@ import { ReciboModal } from './recibo-modal';
 import { ComisionesSemanaComponent } from './comisiones-semana';
 import { diaCorto, diaLargo, domingoDe, rangoArchivo, rangoCorto, rangoLargo, sumarDias } from './semana';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { AutorizacionesService } from '../../../core/services/autorizaciones.service';
 import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
 
 /** Una opción del selector de semana. */
@@ -62,7 +64,11 @@ const SEMANAS_ATRAS = 12;
 export class Nomina {
   private readonly api = inject(NominaService);
   private readonly confirmacion = inject(ConfirmacionService);
+  private readonly auth = inject(AuthService);
+  private readonly autorizaciones = inject(AutorizacionesService);
   private readonly dinero = new DineroPipe();
+  /** La paga directo (el administrador) o la PIDE (quien la prepara, fase 3). */
+  readonly pagaDirecto = computed(() => this.auth.puede('hacer:pagar_nomina'));
 
   readonly semana = signal<SemanaNomina | null>(null);
   readonly periodo = signal<PeriodoNomina | null>(null);
@@ -88,6 +94,11 @@ export class Nomina {
   private fecha = this.hoy;
 
   readonly editable = computed(() => this.periodo()?.estado === 'borrador');
+
+  /** Nadie toca su propio recibo, salvo el administrador (fase 3). */
+  puedeTocar(r: ReciboNomina): boolean {
+    return this.auth.esAdmin() || r.usuario_id !== this.auth.miId();
+  }
 
   readonly totales = computed(() => {
     const recibos = this.periodo()?.recibos ?? [];
@@ -195,11 +206,55 @@ export class Nomina {
     const total = this.dinero.transform(this.totales().total);
     const si = await this.confirmacion.pedir({
       titulo: `¿Marcar como pagada la nómina del sábado ${diaLargo(p.fecha_pago, this.hoy)}?`,
-      mensaje: `Por ${total}. Después ya no podrá editarse ni recalcularse.`,
+      mensaje: p.pago_pedido
+        ? `Por ${total}. ${p.pago_pedido.solicitante} pidió que se pague: se acepta su solicitud. Después ya no podrá editarse ni recalcularse.`
+        : `Por ${total}. Después ya no podrá editarse ni recalcularse.`,
       aceptar: 'Marcar como pagada',
     });
     if (!si) return;
+    if (p.pago_pedido) {
+      // La acepta (queda dicho que se autorizó lo que se pidió); si la nómina
+      // cambió desde que se pidió, lo dice y no se paga.
+      this.ocupado.set(true);
+      this.error.set(null);
+      this.autorizaciones.aprobar(p.pago_pedido.id).subscribe({
+        next: () => {
+          this.ocupado.set(false);
+          this.mensaje.set('Nómina marcada como pagada.');
+          this.cargarSemana();
+        },
+        error: (e) => {
+          this.fallo(e);
+          this.cargarSemana();
+        },
+      });
+      return;
+    }
     this.cambiarEstado('pagado', 'Nómina marcada como pagada.');
+  }
+
+  /** Quien la prepara (fase 3): pide que se pague; la paga quien la autoriza. */
+  async pedirPago(): Promise<void> {
+    const p = this.periodo();
+    if (!p) return;
+    const total = this.dinero.transform(this.totales().total);
+    const si = await this.confirmacion.pedir({
+      titulo: `¿Pedir que se pague la nómina del sábado ${diaLargo(p.fecha_pago, this.hoy)}?`,
+      mensaje: `Por ${total}. Se paga cuando la autoricen. Si cambias algo después (recalcular, días, horas extra, ` +
+        'bonos o descuentos), hay que volver a pedirla.',
+      aceptar: 'Pedir que se pague',
+    });
+    if (!si) return;
+    this.ocupado.set(true);
+    this.error.set(null);
+    this.api.pedirPago(p.id).subscribe({
+      next: () => {
+        this.ocupado.set(false);
+        this.mensaje.set('Se pidió que se pague: la ve quien la autoriza en Autorizaciones.');
+        this.cargarSemana();
+      },
+      error: (e) => this.fallo(e),
+    });
   }
 
   async cancelar(): Promise<void> {

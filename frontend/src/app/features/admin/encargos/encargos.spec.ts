@@ -40,7 +40,7 @@ describe('EncargosPantalla', () => {
       providers: [
         provideRouter([]),
         { provide: VentasService, useValue: { encargos: () => of(datos) } },
-        { provide: AuthService, useValue: { puede: () => true } },
+        { provide: AuthService, useValue: { puede: () => true, puedeOPide: () => true } },
       ],
     }).compileComponents();
     const f = TestBed.createComponent(EncargosPantalla);
@@ -119,7 +119,7 @@ describe('EntregarPedidoModal', () => {
             },
           },
         },
-        { provide: AuthService, useValue: { puede: (p: string) => permisos.includes(p) } },
+        { provide: AuthService, useValue: { puede: (p: string) => permisos.includes(p), puedeOPide: (p: string) => permisos.includes(p) } },
       ],
     }).compileComponents();
     const f = TestBed.createComponent(EntregarPedidoModal);

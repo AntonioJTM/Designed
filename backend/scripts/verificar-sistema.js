@@ -205,7 +205,8 @@ function verificarPantallasYPermisos() {
   const authServiceTs = leer('frontend/src/app/core/services/auth.service.ts');
 
   const usados = new Set();
-  const regexPermiso = /'(ver:[a-z_]+|hacer:[a-z_]+)'/g;
+  // `pedir:*` (2026-10-19): las operaciones que se piden con autorización.
+  const regexPermiso = /'(ver:[a-z_]+|hacer:[a-z_]+|pedir:[a-z_]+)'/g;
 
   const archivosCodigo = [
     ...listarArchivos(path.join(BACKEND, 'src'), (f) => f.endsWith('.js') && !f.endsWith('.test.js')),
@@ -552,7 +553,18 @@ function verificarModulosEnCodigo() {
   const cajaTs = leer('frontend/src/app/features/admin/caja/caja.ts');
   const cajaHtml = leer('frontend/src/app/features/admin/caja/caja.html');
   revisar('modulos', cajaModel.includes('SIGNO_CAJA') && cajaModel.includes('EFECTIVO_INSUFICIENTE'), 'El módulo de Caja debe calcular con SIGNO_CAJA e impedir retiros mayores al efectivo del cajón (EFECTIVO_INSUFICIENTE).', 'GRAVE', M03);
-  revisar('modulos', cajaRoutes.includes('hacer:mover_efectivo'), 'Sacar o meter efectivo en Caja debe exigir el permiso "hacer:mover_efectivo" en el servidor.', 'GRAVE', M03);
+  // Una ruta exige el permiso con `requirePermiso('hacer:…')` o con su candado de
+  // AUTORIZACIONES (2026-10-19) `autorizable('<operación>')`, si esa operación
+  // exige ese mismo permiso en `autorizaciones/operaciones.js`.
+  function exigePermiso(rutas, permiso, operaciones) {
+    if (rutas.includes(`'${permiso}'`)) return true;
+    const ops = fs.readFileSync(path.join(RAIZ, 'backend', 'src', 'modules', 'autorizaciones', 'operaciones.js'), 'utf8');
+    return operaciones.every((op) => {
+      const bloque = ops.split(new RegExp(`\\n  ${op}: \\{`))[1]?.split(/\n  \w+: \{/)[0] ?? '';
+      return rutas.includes(`autorizable('${op}')`) && bloque.includes(`permiso: '${permiso}'`);
+    });
+  }
+  revisar('modulos', exigePermiso(cajaRoutes, 'hacer:mover_efectivo', ['mover_efectivo']), 'Sacar o meter efectivo en Caja debe exigir el permiso "hacer:mover_efectivo" en el servidor.', 'GRAVE', M03);
   // Identidad matemática de Caja: las tarjetas de arriba deben incluir todos los ingresos que no son venta (abonos, anticipos, pagos de nota, entregas, ingresos) para cuadrar con "Debería haber"
   revisar('modulos', cajaTs.includes('claseIngreso') && cajaTs.includes('anticipo') && cajaTs.includes('nota'), 'En Caja (caja.ts), las cifras de arriba deben sumar todos los ingresos al cajón (abonos, anticipos, pagos de nota, entregas e ingresos a mano) para cuadrar con "Debería haber".', 'GRAVE', M03);
   // Candado anti-doble turno en Caja (pantalla + transacción FOR UPDATE en servidor)
@@ -600,7 +612,7 @@ function verificarModulosEnCodigo() {
   const adminRoutesTs = leer('frontend/src/app/features/admin/admin.routes.ts');
   revisar('modulos', cliModel.includes('asignarCodigo') && cliModel.includes('repartirAbonos') && cliModel.includes('liquidarVentasACredito'), 'El CRM de Clientes debe asignar código automático (C-0001), repartir abonos por antigüedad (FIFO) y liquidar ventas a crédito cubiertas.', 'GRAVE', M05);
   revisar('modulos', cliSaldo.includes('recibirAnticipo') && cliSaldo.includes('ajustarSaldo') && cliSaldo.includes('SALDO_FAVOR_INSUFICIENTE'), 'El libro de saldo a favor debe soportar anticipos, ajustes con motivo y nunca permitir saldo negativo.', 'GRAVE', M05);
-  revisar('modulos', cliRoutes.includes('hacer:corregir_deuda'), 'Ajustar deuda o saldo a favor en Clientes debe exigir el permiso "hacer:corregir_deuda".', 'GRAVE', M05);
+  revisar('modulos', exigePermiso(cliRoutes, 'hacer:corregir_deuda', ['corregir_deuda', 'ajustar_saldo_favor']), 'Ajustar deuda o saldo a favor en Clientes debe exigir el permiso "hacer:corregir_deuda".', 'GRAVE', M05);
   for (const vista of ['todos', 'frecuencia', 'dejaron', 'deuda', 'que-compra', 'cuando', 'gasto', 'lugares']) {
     revisar('modulos', adminRoutesTs.includes(`'${vista}'`), `Falta la pestaña "${vista}" del CRM de Clientes en admin.routes.ts.`, 'GRAVE', M05);
   }

@@ -4,6 +4,7 @@ import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { VentasService } from '../../../core/services/ventas.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { Encargo, MetodoPago, Pedido, SesionCaja } from '../../../core/models/ventas.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -32,6 +33,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
 export class EntregarPedidoModal implements OnInit {
   private readonly ventas = inject(VentasService);
   private readonly auth = inject(AuthService);
+  private readonly confirmacion = inject(ConfirmacionService);
 
   readonly pedido = input.required<Encargo>();
   readonly cerrado = output<void>();
@@ -166,8 +168,22 @@ export class EntregarPedidoModal implements OnInit {
           this.guardando.set(false);
           this.entregado.emit(p);
         },
-        error: (e) => {
+        error: async (e) => {
           this.guardando.set(false);
+          // Con la cuenta atrasada se pregunta (y, si no lo hace directo, se autoriza).
+          const api = (e as { error?: { error?: ApiError } })?.error?.error;
+          if (api?.code === 'CREDITO_ATRASADO' && !body.fiar_con_atraso) {
+            if (!this.auth.puedeOPide('hacer:fiar_atrasado')) {
+              this.error.set(`${api.message} Tu puesto no le puede dar a crédito así.`);
+              return;
+            }
+            const si = await this.confirmacion.pedir({
+              titulo: '¿Darle a crédito con la cuenta atrasada?', mensaje: api.message,
+              aceptar: 'Darle a crédito de todos modos', peligro: true,
+            });
+            if (si) this.enviar({ ...body, fiar_con_atraso: true });
+            return;
+          }
           this.error.set(this.msg(e));
         },
       });

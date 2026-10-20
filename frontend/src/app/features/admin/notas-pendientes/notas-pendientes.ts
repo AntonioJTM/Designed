@@ -139,9 +139,15 @@ export class NotasPendientesPantalla {
       aceptar: 'Pasar a crédito',
     });
     if (!si) return;
+    this.mandarACredito(n, false);
+  }
+
+  /** Con la cuenta atrasada se pregunta otra vez (y, si no lo hace directo, se autoriza). */
+  private mandarACredito(n: NotaPendiente, fiarConAtraso: boolean): void {
+    const dinero = (x: number) => `$${Number(x).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     this.pasando.set(n.id);
     this.error.set(null);
-    this.ventas.pasarACredito(n.id).subscribe({
+    this.ventas.pasarACredito(n.id, fiarConAtraso ? { fiar_con_atraso: true } : {}).subscribe({
       next: (p) => {
         this.pasando.set(null);
         this.mensaje.set(
@@ -150,9 +156,22 @@ export class NotasPendientesPantalla {
         );
         this.cargar();
       },
-      error: (e) => {
+      error: async (e) => {
         this.pasando.set(null);
         this.mensaje.set(null);
+        const api = (e as { error?: { error?: ApiError } })?.error?.error;
+        if (api?.code === 'CREDITO_ATRASADO' && !fiarConAtraso) {
+          if (!this.auth.puedeOPide('hacer:fiar_atrasado')) {
+            this.error.set(`${api.message} Tu puesto no le puede dar a crédito así.`);
+            return;
+          }
+          const si = await this.confirmacion.pedir({
+            titulo: '¿Pasarla a crédito con la cuenta atrasada?', mensaje: api.message,
+            aceptar: 'Pasarla a crédito de todos modos', peligro: true,
+          });
+          if (si) this.mandarACredito(n, true);
+          return;
+        }
         this.error.set(this.msg(e));
       },
     });

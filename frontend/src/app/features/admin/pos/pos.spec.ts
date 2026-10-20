@@ -103,6 +103,7 @@ describe('Pos', () => {
             sesion: signal({ rol: 'cajero' }),
             cargarPerfil: () => of(null),
             puede: (k: string) => permisos.has(k),
+            puedeOPide: (k: string) => permisos.has(k) || permisos.has(k.replace(/^hacer:/, 'pedir:')),
           },
         },
         {
@@ -138,7 +139,7 @@ describe('Pos', () => {
   beforeEach(() => {
     pedidoEnviado = null;
     cajaPedida = null;
-    permisos = new Set(['ver:caja', 'hacer:fiar']);
+    permisos = new Set(['ver:caja', 'hacer:fiar', 'pedir:fiar_atrasado']);
     invFalso = {};
     hilosCliente = [];
     respuesta = true;
@@ -316,6 +317,18 @@ describe('Pos', () => {
     await c.cobrar();
     expect(pedidoEnviado!.a_credito).toBe(432);
     expect((pedidoEnviado as unknown as { fiar_con_atraso?: boolean }).fiar_con_atraso).toBe(true);
+  });
+
+  it('con la cuenta atrasada y sin poder darle así ni pedirlo: no pregunta y dice por qué', async () => {
+    permisos.delete('pedir:fiar_atrasado');
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirModo('credito');
+    await c.cobrar();
+    expect(preguntado).toBeNull();
+    expect(pedidoEnviado).toBeNull();
+    expect(c.error()).toContain('22 días sin abonar');
   });
 
   it('al corriente, fía sin preguntar', async () => {

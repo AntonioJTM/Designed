@@ -5,6 +5,7 @@ const tickets = require('./tickets');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisos = require('../permisos/service');
+const { puedeEn } = require('../autorizaciones/autorizable');
 const { NOMBRE: NOMBRE_PERMISO } = require('../permisos/catalogo');
 const { pool } = require('../../config/db');
 
@@ -133,8 +134,9 @@ async function misPedidos(req, res, next) {
 
 async function cambiarEstado(req, res, next) {
   try {
+    // Ya pasó por su candado (`autorizable('cancelar_venta')`): directo o autorizada.
     if (['cancelado', 'devuelto'].includes(req.body.estado)
-        && !(await permisos.puede(req.auth, 'hacer:cancelar_venta'))) {
+        && !(await puedeEn(req, 'hacer:cancelar_venta'))) {
       throw new AppError(403, 'SIN_PERMISO', sinPermiso('hacer:cancelar_venta'));
     }
     // El usuario queda en el kardex del movimiento que repone o vuelve a
@@ -245,7 +247,7 @@ async function notasPendientes(req, res, next) {
 
 async function pasarACredito(req, res, next) {
   try {
-    res.json({ data: await service.pasarACredito(Number(req.params.id), req.auth?.sub), error: null });
+    res.json({ data: await service.pasarACredito(Number(req.params.id), req.auth?.sub, req.body ?? {}), error: null });
   } catch (err) { next(err); }
 }
 

@@ -84,6 +84,20 @@ export class AuthService {
     return (s.permisos ?? []).includes(permiso);
   }
 
+  /**
+   * ¿La hace directo o la puede PEDIR con autorización (2026-10-19)? Para
+   * enseñar el botón de una operación que se autoriza: quien solo la pide
+   * también lo ve, y al usarlo le sale la ventana "Hace falta autorización".
+   */
+  puedeOPide(permiso: string): boolean {
+    return this.puede(permiso) || this.puede(permiso.replace(/^hacer:/, 'pedir:'));
+  }
+
+  /** El id de quien tiene la sesión (staff). */
+  miId(): number | null {
+    return this.sesion()?.id ?? null;
+  }
+
   esAdmin(): boolean {
     return esAdminSesion(this.sesion());
   }
@@ -170,6 +184,7 @@ export class AuthService {
     this.tokens.guardar(token, 'usuario');
     const sesion: SesionActual = {
       tipo: 'usuario',
+      id: usuario.id,
       nombre: usuario.nombre,
       // Quien entra siempre tiene correo; solo el cargador va sin él, y no entra.
       correo: usuario.correo ?? '',

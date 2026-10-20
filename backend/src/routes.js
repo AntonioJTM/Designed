@@ -25,6 +25,7 @@ const whatsappRoutes = require('./modules/whatsapp/routes');
 const permisosRoutes = require('./modules/permisos/routes');
 const hoyRoutes = require('./modules/hoy/routes');
 const tiempoRealRoutes = require('./modules/tiempo-real/routes');
+const autorizacionesRoutes = require('./modules/autorizaciones/routes');
 const { avisarAlTerminar } = require('./modules/tiempo-real/bus');
 
 // Enrutador raíz de la API v1. Aquí se montan los módulos por dominio.
@@ -34,6 +35,7 @@ const router = Router();
 // pantallas abiertas qué tipo de cosa cambió, y ellas vuelven a pedir lo suyo.
 router.use(avisarAlTerminar);
 router.use('/tiempo-real', tiempoRealRoutes);
+router.use('/autorizaciones', autorizacionesRoutes);
 
 // Seguridad / cuentas
 router.use('/usuarios', usuariosRoutes);

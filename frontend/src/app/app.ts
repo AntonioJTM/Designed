@@ -5,12 +5,13 @@ import { WhatsappTicket } from './shared/ticket/whatsapp-ticket';
 import { FocoVentanas } from './core/services/foco-ventanas.service';
 import { TablasDesplazables } from './core/services/tablas-desplazables.service';
 
+import { AutorizacionDialogo } from './shared/autorizacion/autorizacion-dialogo';
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ConfirmacionComponent, WhatsappTicket],
+  imports: [RouterOutlet, ConfirmacionComponent, WhatsappTicket, AutorizacionDialogo],
   // La ventana de confirmación y la de mandar un ticket por WhatsApp viven aquí,
   // una sola vez, para todo el sistema.
-  template: '<router-outlet /><app-whatsapp-ticket /><app-confirmacion />',
+  template: '<router-outlet /><app-whatsapp-ticket /><app-confirmacion /><app-autorizacion-dialogo />',
 })
 export class App {
   constructor() {

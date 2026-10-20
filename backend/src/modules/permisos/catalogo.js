@@ -11,7 +11,11 @@
  *   ver:*    una pantalla del menú. Lo que no se ve tampoco se abre escribiendo
  *            la dirección (lo cuida el frontend con su guarda de ruta).
  *   hacer:*  una acción dentro de una pantalla que sí se ve. Estas las valida el
- *            SERVIDOR: esconder un botón no basta.
+ *            SERVIDOR: esconder un botón no basta. Quien la hace directo,
+ *            AUTORIZA a quien solo la puede pedir.
+ *   pedir:*  AUTORIZACIONES (2026-10-19): la puede pedir, y la hace hasta que
+ *            alguien con su `hacer:*` la acepte (o escriba su clave ahí mismo).
+ *            Si el puesto tiene las dos, la hace directo.
  *
  * El ADMINISTRADOR no se configura: lo puede todo siempre, para que nunca se
  * quede nadie sin poder entrar a Permisos. Permisos y la creación de puestos son
@@ -36,6 +40,7 @@ const CATALOGO = [
   { grupo: 'Administración', tipo: 'pantalla', clave: 'ver:personal', nombre: 'Personal', ayuda: 'Quién trabaja y en qué puesto' },
   { grupo: 'Administración', tipo: 'pantalla', clave: 'ver:nomina', nombre: 'Nómina', ayuda: 'Sueldos y comisiones de la semana' },
   { grupo: 'Administración', tipo: 'pantalla', clave: 'ver:config', nombre: 'Configuración', ayuda: 'Datos de la tienda' },
+  { grupo: 'Administración', tipo: 'pantalla', clave: 'ver:autorizaciones', nombre: 'Autorizaciones', ayuda: 'Lo que pidió y, si autoriza algo, lo que le toca aceptar' },
 
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:fiar', nombre: 'Vender a crédito', ayuda: 'A crédito a un cliente con límite, y pasar a crédito una nota pendiente' },
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:cancelar_venta', nombre: 'Cancelar o devolver una venta', ayuda: 'Regresa la mercancía y saca el efectivo de la caja' },
@@ -43,10 +48,29 @@ const CATALOGO = [
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:corregir_deuda', nombre: 'Corregir la deuda de un cliente', ayuda: 'Perdonar o agregar un cargo, con motivo' },
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:cambiar_precios', nombre: 'Cambiar precios', ayuda: 'Precio público, peso y precio por lista de una presentación' },
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:ver_costos', nombre: 'Ver costos y márgenes', ayuda: 'Lo que costó cada hilo y lo que deja' },
+  { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:fiar_atrasado', nombre: 'Fiar con cuenta atrasada', ayuda: 'Vender a crédito a quien lleva más de 15 días sin abonar' },
+  { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:dar_credito', nombre: 'Darle o subirle el crédito', ayuda: 'El límite de crédito de un cliente' },
   { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:enviar_traspaso', nombre: 'Enviar desde la bodega', ayuda: 'Mandar lo que pidió una sucursal' },
   { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:recibir_traspaso', nombre: 'Confirmar que llegó un envío', ayuda: 'Firmar de recibido en la sucursal' },
   { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:ajuste_merma', nombre: 'Ajuste y merma', ayuda: 'Cuadrar con un conteo o dar de baja hilo dañado' },
   { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:bajar_conos', nombre: 'Bajar conos a mostrador', ayuda: 'Desarmar un paquete en conos' },
+  // Fase 2 de autorizaciones (2026-10-19).
+  { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:cargar_inventario', nombre: 'Cargar mercancía al inventario', ayuda: 'La lista del proveedor, un hilo o un paquete a mano' },
+  { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:surtir_sucursal', nombre: 'Pedir mercancía a otra tienda', ayuda: 'Sin esperar autorización (y autorizar los pedidos, también por menos)' },
+  { grupo: 'Administración', tipo: 'accion', clave: 'hacer:pagar_nomina', nombre: 'Pagar la nómina', ayuda: 'Marcarla pagada (y autorizar que se pague la que preparó alguien más)' },
+  { grupo: 'Administración', tipo: 'accion', clave: 'hacer:autorizar_vacaciones', nombre: 'Autorizar vacaciones', ayuda: 'Aceptar o rechazar las vacaciones que pide el personal (nunca las propias)' },
+  // Lo que se PIDE con autorización (2026-10-19). Lo autoriza quien tiene su «hacer».
+  { grupo: 'Dinero', tipo: 'pedir', clave: 'pedir:mover_efectivo', nombre: 'Sacar o meter efectivo', ayuda: 'Retiros e ingresos en el turno' },
+  { grupo: 'Dinero', tipo: 'pedir', clave: 'pedir:cancelar_venta', nombre: 'Cancelar o devolver una venta', ayuda: 'Cancelar completa o regresar mercancía' },
+  { grupo: 'Dinero', tipo: 'pedir', clave: 'pedir:corregir_deuda', nombre: 'Corregir la deuda o el saldo a favor', ayuda: 'Perdonar o agregar un cargo, quitar o agregar saldo a favor' },
+  { grupo: 'Dinero', tipo: 'pedir', clave: 'pedir:cambiar_precios', nombre: 'Cambiar precios', ayuda: 'Precio público, oferta, peso y precio por lista' },
+  { grupo: 'Dinero', tipo: 'pedir', clave: 'pedir:fiar_atrasado', nombre: 'Fiar con cuenta atrasada', ayuda: 'Se autoriza con clave en el momento: el cliente está enfrente' },
+  { grupo: 'Dinero', tipo: 'pedir', clave: 'pedir:dar_credito', nombre: 'Darle o subirle el crédito', ayuda: 'El límite de crédito de un cliente' },
+  { grupo: 'Mercancía', tipo: 'pedir', clave: 'pedir:ajuste_merma', nombre: 'Ajuste y merma', ayuda: 'Cuadrar con un conteo o dar de baja hilo dañado' },
+  { grupo: 'Mercancía', tipo: 'pedir', clave: 'pedir:cargar_inventario', nombre: 'Cargar mercancía al inventario', ayuda: 'Entra con sus paquetes cuando se acepta' },
+  { grupo: 'Mercancía', tipo: 'pedir', clave: 'pedir:surtir_sucursal', nombre: 'Pedir mercancía a otra tienda', ayuda: 'Quien surte la ve cuando se acepta; puede autorizarse por menos' },
+  { grupo: 'Administración', tipo: 'pedir', clave: 'pedir:pagar_nomina', nombre: 'Pedir que se pague la nómina', ayuda: 'Quien la prepara; si cambia después de pedirla, se pide otra vez' },
+  { grupo: 'Administración', tipo: 'pedir', clave: 'pedir:vacaciones', nombre: 'Pedir sus vacaciones', ayuda: 'En «Mis vacaciones»; se le avisa por WhatsApp' },
 ];
 
 const CLAVES = new Set(CATALOGO.map((p) => p.clave));

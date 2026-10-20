@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ClientesService } from '../../../core/services/clientes.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Cliente, ClienteInput, LugarEntrega } from '../../../core/models/clientes.models';
 import { TipoCliente } from '../../../core/models/catalogo.models';
@@ -63,6 +64,10 @@ export class ClienteFormModal implements OnInit {
 
   /** Cliente a editar; `null` = alta. */
   readonly cliente = input<Cliente | null>(null);
+  private readonly auth = inject(AuthService);
+  /** Darle o subirle el crédito (2026-10-19): directo, o pedirlo con autorización. */
+  readonly puedeDarCredito = () => this.auth.puede('hacer:dar_credito');
+  readonly puedePedirCredito = () => this.auth.puedeOPide('hacer:dar_credito');
 
   readonly cerrado = output<void>();
   readonly guardado = output<Cliente>();
@@ -119,6 +124,8 @@ export class ClienteFormModal implements OnInit {
    * Ya pasó con el modal de producto y hay pruebas que lo cubren.
    */
   ngOnInit(): void {
+    // Quien no lo da ni lo pide no lo mueve (sigue yendo al guardar: getRawValue).
+    if (!this.puedePedirCredito()) this.form.controls.limite_credito.disable();
     const c = this.cliente();
     if (c) {
       this.form.reset({

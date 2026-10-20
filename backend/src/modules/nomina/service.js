@@ -139,43 +139,58 @@ async function vacacionesDe(usuarioId) {
 
 const _dma = (iso) => iso.split('-').reverse().join('/');
 
-async function registrarVacaciones(usuarioId, datos, creadoPor) {
+/**
+ * Las REGLAS de unas vacaciones (2026-10-06; separadas el 2026-10-19 para
+ * revisarlas también al PEDIRLAS en "Mis vacaciones"): en la nómina, con fecha de
+ * ingreso y horario, fechas en orden, días de trabajo, el primer año cumplido,
+ * los días que le quedan del año donde EMPIEZAN y ninguna semana ya pagada.
+ * `propias`: los mensajes le hablan a quien las pide ("te quedan…").
+ */
+async function revisarVacaciones(usuarioId, datos, { propias = false } = {}) {
+  const t = (deOtro, suyas) => (propias ? suyas : deOtro);
   const emp = await model.obtenerEmpleado(usuarioId);
   if (!emp) throw new AppError(404, 'NO_ENCONTRADO', 'Usuario no encontrado');
   if (!emp.en_nomina) {
-    throw new AppError(422, 'NO_EN_NOMINA', 'Primero dalo de alta en la nómina.');
+    throw new AppError(422, 'NO_EN_NOMINA',
+      t('Primero dalo de alta en la nómina.', 'Todavía no estás en la nómina: pídele al administrador que te dé de alta.'));
   }
   if (!emp.fecha_ingreso) {
-    throw new AppError(422, 'SIN_FECHA_INGRESO',
-      'Captura primero su fecha de ingreso: con ella se cuentan los días que le tocan.');
+    throw new AppError(422, 'SIN_FECHA_INGRESO', t(
+      'Captura primero su fecha de ingreso: con ella se cuentan los días que le tocan.',
+      'Falta tu fecha de ingreso en la nómina (con ella se cuentan tus días): pídesela al administrador.'));
   }
   if (!emp.horario.length) {
-    throw new AppError(422, 'SIN_HORARIO',
-      'Captura primero su horario: con él se cuentan los días de vacaciones (sus descansos no cuentan).');
+    throw new AppError(422, 'SIN_HORARIO', t(
+      'Captura primero su horario: con él se cuentan los días de vacaciones (sus descansos no cuentan).',
+      'Falta tu horario en la nómina (con él se cuentan tus días; tus descansos no cuentan): pídeselo al administrador.'));
   }
   const { fecha_inicio: desde, fecha_fin: hasta } = datos;
   if (hasta < desde) {
     throw new AppError(422, 'RANGO_INVALIDO', 'La fecha final va después de la inicial.');
   }
   if (desde < emp.fecha_ingreso) {
-    throw new AppError(422, 'ANTES_DE_INGRESO', 'Esas fechas son de antes de que entrara a trabajar.');
+    throw new AppError(422, 'ANTES_DE_INGRESO', t('Esas fechas son de antes de que entrara a trabajar.', 'Esas fechas son de antes de que entraras a trabajar.'));
   }
   const dias = jornada.diasHabilesEnRango(emp.horario, desde, hasta);
   if (dias <= 0) {
-    throw new AppError(422, 'SIN_DIAS_HABILES', 'En esas fechas no le toca trabajar: no gastan días de vacaciones.');
+    throw new AppError(422, 'SIN_DIAS_HABILES', t(
+      'En esas fechas no le toca trabajar: no gastan días de vacaciones.',
+      'En esas fechas no te toca trabajar: no gastan días de vacaciones.'));
   }
 
   // El saldo es del año de vacaciones donde EMPIEZAN.
   const registros = await model.listarVacaciones(usuarioId);
   const saldo = jornada.saldoVacaciones(emp.fecha_ingreso, desde, registros);
   if (saldo.anios < 1) {
-    throw new AppError(422, 'SIN_ANTIGUEDAD',
-      `Todavía no cumple su primer año: lo cumple el ${_dma(saldo.proximo_aniversario)} y desde entonces le tocan ${saldo.dias_proximo_anio} días.`);
+    throw new AppError(422, 'SIN_ANTIGUEDAD', t(
+      `Todavía no cumple su primer año: lo cumple el ${_dma(saldo.proximo_aniversario)} y desde entonces le tocan ${saldo.dias_proximo_anio} días.`,
+      `Todavía no cumples tu primer año: lo cumples el ${_dma(saldo.proximo_aniversario)} y desde entonces te tocan ${saldo.dias_proximo_anio} días.`));
   }
   if (dias > saldo.restan) {
-    throw new AppError(422, 'VACACIONES_INSUFICIENTES',
-      `En su año del ${_dma(saldo.desde)} al ${_dma(jornada.sumarDias(saldo.hasta, -1))} le tocan ${saldo.corresponden} días ` +
-      `y ya tomó ${saldo.tomados}: le quedan ${saldo.restan}, y estas fechas son ${dias} días de trabajo.`);
+    const anio = `del ${_dma(saldo.desde)} al ${_dma(jornada.sumarDias(saldo.hasta, -1))}`;
+    throw new AppError(422, 'VACACIONES_INSUFICIENTES', t(
+      `En su año ${anio} le tocan ${saldo.corresponden} días y ya tomó ${saldo.tomados}: le quedan ${saldo.restan}, y estas fechas son ${dias} días de trabajo.`,
+      `En tu año ${anio} te tocan ${saldo.corresponden} días y ya tomaste ${saldo.tomados}: te quedan ${saldo.restan}, y estas fechas son ${dias} días de trabajo.`));
   }
 
   // Una semana ya pagada no se mueve: esos días ya se pagaron como trabajados.
@@ -185,11 +200,33 @@ async function registrarVacaciones(usuarioId, datos, creadoPor) {
       `La nómina de la semana del ${_dma(pagadas[0].fecha_inicio)} al ${_dma(pagadas[0].fecha_fin)} ya se pagó: ` +
       'no se le pueden agregar vacaciones.');
   }
+  // Encimadas con unas ya registradas (al registrarlas se vuelve a revisar, con candado).
+  const encimada = registros.find((r) => r.fecha_inicio <= hasta && r.fecha_fin >= desde);
+  if (encimada) {
+    throw new AppError(409, 'VACACIONES_ENCIMADAS', t(
+      `Esas fechas se enciman con sus vacaciones del ${_dma(encimada.fecha_inicio)} al ${_dma(encimada.fecha_fin)}.`,
+      `Esas fechas se enciman con tus vacaciones del ${_dma(encimada.fecha_inicio)} al ${_dma(encimada.fecha_fin)}.`));
+  }
+  return { emp, dias, saldo };
+}
 
+/**
+ * NADIE se registra (ni se quita) sus propias vacaciones desde la nómina: se
+ * piden en "Mis vacaciones" y las autoriza otro (2026-10-19). El administrador
+ * sí: es el dueño.
+ */
+function exigirQueNoSeanSuyas(usuarioId, yo, esAdmin) {
+  if (!esAdmin && yo != null && Number(usuarioId) === Number(yo)) {
+    throw new AppError(403, 'SON_TUS_VACACIONES', 'Tus vacaciones se piden en «Mis vacaciones»: las autoriza alguien más.');
+  }
+}
+
+async function registrarVacaciones(usuarioId, datos, creadoPor, opciones = {}) {
+  const { dias } = await revisarVacaciones(usuarioId, datos, opciones);
   await model.crearVacaciones({
     usuario_id: usuarioId,
-    fecha_inicio: desde,
-    fecha_fin: hasta,
+    fecha_inicio: datos.fecha_inicio,
+    fecha_fin: datos.fecha_fin,
     dias,
     notas: datos.notas || null,
     creado_por: creadoPor,
@@ -197,9 +234,34 @@ async function registrarVacaciones(usuarioId, datos, creadoPor) {
   return vacacionesDe(usuarioId);
 }
 
-async function eliminarVacaciones(id) {
+/** Para decirlo en palabras: su nombre, cuántos días de trabajo son y cuántos le quedan de su año. */
+async function resumenVacaciones(usuarioId, datos) {
+  const emp = await model.obtenerEmpleado(usuarioId);
+  if (!emp) return { nombre: 'el empleado', dias: 0, restan: 0 };
+  const dias = jornada.diasHabilesEnRango(emp.horario, datos.fecha_inicio, datos.fecha_fin);
+  const saldo = emp.fecha_ingreso
+    ? jornada.saldoVacaciones(emp.fecha_ingreso, datos.fecha_inicio, await model.listarVacaciones(usuarioId))
+    : null;
+  return { nombre: emp.nombre, dias, restan: saldo?.restan ?? 0 };
+}
+
+/**
+ * "MIS VACACIONES" (2026-10-19): lo de esta persona —cuántas le tocan por ley,
+ * cuántas tomó, las que le quedan, su horario— y lo que ha pedido (esperando,
+ * aprobadas o no). Quien no está en la nómina solo ve eso.
+ */
+async function misVacaciones(usuarioId) {
+  const emp = await model.obtenerEmpleado(usuarioId);
+  if (!emp) throw new AppError(404, 'NO_ENCONTRADO', 'Usuario no encontrado');
+  const pedidas = await require('../autorizaciones/model').vacacionesPedidas(usuarioId);
+  if (!emp.en_nomina) return { en_nomina: false, nombre: emp.nombre, pedidas };
+  return { en_nomina: true, ...(await vacacionesDe(usuarioId)), hoy: hoyLocal(), pedidas };
+}
+
+async function eliminarVacaciones(id, { yo = null, esAdmin = true } = {}) {
   const v = await model.obtenerVacaciones(id);
   if (!v) throw new AppError(404, 'NO_ENCONTRADO', 'Vacaciones no encontradas');
+  exigirQueNoSeanSuyas(v.usuario_id, yo, esAdmin);
   const pagadas = (await model.periodosEnRango(v.fecha_inicio, v.fecha_fin)).filter((p) => p.estado === 'pagado');
   if (pagadas.length) {
     throw new AppError(409, 'SEMANA_PAGADA',
@@ -265,7 +327,14 @@ async function cambiarEstado(id, estado) {
         'Calcula la nómina antes de marcarla como pagada');
     }
   }
-  return _conRecibos(await model.cambiarEstadoPeriodo(id, estado));
+  const cambiado = await model.cambiarEstadoPeriodo(id, estado);
+  // Si alguien había pedido que se pague y ya se pagó o se canceló, esa
+  // solicitud ya no tiene caso (fase 3).
+  if (estado !== 'borrador') {
+    await require('../autorizaciones/model').cerrarPendientesDeRuta('pagar_nomina', `/nomina/periodos/${id}/estado`,
+      estado === 'pagado' ? 'La nómina ya se pagó.' : 'La nómina se canceló.').catch(() => {});
+  }
+  return _conRecibos(cambiado);
 }
 
 /**
@@ -393,7 +462,11 @@ async function eliminarConcepto(conceptoId) {
 async function _conRecibos(periodo) {
   const recibos = await model.listarRecibos(periodo.id);
   const total_nomina = round2(recibos.reduce((s, r) => s + Number(r.total_pagar), 0));
-  return { ...periodo, recibos, total_nomina };
+  // Si alguien ya pidió que se pague y espera autorización (fase 3, 2026-10-19).
+  const pago_pedido = periodo.estado === 'borrador'
+    ? await require('../autorizaciones/model').esperandoDe('pagar_nomina', `/nomina/periodos/${periodo.id}/estado`).catch(() => null)
+    : null;
+  return { ...periodo, recibos, total_nomina, pago_pedido };
 }
 
 module.exports = {
@@ -402,6 +475,10 @@ module.exports = {
   guardarEmpleado,
   vacacionesDe,
   registrarVacaciones,
+  exigirQueNoSeanSuyas,
+  revisarVacaciones,
+  resumenVacaciones,
+  misVacaciones,
   eliminarVacaciones,
   fijarDiasTrabajados,
   agregarHorasExtra,

@@ -9,6 +9,9 @@ import { fechaRelativa } from '../../shared/fecha.pipe';
 import { DESTINO_AVISO, urlDe } from '../../core/avisos';
 import { CantidadPipe } from '../../shared/cantidad.pipe';
 import { TiempoRealService } from '../../core/services/tiempo-real.service';
+import { PERMISOS_QUE_AUTORIZAN } from '../../core/models/autorizaciones.models';
+import { MiClaveModal } from '../../shared/autorizacion/mi-clave-modal';
+import { MisVacacionesModal } from './nomina/mis-vacaciones-modal';
 
 /**
  * El marco del panel: el menú por tareas a la izquierda (rediseño 2026-10) y la
@@ -17,7 +20,7 @@ import { TiempoRealService } from '../../core/services/tiempo-real.service';
  */
 @Component({
   selector: 'app-admin-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, CantidadPipe],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, CantidadPipe, MiClaveModal, MisVacacionesModal],
   templateUrl: './admin-layout.html',
   styleUrls: ['./admin-layout.scss', './admin-avisos.scss'],
   host: {
@@ -71,6 +74,13 @@ export class AdminLayout implements AfterViewInit {
   readonly veHoy = computed(() => { this.sesion(); return this.auth.puede('ver:hoy'); });
   /** El aviso del WhatsApp de la tienda: lo atiende quien entra a Configuración. */
   readonly veConfig = computed(() => { this.sesion(); return this.auth.puede('ver:config'); });
+  readonly veAutorizaciones = computed(() => { this.sesion(); return this.auth.puede('ver:autorizaciones'); });
+  /** Autoriza algo (lo hace directo): ve "Mi clave para autorizar". */
+  readonly autoriza = computed(() => { this.sesion(); return PERMISOS_QUE_AUTORIZAN.some((c) => this.auth.puede(c)); });
+  readonly miClave = signal(false);
+  /** "Mis vacaciones" (2026-10-19): quien las puede pedir. */
+  readonly pideVacaciones = computed(() => { this.sesion(); return this.auth.puede('pedir:vacaciones'); });
+  readonly misVacaciones = signal(false);
 
   /** Los trazos de los iconos del panel de avisos (los mismos de Hoy). */
   readonly ICONO = {
@@ -80,6 +90,8 @@ export class AdminLayout implements AfterViewInit {
     nota: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
     cobro: 'M3 7h18v11H3z M3 11h18 M7 15h4',
     gente: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5',
+    // Un círculo con su palomita (una autorización).
+    autoriza: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M8.5 12l2.5 2.5 4.5-5',
     // Un globo de chat, con su colita (el WhatsApp de la tienda).
     chat: 'M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.6-4.2A8.5 8.5 0 1 1 20.5 11.5z',
   };
@@ -90,6 +102,9 @@ export class AdminLayout implements AfterViewInit {
     if (!p) return 0;
     let n = 0;
     if (this.veConfig() && p.whatsapp) n += 1;
+    // Las solicitudes que esperan SU autorización: el servidor ya las cuenta por persona.
+    if (this.veAutorizaciones() && (p.autorizaciones?.num ?? 0) > 0) n += 1;
+    if (p.mi_clave_apagada) n += 1;
     if (this.veMercancia()) n += p.traspasos_por_enviar.length + p.traspasos_por_recibir.length;
     if (this.veInventario() && p.alertas_stock > 0) n += 1;
     if (this.veCatalogo() && (p.sin_precio?.num ?? 0) > 0) n += 1;
@@ -249,6 +264,12 @@ export class AdminLayout implements AfterViewInit {
   /** A dónde lleva cada aviso: los mismos destinos que Hoy (`core/avisos.ts`). */
   readonly destino = DESTINO_AVISO;
   readonly url = urlDe;
+
+  /** "Tu clave para autorizar se apagó": se vuelve a poner aquí mismo. */
+  abrirMiClave(): void {
+    this.abierto.set(false);
+    this.miClave.set(true);
+  }
 
   irA(ruta: string): void {
     this.abierto.set(false);

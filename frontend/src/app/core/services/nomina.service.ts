@@ -15,6 +15,7 @@ import {
   PeriodoResumen,
   SemanaActual,
   VacacionesEmpleado,
+  MisVacaciones,
 } from '../models/nomina.models';
 
 /** Extrae `data` o lanza el error del API. */
@@ -68,6 +69,21 @@ export class NominaService {
       .pipe(map(data));
   }
 
+  /** "Mis vacaciones" (2026-10-19): las de quien tiene la sesión. */
+  misVacaciones(): Observable<MisVacaciones> {
+    return this.http.get<ApiResponse<MisVacaciones>>(`${this.base}/mis-vacaciones`).pipe(map(data));
+  }
+
+  /**
+   * Pide sus vacaciones: se quedan esperando a quien las autoriza (`pedidas`).
+   * Al administrador (el dueño) se le registran directo (`pedidas: false`).
+   */
+  pedirVacaciones(body: { fecha_inicio: string; fecha_fin: string; notas?: string }): Observable<{ pedidas: boolean }> {
+    return this.http
+      .post<ApiResponse<object>>(`${this.base}/mis-vacaciones`, body, { headers: { 'X-Pedir-Autorizacion': '1' } })
+      .pipe(map((r) => ({ pedidas: 'autorizacion' in (data(r) as object) })));
+  }
+
   quitarVacaciones(id: number): Observable<VacacionesEmpleado> {
     return this.http
       .delete<ApiResponse<VacacionesEmpleado>>(`${this.base}/vacaciones/${id}`)
@@ -102,6 +118,13 @@ export class NominaService {
     return this.http
       .post<ApiResponse<PeriodoNomina>>(`${this.base}/periodos/${id}/calcular`, {})
       .pipe(map(data));
+  }
+
+  /** Pedir que se pague (fase 3): se queda esperando a quien autoriza pagarla. */
+  pedirPago(id: number): Observable<void> {
+    return this.http
+      .patch<ApiResponse<object>>(`${this.base}/periodos/${id}/estado`, { estado: 'pagado' }, { headers: { 'X-Pedir-Autorizacion': '1' } })
+      .pipe(map(() => undefined));
   }
 
   cambiarEstado(id: number, estado: EstadoPeriodoNomina): Observable<PeriodoNomina> {

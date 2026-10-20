@@ -78,7 +78,9 @@ export class ProductoPresentaciones {
   // ---- Permisos. El servidor también los exige (403 SIN_PERMISO); aquí solo
   // se esconde lo que iba a fallar.
   /** Precio público, peso y precio por lista: lo que se le cobra a todos. */
-  readonly puedeCambiarPrecios = computed(() => this.auth.puede('hacer:cambiar_precios'));
+  readonly puedeCambiarPrecios = computed(() => this.auth.puedeOPide('hacer:cambiar_precios'));
+  /** Un paquete a mano mete kilos: lo hace (o lo pide) quien carga mercancía (2026-10-19). */
+  readonly puedeCargar = computed(() => this.auth.puedeOPide('hacer:cargar_inventario'));
   /** El costo es información interna: no todo el personal lo ve. */
   readonly puedeVerCostos = computed(() => this.auth.puede('hacer:ver_costos'));
   /** Subir el Excel del proveedor da ENTRADA a mercancía: es lo de Surtir inventario. */

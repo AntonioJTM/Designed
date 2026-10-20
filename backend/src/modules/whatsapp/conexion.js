@@ -328,6 +328,16 @@ async function enviarDocumento({ telefono, pdf, archivo, mensaje }) {
   });
 }
 
+/** Un mensaje de texto (el aviso de sus vacaciones a un empleado, 2026-10-19). */
+async function enviarTexto({ telefono, mensaje }) {
+  const s = exigirEnlazado();
+  return enFila(async () => {
+    const jid = await chatDe(s, telefono);
+    await conLimite(s.sendMessage(jid, { text: mensaje }), 30000, 'WhatsApp tardó demasiado en mandarlo.');
+    return { enviado: true, numero: numeroLegible(jid) };
+  });
+}
+
 /** Un mensaje de prueba, para ver que quedó bien enlazado. */
 async function enviarPrueba(telefono) {
   const s = exigirEnlazado();
@@ -356,4 +366,4 @@ function arrancar() {
   });
 }
 
-module.exports = { leerEstado, enlazar, desenlazar, enviarDocumento, enviarPrueba, arrancar, detener, avisoCampana };
+module.exports = { leerEstado, enlazar, desenlazar, enviarDocumento, enviarTexto, enviarPrueba, arrancar, detener, avisoCampana };

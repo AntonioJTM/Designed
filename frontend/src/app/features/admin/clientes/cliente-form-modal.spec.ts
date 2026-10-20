@@ -3,6 +3,7 @@ import { of, throwError } from 'rxjs';
 import { ClienteFormModal } from './cliente-form-modal';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Cliente, LugarEntrega } from '../../../core/models/clientes.models';
 import { hoyLocal } from '../../../shared/fecha.pipe';
 
@@ -48,6 +49,13 @@ describe('ClienteFormModal', () => {
       providers: [
         { provide: ClientesService, useValue: clientesFalso },
         { provide: CatalogoService, useValue: { tiposCliente: () => of([]) } },
+        {
+          provide: AuthService,
+          useValue: {
+            puede: (k: string) => permisos.has(k),
+            puedeOPide: (k: string) => permisos.has(k) || permisos.has(k.replace(/^hacer:/, 'pedir:')),
+          },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ClienteFormModal);
@@ -56,12 +64,29 @@ describe('ClienteFormModal', () => {
     return fixture;
   }
 
+  let permisos = new Set<string>();
   beforeEach(() => {
+    permisos = new Set(['hacer:dar_credito']);
     enviados = [];
     lugaresCreados = [];
     repetido = false;
   });
   afterEach(() => TestBed.resetTestingModule());
+
+  it('el crédito: quien no lo da ni lo pide no lo mueve (y al guardar se manda el que tenía)', async () => {
+    permisos = new Set();
+    const f = await montar(cliente);
+    expect(f.componentInstance.form.controls.limite_credito.disabled).toBe(true);
+    expect(f.componentInstance.form.getRawValue().limite_credito).toBe(10000);
+    expect(f.nativeElement.textContent).toContain('Lo cambia quien da crédito');
+  });
+
+  it('el crédito: quien solo lo pide sí lo escribe, y se le dice que se autoriza', async () => {
+    permisos = new Set(['pedir:dar_credito']);
+    const f = await montar(cliente);
+    expect(f.componentInstance.form.controls.limite_credito.disabled).toBe(false);
+    expect(f.nativeElement.textContent).toContain('Subirlo lo autoriza quien da crédito');
+  });
 
   it('al editar llena el formulario con el cliente', async () => {
     const f = await montar(cliente);

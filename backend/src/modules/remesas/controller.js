@@ -101,7 +101,9 @@ async function confirmarLista(req, res, next) {
     const data = await lista.confirmarLista(req.body, req.auth.sub, escribir);
     escribir({ tipo: 'fin', data });
   } catch (err) {
-    // La transacción ya se revirtió: no quedó nada a medias.
+    // La transacción ya se revirtió: no quedó nada a medias. Como ya se contestó
+    // 200 (por partes), se dice aparte que falló (la autorización en el momento lo lee).
+    res.locals.fallo = true;
     if (!(err instanceof AppError)) console.error('[remesas/lista]', err);
     escribir({
       tipo: 'error',

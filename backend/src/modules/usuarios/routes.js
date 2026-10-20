@@ -56,6 +56,17 @@ const soloAdmin = [authRequired, requireTipo('usuario'), requirePermiso('ver:per
 router.post('/login', validate(loginSchema), controller.iniciarSesion);
 router.get('/perfil', authRequired, requireTipo('usuario'), controller.perfil);
 
+// "Mi clave para autorizar" (2026-10-19): la pone o la cambia quien tiene la
+// sesión, confirmando con su contraseña de entrar.
+const claveAutorizacionSchema = z
+  .object({
+    contrasena: z.string().min(1, 'Escribe tu contraseña').max(72),
+    clave: z.string().regex(/^\d{4,6}$/, 'La clave para autorizar son de 4 a 6 números'),
+  })
+  .strict();
+router.put('/perfil/clave-autorizacion', authRequired, requireTipo('usuario'), validate(claveAutorizacionSchema),
+  controller.fijarClaveAutorizacion);
+
 // Catálogo de roles (para el formulario del panel)
 router.get('/roles', ...soloAdmin, controller.roles);
 

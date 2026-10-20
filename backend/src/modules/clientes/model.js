@@ -345,6 +345,11 @@ async function actualizar(id, datos) {
   return obtener(id);
 }
 
+/** Solo el límite de crédito (2026-10-19: lo que se autoriza aparte de la ficha). */
+async function fijarLimiteCredito(id, limite) {
+  await pool.query('UPDATE clientes SET limite_credito = :limite WHERE id = :id', { id, limite });
+}
+
 /** ¿Ya está usado ese correo por OTRO cliente? (El número lo da el sistema: no se repite.) */
 async function duplicado({ correo, exceptoId }) {
   if (!correo) return null;
@@ -1171,6 +1176,7 @@ module.exports = {
   buscarParaVenta, diasSinAbonar, desdeSinAbonar, diasSinAbonarDeTodos,
   crearDesdeStaff,
   actualizar,
+  fijarLimiteCredito,
   duplicado,
   // Historial
   estadisticas,

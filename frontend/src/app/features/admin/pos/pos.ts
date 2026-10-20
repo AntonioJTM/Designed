@@ -1409,6 +1409,11 @@ export class Pos {
     // CUENTA ATRASADA (2026-10-16): no se le fía a ciegas. Se pregunta, con lo que
     // debe y los días; el servidor también lo detiene si no se confirmó.
     const cli = this.clienteSel();
+    if (fiado > 0 && cli?.atrasado && !this.auth.puedeOPide('hacer:fiar_atrasado')) {
+      this.error.set(`${cli.nombre_comercial || cli.nombre} lleva ${cli.dias_sin_abonar} días sin abonar y tu puesto no le ` +
+        'puede dar a crédito así. Pídele un abono, o que le cobre alguien que lo pueda autorizar.');
+      return false;
+    }
     if (fiado > 0 && cli?.atrasado) {
       return this.confirmacion
         .pedir({

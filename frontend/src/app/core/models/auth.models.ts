@@ -91,6 +91,8 @@ export interface LoginClienteResp {
 /** Perfil normalizado para la UI, independientemente del tipo. */
 export interface SesionActual {
   tipo: TipoAuth;
+  /** Su id (solo staff): para no ofrecerle lo que es suyo (su propia nómina). */
+  id?: number;
   nombre: string;
   correo: string;
   rol?: string; // solo staff: su puesto principal

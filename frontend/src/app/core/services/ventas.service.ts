@@ -303,9 +303,9 @@ export class VentasService {
   }
 
   /** Pasa a la cuenta de crédito del cliente lo que falta de una nota pendiente. */
-  pasarACredito(pedidoId: number): Observable<Pedido & { a_credito: number }> {
+  pasarACredito(pedidoId: number, body: { fiar_con_atraso?: boolean } = {}): Observable<Pedido & { a_credito: number }> {
     return this.http
-      .post<ApiResponse<Pedido & { a_credito: number }>>(`${this.base}/pedidos/${pedidoId}/a-credito`, {})
+      .post<ApiResponse<Pedido & { a_credito: number }>>(`${this.base}/pedidos/${pedidoId}/a-credito`, body)
       .pipe(map(data));
   }
 
@@ -344,7 +344,7 @@ export class VentasService {
    */
   entregarPedido(
     pedidoId: number,
-    body: { pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number; pendiente_pago?: boolean }
+    body: { pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number; pendiente_pago?: boolean; fiar_con_atraso?: boolean }
   ): Observable<Pedido> {
     return this.http.post<ApiResponse<Pedido>>(`${this.base}/pedidos/${pedidoId}/entregar`, body).pipe(map(data));
   }
