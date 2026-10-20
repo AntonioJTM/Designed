@@ -100,9 +100,13 @@
                   @if (e.en_nomina) {
                     <button type="button" class="btn btn-ghost btn-sm" (click)="abrirVacaciones(e)">Vacaciones</button>
                   }
-                  <button type="button" class="btn btn-ghost btn-sm" (click)="abrir(e)">
-                    {{ e.en_nomina ? 'Editar' : 'Dar de alta' }}
-                  </button>
+                  @if (esSuya(e)) {
+                    <span class="muted" title="Tu propia nómina la ajusta el administrador">La tuya</span>
+                  } @else {
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="abrir(e)">
+                      {{ e.en_nomina ? 'Editar' : 'Dar de alta' }}
+                    </button>
+                  }
                 </td>
               </tr>
             }
@@ -124,6 +128,7 @@
 @if (vacacionesDe(); as emp) {
   <app-vacaciones-modal
     [empleado]="emp"
+    [puedeRegistrar]="registraVacaciones() && !esSuya(emp)"
     (cerrado)="vacacionesDe.set(null)"
     (cambiado)="cargar()"
   />

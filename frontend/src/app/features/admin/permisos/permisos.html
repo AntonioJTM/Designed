@@ -54,6 +54,21 @@
       </div>
       <ng-container *ngTemplateOutlet="tabla; context: { $implicit: acciones() }" />
     </section>
+
+    @if (pedidos().length) {
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Qué puede pedir, con autorización</h2>
+            <p>
+              Lo pide y se hace cuando alguien que lo hace directo («Qué puede hacer») lo acepta en
+              Autorizaciones o escribe su clave en su pantalla. Si el puesto también lo tiene arriba, lo hace directo.
+            </p>
+          </div>
+        </div>
+        <ng-container *ngTemplateOutlet="tabla; context: { $implicit: pedidos() }" />
+      </section>
+    }
   }
 
   @if (pendientes().length > 0) {

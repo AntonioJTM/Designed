@@ -78,7 +78,7 @@ describe('ClienteExpediente', () => {
         { provide: ClientesService, useValue: clientesFalso },
         { provide: VentasService, useValue: { metodosPago: () => of([]), cajas: () => of([]) } },
         { provide: CatalogoService, useValue: { tiposCliente: () => of([]) } },
-        { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k) } },
+        { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k), puedeOPide: (k: string) => permisos.has(k) || permisos.has(k.replace('hacer:', 'pedir:')) } },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => '7' }, queryParamMap: { get: () => ver } } },

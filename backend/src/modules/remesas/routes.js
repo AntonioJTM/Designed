@@ -6,6 +6,18 @@ const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
 const { authRequired, requireTipo, requirePermiso, requirePermisoAlguno } = require('../../middlewares/auth');
+const { autorizable } = require('../autorizaciones/autorizable');
+const { AppError } = require('../../middlewares/error');
+
+// El costo por kilo de quien no lo ve se rechaza ANTES de guardar una solicitud
+// (si no, se guardaría y al aceptarla siempre fallaría). El controlador lo vuelve
+// a revisar al hacerse.
+const sinCostoAjeno = (req, res, next) => {
+  const costos = [req.body.costo_kg, ...(req.body.hilos ?? []).map((h) => h.costo_kg)];
+  if (!costos.some((c) => c != null)) return next();
+  return require('../permisos/service').veCostos(req).then((ve) => (ve ? next()
+    : next(new AppError(403, 'SIN_PERMISO', 'El costo por kilo solo lo capturan administración y contabilidad.'))), next);
+};
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -120,9 +132,13 @@ router.get('/:id/pdf', ...soloStaff, veReportes, controller.pdfCarga);
 // Varias cargas en un solo PDF (?ids=1,2,3): las de una lista completa.
 router.get('/pdf', ...soloStaff, veReportes, controller.pdfCargas);
 router.post('/previa', ...soloStaff, requirePermiso('ver:remesa'), cuerpoBinario, controller.previa);
-router.post('/', ...soloStaff, requirePermiso('ver:remesa'), validate(confirmarSchema), controller.confirmar);
+// Cargar es un INGRESO de inventario: directo la gerente y el administrador; los
+// demás lo piden (autorizaciones, fase 2, 2026-10-19).
+router.post('/', ...soloStaff, requirePermiso('ver:remesa'), validate(confirmarSchema), sinCostoAjeno, autorizable('cargar_inventario'),
+  controller.confirmar);
 router.post('/lista/previa', ...soloStaff, requirePermiso('ver:remesa'), cuerpoBinario, controller.previaLista);
-router.post('/lista', ...soloStaff, requirePermiso('ver:remesa'), validate(listaSchema), controller.confirmarLista);
+router.post('/lista', ...soloStaff, requirePermiso('ver:remesa'), validate(listaSchema), sinCostoAjeno, autorizable('cargar_inventario'),
+  controller.confirmarLista);
 router.patch('/:id', ...soloStaff, requirePermiso('ver:remesa'), validate(datosSchema), controller.editarDatos);
 
 module.exports = router;

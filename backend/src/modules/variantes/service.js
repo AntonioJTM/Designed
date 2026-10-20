@@ -388,6 +388,7 @@ async function eliminarCodigo(codigoId, usuarioId = null, almacenes = null) {
 }
 
 module.exports = {
+  almacenDelBulto: _almacenDelBulto,
   skuDesdeNombre,
   listar,
   obtener,

@@ -25,6 +25,7 @@ export interface GrupoMenu {
 
 const I = {
   hoy: 'M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4 M8 14h3',
+  autorizaciones: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M8.5 12l2.5 2.5 4.5-5',
   cobrar: 'M4 8V5h3 M17 5h3v3 M20 16v3h-3 M7 19H4v-3 M8 9v6 M11 9v6 M14 9v6 M17 9v6',
   caja: 'M3 7h18v11H3z M12 15a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M6 10h.01 M18 15h.01',
   pedidos: 'M6 3h12v18l-3-2-3 2-3-2-3 2z M9 8h6 M9 12h6 M9 16h3',
@@ -48,7 +49,14 @@ const I = {
 };
 
 export const MENU: GrupoMenu[] = [
-  { titulo: 'Inicio', opciones: [{ clave: 'hoy', nombre: 'Hoy', ruta: '/admin/hoy', icono: I.hoy, permiso: 'ver:hoy' }] },
+  {
+    titulo: 'Inicio',
+    opciones: [
+      { clave: 'hoy', nombre: 'Hoy', ruta: '/admin/hoy', icono: I.hoy, permiso: 'ver:hoy' },
+      // Lo que se pidió y lo que hay que autorizar (2026-10-19).
+      { clave: 'autorizaciones', nombre: 'Autorizaciones', ruta: '/admin/autorizaciones', icono: I.autorizaciones, permiso: 'ver:autorizaciones' },
+    ],
+  },
   {
     titulo: 'Vender',
     opciones: [

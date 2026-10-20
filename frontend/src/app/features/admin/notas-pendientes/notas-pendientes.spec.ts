@@ -37,7 +37,7 @@ describe('NotasPendientesPantalla', () => {
       providers: [
         provideRouter([]),
         { provide: VentasService, useValue: ventas },
-        { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k) } },
+        { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k), puedeOPide: (k: string) => permisos.has(k) } },
         { provide: ConfirmacionService, useValue: { pedir: () => Promise.resolve(true) } },
       ],
     }).compileComponents();

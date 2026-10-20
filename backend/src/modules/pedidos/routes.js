@@ -5,7 +5,8 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requirePermisoAlguno } = require('../../middlewares/auth');
+const { autorizable } = require('../autorizaciones/autorizable');
 const { sinCostosEnRespuesta } = require('../permisos/service');
 
 const router = Router();
@@ -151,7 +152,8 @@ const devolverSchema = z
 router.post('/cotizacion', authRequired, validate(cotizarSchema), controller.cotizar);
 
 // Crear pedido: staff (POS/admin) o cliente autenticado (online).
-router.post('/', authRequired, validate(crearSchema), controller.crear);
+// Fiar a quien trae su cuenta atrasada se autoriza con clave en el momento (2026-10-19).
+router.post('/', authRequired, validate(crearSchema), autorizable('fiar_atrasado'), controller.crear);
 
 // Pedidos del cliente autenticado (debe ir antes de '/:id').
 router.get('/mis', authRequired, controller.misPedidos);
@@ -169,7 +171,7 @@ router.get('/resumen', ...soloStaff, controller.resumen);
 // Consulta y gestión: staff.
 router.get('/', ...soloStaff, controller.listar);
 router.get('/:id', ...soloStaff, controller.obtener);
-router.patch('/:id/estado', ...soloStaff, validate(estadoSchema), controller.cambiarEstado);
+router.patch('/:id/estado', ...soloStaff, validate(estadoSchema), autorizable('cancelar_venta'), controller.cambiarEstado);
 
 // ---- Apartados ----
 const abonoApartadoSchema = z
@@ -186,11 +188,15 @@ router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), controll
 // Los datos del ticket de uno de sus pagos, al registrarlo o para reimprimirlo (2026-10-15).
 router.get('/:id/pagos/:pagoId/ticket', ...soloStaff, controller.ticketPago);
 // Pasar a crédito lo que falta de una nota pendiente de pago (es vender a crédito: pide su permiso).
-router.post('/:id/a-credito', ...soloStaff, requirePermiso('hacer:fiar'), controller.pasarACredito);
+// Con la cuenta atrasada se confirma (`fiar_con_atraso`) y eso se autoriza (2026-10-19).
+const aCreditoSchema = z.object({ fiar_con_atraso: z.boolean().optional() }).strict();
+router.post('/:id/a-credito', ...soloStaff, requirePermiso('hacer:fiar'), validate(aCreditoSchema),
+  autorizable('fiar_atrasado'), controller.pasarACredito);
 
 // Lo que se puede devolver de una nota y la devolución misma (queda a favor).
-router.get('/:id/devolucion', ...soloStaff, requirePermiso('hacer:cancelar_venta'), controller.previaDevolucion);
-router.post('/:id/devoluciones', ...soloStaff, requirePermiso('hacer:cancelar_venta'), validate(devolverSchema), controller.devolver);
+// La vista previa la ve también quien PIDE la devolución (para armarla).
+router.get('/:id/devolucion', ...soloStaff, requirePermisoAlguno('hacer:cancelar_venta', 'pedir:cancelar_venta'), controller.previaDevolucion);
+router.post('/:id/devoluciones', ...soloStaff, validate(devolverSchema), autorizable('devolucion'), controller.devolver);
 // Aquí es donde por fin se descuenta del inventario. Un PEDIDO cobra (o fía)
 // aquí lo que le falte.
 const entregaSchema = z
@@ -200,9 +206,11 @@ const entregaSchema = z
     a_credito: z.coerce.number().positive().max(99999999).optional(),
     // Se lleva la mercancía como NOTA PENDIENTE DE PAGO: lo que falta se cobra después.
     pendiente_pago: z.boolean().optional(),
+    // Fiarle lo que falta aunque traiga su cuenta atrasada (se autoriza, 2026-10-19).
+    fiar_con_atraso: z.boolean().optional(),
   })
   .strict();
-router.post('/:id/entregar', ...soloStaff, validate(entregaSchema), controller.entregarApartado);
+router.post('/:id/entregar', ...soloStaff, validate(entregaSchema), autorizable('fiar_atrasado'), controller.entregarApartado);
 
 // MODIFICAR un pedido en espera (2026-10-07: "hay casos donde el cliente quiere
 // modificar su pedido, agregar o quitar cosas"): la lista COMPLETA de lo que

@@ -5,6 +5,7 @@ const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
 const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { autorizable } = require('../autorizaciones/autorizable');
 
 const router = Router();
 
@@ -75,25 +76,26 @@ router.use(require('../permisos/service').sinCostosEnRespuesta);
 
 const soloStaff = [authRequired, requireTipo('usuario')];
 // Cambiar el precio que se le cobra a todos es decisión de los jefes, no de caja.
-const soloJefes = [...soloStaff, requirePermiso('hacer:cambiar_precios')];
 // Dar de alta o quitar presentaciones y códigos es del catálogo.
 const catalogo = [...soloStaff, requirePermiso('ver:catalogo')];
 
 router.get('/', controller.listar);
 
 router.post('/', ...catalogo, validate(crearSchema), controller.crear);
-router.patch('/:id', ...soloJefes, validate(actualizarSchema), controller.actualizar);
+// Cambiar precios se autoriza (2026-10-19): quien no lo hace directo lo pide.
+router.patch('/:id', ...soloStaff, validate(actualizarSchema), autorizable('cambiar_precio'), controller.actualizar);
 router.delete('/:id', ...catalogo, controller.eliminar);
 
 // Precio de la variante para un tipo de cliente.
-router.put('/:id/precios', ...soloJefes, validate(precioTipoSchema), controller.fijarPrecioTipo);
+router.put('/:id/precios', ...soloStaff, validate(precioTipoSchema), autorizable('precio_lista'), controller.fijarPrecioTipo);
 
 // Códigos de barras adicionales de una variante
 // Antes de '/:id' para que 'resolver' no se interprete como un id.
 router.get('/resolver/:codigo', ...soloStaff, controller.resolverCodigo);
 // Del personal: dice dónde está cada bulto (y solo los de sus tiendas).
 router.get('/:id/codigos', ...soloStaff, controller.listarCodigos);
-router.post('/:id/codigos', ...catalogo, validate(codigoSchema), controller.agregarCodigo);
+// Un paquete a mano mete kilos: es un ingreso de inventario (se autoriza, 2026-10-19).
+router.post('/:id/codigos', ...catalogo, validate(codigoSchema), autorizable('bulto_a_mano'), controller.agregarCodigo);
 router.delete('/codigos/:codigoId', ...catalogo, controller.eliminarCodigo);
 
 module.exports = router;

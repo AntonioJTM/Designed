@@ -1365,6 +1365,42 @@ tienda-hilos/
   campana avisa a los 15 días (`nuevos_sin_credito`) para que se decida si se le abre
   crédito o se le sigue cobrando todo.
 
+- **AUTORIZACIONES (2026-10-19, fase 1)**: "que se haga la solicitud y el administrador o quien tenga
+  el permiso autorice la operación; mientras, no se puede hacer" (usuario). Cada operación de
+  `autorizaciones/operaciones.js` tiene su `hacer:*` (la hace directo y la AUTORIZA) y su `pedir:*` (la
+  pide). Su candado `autorizable('<op>')` va en la ruta DESPUÉS de `validate`: directo pasa; solo pedir →
+  428 NECESITA_AUTORIZACION (resumen y quién autoriza); `X-Pedir-Autorizacion` → solicitud pendiente
+  (202); `X-Autoriza` (quién + su CLAVE DE AUTORIZACIÓN de 4-6 números, aparte de la contraseña; se pone en
+  "Mi clave para autorizar", se revisa en `usuarios/service.js → claveDe`) → se hace en el momento y queda
+  anotada ANTES de hacerse; 10 equivocadas SEGUIDAS la apagan (contadas en la base) y la campana se lo dice
+  a su dueño. La solicitud es de las tiendas de quien pide (otra tienda: 404); la llave se
+  gasta una vez; lo de la caja vence al otro día; el ajuste no se hace si cambió el saldo; el crédito desde
+  la ficha pide SOLO el límite (`PUT /clientes/:id/limite-credito`) y no se hace si cambió mientras; la de
+  quien ya no la puede pedir se cierra sola; una interrumpida solo se CIERRA ('cerrada'). Aceptar (`POST /autorizaciones/:id/aprobar`) REPITE la petición guardada como
+  quien la pidió con una llave de un solo uso (`X-Autorizacion`): pasa por todo lo de siempre; si ya no se
+  puede, sigue pendiente con `ultimo_error`. Autoriza quien la hace directo y ve su tienda. En la pantalla,
+  `autorizacion.interceptor.ts` + `<app-autorizacion-dialogo>` (una vez en `app.ts`): ningún modal cambia;
+  "Pedir" le llega como error AUTORIZACION_PEDIDA (no un éxito falso). Un botón de una operación que se
+  autoriza se enseña con `AuthService.puedeOPide`; un 2xx con `X-Autorizacion-Pedida` = se guardó lo demás y
+  quedó pedido lo que se autoriza. Fase 1: efectivo, cancelar, devolución, corregir
+  deuda, saldo a favor, precios (y de lista), ajuste y merma, fiar atrasado (`soloEnElMomento`) y dar
+  crédito. Una operación nueva: su entrada en `operaciones.js`, sus dos permisos (catálogo + migración) y
+  `autorizable` en su ruta. Pantalla Autorizaciones (`ver:autorizaciones`) y aviso en la campana.
+  **Fase 2 (2026-10-19):** cargar mercancía (`cargar_inventario`, también el paquete a mano `bulto_a_mano`;
+  directo gerente y administrador, piden almacenista y Contabilidad), pedir a OTRA TIENDA (`surtir_sucursal`:
+  hasta aceptarla no hay traspaso; quien autoriza puede dar MENOS por renglón con `ajustes` —"de esos 20,
+  solo 10"—; es de dos tiendas, `conTienda: 'alguna'`) y VACACIONES ("Mis vacaciones", `GET/POST
+  /nomina/mis-vacaciones`; las autoriza «Autorizar vacaciones», nunca las propias; WhatsApp de texto al
+  aprobarlas y al rechazarlas, anotado en `aviso`). Ganchos de una operación: `alPedir`, `completar`,
+  `detalle`/`ajustar`, `alResolver`, `sinConsulta`, `siempreSePide`/`noASiMismo`.
+  **Decidido por el usuario (2026-10-19):** el anticipo y el abono POR TRANSFERENCIA se quedan sin
+  autorización. No los "arregles".
+  **Fase 3 (2026-10-19), la NÓMINA:** la preparan la gerente y Contabilidad (`ver:nomina`); PAGARLA
+  (`pagar_nomina`) la autoriza solo el administrador, y se autoriza lo que se pidió: si los recibos cambian
+  (su FIRMA), no se paga y la solicitud se cierra sola; pedirla otra vez reemplaza la anterior. NADIE toca
+  su propia nómina (recibo ni sueldo; `noEsSuya`, 403 ES_TU_NOMINA) salvo el administrador, y las vacaciones
+  en Nómina las registra solo «Autorizar vacaciones». Lo demás (calcular, bonos, sueldos de otros,
+  cancelar) va directo: así lo eligió el usuario.
 - **Permisos por PUESTO (2026-10).** Los asigna el administrador en Admin → Permisos ("los
   permisos los asigna el administrador"). Viven en `permisos` + `rol_permisos` (migración
   `2026-10_permisos_por_puesto.sql`, solo datos) y el catálogo con nombre y ayuda está en

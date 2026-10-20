@@ -227,7 +227,7 @@ export interface ResumenPedidos {
 
 export interface PermisoCatalogo {
   grupo: string;
-  tipo: 'pantalla' | 'accion';
+  tipo: 'pantalla' | 'accion' | 'pedir';
   clave: string;
   nombre: string;
   ayuda: string;

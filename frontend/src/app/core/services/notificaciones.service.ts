@@ -87,6 +87,10 @@ export interface Pendientes {
    * celular, o ya enlazado no conecta desde hace 10 minutos. null si está bien.
    */
   whatsapp?: { motivo: 'sesion_cerrada' | 'sin_conexion'; desde: string | null } | null;
+  /** Las solicitudes que esperan la autorización de esta persona (2026-10-19). */
+  autorizaciones?: { num: number };
+  /** Su clave para autorizar se apagó: alguien la escribió mal 10 veces seguidas. */
+  mi_clave_apagada?: { desde: string; por: string | null } | null;
   /** Notas pendientes de pago (se llevaron la mercancía sin pagar): UN aviso. */
   notas_pendientes?: {
     num: number;
@@ -129,7 +133,7 @@ export class NotificacionesService {
     // EN VIVO (2026-10-19): cuando alguien guarda algo que cambia los avisos, la
     // campana se pone al día en un par de segundos. El minuto queda de respaldo.
     this.enVivo ??= this.tiempoReal
-      .cambios(['avisos', 'inventario', 'ventas', 'caja', 'traspasos', 'clientes', 'catalogo'], 800)
+      .cambios(['avisos', 'inventario', 'ventas', 'caja', 'traspasos', 'clientes', 'catalogo', 'autorizaciones'], 800)
       .subscribe(() => this.refrescar());
     if (this.reloj) return;
     this.reloj = setInterval(() => this.refrescar(), NotificacionesService.CADA_MS);

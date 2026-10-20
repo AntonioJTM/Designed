@@ -4,6 +4,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { autorizacionInterceptor } from './core/interceptors/autorizacion.interceptor';
 import { TituloPorPantalla } from './core/titulos';
 
 export const appConfig: ApplicationConfig = {
@@ -13,6 +14,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     // Cada pestaña dice qué pantalla es: "Inventario · Hitex".
     { provide: TitleStrategy, useClass: TituloPorPantalla },
-    provideHttpClient(withInterceptors([authInterceptor])),
+    // Autorizaciones (2026-10-19): si una operación necesita autorización, pregunta y la vuelve a mandar.
+    provideHttpClient(withInterceptors([authInterceptor, autorizacionInterceptor])),
   ],
 };

@@ -357,6 +357,19 @@ async function listarRecibos(periodoId) {
   return recibos;
 }
 
+/** De quién es un recibo o un concepto (nadie toca su propia nómina, 2026-10-19). */
+async function duenoDeRecibo(reciboId) {
+  const [[r]] = await pool.query('SELECT usuario_id FROM nomina_recibos WHERE id = :id', { id: Number(reciboId) });
+  return r ? Number(r.usuario_id) : null;
+}
+async function duenoDeConcepto(conceptoId) {
+  const [[r]] = await pool.query(
+    'SELECT r.usuario_id FROM nomina_recibo_conceptos c JOIN nomina_recibos r ON r.id = c.recibo_id WHERE c.id = :id',
+    { id: Number(conceptoId) }
+  );
+  return r ? Number(r.usuario_id) : null;
+}
+
 async function obtenerRecibo(id) {
   const [rows] = await pool.query(
     `SELECT r.*, u.nombre AS usuario, p.estado AS periodo_estado
@@ -722,6 +735,8 @@ function _diaSiguiente(fecha) {
 }
 
 module.exports = {
+  duenoDeRecibo,
+  duenoDeConcepto,
   listarEmpleados,
   obtenerEmpleado,
   guardarEmpleado,

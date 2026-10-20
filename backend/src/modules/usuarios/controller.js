@@ -123,4 +123,13 @@ async function roles(req, res, next) {
   }
 }
 
-module.exports = { iniciarSesion, perfil, listar, crear, actualizar, roles };
+/** "Mi clave para autorizar" (2026-10-19): la de quien tiene la sesión. */
+async function fijarClaveAutorizacion(req, res, next) {
+  try {
+    res.json({ data: await service.fijarClaveAutorizacion(req.auth.sub, req.body), error: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { iniciarSesion, perfil, listar, crear, actualizar, roles, fijarClaveAutorizacion };

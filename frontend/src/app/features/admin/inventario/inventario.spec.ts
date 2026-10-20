@@ -225,7 +225,10 @@ describe('Inventario', () => {
 
   /** Los permisos del puesto; null = todos (el administrador). */
   let permisos: string[] | null = null;
-  const authFalso = { puede: (p: string) => permisos === null || permisos.includes(p) };
+  const authFalso = {
+    puede: (p: string) => permisos === null || permisos.includes(p),
+    puedeOPide: (p: string) => permisos === null || permisos.includes(p) || permisos.includes(p.replace('hacer:', 'pedir:')),
+  };
 
   async function montarFixture() {
     await TestBed.configureTestingModule({

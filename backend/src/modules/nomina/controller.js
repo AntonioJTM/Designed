@@ -38,7 +38,28 @@ async function vacacionesDe(req, res, next) {
 
 async function registrarVacaciones(req, res, next) {
   try {
+    const { esAdmin } = require('../permisos/service');
+    service.exigirQueNoSeanSuyas(Number(req.params.usuarioId), req.auth.sub, await esAdmin(req.auth));
     const data = await service.registrarVacaciones(Number(req.params.usuarioId), req.body, req.auth.sub);
+    return res.status(201).json({ data, error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// MIS VACACIONES (2026-10-19): las de quien tiene la sesión.
+async function misVacaciones(req, res, next) {
+  try {
+    return res.json({ data: await require('./service').misVacaciones(req.auth.sub), error: null });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** Ya pasó por su candado: o se las autorizaron (al aceptarlas) o es el administrador. */
+async function registrarMisVacaciones(req, res, next) {
+  try {
+    const data = await service.registrarVacaciones(req.auth.sub, req.body, req.auth.sub, { propias: true });
     return res.status(201).json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -47,7 +68,8 @@ async function registrarVacaciones(req, res, next) {
 
 async function eliminarVacaciones(req, res, next) {
   try {
-    const data = await service.eliminarVacaciones(Number(req.params.id));
+    const { esAdmin } = require('../permisos/service');
+    const data = await service.eliminarVacaciones(Number(req.params.id), { yo: req.auth.sub, esAdmin: await esAdmin(req.auth) });
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -95,7 +117,28 @@ async function calcular(req, res, next) {
 
 async function cambiarEstado(req, res, next) {
   try {
-    const data = await service.cambiarEstado(Number(req.params.id), req.body.estado);
+    const id = Number(req.params.id);
+    const { puede } = require('../permisos/service');
+    const { AppError } = require('../../middlewares/error');
+    // Cancelar una nómina YA PAGADA o sacar una de cancelada suelta o vuelve a
+    // contar sus comisiones (se pagarían dos veces): solo quien paga la nómina
+    // (fase 3, 2026-10-19). La pantalla solo cancela las de borrador.
+    const actual = await require('./model').obtenerPeriodo(id);
+    if (actual && (actual.estado === 'cancelado' || (actual.estado === 'pagado' && req.body.estado === 'cancelado'))
+        && actual.estado !== req.body.estado && !(await puede(req.auth, 'hacer:pagar_nomina'))) {
+      throw new AppError(403, 'SOLO_QUIEN_PAGA',
+        'Cancelar una nómina ya pagada, o reabrir una cancelada, lo hace solo quien paga la nómina.');
+    }
+    // Pagarla con autorización: se paga lo que se autorizó. Se revisa otra vez
+    // justo antes (pudo cambiar entre que se aceptó y que se hace).
+    if (req.autorizado?.id && req.body.estado === 'pagado') {
+      const ctx = await require('../autorizaciones/model').contextoDe(req.autorizado.id);
+      const ahora = await require('../autorizaciones/operaciones').resumenNomina(id);
+      if (ctx?.firma && ahora.firma !== ctx.firma) {
+        throw new AppError(409, 'NOMINA_CAMBIO', 'La nómina cambió desde que se pidió: que se vuelva a pedir.');
+      }
+    }
+    const data = await service.cambiarEstado(id, req.body.estado);
     return res.json({ data, error: null });
   } catch (err) {
     return next(err);
@@ -169,6 +212,8 @@ module.exports = {
   guardarEmpleado,
   vacacionesDe,
   registrarVacaciones,
+  misVacaciones,
+  registrarMisVacaciones,
   eliminarVacaciones,
   fijarDiasTrabajados,
   agregarHorasExtra,

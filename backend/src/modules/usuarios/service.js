@@ -209,7 +209,67 @@ async function perfil(id) {
   return sanitizar(usuario);
 }
 
+/**
+ * ¿Es la CLAVE DE AUTORIZACIÓN de esta persona? (2026-10-19) Para autorizar en el
+ * momento: quien autoriza la escribe en la pantalla de quien pide. Es un número
+ * APARTE de su contraseña (si alguien la ve en la caja, no entra al sistema con
+ * ella). Activa y que entra al sistema. Devuelve `{ id, nombre }` o null; los
+ * hashes no salen de este módulo.
+ */
+// Equivocadas SEGUIDAS contra la misma persona (de quien sea) para que su clave
+// se apague: con 4 números hay 10,000 y así no se adivina a la fuerza.
+const LIMITE_CLAVE = 10;
+
+/**
+ * ¿Es la clave de autorización de esta persona? Equivocada, cuenta (y a las
+ * `LIMITE_CLAVE` seguidas se apaga: `{ apagada: true }`); buena, vuelve a cero.
+ */
+async function claveDe(usuarioId, clave, { porId = null } = {}) {
+  const u = await model.buscarParaClave(Number(usuarioId) || 0);
+  if (!u || !u.clave_autorizacion_hash) return null;
+  if (!(await verificarPassword(String(clave ?? ''), u.clave_autorizacion_hash))) {
+    const apagada = await model.claveEquivocada(Number(u.id), porId, LIMITE_CLAVE);
+    if (apagada) {
+      console.warn(`[autorizaciones] la clave de ${u.id} se apagó: ${LIMITE_CLAVE} equivocadas seguidas (la última, de ${porId})`);
+    }
+    return { equivocada: true, apagada };
+  }
+  await model.claveBuena(Number(u.id));
+  return { id: Number(u.id), nombre: u.nombre };
+}
+
+/** Para la campana de quien la tenía: su clave se apagó por equivocadas. */
+async function claveApagada(usuarioId) {
+  return model.claveApagada(Number(usuarioId) || 0);
+}
+
+/**
+ * "MI CLAVE PARA AUTORIZAR": cada quien pone (o cambia) la suya, confirmando con
+ * su contraseña de entrar. De 4 a 6 números, y no puede ser su contraseña.
+ */
+async function fijarClaveAutorizacion(usuarioId, { contrasena, clave }) {
+  if (!/^\d{4,6}$/.test(String(clave ?? ''))) {
+    throw new AppError(422, 'CLAVE_INVALIDA', 'La clave para autorizar son de 4 a 6 números.');
+  }
+  const u = await model.buscarParaClave(Number(usuarioId) || 0);
+  if (!u || !(await verificarPassword(String(contrasena ?? ''), u.contrasena_hash))) {
+    throw new AppError(403, 'CONTRASENA_INCORRECTA', 'Tu contraseña no es correcta.');
+  }
+  await model.fijarClaveAutorizacion(u.id, await hashPassword(String(clave)));
+  return { tiene_clave_autorizacion: true };
+}
+
+/** De estas personas, las que ya pusieron su clave de autorización. */
+async function conClaveAutorizacion(ids) {
+  return model.conClaveAutorizacion(ids.map(Number));
+}
+
 module.exports = {
+  claveDe,
+  claveApagada,
+  LIMITE_CLAVE,
+  fijarClaveAutorizacion,
+  conClaveAutorizacion,
   crearStaff,
   iniciarSesion,
   perfil,

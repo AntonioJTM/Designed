@@ -132,7 +132,7 @@ export class Inventario {
   // Lo que el puesto puede hacer aquí. El servidor también lo rechaza (403);
   // esconderlo es para no ofrecer lo que va a fallar.
   readonly puedeBajarConos = computed(() => this.auth.puede('hacer:bajar_conos'));
-  readonly puedeAjustar = computed(() => this.auth.puede('hacer:ajuste_merma'));
+  readonly puedeAjustar = computed(() => this.auth.puedeOPide('hacer:ajuste_merma'));
   readonly veKardex = computed(() => this.auth.puede('ver:kardex'));
 
   // Filtros del detalle

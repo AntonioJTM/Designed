@@ -13,7 +13,8 @@ const { pool, withTransaction } = require('../../config/db');
 // y entonces su correo viene en NULL.
 const CAMPOS_PUBLICOS = `
   u.id, u.rol_id, r.nombre AS rol, r.entra_al_sistema, u.nombre, u.correo, u.telefono,
-  u.activo, u.todas_las_tiendas, u.ultimo_acceso, u.creado_en, u.actualizado_en
+  u.activo, u.todas_las_tiendas, u.ultimo_acceso, u.creado_en, u.actualizado_en,
+  (u.clave_autorizacion_hash IS NOT NULL) AS tiene_clave_autorizacion
 `;
 
 /**
@@ -105,6 +106,81 @@ async function buscarPorCorreoConHash(correo) {
     { correo }
   );
   return rows[0] || null;
+}
+
+/**
+ * Para AUTORIZAR EN EL MOMENTO (2026-10-19): la persona con sus hashes (la
+ * contraseña, para confirmar al poner su clave; la clave de autorización, para
+ * autorizar), si está activa y su puesto entra al sistema. Solo la usa el servicio.
+ */
+async function buscarParaClave(id) {
+  const [rows] = await pool.query(
+    `SELECT u.id, u.nombre, u.contrasena_hash, u.clave_autorizacion_hash
+       FROM usuarios u
+       JOIN roles r ON r.id = u.rol_id
+      WHERE u.id = :id AND u.activo = 1 AND r.entra_al_sistema = 1
+      LIMIT 1`,
+    { id }
+  );
+  return rows[0] || null;
+}
+
+async function fijarClaveAutorizacion(id, hash) {
+  await pool.query(
+    `UPDATE usuarios SET clave_autorizacion_hash = :hash, clave_autorizacion_fallos = 0,
+            clave_autorizacion_apagada_en = NULL, clave_autorizacion_apagada_por = NULL
+      WHERE id = :id`,
+    { id, hash }
+  );
+}
+
+/**
+ * Una clave de autorización EQUIVOCADA contra esta persona (la escribió quien
+ * pide, `porId`). A las `limite` seguidas la clave se APAGA. Devuelve si se apagó.
+ * `actualizado_en = actualizado_en`: esto no es editar a la persona.
+ */
+async function claveEquivocada(id, porId, limite) {
+  await pool.query(
+    `UPDATE usuarios SET clave_autorizacion_fallos = LEAST(clave_autorizacion_fallos + 1, 255), actualizado_en = actualizado_en
+      WHERE id = :id AND clave_autorizacion_hash IS NOT NULL`,
+    { id }
+  );
+  const [r] = await pool.query(
+    `UPDATE usuarios SET clave_autorizacion_hash = NULL, clave_autorizacion_fallos = 0, clave_autorizacion_apagada_en = NOW(),
+            clave_autorizacion_apagada_por = :por, actualizado_en = actualizado_en
+      WHERE id = :id AND clave_autorizacion_hash IS NOT NULL AND clave_autorizacion_fallos >= :limite`,
+    { id, por: porId ?? null, limite }
+  );
+  return r.affectedRows > 0;
+}
+
+/** La escribió bien: vuelve a contar desde cero. */
+async function claveBuena(id) {
+  await pool.query(
+    'UPDATE usuarios SET clave_autorizacion_fallos = 0, actualizado_en = actualizado_en WHERE id = :id AND clave_autorizacion_fallos > 0',
+    { id }
+  );
+}
+
+/** Si su clave se apagó por equivocadas: cuándo y quién la escribió mal la última vez. */
+async function claveApagada(id) {
+  const [[r]] = await pool.query(
+    `SELECT DATE_FORMAT(u.clave_autorizacion_apagada_en, '%Y-%m-%d %H:%i:%s') AS desde, p.nombre AS por
+       FROM usuarios u LEFT JOIN usuarios p ON p.id = u.clave_autorizacion_apagada_por
+      WHERE u.id = :id AND u.clave_autorizacion_apagada_en IS NOT NULL AND u.clave_autorizacion_hash IS NULL`,
+    { id }
+  );
+  return r ?? null;
+}
+
+/** De estas personas, las que ya pusieron su clave de autorización. */
+async function conClaveAutorizacion(ids) {
+  if (!ids.length) return new Set();
+  const [rows] = await pool.query(
+    'SELECT id FROM usuarios WHERE id IN (:ids) AND clave_autorizacion_hash IS NOT NULL',
+    { ids }
+  );
+  return new Set(rows.map((r) => Number(r.id)));
 }
 
 /** Devuelve un usuario por id sin datos sensibles. */
@@ -250,6 +326,12 @@ async function listarRoles() {
 
 module.exports = {
   buscarPorCorreoConHash,
+  buscarParaClave,
+  fijarClaveAutorizacion,
+  claveEquivocada,
+  claveBuena,
+  claveApagada,
+  conClaveAutorizacion,
   buscarPorId,
   conOtrosRoles,
   obtenerRol,

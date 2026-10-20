@@ -81,7 +81,15 @@
                 <span aria-hidden="true">$</span>
                 <input type="number" min="0" step="1" formControlName="limite_credito" />
               </span>
-              <span class="ayuda">En cero no se le da nada a crédito.</span>
+              <span class="ayuda">
+                @if (!puedeDarCredito() && puedePedirCredito()) {
+                  Subirlo lo autoriza quien da crédito.
+                } @else if (!puedePedirCredito()) {
+                  Lo cambia quien da crédito.
+                } @else {
+                  En cero no se le da nada a crédito.
+                }
+              </span>
             </label>
             <label class="field">
               Cliente desde

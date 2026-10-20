@@ -43,6 +43,8 @@ export class VacacionesModal implements OnInit {
   private readonly confirmacion = inject(ConfirmacionService);
 
   readonly empleado = input.required<EmpleadoNomina>();
+  /** Registrar o quitar: solo quien autoriza vacaciones (fase 3); los demás las ven. */
+  readonly puedeRegistrar = input(true);
   readonly cerrado = output<void>();
   /** Cambió su saldo: el listado se recarga. */
   readonly cambiado = output<void>();

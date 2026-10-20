@@ -82,7 +82,7 @@ describe('PedidoDetalle', () => {
         provideRouter([]),
         { provide: VentasService, useValue: ventasFalso },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '5' } } } },
-        { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k) } },
+        { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k), puedeOPide: (k: string) => permisos.has(k) || permisos.has(k.replace('hacer:', 'pedir:')) } },
         // La ventana de confirmación del sistema: contesta lo que diga `respuesta`.
         { provide: ConfirmacionService, useValue: { pedir: () => Promise.resolve(respuesta) } },
       ],

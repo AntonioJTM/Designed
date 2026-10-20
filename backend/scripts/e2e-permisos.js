@@ -72,6 +72,9 @@ const ck = (n, ok, d) => {
   const almacen = como('almacenista');
   const negado = (r) => r.status === 403 && r.error?.code === 'SIN_PERMISO';
   const paso = (r) => r.status !== 403 && r.status !== 401;
+  // AUTORIZACIONES (2026-10-19): no la hace directo pero la puede PEDIR. Los datos
+  // se revisan ANTES del candado, por eso estas van con un cuerpo válido.
+  const pide = (r) => r.status === 428 && r.error?.code === 'NECESITA_AUTORIZACION';
 
   try {
     console.log('=== 1. La pantalla Permisos es solo del administrador ===');
@@ -111,20 +114,24 @@ const ck = (n, ok, d) => {
     ck('almacenista → Clientes: no', negado(await almacen('GET', '/clientes/analisis/deuda')));
     ck('cajero → Cómo va el negocio: no', (await cajero('GET', '/analisis/tablero')).status === 403);
     ck('gerente → Cómo va el negocio: sí', (await gerente('GET', '/analisis/tablero')).status === 200);
-    ck('gerente → Nómina: no', (await gerente('GET', '/nomina/periodos')).status === 403);
+    // La PREPARA la gerente (autorizaciones fase 3, 2026-10-19); pagarla se autoriza.
+    ck('gerente → Nómina: sí (la prepara)', (await gerente('GET', '/nomina/periodos')).status === 200);
+    ck('gerente → pagar una nómina que no existe: 404, ni se pide', (await gerente('PATCH', `/nomina/periodos/${NO_EXISTE}/estado`, { estado: 'pagado' })).status === 404);
     ck('gerente → Personal: no', (await gerente('GET', '/usuarios')).status === 403);
 
     console.log('\n=== 4. Acciones: el servidor las niega aunque se manden a mano ===');
     // Corregir una deuda
-    ck('cajero → corregir deuda: no', negado(await cajero('POST', `/clientes/${NO_EXISTE}/ajustes`, {})));
+    ck('cajero → corregir deuda: la pide (428)', pide(await cajero('POST', `/clientes/${NO_EXISTE}/ajustes`, { monto: 1, notas: 'prueba' })));
+    ck('almacenista → corregir deuda: no', negado(await almacen('POST', `/clientes/${NO_EXISTE}/ajustes`, { monto: 1, notas: 'prueba' })));
     ck('administrador → pasa la guarda (422 del dato)', paso(await admin('POST', `/clientes/${NO_EXISTE}/ajustes`, {})));
-    ck('cajero → ajustar saldo a favor: no', negado(await cajero('POST', `/clientes/${NO_EXISTE}/saldo-favor/ajuste`, {})));
+    ck('cajero → ajustar saldo a favor: lo pide (428)', pide(await cajero('POST', `/clientes/${NO_EXISTE}/saldo-favor/ajuste`, { monto: 1, notas: 'prueba' })));
     ck('administrador → ajustar saldo a favor pasa la guarda (422 del dato)', paso(await admin('POST', `/clientes/${NO_EXISTE}/saldo-favor/ajuste`, {})));
     // Cambiar precios
-    ck('cajero → cambiar precio: no', negado(await cajero('PATCH', `/variantes/${NO_EXISTE}`, { precio: -1 })));
+    ck('cajero → cambiar precio: no', negado(await cajero('PATCH', `/variantes/${NO_EXISTE}`, { precio: 1 })));
     ck('gerente → pasa la guarda', paso(await gerente('PATCH', `/variantes/${NO_EXISTE}`, { precio: -1 })));
     // Cancelar una venta
-    ck('cajero → cancelar venta: no', negado(await cajero('PATCH', `/pedidos/${NO_EXISTE}/estado`, { estado: 'cancelado' })));
+    // La cajera la PIDE; la de una venta que no existe (o de otra tienda) ni se pide: 404.
+    ck('cajero → cancelar una venta que no existe: 404, no se pide', (await cajero('PATCH', `/pedidos/${NO_EXISTE}/estado`, { estado: 'cancelado' })).status === 404);
     ck('gerente → pasa la guarda (404)', paso(await gerente('PATCH', `/pedidos/${NO_EXISTE}/estado`, { estado: 'cancelado' })));
     // Modificar un pedido en espera (Pedidos lo trae de fábrica el cajero)
     ck('cajero → modificar un pedido: pasa la guarda (404)', paso(await cajero('PUT', `/pedidos/${NO_EXISTE}/encargo`, { lineas: [{ detalle_id: 1 }] })));
@@ -137,7 +144,8 @@ const ck = (n, ok, d) => {
     // Cajas: dar de alta es configuración
     ck('cajero → dar de alta una caja: no', negado(await cajero('POST', '/caja/cajas', {})));
     // Mercancía
-    ck('cajero → ajuste/merma: no', negado(await cajero('POST', '/inventario/movimientos', {})));
+    const merma = { variante_id: NO_EXISTE, almacen_id: NO_EXISTE, tipo: 'merma', cantidad: 1 };
+    ck('cajero → ajuste/merma: no', negado(await cajero('POST', '/inventario/movimientos', merma)));
     ck('almacenista → pasa la guarda (422)', paso(await almacen('POST', '/inventario/movimientos', {})));
     ck('cajero → bajar conos: no', negado(await cajero('POST', '/inventario/desarmes', {})));
     ck('almacenista → pasa la guarda (422)', paso(await almacen('POST', '/inventario/desarmes', {})));

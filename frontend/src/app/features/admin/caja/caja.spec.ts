@@ -45,7 +45,7 @@ describe('CajaPantalla', () => {
         provideRouter([]),
         { provide: VentasService, useValue: ventasFalso },
         { provide: InventarioService, useValue: { almacenes: () => of([]), misAlmacenes: () => of([]) } },
-        { provide: AuthService, useValue: { sesion: () => ({}), puede: (p: string) => permisos.includes(p) } },
+        { provide: AuthService, useValue: { sesion: () => ({}), puede: (p: string) => permisos.includes(p), puedeOPide: (p: string) => permisos.includes(p) || permisos.includes(p.replace('hacer:', 'pedir:')) } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(CajaPantalla);

@@ -136,6 +136,14 @@ async function actualizar(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Solo el límite de crédito (2026-10-19): lo que se pide y se autoriza. */
+async function fijarLimite(req, res, next) {
+  try {
+    const data = await service.fijarLimite(Number(req.params.id), req.body.limite_credito);
+    res.json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
 // --- Crédito ---
 
 async function abonar(req, res, next) {
@@ -242,6 +250,7 @@ async function lugaresActualizar(req, res, next) {
 
 module.exports = {
   notasCredito,
+  fijarLimite,
   lugaresListar, lugaresCrear, lugaresActualizar,
   aplicarSaldoFavor,
   recibirAnticipo,

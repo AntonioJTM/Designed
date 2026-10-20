@@ -72,6 +72,34 @@ export interface VacacionesRegistro {
   creado_por: string | null;
 }
 
+/** Unas vacaciones que la persona pidió en "Mis vacaciones" (2026-10-19). */
+export interface VacacionPedida {
+  id: number;
+  estado: 'pendiente' | 'aprobando' | 'aprobada' | 'rechazada' | 'cancelada' | 'vencida' | 'cerrada';
+  fecha_inicio: string;
+  fecha_fin: string;
+  notas: string | null;
+  /** Por qué no se aprobaron. */
+  motivo: string | null;
+  /** Si se le avisó por WhatsApp. */
+  aviso: string | null;
+  solicitado_en: string;
+  resuelto_en: string | null;
+  autorizador: string | null;
+}
+
+/** "Mis vacaciones": lo de quien tiene la sesión. Sin nómina, solo lo que pidió. */
+export interface MisVacaciones {
+  en_nomina: boolean;
+  nombre: string;
+  fecha_ingreso?: string | null;
+  horario?: DiaHorario[];
+  saldo?: SaldoVacaciones | null;
+  registros?: VacacionesRegistro[];
+  hoy?: string;
+  pedidas: VacacionPedida[];
+}
+
 export interface VacacionesEmpleado {
   usuario_id: number;
   nombre: string;
@@ -135,6 +163,8 @@ export interface PeriodoNomina {
   actualizado_en: string;
   recibos: ReciboNomina[];
   total_nomina: number;
+  /** Alguien pidió que se pague y espera autorización (fase 3). */
+  pago_pedido?: { id: number; solicitante: string; solicitado_en: string } | null;
 }
 
 /** Fila del listado histórico de periodos. */

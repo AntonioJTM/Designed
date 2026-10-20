@@ -84,6 +84,37 @@
 
           @if (pendientes(); as p) {
             <div class="avisos-cuerpo">
+              <!-- Solicitudes que esperan SU autorización (2026-10-19): hasta arriba, casi siempre alguien espera. -->
+              @if (veAutorizaciones() && (p.autorizaciones?.num ?? 0) > 0) {
+                <div class="avisos-grupo">
+                  <h3>Autorizaciones</h3>
+                  <button type="button" class="aviso-fila" (click)="irA(url(destino.autorizaciones))">
+                    <span class="icono tono-ambar" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.autoriza"></path></svg></span>
+                    <span class="que">
+                      <b>{{ p.autorizaciones!.num === 1 ? '1 solicitud espera tu autorización' : p.autorizaciones!.num + ' solicitudes esperan tu autorización' }}</b>
+                      <span>Acéptala o recházala; al aceptarla se hace en ese momento</span>
+                    </span>
+                    <span class="ir" aria-hidden="true">Ver ›</span>
+                  </button>
+                </div>
+              }
+              <!-- Su clave para autorizar se apagó por equivocadas (2026-10-19): solo la vuelve a poner él. -->
+              @if (p.mi_clave_apagada; as c) {
+                <div class="avisos-grupo">
+                  <h3>Tu clave</h3>
+                  <button type="button" class="aviso-fila" (click)="abrirMiClave()">
+                    <span class="icono tono-naranja" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.autoriza"></path></svg></span>
+                    <span class="que">
+                      <b>Tu clave para autorizar se apagó</b>
+                      <span>
+                        Se escribió mal 10 veces seguidas {{ cuando(c.desde) }}@if (c.por) { (la última vez, en la sesión de {{ c.por }})}.
+                        Ponla otra vez, distinta.
+                      </span>
+                    </span>
+                    <span class="ir" aria-hidden="true">Ponerla ›</span>
+                  </button>
+                </div>
+              }
               <!-- El WhatsApp de la tienda se desconectó (2026-10-16): arriba, porque los tickets ya no salen solos. -->
               @if (veConfig() && p.whatsapp; as w) {
                 <div class="avisos-grupo">
@@ -238,6 +269,13 @@
         </section>
       }
 
+      @if (autoriza()) {
+        <!-- La clave con que autoriza en la pantalla de quien pide (2026-10-19), aparte de su contraseña. -->
+        <button type="button" class="salir" (click)="miClave.set(true)">Mi clave para autorizar</button>
+      }
+      @if (pideVacaciones()) {
+        <button type="button" class="salir" (click)="misVacaciones.set(true)">Mis vacaciones</button>
+      }
       <button type="button" class="salir" (click)="salir()">Salir</button>
     </div>
   </aside>
@@ -249,3 +287,6 @@
   <!-- Dice en voz alta a qué pantalla se llegó, cuando el cursor no se movió a ella. -->
   <p class="oculto" role="status">{{ anuncio() }}</p>
 </div>
+
+@if (miClave()) { <app-mi-clave-modal (cerrado)="miClave.set(false)" /> }
+@if (misVacaciones()) { <app-mis-vacaciones-modal (cerrado)="misVacaciones.set(false)" /> }

@@ -15,6 +15,7 @@ export const DESTINO_AVISO = {
   notasPendientes: { ruta: '/admin/notas-pendientes' },
   cobranza: { ruta: '/admin/clientes/deuda' },
   dejaronDeVenir: { ruta: '/admin/clientes/dejaron' },
+  autorizaciones: { ruta: '/admin/autorizaciones' },
 } satisfies Record<string, DestinoAviso>;
 
 /** La dirección completa ("/admin/inventario?ver=minimo"), para `navigateByUrl`. */

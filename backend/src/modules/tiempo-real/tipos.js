@@ -22,6 +22,7 @@ const POR_PREFIJO = [
   ['/categorias', ['catalogo']],
   ['/tipos-cliente', ['catalogo']],
   ['/proveedores', ['catalogo']],
+  ['/autorizaciones', ['autorizaciones', 'avisos']],
   ['/almacenes', ['almacenes', 'inventario', 'caja']],
   // Nómina, personal, permisos y configuración: ninguna pantalla los escucha
   // todavía, así que no se avisan (revisión de tiendas, 2026-10-19).

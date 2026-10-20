@@ -473,7 +473,7 @@
               <option value="vendidos">Vendidos</option>
               <option value="desarmados">Bajados a conos</option>
             </select>
-            @if (principal()) {
+            @if (principal() && puedeCargar()) {
               <button type="button" class="btn btn-ghost btn-sm" (click)="abrirBulto()">Agregar bulto a mano</button>
             }
           </div>

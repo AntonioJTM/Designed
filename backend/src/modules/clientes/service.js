@@ -281,6 +281,14 @@ async function registrarAbono(id, datos, usuarioId, opciones = {}) {
   return model.registrarAbono(id, { ...datos, monto }, usuarioId, opciones);
 }
 
+/** Solo el límite de crédito (2026-10-19). */
+async function fijarLimite(id, limite) {
+  const cliente = await model.obtener(id);
+  if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
+  await model.fijarLimiteCredito(id, Math.round(Number(limite) * 100) / 100);
+  return model.obtener(id);
+}
+
 /** Lo que debe en total y las notas a crédito que se pueden pagar una por una. */
 async function notasCredito(id, almacenes) {
   const cliente = await model.obtener(id);
@@ -353,6 +361,7 @@ async function recibirAnticipo(id, datos, usuarioId) {
 
 module.exports = {
   notasCredito,
+  fijarLimite,
   aplicarSaldoFavor,
   ajustarSaldoFavor,
   loQueLleva,

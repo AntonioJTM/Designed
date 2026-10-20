@@ -5,6 +5,7 @@ const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
 const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
+const { autorizable } = require('../autorizaciones/autorizable');
 
 const router = Router();
 
@@ -133,20 +134,26 @@ router.put('/lugares-entrega/:id', ...soloStaff, validate(lugarSchema), controll
 router.get('/analisis/:vista', ...soloStaff, requirePermiso('ver:clientes'), requireTodasLasTiendas, controller.analisis);
 
 router.get('/', ...soloStaff, controller.listar);
-router.post('/', ...soloStaff, validate(expedienteSchema), controller.crearDesdeStaff);
+// Darle crédito a un cliente nuevo o SUBÍRSELO se autoriza (2026-10-19). En el
+// alta, solo en el momento (o se da de alta sin crédito y se pide desde su ficha).
+router.post('/', ...soloStaff, validate(expedienteSchema), autorizable('credito_alta'), controller.crearDesdeStaff);
 router.get('/:id', ...soloStaff, controller.expediente);
 // "Lo que siempre lleva" (2026-10-16): sus 5 hilos más comprados, para la caja.
 router.get('/:id/lo-que-lleva', ...soloStaff, controller.loQueLleva);
 // Las notas a crédito que se pueden pagar una por una (2026-10-19).
 router.get('/:id/notas-credito', ...soloStaff, controller.notasCredito);
-router.put('/:id', ...soloStaff, validate(editarSchema), controller.actualizar);
+// Desde la ficha, pedirlo guarda la ficha y deja pedido SOLO el límite (su ruta, abajo).
+router.put('/:id', ...soloStaff, validate(editarSchema), autorizable('dar_credito'), controller.actualizar);
+// El límite de crédito solo: lo que queda en la solicitud y lo que se hace al aceptarla.
+const limiteSchema = z.object({ limite_credito: z.coerce.number().min(0).max(99999999) }).strict();
+router.put('/:id/limite-credito', ...soloStaff, validate(limiteSchema), autorizable('dar_credito'), controller.fijarLimite);
 
 // Crédito. El estado de cuenta viaja dentro del expediente (GET /:id) y la lista
 // de quién debe, en el tablero (GET /analisis/tablero).
 router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), controller.abonar);
 // Los datos de su ticket, al registrarlo o para reimprimirlo (2026-10-15).
 router.get('/:id/abonos/:movId/ticket', ...soloStaff, controller.ticketAbono);
-router.post('/:id/ajustes', ...soloStaff, requirePermiso('hacer:corregir_deuda'), validate(ajusteSchema), controller.ajustar);
+router.post('/:id/ajustes', ...soloStaff, validate(ajusteSchema), autorizable('corregir_deuda'), controller.ajustar);
 
 // SALDO A FAVOR (2026-10-13): lo que le quedó de una devolución se descuenta de
 // lo que debe cuando él lo pide. Sin `monto`, todo lo que alcance.
@@ -162,7 +169,7 @@ const ajusteSaldoSchema = z
     notas: z.string().trim().min(1, 'Escribe el motivo').max(255),
   })
   .strict();
-router.post('/:id/saldo-favor/ajuste', ...soloStaff, requirePermiso('hacer:corregir_deuda'), validate(ajusteSaldoSchema), controller.ajustarSaldoFavor);
+router.post('/:id/saldo-favor/ajuste', ...soloStaff, validate(ajusteSaldoSchema), autorizable('ajustar_saldo_favor'), controller.ajustarSaldoFavor);
 
 // ANTICIPO (2026-10-14): dinero a cuenta, sin nota, en efectivo y/o por
 // transferencia; le queda a favor. El efectivo exige el turno que lo recibe.

@@ -419,20 +419,7 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         throw new AppError(422, 'CREDITO_MAYOR_AL_TOTAL',
           `Se quiere dejar a crédito $${aCredito.toFixed(2)} de una venta de $${total.toFixed(2)}.`);
       }
-      // CUENTA ATRASADA (2026-10-16: "no fiarle a ciegas cuando trae cuenta
-      // vencida"): si debe y lleva más de DIAS_SIN_ABONAR días sin abonar, no se
-      // le fía sin que la caja lo confirme (`fiar_con_atraso`). Es un candado con
-      // llave: la caja lo pregunta y la tienda decide.
-      if (datos.fiar_con_atraso !== true) {
-        const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
-        const dias = await clientesModel.diasSinAbonar(datos.cliente_id, conn);
-        if (dias != null && dias > DIAS_SIN_ABONAR) {
-          throw new AppError(409, 'CREDITO_ATRASADO',
-            `Debe y lleva ${dias} días sin abonar (el plazo es de ${DIAS_SIN_ABONAR}). ` +
-            'Pídele un abono, o confirma en la caja que se le da a crédito de todos modos.',
-            { dias, plazo: DIAS_SIN_ABONAR });
-        }
-      }
+      await _exigirSinAtraso(conn, datos.cliente_id, datos.fiar_con_atraso);
     }
 
     // Lo que paga con su SALDO A FAVOR (2026-10-13): lo que le quedó de una
@@ -1843,6 +1830,26 @@ async function _revisarReactivarFiada(conn, { id, numero, estado, clienteFiado, 
   }
 }
 
+/**
+ * CUENTA ATRASADA (2026-10-16: "no fiarle a ciegas cuando trae cuenta vencida"):
+ * si debe y lleva más de DIAS_SIN_ABONAR días sin abonar, no se le fía sin que se
+ * confirme (`fiar_con_atraso`). Desde el 2026-10-19 confirmarlo pide AUTORIZACIÓN
+ * (`autorizable('fiar_atrasado')`) a quien no fía atrasados directo. Vale para
+ * los TRES caminos de fiar: la venta, pasar una nota pendiente a crédito y
+ * entregar una nota en espera a crédito (antes estos dos ni lo revisaban).
+ */
+async function _exigirSinAtraso(conn, clienteId, fiarConAtraso) {
+  if (fiarConAtraso === true || !clienteId) return;
+  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
+  const dias = await clientesModel.diasSinAbonar(clienteId, conn);
+  if (dias != null && dias > DIAS_SIN_ABONAR) {
+    throw new AppError(409, 'CREDITO_ATRASADO',
+      `Debe y lleva ${dias} días sin abonar (el plazo es de ${DIAS_SIN_ABONAR}). ` +
+      'Pídele un abono, o confirma que se le da a crédito de todos modos.',
+      { dias, plazo: DIAS_SIN_ABONAR });
+  }
+}
+
 /** Estados que dicen que el pedido ya se cobró. */
 const POR_COBRADO = ['pagado', 'en_preparacion', 'enviado', 'entregado'];
 
@@ -2271,7 +2278,7 @@ async function _notaPorCobrar(conn, pedido) {
  * CREDITO_INSUFICIENTE si no le alcanza), y desde ahí se cobra con abonos a la
  * cuenta: sale de Notas pendientes de pago. Si tenía saldo a favor, eso la paga.
  */
-async function pasarACredito(pedidoId, usuarioId) {
+async function pasarACredito(pedidoId, usuarioId, datos = {}) {
   return withTransaction(async (conn) => {
     const [prows] = await conn.query(
       `SELECT id, numero_pedido, estado, total, nota_pendiente, cliente_id
@@ -2288,6 +2295,7 @@ async function pasarACredito(pedidoId, usuarioId) {
     if (falta <= 0.0001) {
       throw new AppError(409, 'NOTA_YA_PAGADA', `${pedido.numero_pedido} ya está pagada.`);
     }
+    await _exigirSinAtraso(conn, pedido.cliente_id, datos.fiar_con_atraso);
     await clientesModel.cargarVentaACredito(conn, {
       clienteId: pedido.cliente_id,
       monto: falta,
@@ -3038,6 +3046,7 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
     );
   }
   if (aCredito > 0) {
+    await _exigirSinAtraso(conn, pedido.cliente_id, datos.fiar_con_atraso);
     // Dentro de la misma transacción: si la entrega se revierte, la deuda no queda.
     await clientesModel.cargarVentaACredito(conn, {
       clienteId: pedido.cliente_id, monto: aCredito, pedidoId: pedido.id, numeroPedido: num, usuarioId,

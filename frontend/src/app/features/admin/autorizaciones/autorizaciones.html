@@ -1,0 +1,194 @@
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Autorizaciones</h1>
+      <p class="sub">
+        Lo que alguien pidió hacer y necesita que lo autorice quien lo puede hacer directo: sacar o meter efectivo,
+        cancelar o devolver una venta, corregir una deuda o un saldo a favor, cambiar precios, un ajuste o una merma,
+        subirle el crédito a un cliente, cargar mercancía, pedirle mercancía a otra tienda, las vacaciones y pagar
+        la nómina.
+        <b>Aceptar la hace en ese momento</b>; si ya no se puede, aquí dice por qué.
+      </p>
+    </div>
+  </header>
+
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+
+  <section class="card">
+    <div class="tabs" role="tablist" aria-label="Qué solicitudes ver">
+      @for (t of PESTANAS; track t.clave) {
+        <button type="button" role="tab" [class.on]="vista() === t.clave" [attr.aria-selected]="vista() === t.clave"
+                (click)="elegir(t.clave)">
+          {{ t.nombre }}@if (t.clave === 'por_autorizar' && porAutorizar() > 0) { <span class="cuenta">{{ porAutorizar() }}</span> }
+        </button>
+      }
+    </div>
+
+    @if (filas() === null) {
+      <p class="muted vacio">Cargando…</p>
+    } @else if (!filas()!.length) {
+      <p class="muted vacio">
+        @switch (vista()) {
+          @case ('por_autorizar') { No hay nada esperando tu autorización. }
+          @case ('mias') { No has pedido ninguna autorización. }
+          @default { Todavía no hay solicitudes resueltas. }
+        }
+      </p>
+    } @else {
+      <ul class="solicitudes">
+        @for (a of filas(); track a.id) {
+          <li class="solicitud" [class.esperando]="a.estado === 'pendiente'">
+            <div class="que">
+              <div class="arriba">
+                <span class="operacion">{{ a.operacion_nombre }}</span>
+                <span [class]="'pill ' + estado(a).tono">{{ estado(a).texto }}</span>
+              </div>
+              <p class="resumen">{{ a.resumen }}</p>
+              <p class="quien muted">
+                @if (a.tiendas.length) { {{ a.tiendas.join(', ') }} · }
+                Lo pidió <b>{{ a.solicitante }}</b> {{ cuando(a.solicitado_en) }}
+                @if (a.autorizador && a.estado !== 'pendiente') {
+                  · {{ a.estado === 'rechazada' ? 'lo rechazó' : (a.estado === 'aprobada' ? 'lo autorizó' : 'lo estaba autorizando') }}
+                  <b>{{ a.autorizador }}</b>
+                  {{ a.en_el_momento ? 'con su clave, ahí mismo' : cuando(a.resuelto_en) }}
+                }
+              </p>
+              @if (a.estado === 'rechazada' && a.motivo) { <p class="motivo">Por qué: {{ a.motivo }}</p> }
+              @if (a.nota_aprobacion) { <p class="nota-aprobacion">{{ a.nota_aprobacion }}</p> }
+              @if (a.detalle?.recibos?.length) {
+                <!-- Pagar una nómina: qué se paga a cada quien, antes de aceptarla. -->
+                <details class="recibos">
+                  <summary>Ver los {{ a.detalle!.recibos!.length }} recibos</summary>
+                  <ul>
+                    @for (r of a.detalle!.recibos; track $index) {
+                      <li><span>{{ r.nombre }} <span class="muted">· {{ r.dias === null ? 'sin horario' : r.dias + (r.dias === 1 ? ' día' : ' días') }}</span></span><b>{{ r.total | dinero }}</b></li>
+                    }
+                  </ul>
+                </details>
+              }
+              @if (a.aviso) { <p class="muted motivo-gris">{{ a.aviso }}</p> }
+              @if ((a.estado === 'cerrada' || a.estado === 'cancelada') && a.motivo) { <p class="muted motivo-gris">{{ a.motivo }}</p> }
+              @if (a.estado === 'cerrada') {
+                <p class="muted motivo-gris">Se interrumpió a media aprobación: no se sabe si se hizo.</p>
+              }
+              @if (a.estado === 'pendiente' && a.ultimo_error) {
+                <p class="aviso">No se pudo hacer: {{ a.ultimo_error }}</p>
+              }
+              @if (a.interrumpida) {
+                <p class="aviso">
+                  Se estaba haciendo cuando se interrumpió. Revisa si se hizo (en la caja, la venta o el inventario):
+                  si no, ciérrala y que se vuelva a pedir. No se acepta otra vez para no hacerla dos veces.
+                </p>
+              }
+              @if (a.estado === 'vencida') { <p class="muted motivo-gris">Lo de la caja se autoriza el mismo día: que se vuelva a pedir.</p> }
+            </div>
+            <div class="acciones">
+              @if (vista() === 'por_autorizar' && a.interrumpida) {
+                <button type="button" class="btn btn-ghost" (click)="abrirRechazo(a)">Cerrar</button>
+              } @else if (vista() === 'por_autorizar' && a.estado === 'pendiente') {
+                <button type="button" class="btn btn-ghost" (click)="abrirRechazo(a)" [disabled]="aceptando() !== null">Rechazar</button>
+                <button type="button" class="btn btn-primary" (click)="aceptar(a)" [disabled]="aceptando() !== null">
+                  {{ aceptando() === a.id ? 'Haciéndolo…' : (a.ajustable && a.detalle?.lineas?.length ? 'Aceptar…' : 'Aceptar') }}
+                </button>
+              } @else if (vista() === 'mias' && a.estado === 'pendiente') {
+                <button type="button" class="btn btn-ghost" (click)="retirar(a)">Retirar</button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</div>
+
+<!-- Rechazar pide el motivo. No se cierra al tocar el fondo: se perdería lo escrito. -->
+@if (rechazando(); as a) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="rechazo-titulo">
+      <div class="modal-head">
+        <h2 id="rechazo-titulo">{{ a.interrumpida ? 'Cerrar la solicitud' : 'Rechazar la solicitud' }}</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarRechazo()" aria-label="Cerrar">✕</button>
+      </div>
+      <form (ngSubmit)="rechazar()">
+        <div class="modal-body columna">
+          <p><b>{{ a.operacion_nombre }}</b> · {{ a.resumen }}</p>
+          @if (a.interrumpida) {
+            <p class="muted">Se interrumpió y no se sabe si se hizo: revísalo antes. Cerrarla no hace ni deshace nada.</p>
+          } @else {
+            <p class="muted">Lo pidió {{ a.solicitante }}. No se hace nada; le queda dicho por qué.</p>
+          }
+          <label class="field">
+            {{ a.interrumpida ? 'Qué encontraste' : 'Por qué se rechaza' }}
+            <textarea [(ngModel)]="motivo" name="motivo" rows="3" maxlength="255" required></textarea>
+          </label>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="cerrarRechazo()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="guardando() || !motivo.trim()">
+            {{ guardando() ? 'Guardando…' : (a.interrumpida ? 'Cerrarla' : 'Rechazar') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Un pedido a otra tienda se autoriza por renglón: de cada hilo, cuánto (hasta lo pedido; 0 = nada). -->
+@if (ajustando(); as a) {
+  <div class="modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ajuste-titulo">
+      <div class="modal-head">
+        <h2 id="ajuste-titulo">Autorizar el pedido</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarAjuste()" aria-label="Cerrar">✕</button>
+      </div>
+      <form (ngSubmit)="autorizarAjustado()">
+        <div class="modal-body columna">
+          <p class="muted">Lo pidió {{ a.solicitante }} {{ cuando(a.solicitado_en) }}. Puedes autorizar menos de lo que pidió: de cada hilo, escribe cuántos van (0 = ese no).</p>
+          @if (errorAjuste()) { <p class="alert" role="alert">{{ errorAjuste() }}</p> }
+          <div class="tabla-scroll">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th scope="col">Hilo</th>
+                  <th scope="col" class="num">Pidió</th>
+                  <th scope="col" class="num">Hay en {{ a.detalle!.origen }}</th>
+                  <th scope="col" class="num">Se autoriza</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (l of a.detalle!.lineas; track l.variante_id) {
+                  <tr>
+                    <td>{{ l.hilo }}</td>
+                    <td class="num">{{ l.pedido }} {{ l.unidad === 'paquetes' ? 'paq' : 'kg' }}</td>
+                    <td class="num" [class.poco]="l.en_origen !== null && l.en_origen < vale(l)">
+                      {{ l.en_origen === null ? '—' : l.en_origen + (l.unidad === 'paquetes' ? ' paq' : ' kg') }}
+                    </td>
+                    <td class="num">
+                      <span class="cant-paq">
+                      <input type="number" class="cuanto" min="0" [max]="l.pedido" [step]="l.unidad === 'paquetes' ? 1 : 0.001"
+                             [name]="'v' + l.variante_id" [(ngModel)]="cuanto[l.variante_id]" [attr.aria-invalid]="malo(l)"
+                             [class.invalido]="malo(l)" [attr.aria-label]="'Cuánto se autoriza de ' + l.hilo" />
+                      <span class="muted">{{ l.unidad === 'paquetes' ? 'paq' : 'kg' }}</span>
+                      </span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="resumen-ajuste">{{ resumenAjuste(a) }}</p>
+          @if (!ajusteValido(a)) {
+            <p class="muted">Cada renglón va de 0 a lo que se pidió, en paquetes enteros; al menos uno con algo. Para no dar nada, recházala.</p>
+          }
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="cerrarAjuste()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="aceptando() !== null || !ajusteValido(a)">
+            {{ aceptando() !== null ? 'Haciéndolo…' : 'Autorizar' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

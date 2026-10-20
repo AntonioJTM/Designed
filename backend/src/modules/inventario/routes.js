@@ -5,6 +5,7 @@ const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
 const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { autorizable } = require('../autorizaciones/autorizable');
 
 const router = Router();
 // Un envío de otras tiendas no se ve ni se toca (2026-10-15): toda ruta con `:id`.
@@ -138,12 +139,20 @@ router.get('/traspasos', ...soloStaff, controller.listarTraspasos);
 router.get('/traspasos/:id', ...soloStaff, controller.obtenerTraspaso);
 
 // Escrituras (staff): movimientos, desarmes, traspasos y configuración de umbrales.
-router.post('/movimientos', ...soloStaff, requirePermiso('hacer:ajuste_merma'), validate(movimientoSchema), controller.registrarMovimiento);
+// Un costo de quien no lo puede ver se rechaza ANTES de guardar la solicitud: si
+// no, se guardaría y al aceptarla siempre fallaría.
+const sinCostoAjeno = (req, res, next) =>
+  require('../permisos/service').exigirVerCostos(req, req.body.costo_unitario).then(() => next(), next);
+router.post('/movimientos', ...soloStaff, validate(movimientoSchema), sinCostoAjeno, autorizable('ajuste_merma'),
+  controller.registrarMovimiento);
 router.post('/desarmes', ...soloStaff, requirePermiso('hacer:bajar_conos'), validate(desarmarSchema), controller.desarmar);
 // El traspaso tiene tres pasos: se solicita (aparta), se envía (sale) y se
 // recibe (entra, con el acuse de quien lo aceptó). Cualquiera del staff puede
 // recibir; queda guardado su nombre y la hora.
-router.post('/traspasos', ...soloStaff, requirePermiso('ver:surtir'), validate(traspasoSchema), controller.solicitarTraspaso);
+// Pedir mercancía a otra tienda espera autorización (fase 2, 2026-10-19): hasta
+// aceptarla no se aparta nada ni la ve quien surte, y se puede autorizar menos.
+router.post('/traspasos', ...soloStaff, requirePermiso('ver:surtir'), validate(traspasoSchema), autorizable('surtir_sucursal'),
+  controller.solicitarTraspaso);
 router.post('/traspasos/:id/enviar', ...soloStaff, requirePermiso('hacer:enviar_traspaso'), validate(envioSchema), controller.enviarTraspaso);
 // Guardar lo escaneado a medio surtir (la lista completa): esos paquetes quedan
 // apartados para este envío hasta que se envíe o se cancele.

@@ -38,14 +38,26 @@
           <button type="button" class="btn btn-ghost" [disabled]="ocupado()" (click)="calcular()">
             {{ periodo()!.recibos.length ? 'Recalcular' : 'Calcular nómina' }}
           </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            [disabled]="ocupado() || periodo()!.recibos.length === 0"
-            (click)="marcarPagada()"
-          >
-            Marcar como pagada
-          </button>
+          @if (pagaDirecto()) {
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="ocupado() || periodo()!.recibos.length === 0"
+              (click)="marcarPagada()"
+            >
+              Marcar como pagada
+            </button>
+          } @else {
+            <!-- Quien la prepara (fase 3) pide que se pague; la paga quien la autoriza. -->
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="ocupado() || periodo()!.recibos.length === 0 || !!periodo()!.pago_pedido"
+              (click)="pedirPago()"
+            >
+              {{ periodo()!.pago_pedido ? 'Ya se pidió que se pague' : 'Pedir que se pague' }}
+            </button>
+          }
         }
       }
     </div>
@@ -101,7 +113,9 @@
       </div>
       <div class="estado-periodo">
         @if (periodo(); as p) {
-          @if (p.estado === 'borrador') {
+          @if (p.estado === 'borrador' && p.pago_pedido) {
+            <span class="pill info" [title]="'Lo pidió ' + p.pago_pedido.solicitante">Pedida para pagar: espera autorización</span>
+          } @else if (p.estado === 'borrador') {
             <span class="pill ambar">Borrador: se recalcula con las ventas</span>
           } @else if (p.estado === 'pagado') {
             <span class="pill verde">Pagada: ya no cambia</span>
@@ -259,7 +273,7 @@
     [recibo]="r"
     [periodoId]="periodo()!.id"
     [semanaInicio]="periodo()!.fecha_inicio"
-    [editable]="editable()"
+    [editable]="editable() && puedeTocar(r)"
     (cerrado)="reciboAbierto.set(null)"
     (actualizado)="periodoActualizado($event)"
   />
