@@ -35,6 +35,8 @@ function pistasDelCambio(ruta, cuerpo) {
   if ((m = r.match(/^\/pedidos\/(\d+)(\/|$)/))) p.pedido = Number(m[1]);
   if ((m = r.match(/^\/caja\/sesiones\/(\d+)(\/|$)/))) p.sesiones.push(Number(m[1]));
   if ((m = r.match(/^\/caja\/cajas\/(\d+)(\/|$)/))) p.caja = Number(m[1]);
+  // Un gasto de la caja (2026-10-20): su tienda es la de su turno.
+  if ((m = r.match(/^\/caja\/gastos\/(\d+)(\/|$)/))) p.gasto = Number(m[1]);
   if (r === '/caja/sesiones' && num(b.caja_id)) p.caja = num(b.caja_id);
   if ((m = r.match(/^\/inventario\/traspasos\/(\d+)(\/|$)/))) p.traspaso = Number(m[1]);
   if ((m = r.match(/^\/remesas\/(\d+)(\/|$)/))) p.remesa = Number(m[1]);
@@ -44,6 +46,9 @@ function pistasDelCambio(ruta, cuerpo) {
 
 /** Las tiendas del cambio, o null si no es de ninguna en particular (le llega a todos). */
 async function almacenesDelCambio(ruta, cuerpo) {
+  // Transferencias suma todas las tiendas (y un abono por transferencia no tiene
+  // tienda): lo que se marca ahí le llega solo a quien ve todas (2026-10-20).
+  if (/^\/transferencias(\/|$)/.test(String(ruta ?? ''))) return DESCONOCIDO;
   const p = pistasDelCambio(ruta, cuerpo);
   const ids = new Set(p.almacenes);
   const una = async (sql, params) => {
@@ -57,6 +62,13 @@ async function almacenesDelCambio(ruta, cuerpo) {
   }
   if (p.remesa) await una('SELECT almacen_id FROM remesas WHERE id = :id', { id: p.remesa });
   if (p.bulto) await una('SELECT almacen_id FROM variante_codigos WHERE id = :id', { id: p.bulto });
+  if (p.gasto) {
+    await una(
+      `SELECT c.almacen_id FROM gastos g JOIN sesiones_caja s ON s.id = g.sesion_caja_id
+         JOIN cajas c ON c.id = s.caja_id WHERE g.id = :id`,
+      { id: p.gasto }
+    );
+  }
   if (p.sesiones.length) {
     await una(
       'SELECT c.almacen_id FROM sesiones_caja s JOIN cajas c ON c.id = s.caja_id WHERE s.id IN (:ids)',

@@ -16,6 +16,9 @@ const POR_PREFIJO = [
   ['/pedidos', ['ventas', 'inventario', 'caja', 'clientes', 'avisos']],
   ['/caja', ['caja', 'avisos']],
   ['/clientes', ['clientes', 'caja', 'avisos']],
+  // Marcar Procesada / Facturada o corregir la cuenta y el no. de operación (que
+  // vive en la venta, el abono o el anticipo). Solo a quien ve todas (almacenes.js).
+  ['/transferencias', ['transferencias', 'ventas', 'clientes']],
   ['/remesas', ['inventario', 'catalogo', 'avisos']],
   ['/variantes', ['inventario', 'catalogo']],
   ['/productos', ['catalogo', 'avisos']],

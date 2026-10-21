@@ -1,0 +1,253 @@
+<div class="pagina">
+  <header class="page-head">
+    <div>
+      <h1>Transferencias</h1>
+      <p class="sub">
+        Todo lo que entró por transferencia: ventas, pagos de notas, abonos y anticipos. Márcalas
+        <b>procesadas</b> al verlas en el banco y <b>facturadas</b> cuando salga su factura.
+      </p>
+    </div>
+  </header>
+
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+
+  @if (cifras(); as c) {
+    <div class="kpis">
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto tono-tinta"></span>Entró por transferencia</span>
+        <span class="kpi-valor">{{ c.importe | dinero }}</span>
+        <span class="kpi-pie">
+          {{ plural(c.cuantas, 'transferencia', 'transferencias') }}
+          @if (c.importe_cancelado > 0) { · {{ c.importe_cancelado | dinero }} de ventas canceladas }
+        </span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto tono-aviso"></span>Por revisar</span>
+        <span class="kpi-valor">{{ c.importe_por_revisar | dinero }}</span>
+        <span class="kpi-pie">{{ plural(c.por_revisar, 'falta de ver en el banco', 'faltan de ver en el banco') }}</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto tono-serie-3"></span>Procesadas</span>
+        <span class="kpi-valor">{{ c.importe_procesado | dinero }}</span>
+        <span class="kpi-pie">ya se vieron en el banco</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto tono-alerta"></span>Sin facturar</span>
+        <span class="kpi-valor">{{ c.sin_facturar }}</span>
+        <span class="kpi-pie">{{ c.importe_sin_facturar | dinero }}</span>
+      </div>
+    </div>
+  }
+
+  @if (cuentas()?.length === 0) {
+    <p class="aviso">
+      No hay cuentas de banco dadas de alta: las transferencias salen "Sin cuenta". Se dan de alta en
+      Configuración → Cuentas de banco, y desde entonces la caja pregunta a cuál llegó cada una.
+    </p>
+  }
+
+  <div class="filtros-barra">
+    <label class="crece">
+      <span class="oculto">Buscar</span>
+      <span class="buscador">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4"></path>
+        </svg>
+        <input type="search" [(ngModel)]="q" name="q" (ngModelChange)="buscarAlTeclear()"
+               placeholder="Cliente, su número, folio de venta o no. de operación" autocomplete="off" />
+      </span>
+    </label>
+    <label class="field">
+      Cuenta
+      <select [(ngModel)]="cuenta" name="cuenta" (ngModelChange)="buscar()">
+        <option value="">Todas</option>
+        @for (k of cuentas() ?? []; track k.id) { <option [ngValue]="k.id">{{ nombreCuentaFila(k) }}</option> }
+        <option value="sin">Sin cuenta</option>
+      </select>
+    </label>
+    <label class="field">
+      Estado
+      <select [(ngModel)]="estado" name="estado" (ngModelChange)="buscar()">
+        <option value="">Todas</option>
+        <option value="por_revisar">Por revisar</option>
+        <option value="procesada">Procesadas</option>
+      </select>
+    </label>
+    <label class="field">
+      Facturada
+      <select [(ngModel)]="facturada" name="facturada" (ngModelChange)="buscar()">
+        <option value="">Todas</option>
+        <option value="no">Sin facturar</option>
+        <option value="si">Facturadas</option>
+      </select>
+    </label>
+    <label class="field">
+      De
+      <select [(ngModel)]="de" name="de" (ngModelChange)="buscar()">
+        <option value="">Todo</option>
+        <option value="venta">Ventas</option>
+        <option value="nota">Notas pendientes</option>
+        <option value="espera">Notas en espera</option>
+        <option value="abono">Abonos</option>
+        <option value="anticipo">Anticipos</option>
+      </select>
+    </label>
+    <div class="field periodos">
+      <span>Periodo</span>
+      <div class="seg" role="radiogroup" aria-label="Periodo">
+        <button type="button" role="radio" [class.on]="periodo() === 'hoy'" [attr.aria-checked]="periodo() === 'hoy'" (click)="ponerPeriodo('hoy')">Hoy</button>
+        <button type="button" role="radio" [class.on]="periodo() === 'semana'" [attr.aria-checked]="periodo() === 'semana'" (click)="ponerPeriodo('semana')">7 días</button>
+        <button type="button" role="radio" [class.on]="periodo() === 'mes'" [attr.aria-checked]="periodo() === 'mes'" (click)="ponerPeriodo('mes')">Este mes</button>
+        <button type="button" role="radio" [class.on]="periodo() === 'todo'" [attr.aria-checked]="periodo() === 'todo'" (click)="ponerPeriodo('todo')">Todo</button>
+      </div>
+    </div>
+    <label class="field">
+      Desde
+      <input type="date" [(ngModel)]="desde" name="desde" (ngModelChange)="buscar()" />
+    </label>
+    <label class="field">
+      Hasta
+      <input type="date" [(ngModel)]="hasta" name="hasta" (ngModelChange)="buscar()" />
+    </label>
+  </div>
+
+  <!-- A qué cuenta llegó: lo que se coteja contra cada estado de cuenta del banco. -->
+  @if (porCuenta().length > 0 && (cifras()?.importe ?? 0) > 0) {
+    <section class="card">
+      <div class="card-head">
+        <div><h2>A qué cuenta llegó</h2><p>Con los filtros de arriba. Cada barra es su parte del total.</p></div>
+      </div>
+      <div class="barras" style="--etiqueta: 190px; --cola: 150px">
+        @for (k of porCuenta(); track k.id) {
+          <div class="barra-fila">
+            <span class="barra-etiqueta">
+              <span [class.sin-cuenta]="k.id === null">{{ nombreCuentaFila(k) }}</span>
+              <span class="muted">{{ plural(k.cuantas, 'transferencia', 'transferencias') }}</span>
+            </span>
+            <span class="barra-valor">
+              <span class="relleno" [class.relleno-sin]="k.id === null" [style.width.%]="anchoCuenta(k.importe)"></span>
+              <b>{{ k.importe | dinero }}</b>
+            </span>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>{{ tituloLista() }}</h2>
+        <p>
+          @if (cargando()) { Cargando… }
+          @else { {{ plural(total(), 'transferencia', 'transferencias') }} · las más recientes primero }
+        </p>
+      </div>
+    </div>
+
+    <!-- Las elegidas se marcan juntas: es como se coteja contra el banco. -->
+    @if (puedeMarcar && elegidas().size > 0) {
+      <div class="seleccion" role="region" aria-label="Las elegidas">
+        <span><b>{{ plural(elegidas().size, 'elegida', 'elegidas') }}</b> · {{ importeElegidas() | dinero }}</span>
+        <span class="seleccion-botones">
+          <button type="button" class="btn btn-ok btn-sm" [disabled]="marcando()" (click)="marcar({ estado: 'procesada' })">Marcar procesadas</button>
+          <button type="button" class="btn btn-ghost btn-sm" [disabled]="marcando()" (click)="marcar({ facturada: true })">Marcar facturadas</button>
+          <button type="button" class="btn btn-ghost btn-sm" [disabled]="marcando()" (click)="alternarTodas(false)">Quitar la selección</button>
+        </span>
+      </div>
+    }
+
+    @if (!cargando() && items().length === 0) {
+      <p class="vacio">No hay transferencias con esos filtros.</p>
+    } @else if (!cargando()) {
+      <div class="tabla-scroll">
+        <table class="grid transferencias">
+          <thead>
+            <tr>
+              @if (puedeMarcar) {
+                <th class="elegir">
+                  <input type="checkbox" [checked]="todasElegidas()" (change)="alternarTodas($any($event.target).checked)"
+                         aria-label="Elegir todas las de la lista" />
+                </th>
+              }
+              <th>Fecha</th><th>Folio de venta</th><th>Cliente</th><th>Cuenta</th><th>No. operación</th>
+              <th>Material</th><th class="num">Importe</th><th>Estado</th><th>Facturada</th>
+              @if (puedeMarcar) { <th><span class="oculto">Acciones</span></th> }
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of items(); track t.clave) {
+              <tr [class.fila-elegida]="elegida(t)">
+                @if (puedeMarcar) {
+                  <td class="elegir">
+                    <input type="checkbox" [checked]="elegida(t)" (change)="alternar(t, $any($event.target).checked)"
+                           [attr.aria-label]="'Elegir la de ' + (t.cliente || 'sin cliente') + ' por ' + (t.importe | dinero)" />
+                  </td>
+                }
+                <td class="fecha">{{ cuando(t.fecha) }}</td>
+                <td class="folios">
+                  @if (t.ventas.length) {
+                    @for (v of t.ventas; track v.id; let ultimo = $last) {
+                      <a [routerLink]="['/admin/ventas', v.id]" [title]="v.folio">{{ v.folio | folio }}</a>@if (!ultimo) {, }
+                    }
+                  } @else {
+                    <span class="sin-folio">{{ t.de === 'anticipo' ? 'Anticipo' : 'A su cuenta' }}</span>
+                  }
+                  <span class="de">{{ de_(t) }}</span>
+                  @if (t.cancelada) { <span class="pill rojo">Venta cancelada</span> }
+                </td>
+                <td class="cliente">
+                  @if (t.cliente_id) {
+                    <a [routerLink]="['/admin/clientes', t.cliente_id]">{{ t.cliente }}</a>
+                    @if (t.cliente_codigo) { <span class="num-cli">{{ t.cliente_codigo }}</span> }
+                  } @else { <span class="muted">Cliente de paso</span> }
+                </td>
+                <td class="cuenta" [class.sin-cuenta]="!t.cuenta_bancaria_id">{{ nombreCuenta(t) }}</td>
+                <td class="operacion">
+                  @if (t.referencia) { {{ t.referencia }} } @else { <span class="muted">S/N</span> }
+                </td>
+                <td class="tenue">{{ t.materiales || '—' }}</td>
+                <td class="num"><b>{{ t.importe | dinero }}</b></td>
+                <td>
+                  @if (t.estado === 'procesada') {
+                    <span class="pill verde" [title]="(t.revisada_por ? 'La marcó ' + t.revisada_por : '') + (t.revisada_en ? ' el ' + (t.revisada_en | fecha) : '')">Procesada</span>
+                  } @else {
+                    <span class="pill ambar">Por revisar</span>
+                  }
+                </td>
+                <td>
+                  @if (t.facturada) {
+                    <span class="pill verde" [title]="(t.facturada_por ? 'La marcó ' + t.facturada_por : '') + (t.facturada_en ? ' el ' + (t.facturada_en | fecha) : '')">Sí</span>
+                  } @else { <span class="muted">No</span> }
+                </td>
+                @if (puedeMarcar) {
+                  <td class="acciones">
+                    <!-- Un lápiz: con el texto "Corregir" la columna no cabía en 1366 px. -->
+                    <button type="button" class="btn btn-ghost btn-sm btn-icono" (click)="editando.set(t)" title="Corregir"
+                            [attr.aria-label]="'Corregir la transferencia de ' + (t.cliente || 'sin cliente')">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z M14 6l4 4"></path></svg>
+                    </button>
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (items().length < total()) {
+        <div class="mas">
+          <button type="button" class="btn btn-ghost" (click)="verMas()" [disabled]="cargandoMas()">
+            {{ cargandoMas() ? 'Cargando…' : 'Ver más (' + (total() - items().length) + ' más)' }}
+          </button>
+        </div>
+      }
+    }
+  </section>
+</div>
+
+@if (editando(); as t) {
+  <app-transferencia-modal [transferencia]="t" (cerrado)="editando.set(null)" (guardado)="alGuardar($event)" />
+}

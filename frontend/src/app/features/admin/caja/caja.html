@@ -16,6 +16,9 @@
         </label>
       }
       @if (abierta()) {
+        @if (puedeRegistrarGasto()) {
+          <button type="button" class="btn btn-ghost" (click)="gastoAbierto.set(true)">Registrar gasto</button>
+        }
         @if (puedeMoverEfectivo()) {
           <button type="button" class="btn btn-ghost" (click)="movAbierto.set(true)">Sacar o meter efectivo</button>
         }
@@ -218,8 +221,16 @@
         </section>
       </div>
     </div>
+
+    <!-- GASTOS de la caja (2026-10-20): lo que se pagó con el cajón, por periodo y tipo. -->
+    <app-gastos-caja [version]="versionGastos()" />
   }
 </div>
+
+@if (gastoAbierto() && sesion(); as s) {
+  <app-gasto-modal [sesion]="s" (guardado)="gastoRegistrado($event)" (pedido)="gastoPedido($event)"
+                   (cerrado)="gastoAbierto.set(false)" />
+}
 
 @if (movAbierto() && sesion(); as s) {
   <app-movimiento-caja-modal [sesion]="s" (guardado)="movimientoRegistrado($event)" (cerrado)="movAbierto.set(false)" />

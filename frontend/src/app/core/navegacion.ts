@@ -29,6 +29,7 @@ const I = {
   cobrar: 'M4 8V5h3 M17 5h3v3 M20 16v3h-3 M7 19H4v-3 M8 9v6 M11 9v6 M14 9v6 M17 9v6',
   caja: 'M3 7h18v11H3z M12 15a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M6 10h.01 M18 15h.01',
   pedidos: 'M6 3h12v18l-3-2-3 2-3-2-3 2z M9 8h6 M9 12h6 M9 16h3',
+  transferencias: 'M4 8h13 M13 4l4 4-4 4 M20 16H7 M11 12l-4 4 4 4',
   espera: 'M6 3h12v18H6z M10 8v8 M14 8v8',
   pendiente: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
   clientes: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5 M16 4.5a3.5 3.5 0 0 1 0 6.5 M18.5 14.5c1.7.8 2.8 2.8 3 5.5',
@@ -67,6 +68,8 @@ export const MENU: GrupoMenu[] = [
       // chofer), y las que se llevaron sin pagar, las NOTAS PENDIENTES DE PAGO.
       // Apartados se quitó ("se eliminan los apartados y fiar").
       { clave: 'ventas', nombre: 'Ventas', ruta: '/admin/ventas', icono: I.pedidos, permiso: 'ver:pedidos' },
+      // Todo lo que entró por transferencia y su revisión contra el banco (2026-10-20).
+      { clave: 'transferencias', nombre: 'Transferencias', ruta: '/admin/transferencias', icono: I.transferencias, permiso: 'ver:transferencias' },
       { clave: 'pedidos', nombre: 'Notas en espera', ruta: '/admin/notas-en-espera', icono: I.espera, permiso: 'ver:encargos' },
       { clave: 'notas', nombre: 'Notas pendientes de pago', ruta: '/admin/notas-pendientes', icono: I.pendiente, permiso: 'ver:notas_pendientes' },
     ],

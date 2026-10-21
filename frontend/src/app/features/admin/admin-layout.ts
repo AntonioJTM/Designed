@@ -70,6 +70,15 @@ export class AdminLayout implements AfterViewInit {
   readonly veInventario = computed(() => { this.sesion(); return this.auth.puede('ver:inventario'); });
   readonly veCatalogo = computed(() => { this.sesion(); return this.auth.puede('ver:catalogo'); });
   readonly veClientes = computed(() => { this.sesion(); return this.auth.puede('ver:clientes'); });
+  readonly veVentas = computed(() => { this.sesion(); return this.auth.puede('ver:pedidos'); });
+
+  /**
+   * A dónde lleva una nota vencida de la campana (2026-10-20): a esa venta si se
+   * puede abrir Ventas; si no (o si es un ajuste, que no es venta), al cliente.
+   */
+  destinoNota(n: { pedido_id: number | null; cliente_id: number }): string {
+    return n.pedido_id && this.veVentas() ? `/admin/ventas/${n.pedido_id}` : `/admin/clientes/${n.cliente_id}`;
+  }
   readonly veNotas = computed(() => { this.sesion(); return this.auth.puede('ver:notas_pendientes'); });
   /** Los turnos de caja abiertos de varios días: los atiende quien entra a Caja. */
   readonly veCaja = computed(() => { this.sesion(); return this.auth.puede('ver:caja'); });
@@ -113,7 +122,7 @@ export class AdminLayout implements AfterViewInit {
     if (this.veNotas() && (p.notas_pendientes?.num ?? 0) > 0) n += 1;
     if (this.veCaja() && (p.turnos_abiertos?.num ?? 0) > 0) n += 1;
     if (this.veClientes()) {
-      if ((p.cobranza?.num_clientes ?? 0) > 0) n += 1;
+      if ((p.cobranza?.num_notas ?? 0) > 0) n += 1;
       if ((p.enfriados?.num_clientes ?? 0) > 0) n += 1;
       if ((p.nuevos_sin_credito?.num_clientes ?? 0) > 0) n += 1;
     }

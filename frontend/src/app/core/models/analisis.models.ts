@@ -21,6 +21,14 @@ export interface ClienteConSaldo {
   dias_sin_abonar: number;
   /** Lo que le falta de esa nota. */
   nota_vieja_por_pagar?: number;
+  /** Hace cuántos días venció su nota MÁS vencida; 0 = ninguna ha vencido (2026-10-20). */
+  dias_vencida?: number;
+  /** Cuándo venció esa nota; al corriente, cuándo vence la primera. */
+  vence_el?: string | null;
+  /** Cuántas de sus notas ya pasaron sus días. */
+  notas_vencidas?: number;
+  /** Lo que falta de sus notas vencidas. */
+  vencido_por_pagar?: number;
   ultimo_movimiento?: string | null;
   ultimo_abono?: string | null;
   ultima_compra?: string | null;

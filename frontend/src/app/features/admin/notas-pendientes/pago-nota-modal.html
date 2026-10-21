@@ -59,10 +59,13 @@
               </label>
             }
 
-            <label class="field" [class.full]="!(esEfectivo() && turnos().length > 1)">
-              <span>Referencia <span class="muted">(opcional)</span></span>
+            @if (esTransferencia()) {
+              <app-cuenta-deposito [(cuenta)]="cuentaId" [marcar]="!!error()" />
+            }
+            <label class="field" [class.full]="!(esEfectivo() && turnos().length > 1) && !esTransferencia()">
+              <span>{{ esTransferencia() ? 'No. de operación' : 'Referencia' }} <span class="muted">(opcional)</span></span>
               <input type="text" [(ngModel)]="referencia" name="referencia" maxlength="120"
-                     placeholder="Folio de la transferencia, por ejemplo" />
+                     [placeholder]="esTransferencia() ? 'El folio que trae el comprobante' : 'Folio de la transferencia, por ejemplo'" />
             </label>
           </div>
 

@@ -151,6 +151,12 @@
                     Confirmar que llegó
                   </button>
                 }
+                @if (tienePdfEnvio(t)) {
+                  <button type="button" class="btn btn-ghost btn-sm" [disabled]="bajandoPdf() === t.id + '-envio'"
+                          (click)="bajarPdf(t, 'envio')" [attr.aria-label]="'Bajar el PDF del envío ' + t.folio">
+                    {{ bajandoPdf() === t.id + '-envio' ? 'Armando PDF…' : 'PDF del envío' }}
+                  </button>
+                }
                 <button type="button" class="btn btn-ghost btn-sm" (click)="cancelar(t)">Cancelar</button>
               </div>
             </div>
@@ -434,6 +440,7 @@
               <th>Qué llevó</th>
               <th>Estado</th>
               <th>Firmó de recibido</th>
+              <th>PDF</th>
             </tr>
           </thead>
           <tbody>
@@ -473,6 +480,24 @@
                     <span class="muted">—</span>
                     @if (t.cancelado_por) { <div class="sub">canceló {{ t.cancelado_por }}</div> }
                   }
+                </td>
+                <!-- Los PDF de lo que salió y de lo que llegó (2026-10-20). -->
+                <td>
+                  <div class="pdfs">
+                    @if (tienePdfEnvio(t)) {
+                      <button type="button" class="btn btn-ghost btn-sm" [disabled]="bajandoPdf() === t.id + '-envio'"
+                              (click)="bajarPdf(t, 'envio')" [attr.aria-label]="'Bajar el PDF del envío ' + t.folio">
+                        {{ bajandoPdf() === t.id + '-envio' ? 'Armando…' : 'Envío' }}
+                      </button>
+                    }
+                    @if (t.estado === 'recibido') {
+                      <button type="button" class="btn btn-ghost btn-sm" [disabled]="bajandoPdf() === t.id + '-recepcion'"
+                              (click)="bajarPdf(t, 'recepcion')" [attr.aria-label]="'Bajar el PDF de la recepción ' + t.folio">
+                        {{ bajandoPdf() === t.id + '-recepcion' ? 'Armando…' : 'Recepción' }}
+                      </button>
+                    }
+                    @if (!tienePdfEnvio(t)) { <span class="muted">—</span> }
+                  </div>
                 </td>
               </tr>
             }

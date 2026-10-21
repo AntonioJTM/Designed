@@ -2,6 +2,7 @@
 
 const service = require('./service');
 const hilo = require('./hilo');
+const traspasoPdf = require('./traspaso-pdf');
 const { parsePagination, parseBool } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisos = require('../permisos/service');
@@ -302,6 +303,22 @@ async function configurar(req, res, next) {
   }
 }
 
+/**
+ * El PDF de un envío (lo que salió, con cada paquete) o de su recepción (lo que
+ * llegó y lo que faltó), 2026-10-20. Las tiendas ya las revisó router.param.
+ */
+async function pdfTraspaso(req, res, next) {
+  try {
+    const tipo = req.query.tipo === 'recepcion' ? 'recepcion' : 'envio';
+    const { buffer, folio } = tipo === 'recepcion'
+      ? await traspasoPdf.pdfRecepcion(Number(req.params.id), { usuarioId: req.auth.sub })
+      : await traspasoPdf.pdfEnvio(Number(req.params.id), { usuarioId: req.auth.sub });
+    require('../../utils/pdf').enviar(res, buffer, `${tipo === 'recepcion' ? 'Recepción' : 'Envío'} ${folio}.pdf`);
+  } catch (err) {
+    next(err);
+  }
+}
+
 /** Mínimo en paquetes para varios hilos de un almacén (vista previa o guardar). */
 async function minimos(req, res, next) {
   try {
@@ -314,6 +331,7 @@ async function minimos(req, res, next) {
 
 module.exports = {
   minimos,
+  pdfTraspaso,
   traspasoDeSusTiendas,
   listarStock,
   resumenPorAlmacen,

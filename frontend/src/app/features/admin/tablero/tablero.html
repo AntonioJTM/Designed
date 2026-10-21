@@ -265,7 +265,7 @@
           <b>{{ pesos(d.cobranza.total_por_cobrar) }}</b>
         </div>
         <div>
-          <span>Atrasado (más de {{ d.cobranza.dias_aviso }} días)</span>
+          <span>Con notas vencidas</span>
           <b>{{ pesos(d.cobranza.vencido) }}</b>
           <small>
             {{ d.cobranza.num_vencidos }} {{ d.cobranza.num_vencidos === 1 ? 'cliente' : 'clientes' }}
@@ -311,7 +311,7 @@
             <thead>
               <tr>
                 <th>Cliente</th><th>Teléfono</th><th class="num">Debe</th>
-                <th class="num">Nota más vieja</th><th>Estado</th>
+                <th>Vencimiento</th><th>Estado</th>
                 @if (veClientes()) { <th><span class="oculto">Acciones</span></th> }
               </tr>
             </thead>
@@ -324,13 +324,13 @@
                   </td>
                   <td class="muted">{{ c.telefono || '—' }}</td>
                   <td class="num"><b>{{ c.saldo | dinero }}</b></td>
-                  <td class="num">{{ c.dias_sin_abonar }} {{ c.dias_sin_abonar === 1 ? 'día' : 'días' }}</td>
+                  <td style="white-space: nowrap">{{ vencimiento(c) }}</td>
                   <td>
                     <!-- El estado se dice con ICONO + TEXTO, no solo con color: los
                          cuatro colores de semáforo no se distinguen bien entre sí. -->
-                    <span [class]="claseRiesgo(c.dias_sin_abonar)">
-                      <span aria-hidden="true">{{ iconoRiesgo(c.dias_sin_abonar) }}</span>
-                      {{ etiquetaRiesgo(c.dias_sin_abonar) }}
+                    <span [class]="claseRiesgo(c.dias_vencida ?? 0)">
+                      <span aria-hidden="true">{{ iconoRiesgo(c.dias_vencida ?? 0) }}</span>
+                      {{ etiquetaRiesgo(c.dias_vencida ?? 0) }}
                     </span>
                   </td>
                   @if (veClientes()) {

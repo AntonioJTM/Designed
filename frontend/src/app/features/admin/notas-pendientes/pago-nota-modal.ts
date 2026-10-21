@@ -1,6 +1,8 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { CuentaDeposito } from '../../../shared/cuenta-deposito';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { VentasService } from '../../../core/services/ventas.service';
@@ -24,7 +26,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
  */
 @Component({
   selector: 'app-pago-nota-modal',
-  imports: [FormsModule, DineroPipe],
+  imports: [FormsModule, DineroPipe, CuentaDeposito],
   templateUrl: './pago-nota-modal.html',
   host: { '(document:keydown.escape)': 'cerrar()' },
   styles: `
@@ -54,6 +56,9 @@ export class PagoNotaModal implements OnInit {
   metodoId: number | null = null;
   turnoId: number | null = null;
   referencia = '';
+  /** A qué cuenta llegó, si es por transferencia (Transferencias, 2026-10-20). */
+  cuentaId: number | null = null;
+  protected readonly transf = inject(TransferenciasService);
 
   /** Los inputs se leen AQUÍ: en el constructor todavía no están asignados. */
   ngOnInit(): void {
@@ -87,6 +92,12 @@ export class PagoNotaModal implements OnInit {
     return Number(this.metodoId) === this.SALDO;
   }
 
+  /** Por transferencia: se pregunta a qué cuenta llegó. Método: lee ngModel. */
+  esTransferencia(): boolean {
+    const m = this.metodos().find((x) => x.id === Number(this.metodoId));
+    return (m?.nombre ?? '').toLowerCase().includes('transferencia');
+  }
+
   /** Método y no `computed`: lee campos de ngModel. */
   esEfectivo(): boolean {
     const m = this.metodos().find((x) => x.id === Number(this.metodoId));
@@ -117,6 +128,10 @@ export class PagoNotaModal implements OnInit {
       this.error.set(`Tiene ${this.dinero(this.saldoFavor())} a favor: no alcanza para ${this.dinero(monto)}.`);
       return;
     }
+    if (!this.conSaldo() && this.transf.faltaCuenta(this.esTransferencia(), this.cuentaId)) {
+      this.error.set('Elige a qué cuenta llegó la transferencia.');
+      return;
+    }
     if (this.esEfectivo() && !this.turnoId) {
       this.error.set(
         this.turnos().length > 1
@@ -136,6 +151,8 @@ export class PagoNotaModal implements OnInit {
           metodo_pago_id: Number(this.metodoId),
           sesion_caja_id: this.esEfectivo() ? Number(this.turnoId) : undefined,
           referencia: this.referencia.trim() || undefined,
+          ...(this.esTransferencia() && this.transf.elegida(this.cuentaId)
+            ? { cuenta_bancaria_id: this.transf.elegida(this.cuentaId)! } : {}),
         }, this.clave)
       .subscribe({
         next: (r) => {

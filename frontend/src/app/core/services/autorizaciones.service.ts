@@ -22,7 +22,11 @@ export class AutorizacionesService {
 
   /** La acepta: el sistema la hace en ese momento (si ya no se puede, 409 y sigue pendiente). */
   /** `ajustes`: autorizar MENOS de lo pedido (un pedido a otra tienda: `{ items: [{ variante_id, paquetes }] }`). */
-  aprobar(id: number, ajustes?: { items: { variante_id: number; paquetes?: number; cantidad?: number }[] }): Observable<Autorizacion> {
+  /** `ajustes`: lo que cambia quien autoriza (de un pedido, cuánto de cada hilo; de un tipo de gasto, su límite). */
+  aprobar(
+    id: number,
+    ajustes?: { items: { variante_id: number; paquetes?: number; cantidad?: number }[] } | { limite: number | null }
+  ): Observable<Autorizacion> {
     return this.http.post<ApiResponse<Autorizacion>>(`${this.base}/${id}/aprobar`, ajustes ? { ajustes } : {}).pipe(map(data));
   }
 

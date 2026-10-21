@@ -15,7 +15,8 @@ function entero(valor, porOmision, min, max) {
 
 async function cobranza(q = {}) {
   // Sin decir nada, el plazo de la caja y la campana (DIAS_SIN_ABONAR).
-  return model.cartera({ diasAviso: q.dias_aviso == null ? undefined : entero(q.dias_aviso, 15, 1, 3650) });
+  // `dias_aviso`: las que vencieron hace MÁS de esos días (sin decirlo, todas las vencidas).
+  return model.cartera({ diasAviso: q.dias_aviso == null ? undefined : entero(q.dias_aviso, 0, 0, 3650) });
 }
 
 async function clientesEnfriados(q = {}) {

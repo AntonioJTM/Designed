@@ -826,7 +826,56 @@ CREATE TABLE `movimientos_caja` (
   PRIMARY KEY (`id`),
   KEY `idx_movcaja_sesion` (`sesion_caja_id`),
   CONSTRAINT `movimientos_caja_ibfk_1` FOREIGN KEY (`sesion_caja_id`) REFERENCES `sesiones_caja` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `movimientos_caja_chk_1` CHECK (`tipo` in (_utf8mb4'venta',_utf8mb4'ingreso',_utf8mb4'retiro',_utf8mb4'devolucion'))
+  -- 'gasto' (2026-10-20): un gasto de la caja, ligado a su renglón en `gastos`.
+  CONSTRAINT `movimientos_caja_chk_1` CHECK (`tipo` in (_utf8mb4'venta',_utf8mb4'ingreso',_utf8mb4'retiro',_utf8mb4'devolucion',_utf8mb4'gasto'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: tipos_gasto (2026-10-20, migración 2026-10_gastos) ----------
+-- Viajes, Limpieza, Papelería… con su TOPE POR GASTO (NULL = sin tope).
+DROP TABLE IF EXISTS `tipos_gasto`;
+CREATE TABLE `tipos_gasto` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(60) NOT NULL,
+  `limite` decimal(12,2) DEFAULT NULL,
+  `activo` tinyint(1) NOT NULL DEFAULT 1,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tipos_gasto_nombre` (`nombre`),
+  CONSTRAINT `chk_tipos_gasto_limite` CHECK (`limite` is null or `limite` > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: gastos (2026-10-20) ----------
+-- Cada gasto que se pagó con el cajón: su turno, su tipo, cuánto, qué se compró,
+-- el tope con que se registró (congelado), la autorización si lo pasó y la foto
+-- opcional del ticket (en disco, uploads/gastos).
+DROP TABLE IF EXISTS `gastos`;
+CREATE TABLE `gastos` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sesion_caja_id` bigint(20) unsigned NOT NULL,
+  `movimiento_caja_id` bigint(20) unsigned DEFAULT NULL,
+  `tipo_gasto_id` int(10) unsigned NOT NULL,
+  `monto` decimal(12,2) NOT NULL,
+  `descripcion` varchar(255) NOT NULL,
+  `limite` decimal(12,2) DEFAULT NULL,
+  `autorizacion_id` bigint(20) unsigned DEFAULT NULL,
+  `comprobante` varchar(60) DEFAULT NULL,
+  `comprobante_nombre` varchar(255) DEFAULT NULL,
+  `comprobante_tipo` varchar(40) DEFAULT NULL,
+  `usuario_id` bigint(20) unsigned NOT NULL,
+  `estado` varchar(12) NOT NULL DEFAULT 'registrado',
+  `cancelado_en` datetime DEFAULT NULL,
+  `cancelado_por` bigint(20) unsigned DEFAULT NULL,
+  `motivo_cancelacion` varchar(255) DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_gastos_sesion` (`sesion_caja_id`),
+  KEY `idx_gastos_tipo` (`tipo_gasto_id`),
+  KEY `idx_gastos_fecha` (`creado_en`),
+  CONSTRAINT `fk_gastos_sesion` FOREIGN KEY (`sesion_caja_id`) REFERENCES `sesiones_caja` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_gastos_tipo` FOREIGN KEY (`tipo_gasto_id`) REFERENCES `tipos_gasto` (`id`),
+  CONSTRAINT `fk_gastos_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `chk_gastos_monto` CHECK (`monto` > 0),
+  CONSTRAINT `chk_gastos_estado` CHECK (`estado` in ('registrado','cancelado'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
@@ -862,6 +911,8 @@ CREATE TABLE `pedidos` (
   `canal` varchar(15) NOT NULL,
   `encargo` tinyint(1) NOT NULL DEFAULT 0,
   `nota_pendiente` tinyint(1) NOT NULL DEFAULT 0,
+  -- A cuántos días se fió la nota (2026-10-20); NULL = 15. Vence el día en que se fió más estos días.
+  `dias_credito` smallint(5) unsigned DEFAULT NULL,
   `metodo_entrega` varchar(10) NOT NULL DEFAULT 'recoger',
   `cliente_id` bigint(20) unsigned DEFAULT NULL,
   `tipo_cliente_id` smallint(5) unsigned DEFAULT NULL,
@@ -905,6 +956,7 @@ CREATE TABLE `pedidos` (
   CONSTRAINT `pedidos_ibfk_6` FOREIGN KEY (`cupon_id`) REFERENCES `cupones` (`id`),
   CONSTRAINT `pedidos_chk_1` CHECK (`canal` in (_utf8mb4'tienda_linea',_utf8mb4'punto_venta')),
   CONSTRAINT `chk_pedidos_metodo_entrega` CHECK (`metodo_entrega` in ('recoger','envio')),
+  CONSTRAINT `chk_pedidos_dias_credito` CHECK (`dias_credito` is null or `dias_credito` between 1 and 365),
   CONSTRAINT `pedidos_chk_2` CHECK (`estado` in ('apartado','pendiente','pagado','en_preparacion','listo','enviado','entregado','cancelado','devuelto'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1284,6 +1336,39 @@ CREATE TABLE `operaciones_unicas` (
   PRIMARY KEY (`clave`),
   KEY `idx_ou_creado` (`creado_en`),
   CONSTRAINT `chk_ou_estado` CHECK (`estado` in ('en_curso','hecha'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: transferencias ----------
+-- Lo NUEVO de cada transferencia (2026-10-20): a qué cuenta llegó, si ya se vio
+-- en el banco (procesada) y si se facturó. La transferencia misma es un pagos,
+-- un abono (su primer renglón) o un anticipo: (fuente, fuente_id).
+DROP TABLE IF EXISTS `transferencias`;
+CREATE TABLE `transferencias` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `fuente` varchar(10) NOT NULL,
+  `fuente_id` bigint(20) unsigned NOT NULL,
+  `cuenta_bancaria_id` int(10) unsigned DEFAULT NULL,
+  `estado` varchar(12) NOT NULL DEFAULT 'por_revisar',
+  `facturada` tinyint(1) NOT NULL DEFAULT 0,
+  `revisada_por` bigint(20) unsigned DEFAULT NULL,
+  `revisada_en` datetime DEFAULT NULL,
+  `facturada_por` bigint(20) unsigned DEFAULT NULL,
+  `facturada_en` datetime DEFAULT NULL,
+  `creado_por` bigint(20) unsigned DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_transferencias_fuente` (`fuente`,`fuente_id`),
+  KEY `idx_transferencias_cuenta` (`cuenta_bancaria_id`),
+  KEY `fk_transferencias_revisada` (`revisada_por`),
+  KEY `fk_transferencias_facturada` (`facturada_por`),
+  KEY `fk_transferencias_creado` (`creado_por`),
+  CONSTRAINT `fk_transferencias_cuenta` FOREIGN KEY (`cuenta_bancaria_id`) REFERENCES `cuentas_bancarias` (`id`),
+  CONSTRAINT `fk_transferencias_revisada` FOREIGN KEY (`revisada_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_transferencias_facturada` FOREIGN KEY (`facturada_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_transferencias_creado` FOREIGN KEY (`creado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `chk_transferencias_fuente` CHECK (`fuente` in ('pago','abono','anticipo')),
+  CONSTRAINT `chk_transferencias_estado` CHECK (`estado` in ('por_revisar','procesada'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP VIEW IF EXISTS `v_ventas_por_empleado`;

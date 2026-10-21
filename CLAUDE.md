@@ -229,6 +229,11 @@ tienda-hilos/
   se sigue vendiendo escaneando su código. Teclear el color ("rojo") resuelve al código de la
   presentación (el código es el nombre): eso ahora BUSCA en vez de agregar.
   `e2e-venta-conos.js` recorre bajar a conos → buscar → vender 6 conos.
+- **Los paquetes de una venta van POR LOTE** (2026-10-20, usuario: "cada paquete que se escanea
+  tiene que tener el lote y cuántos paquetes van de cada lote en una venta"): `shared/lotes.ts →
+  porLote` los agrupa (en el orden en que se escaneó el primero de cada lote) en la caja ("Lote
+  0096952 · 3 paquetes · 58.45 kg" y sus paquetes con su ✕), el ticket ("Lote X: 2 paquetes (…)")
+  y el detalle de la venta (un renglón por lote en la tabla). Los tres usan la misma función.
 - **El pedido guarda de qué bultos salió.** `pedido_detalle_bultos` liga cada línea con los bultos
   que se entregaron. El código, el peso y el lote se **congelan** ahí, igual que
   `pedido_detalle.precio_unitario`: `variante_codigo_id` es la referencia viva y queda en `NULL`
@@ -448,6 +453,54 @@ tienda-hilos/
   `hacer:mover_efectivo`). El retiro EXIGE
   motivo —dinero que sale sin explicación es un faltante que nadie aclara— y no puede sacar más
   de lo que debería haber en el cajón (409 `EFECTIVO_INSUFICIENTE`, con la sesión bloqueada).
+- **GASTOS DE LA CAJA (2026-10-20)**: "otro apartado de gastos con límites; va en caja porque el
+  dinero sale de caja y no se calcula en nómina; tiene que llevar tipo: viajes, limpieza,
+  papelería" (usuario). Decidió: el LÍMITE es POR GASTO (un tope para cada gasto suelto de ese
+  tipo), PASARLO PIDE AUTORIZACIÓN y la foto del ticket es OPCIONAL. Migración `2026-10_gastos.sql`
+  (LAS DOS bases): `tipos_gasto` (nombre único, `limite`, `activo`; nacen Viajes, Limpieza y
+  Papelería SIN tope). **Un tipo SIN tope NO es "pasa todo": TODO gasto de ese tipo se autoriza**
+  (revisor de tiendas: con "sin límite" la cajera sacaba $8,000 sin pedir nada, cuando un retiro
+  sí se lo pide); quien autoriza lo registra directo. `gastos.js → seAutoriza / seAutorizaCon`, `gastos` (turno, tipo, monto, qué se compró, el `limite`
+  CONGELADO, `autorizacion_id`, la foto, estado registrado/cancelado) y el tipo nuevo `'gasto'` en
+  `movimientos_caja` (`SIGNO_CAJA` −1: el corte lo resta como un retiro). `caja/gastos.js` +
+  `gastos-controller.js`; rutas `/caja/tipos-gasto` (cambios: `hacer:tipos_gasto` y todas las
+  tiendas; ALTA: directo con `hacer:tipos_gasto` y todas las tiendas, o la PIDE el cajero con
+  `pedir:tipos_gasto` —operación `tipo_gasto`: quien autoriza la acepta poniéndole o cambiándole
+  el LÍMITE con `detalle`/`ajustar` ("Autorizar el tipo de gasto" en Autorizaciones), migración
+  `2026-10_gastos_tipo_pedir.sql`; 2026-10-20: "que lo puedan hacer también cajeros y la persona
+  que autoriza diga si se autoriza ese tipo y el límite"), `POST /caja/sesiones/:id/gastos` (`hacer:registrar_gasto`, `unaVez`,
+  `autorizable('gasto_sobre_limite')`: si pasa el tope del tipo o el tipo no tiene; directo con
+  `hacer:gasto_sobre_limite`; `alPedir` revisa turno y efectivo, `revisarAntes` cierra la
+  solicitud si cortaron el turno, desactivaron el tipo o quien pidió ya no registra; el registro
+  vuelve a mirar el tope adentro, 409 `GASTO_SE_AUTORIZA`), `GET /caja/gastos` (de SUS tiendas, por rango y tipo, con lo gastado
+  por tipo), `POST /caja/gastos/:id/cancelar` (`hacer:mover_efectivo`, motivo; SOLO con su turno
+  abierto: el dinero regresa como `'ingreso'`; cortado, 409 `TURNO_CERRADO`) y la foto en
+  `/caja/gastos/:id/comprobante` (en crudo, por sus bytes, `uploads/gastos`, servida con sesión;
+  cambiarla o quitarla solo quien registró el gasto con su turno abierto, o quien saca efectivo).
+  Con `X-Autorizacion` el candado (`autorizable.js`) ya no se salta por `aplica`: la llave se gasta
+  y queda ligada aunque algo cambiara mientras esperaba (para TODAS las operaciones).
+  No saca más de lo que hay en el cajón (409 `EFECTIVO_INSUFICIENTE`); tipo desactivado, 422
+  `TIPO_GASTO_INACTIVO`. La migración dio «Registrar gastos» a quien saca o pide sacar efectivo,
+  «Gastos arriba de su límite» a quien saca directo y su `pedir:` a quien lo pide. En la pantalla:
+  Caja → "Registrar gasto" (`caja/gasto-modal.ts`: tope del tipo, cajón antes → después, aviso de
+  autorización; la foto se sube DESPUÉS de registrarlo; "Nuevo tipo" ahí mismo para quien tiene
+  «Tipos de gasto» y todas las tiendas, y queda elegido), la tarjeta **Gastos**
+  (`caja/gastos-caja.ts`: Hoy / 7 días / Este mes, tipo, total y barras por tipo, "pasó su límite"
+  y quién autorizó, ver/subir ticket, cancelar) y "Tipos de gasto" (`caja/tipos-gasto-modal.ts`).
+  "Salió del cajón" cuenta los gastos. NO tocan la nómina.
+- **TRANSFERENCIAS (2026-10-20)**: "un apartado en ventas que se llame transferencias" con los datos
+  de la hoja del usuario. La lista sale SOLA (`transferencias/model.js`): los `pagos` por
+  Transferencia, los abonos por transferencia (el abono a VARIAS notas es UN renglón; llave =
+  su primer renglón de `credito_movimientos`) y la parte por transferencia de un anticipo, con su
+  cliente, los folios, el MATERIAL de lo vendido y el no. de operación (vive donde siempre;
+  corregirlo aquí lo corrige ahí). Lo nuevo va en `transferencias` (fuente, fuente_id): la
+  cuenta, Por revisar / Procesada y Facturada, con quién y cuándo; sin renglón sale "Por revisar"
+  y "Sin cuenta". La cuenta se pregunta AL COBRAR (`shared/cuenta-deposito.ts`, `cuenta_bancaria_id`
+  en pagos, abono, anticipo, pago de nota y entrega; `transferencias.anotar` en su transacción;
+  una sola cuenta activa se elige sola; 422 `CUENTA_INVALIDA`). Pantalla Vender → Transferencias
+  (`ver:transferencias` y todas las tiendas; marcar con `hacer:revisar_transferencias`, varias de
+  una vez con `POST /transferencias/marcar`). Una cuenta con transferencias no se borra (409
+  `CUENTA_CON_TRANSFERENCIAS`). Un cobro NUEVO por transferencia lleva su `anotar`.
 - **La mercancía puede regresar en OTRA presentación.** Se entrega el paquete y el cliente devuelve
   los conos: `PATCH /pedidos/:id/estado` acepta `devoluciones: [{detalle_id, variante_id, cantidad}]`
   y repone en la presentación indicada, no en la vendida. La equivalencia la calcula el backend
@@ -607,6 +660,14 @@ tienda-hilos/
     azul a medias y verde completa. Y la VENTANA DE ENVÍO la misma, al escanear (2026-10-20,
     `envio-modal.ts → avance`, "3 de 3 · completo ✓"). Para quien SURTE (de la matriz), "Pedidos
     con autorización" va DEBAJO de Pendientes (`traspasos.ts → surte`); para quien pide, arriba.
+    **Y SUS PDF** (2026-10-20, usuario: "que dé PDF de lo que se envía y de lo que se recibe"):
+    `GET /inventario/traspasos/:id/pdf?tipo=envio|recepcion` (`ver:surtir`, `inventario/traspaso-pdf.js`).
+    El del ENVÍO (en camino o recibido; sin enviar o cancelado, 409 `TRASPASO_SIN_ENVIAR`): pedido contra lo que salió y cada
+    paquete por hilo y lote (código, lote, peso, conos), con firmas Surtió / Lo llevó / Recibió. El de
+    RECEPCIÓN (solo recibido; 409 `TRASPASO_SIN_RECIBIR`): enviado / llegó / faltó por hilo, los que no
+    llegaron y cada paquete con "Llegó" / "NO LLEGÓ". Bajan SOLOS al enviar y al confirmar que llegó, y
+    se vuelven a sacar en Pendientes ("PDF del envío") y Traspasos cerrados (columna PDF). Sin costo
+    ni lo que hay en el origen.
   · `POST /inventario/traspasos/:id/recibir` **recibe**: lo firma cualquiera del staff y queda su
     nombre y la hora. Acepta `recibido: [{detalle_id, paquetes|cantidad}]` para declarar lo que de
     verdad llegó; entra al destino solo eso y el faltante se asienta como **merma** con el folio
@@ -822,6 +883,16 @@ tienda-hilos/
   El signo lo define el TIPO (como `SIGNO_CAJA`): `cargo` sube la deuda, `abono` la baja, y
   `ajuste` la corrige —es el único que admite monto negativo, para condonar o arreglar una captura
   mala, y EXIGE motivo: un saldo que cambia sin explicación no se puede aclarar después—.
+- **A CUÁNTOS DÍAS ES CADA NOTA A CRÉDITO (2026-10-20)**: "que diga a cuántos días es la nota; después
+  de los días, si no paga, una notificación" (usuario; eligió escribirlos en CADA venta, aviso en la
+  campana y que REEMPLACE la regla fija de 15 días). `pedidos.dias_credito` (1-365; NULL = 15,
+  migración `2026-10_dias_credito.sql`), lo guarda `cargarVentaACredito` en los tres caminos de fiar
+  (`dias_credito` en POST /pedidos, /a-credito y /entregar). La nota vence el día en que se fió más
+  sus días; `clientes/model.js → vencimientoDe` (sobre `repartirAbonos`, que lleva el `plazo`) da la
+  más vencida, las vencidas y la próxima. ATRASADO = alguna nota vencida: caja (`nota_vencida`, sin
+  folio), candado `CREDITO_ATRASADO`, campana (`cobranza.notas`, solo quien ve todas) y `cartera`
+  (tramos por días de vencida). En pantalla `shared/plazo-credito.ts` (8 / 15 / 30 u otro, "Vence el
+  …"); el ticket, el detalle y Ventas dicen a cuántos días y si venció.
 - **Vender a crédito: `POST /pedidos` acepta `a_credito`** (cuánto se lleva a deber). Admite venta
   MIXTA —paga algo hoy y el resto queda a deber, que es como ocurre en el mostrador— y exige
   `cliente_id`: no se le fía a un desconocido (422 `FALTA_CLIENTE`).
@@ -1424,11 +1495,10 @@ tienda-hilos/
   · **Lo que siempre lleva**: al elegirlo, sus 5 hilos de esa tienda (`GET /clientes/:id/lo-que-lleva`,
     por `producto_id`) como botones: el nombre busca el hilo, "Conos" abre directo la báscula de
     sus conos si hay ahí.
-  · **Cuenta atrasada**: `clientes/model.js → atrasoDe` cuenta los días de su NOTA MÁS VIEJA que
-    todavía se debe (2026-10-20; antes, desde su último abono). La caja dice "su nota más vieja
-    lleva N días sin pagarse (le faltan $X)". Pasado `DIAS_SIN_ABONAR` (15, el MISMO
-    de la campana, Cuánto debe y Cómo va el negocio, en `notificaciones/model.js`) la caja lo avisa en rojo y pregunta antes de
-    fiarle; el servidor da 409 `CREDITO_ATRASADO` sin `fiar_con_atraso: true`. Es un candado con
+  · **Cuenta atrasada**: desde el 2026-10-20 (tarde) es una NOTA VENCIDA (pasó sus días de crédito;
+    ver "A CUÁNTOS DÍAS ES CADA NOTA"); antes, su nota más vieja con más de 15 días. La caja dice
+    "tiene una nota a crédito vencida desde el … (hace N días; era a 15 días), le faltan $X", lo
+    avisa en rojo y pregunta antes de fiarle; el servidor da 409 `CREDITO_ATRASADO` sin `fiar_con_atraso: true`. Es un candado con
     llave, no un bloqueo: la tienda decide.
   · **El cintillo del modo** (`pos.ts → cintillo()`): bajo Cobrar / A crédito / Nota en espera /
     Pendiente de pago, una línea con qué pasa con la mercancía y con el dinero, en los pares de

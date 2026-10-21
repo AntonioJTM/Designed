@@ -59,7 +59,10 @@ function autorizable(clave) {
 
   return async (req, res, next) => {
     try {
-      if (op.aplica && !(await op.aplica(req))) return next();
+      // Con `X-Autorizacion` (se está haciendo lo que se aceptó) no se salta por
+      // `aplica`: la llave se gasta y queda ligada aunque algo cambiara mientras
+      // (el tope de un gasto que subieron después de pedirlo).
+      if (op.aplica && !req.get('X-Autorizacion') && !(await op.aplica(req))) return next();
       if (!req.auth || req.auth.tipo !== 'usuario') {
         return next(new AppError(403, 'PROHIBIDO', 'Recurso exclusivo de personal (staff)'));
       }

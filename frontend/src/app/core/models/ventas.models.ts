@@ -24,7 +24,8 @@ export interface Caja {
 
 export interface MovimientoCaja {
   id: number;
-  tipo: 'venta' | 'ingreso' | 'retiro' | 'devolucion';
+  /** 'gasto' (2026-10-20): un gasto de la caja (limpieza, papelería…); sale como un retiro. */
+  tipo: 'venta' | 'ingreso' | 'retiro' | 'devolucion' | 'gasto';
   monto: string;
   referencia_id?: number | null;
   motivo?: string | null;
@@ -32,6 +33,58 @@ export interface MovimientoCaja {
   /** Venta y devolución: el folio y el cliente del pedido. */
   numero_pedido?: string | null;
   cliente?: string | null;
+}
+
+/** Un tipo de gasto (Viajes, Limpieza…) con su TOPE POR GASTO; null = sin tope (2026-10-20). */
+export interface TipoGasto {
+  id: number;
+  nombre: string;
+  limite: number | null;
+  activo: boolean;
+}
+
+/** Un gasto pagado con el cajón (2026-10-20). */
+export interface Gasto {
+  id: number;
+  sesion_caja_id: number;
+  tipo_gasto_id: number;
+  tipo: string;
+  monto: number;
+  descripcion: string;
+  /** El tope que tenía su tipo al registrarlo (congelado). */
+  limite: number | null;
+  /** Pasó su tope: se registró con autorización (o lo hizo quien autoriza). */
+  paso_limite: boolean;
+  /** Necesitaba autorización: pasó su tope o su tipo no tenía. Sin `autorizo`: lo hizo directo quien autoriza. */
+  se_autorizaba: boolean;
+  usuario_id: number;
+  autorizacion_id: number | null;
+  autorizo: string | null;
+  con_comprobante: boolean;
+  comprobante_nombre: string | null;
+  comprobante_tipo: string | null;
+  estado: 'registrado' | 'cancelado';
+  motivo_cancelacion: string | null;
+  creado_en: string;
+  cancelado_en: string | null;
+  cancelado_por: string | null;
+  usuario: string;
+  caja: string;
+  almacen_id: number;
+  almacen: string;
+  /** El turno de donde salió: con 'abierta' todavía se puede cancelar. */
+  turno_estado: string;
+}
+
+export interface ListaGastos {
+  /** Los primeros 500; las cifras de abajo son de TODOS. */
+  items: Gasto[];
+  hay_mas: boolean;
+  /** Solo los registrados (sin los cancelados). */
+  total: number;
+  num: number;
+  pasaron_limite: number;
+  por_tipo: { tipo_gasto_id: number; tipo: string; num: number; total: number }[];
 }
 
 export interface SesionCaja {
@@ -361,6 +414,12 @@ export interface Pedido {
    */
   credito_pagado?: number | null;
   credito_por_pagar?: number | null;
+  /** A cuántos días se fió (2026-10-20); las de antes cuentan 15. */
+  dias_credito?: number | null;
+  /** Detalle: cuándo vence lo fiado (el día en que se fió más sus días). */
+  credito_vence_el?: string | null;
+  /** Listado: hace cuántos días venció lo que todavía se debe; null si no ha vencido. */
+  credito_dias_vencida?: number | null;
   /** Detalle: lo que el cliente REGRESÓ de esta nota y le quedó a favor (2026-10-13). */
   devoluciones?: DevolucionHecha[];
   /** Cuánto suman esas devoluciones. */

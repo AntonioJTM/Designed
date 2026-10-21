@@ -1,0 +1,25 @@
+// GASTOS DE LA CAJA (2026-10-20).
+:host { display: contents; }
+.gastos-card { margin-top: 0; }
+.gastos-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+.gastos-filtros .seg { flex: 0 1 auto; }
+.gastos-filtros .field { flex: 0 1 220px; min-width: 0; }
+.gastos-total { margin: 0 0 10px; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.gastos-total b { font-size: 1.125rem; }
+
+// Lo gastado por tipo: una barra contra el total del periodo.
+.gastos-por-tipo { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; max-width: 560px; }
+.gastos-por-tipo li { display: grid; grid-template-columns: minmax(0, 9rem) minmax(60px, 1fr) auto; align-items: center; gap: 10px; font-size: 0.875rem; }
+.gastos-por-tipo .nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gastos-por-tipo .barra { height: 8px; border-radius: 4px; background: var(--superficie-2); overflow: hidden; }
+.gastos-por-tipo .barra > span { display: block; height: 100%; border-radius: 4px; background: var(--viz-series-1); }
+.gastos-por-tipo .monto-tipo { font-variant-numeric: tabular-nums; color: var(--tinta-2); white-space: nowrap; }
+
+table.grid .sub { font-size: 0.75rem; color: var(--tinta-3); margin-top: 2px; }
+table.grid .sub.aviso-txt { color: var(--aviso-t); }
+tr.cancelado td { color: var(--tinta-3); }
+.tachado { text-decoration: line-through; }
+.acciones .btn { margin-left: 4px; }
+.acciones label.btn.disabled { pointer-events: none; opacity: 0.6; }
+.vacio { margin: 0; padding: 8px 0; color: var(--tinta-3); }
+.foto-ticket { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; border-radius: 6px; }

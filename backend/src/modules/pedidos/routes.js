@@ -40,6 +40,8 @@ const pagoSchema = z.object({
   metodo_pago_id: z.coerce.number().int().positive(),
   monto: z.coerce.number().positive(),
   referencia_transaccion: z.string().trim().max(120).optional(),
+  // A qué cuenta llegó una transferencia (2026-10-20, Transferencias).
+  cuenta_bancaria_id: z.coerce.number().int().positive().optional(),
 });
 
 const crearSchema = z
@@ -71,6 +73,8 @@ const crearSchema = z
     // ocurre de verdad en el mostrador. Exige `cliente_id`: no se le puede
     // fiar a un desconocido.
     a_credito: z.coerce.number().positive().max(99999999).optional(),
+    // A cuántos días es la nota a crédito (2026-10-20); sin decirlo, 15.
+    dias_credito: z.coerce.number().int().min(1).max(365).optional(),
     // Fiarle aunque traiga la cuenta atrasada: la caja lo pregunta antes (2026-10-16).
     fiar_con_atraso: z.boolean().optional(),
     // NOTA PENDIENTE DE PAGO: se lleva la mercancía y paga después (2026-10-13).
@@ -184,6 +188,8 @@ const abonoApartadoSchema = z
     // Obligatoria si el abono es en efectivo: el dinero entra al turno.
     sesion_caja_id: z.coerce.number().int().positive().optional(),
     referencia: z.string().trim().max(120).optional(),
+    // A qué cuenta llegó, si es por transferencia (2026-10-20).
+    cuenta_bancaria_id: z.coerce.number().int().positive().optional(),
   })
   .strict();
 
@@ -193,7 +199,13 @@ router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), unaVez()
 router.get('/:id/pagos/:pagoId/ticket', ...soloStaff, controller.ticketPago);
 // Pasar a crédito lo que falta de una nota pendiente de pago (es vender a crédito: pide su permiso).
 // Con la cuenta atrasada se confirma (`fiar_con_atraso`) y eso se autoriza (2026-10-19).
-const aCreditoSchema = z.object({ fiar_con_atraso: z.boolean().optional() }).strict();
+const aCreditoSchema = z
+  .object({
+    fiar_con_atraso: z.boolean().optional(),
+    // A cuántos días queda la nota (2026-10-20).
+    dias_credito: z.coerce.number().int().min(1).max(365).optional(),
+  })
+  .strict();
 router.post('/:id/a-credito', ...soloStaff, requirePermiso('hacer:fiar'), validate(aCreditoSchema),
   autorizable('fiar_atrasado'), controller.pasarACredito);
 
@@ -208,6 +220,8 @@ const entregaSchema = z
     pagos: z.array(pagoSchema).max(10).optional(),
     sesion_caja_id: z.coerce.number().int().positive().optional(),
     a_credito: z.coerce.number().positive().max(99999999).optional(),
+    // A cuántos días es la nota a crédito (2026-10-20); sin decirlo, 15.
+    dias_credito: z.coerce.number().int().min(1).max(365).optional(),
     // Se lleva la mercancía como NOTA PENDIENTE DE PAGO: lo que falta se cobra después.
     pendiente_pago: z.boolean().optional(),
     // Fiarle lo que falta aunque traiga su cuenta atrasada (se autoriza, 2026-10-19).

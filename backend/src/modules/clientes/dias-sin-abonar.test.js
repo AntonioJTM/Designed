@@ -43,3 +43,42 @@ test('los días cuentan desde la nota más vieja hasta hoy', () => {
   const a = diasDeLaMasVieja([m('cargo', 1000, '2026-09-01', 1), m('abono', 200, '2026-10-01')], '2026-10-20');
   assert.deepEqual(a, { dias: 49, porPagar: 800 });
 });
+
+// DÍAS DE CRÉDITO DE CADA NOTA (2026-10-20): la nota vence el día en que se fió
+// más sus días; sin decirlos, 15 (lo de antes da igual).
+const { vencimientoDe } = require('./model');
+const c = (monto, dia, pedido_id, dias_credito) => ({ tipo: 'cargo', monto, dia, pedido_id, dias_credito });
+
+test('a 30 días: el 20 de octubre una nota del 1 todavía no vence (vence el 31)', () => {
+  const v = vencimientoDe([c(1000, '2026-10-01', 1, 30)], '2026-10-20', 15);
+  assert.equal(v.vencida, null);
+  assert.equal(v.proxima.venceEl, '2026-10-31');
+  assert.equal(v.proxima.diasVencida, -11);
+});
+
+test('sin decir sus días: 15, como antes (del 1 de octubre vence el 16; al 20, hace 4 días)', () => {
+  const v = vencimientoDe([c(1000, '2026-10-01', 1, null)], '2026-10-20', 15);
+  assert.equal(v.vencida.venceEl, '2026-10-16');
+  assert.equal(v.vencida.diasVencida, 4);
+  assert.equal(v.vencida.plazo, 15);
+});
+
+test('la más vieja a 60 días no ha vencido, pero una más nueva a 8 sí: está atrasado por la nueva', () => {
+  const v = vencimientoDe([c(1000, '2026-09-01', 1, 60), c(300, '2026-10-05', 2, 8)], '2026-10-20', 15);
+  assert.equal(v.vencida.pedidoId, 2);
+  assert.equal(v.vencida.diasVencida, 7);
+  assert.equal(v.vencidas.length, 1);
+  assert.equal(v.dias, 49); // los de su nota más vieja, como antes
+});
+
+test('el día que vence todavía no está vencida; al día siguiente, sí', () => {
+  assert.equal(vencimientoDe([c(100, '2026-10-01', 1, 10)], '2026-10-11', 15).vencida, null);
+  assert.equal(vencimientoDe([c(100, '2026-10-01', 1, 10)], '2026-10-12', 15).vencida.diasVencida, 1);
+});
+
+test('la nota que ya se pagó no vence; no debe: null', () => {
+  const v = vencimientoDe([c(500, '2026-08-01', 1, 8), { tipo: 'abono', monto: 500, dia: '2026-08-05', pedido_id: 1 }, c(200, '2026-10-15', 2, 15)], '2026-10-20', 15);
+  assert.equal(v.vencida, null);
+  assert.equal(v.proxima.pedidoId, 2);
+  assert.equal(vencimientoDe([], '2026-10-20', 15), null);
+});

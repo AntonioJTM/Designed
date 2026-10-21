@@ -3,6 +3,7 @@
 const model = require('./model');
 const cuentas = require('./cuentas');
 const { AppError } = require('../../middlewares/error');
+const { pool } = require('../../config/db');
 
 /**
  * Lo que ve la tienda pública: las claves marcadas `publica` y las cuentas de
@@ -86,6 +87,16 @@ async function actualizarCuenta(id, datos) {
 
 /** Se borra de verdad: ninguna venta ni pago apunta a la cuenta, solo se le enseña al cliente. */
 async function eliminarCuenta(id) {
+  // Una cuenta a la que ya llegaron transferencias no se borra: se perdería a
+  // dónde llegaron (Transferencias, 2026-10-20). Se desactiva.
+  const [[u]] = await pool.query(
+    'SELECT COUNT(*) AS n FROM transferencias WHERE cuenta_bancaria_id = :id', { id }
+  );
+  if (Number(u.n)) {
+    throw new AppError(409, 'CUENTA_CON_TRANSFERENCIAS',
+      `A esa cuenta ya llegaron ${u.n} ${Number(u.n) === 1 ? 'transferencia' : 'transferencias'}: ` +
+      'no se puede borrar. Desactívala para que ya no se ofrezca.');
+  }
   const n = await model.eliminarCuenta(id);
   if (!n) throw new AppError(404, 'NO_ENCONTRADO', 'Cuenta no encontrada');
   return model.listarCuentas();

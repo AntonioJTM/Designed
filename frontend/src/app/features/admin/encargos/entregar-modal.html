@@ -78,6 +78,17 @@
             }
           </div>
 
+          @if (aCobrar() > 0 && esTransferencia()) {
+            <!-- A qué cuenta llegó y su folio (Transferencias, 2026-10-20). -->
+            <div class="form-grid">
+              <app-cuenta-deposito [(cuenta)]="cuentaId" [marcar]="!!error()" />
+              <label class="field">
+                <span>No. de operación <span class="muted">(opcional)</span></span>
+                <input type="text" [(ngModel)]="operacion" name="operacion" maxlength="120" placeholder="El folio que trae el comprobante" />
+              </label>
+            </div>
+          }
+
           @if (aCobrar() > 0 && esEfectivo()) {
             <div class="form-grid">
               <label class="field">
@@ -106,6 +117,10 @@
                 <input type="checkbox" [(ngModel)]="fiarResto" name="fiar" />
                 Los {{ resto() | dinero }} que no paga hoy van a crédito
               </label>
+              @if (fiarResto) {
+                <!-- A cuántos días (2026-10-20): pasados, la campana avisa. -->
+                <app-plazo-credito [(dias)]="diasCredito" nombre="dias-credito-entrega" />
+              }
             }
           }
         } @else if (aFavor() <= 0) {

@@ -7,9 +7,10 @@ const whatsapp = require('../whatsapp/conexion');
 
 // Cuándo un pendiente empieza a doler. Van aquí, con nombre, para poder
 // ajustarlos sin buscarlos dentro de una consulta.
-// Su nota más vieja lleva más de dos semanas sin pagarse (2026-10-20; antes,
-// "sin abonar"). Era 30; el 2026-10-16 el usuario lo pidió de 15 al poner el
-// aviso en la caja ("no fiarle a ciegas"): la campana y la caja usan el MISMO plazo.
+// Los días de crédito de una nota que no los dijo (las de antes del 2026-10-20,
+// cuando cada venta a crédito empezó a llevar los suyos): con 15, una cuenta está
+// atrasada cuando su nota pasó 15 días sin pagarse, como antes. La campana, la
+// caja, Cuánto debe y Cómo va el negocio miden el vencimiento de CADA nota.
 const DIAS_SIN_ABONAR = 15;
 const DIAS_SIN_VENIR = 60;  // compraba seguido y lleva dos meses sin aparecer
 // Cuánto tiempo un cliente sigue siendo "nuevo" para el aviso. Pasado eso, si
@@ -104,18 +105,27 @@ async function pendientes(almacenes = null) {
   // pantalla de cobranza. Sale de la MISMA cartera que Cuánto debe y Cómo va el negocio (2026-10-17):
   // los mismos días y el mismo plazo que la caja, así el aviso y la lista nunca
   // se contradicen.
-  const atrasados = !todas ? [] : (await analisisModel.cartera()).clientes
-    .filter((r) => r.dias_sin_abonar > DIAS_SIN_ABONAR);
-  const cobranza = [...atrasados]
-    .sort((a, b) => Number(b.saldo) - Number(a.saldo))
-    .slice(0, 8)
-    .map((r) => ({
-      cliente_id: r.cliente_id, nombre: r.nombre, nombre_comercial: r.nombre_comercial,
-      telefono: r.telefono, saldo: r.saldo, dias_sin_abonar: r.dias_sin_abonar,
-    }));
+  //
+  // Desde el 2026-10-20 son las NOTAS A CRÉDITO VENCIDAS: cada una pasó sus días de
+  // crédito sin pagarse ("después de los días, si no paga, una notificación"). Un
+  // aviso con TODAS contadas y las 8 más vencidas a la vista.
+  const atrasados = !todas ? [] : (await analisisModel.cartera()).clientes.filter((r) => r.notas_vencidas > 0);
+  let notasVencidas = [];
+  if (atrasados.length) {
+    const { diasSinAbonarDeTodos } = require('../clientes/model');
+    const porCliente = await diasSinAbonarDeTodos();
+    notasVencidas = atrasados.flatMap((r) => (porCliente.get(Number(r.cliente_id))?.vencidas ?? []).map((n) => ({
+      cliente_id: r.cliente_id, nombre: r.nombre, nombre_comercial: r.nombre_comercial, telefono: r.telefono,
+      // Sin venta = un ajuste que subió su deuda (Corregir deuda): no es una nota.
+      pedido_id: n.pedidoId ?? null, folio: n.folio ?? null, ajuste: n.pedidoId == null,
+      clave: `${r.cliente_id}-${n.pedidoId ?? 'aj-' + n.dia}`,
+      dias_credito: n.plazo, vence_el: n.venceEl, dias_vencida: n.diasVencida, por_pagar: n.porPagar,
+    }))).sort((a, b) => b.dias_vencida - a.dias_vencida || b.por_pagar - a.por_pagar);
+  }
+  const cobranza = notasVencidas.slice(0, 8);
   const cobranzaTotal = {
     n: atrasados.length,
-    monto: Math.round(atrasados.reduce((s, r) => s + Number(r.saldo), 0) * 100) / 100,
+    monto: Math.round(notasVencidas.reduce((s, n) => s + n.por_pagar, 0) * 100) / 100,
   };
 
   // Clientes que compraban y dejaron de venir: 2 compras o más y DIAS_SIN_VENIR
@@ -201,11 +211,12 @@ async function pendientes(almacenes = null) {
     // Hilos sin precio: UN aviso, con los primeros a la vista.
     sin_precio: { num: sinPrecio.length, hilos: sinPrecio.slice(0, 8) },
     // Cobranza atrasada: los pocos de mayor saldo, más el total.
+    // Las notas a crédito vencidas (2026-10-20): las 8 más vencidas, y el total.
     cobranza: {
-      clientes: cobranza,
+      notas: cobranza,
+      num_notas: notasVencidas.length,
       num_clientes: Number(cobranzaTotal.n),
       monto: Number(cobranzaTotal.monto),
-      dias: DIAS_SIN_ABONAR,
     },
     // Clientes que dejaron de venir.
     enfriados: {

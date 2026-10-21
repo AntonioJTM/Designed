@@ -32,7 +32,7 @@ El usuario pidió `/verificar`. Quiere una **auditoría estricta módulo por mó
      - En **Reportes › Ventas por día**: `Sin IVA − Descuentos + IVA + Envío = Total`.
      - En **PDFs (Nómina / Comisiones)**: que una devolución no cuente como venta ni sume al vendido, y que no se corten textos largos en las columnas.
    - **Un solo plazo y signo (`<` vs `<=`) en todo el sistema:**
-     - **Atraso de cobranza (`15 días` desde el último abono):** igual en Caja, Campana, Clientes › Cuánto debe y Cómo va el negocio (nunca mezclar 15 y 30 días).
+     - **Atraso de cobranza (el vencimiento de CADA nota, 2026-10-20):** una nota a crédito vence el día en que se fió más sus días de crédito (`pedidos.dias_credito`; sin decirlos, `DIAS_SIN_ABONAR` = 15); una cuenta está atrasada si alguna nota ya venció. La misma cuenta (`vencimientoDe` / `diasSinAbonarDeTodos`) en Caja, Campana, Clientes › Cuánto debe y Cómo va el negocio.
      - **Cliente nuevo en Hoy:** capturado en los *últimos* 15 días (nunca decir *"hace 15 días o más"*).
      - **Stock mínimo (`<=`):** decir *"N paquetes o menos"* (nunca *"menos de N"*) y abrir en Paquetes.
    - **Candados de cobro y cierre de operaciones:**

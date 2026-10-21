@@ -6,6 +6,7 @@ import { TicketService } from '../../../core/services/ticket.service';
 import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { PlazoCredito, PLAZO_CREDITO_POR_OMISION, plazoValido } from '../../../shared/plazo-credito';
 import { NotaPendiente, NotaPendienteHilo, NotasPendientes, ResultadoAbono } from '../../../core/models/ventas.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -33,8 +34,9 @@ import { TiempoRealService } from '../../../core/services/tiempo-real.service';
  */
 @Component({
   selector: 'app-notas-pendientes',
-  imports: [BotonWhatsapp, FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, PagoNotaModal],
+  imports: [BotonWhatsapp, FormsModule, RouterLink, DineroPipe, FolioPipe, FechaPipe, PagoNotaModal, PlazoCredito],
   templateUrl: './notas-pendientes.html',
+  host: { '(document:keydown.escape)': 'aCredito.set(null)' },
 })
 export class NotasPendientesPantalla {
   private readonly ventas = inject(VentasService);
@@ -52,6 +54,10 @@ export class NotasPendientesPantalla {
   readonly pagando = signal<NotaPendiente | null>(null);
   /** La que se está pasando a crédito (apaga su botón mientras). */
   readonly pasando = signal<number | null>(null);
+  /** La nota que se va a pasar a crédito: su ventana pide a cuántos días (2026-10-20). */
+  readonly aCredito = signal<NotaPendiente | null>(null);
+  diasCredito: number | null = PLAZO_CREDITO_POR_OMISION;
+  readonly plazoValido = plazoValido;
 
   readonly puedeCredito = computed(() => this.auth.puede('hacer:fiar'));
   readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
@@ -132,16 +138,16 @@ export class NotasPendientesPantalla {
     this.cargar();
   }
 
-  async pasarACredito(n: NotaPendiente): Promise<void> {
-    const dinero = (x: number) => `$${Number(x).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const si = await this.confirmacion.pedir({
-      titulo: '¿Pasar a crédito?',
-      mensaje:
-        `Se cargan ${dinero(n.falta)} a la cuenta de crédito de ${this.quien(n)} y la nota sale de esta lista: ` +
-        'desde ahí se cobra con abonos a su cuenta, en su expediente.',
-      aceptar: 'Pasar a crédito',
-    });
-    if (!si) return;
+  /** Abre la ventana: lo que se carga y a cuántos días (2026-10-20; antes era solo una pregunta). */
+  pasarACredito(n: NotaPendiente): void {
+    this.diasCredito = PLAZO_CREDITO_POR_OMISION;
+    this.aCredito.set(n);
+  }
+
+  confirmarACredito(): void {
+    const n = this.aCredito();
+    if (!n || !plazoValido(this.diasCredito)) return;
+    this.aCredito.set(null);
     this.mandarACredito(n, false);
   }
 
@@ -150,11 +156,12 @@ export class NotasPendientesPantalla {
     const dinero = (x: number) => `$${Number(x).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     this.pasando.set(n.id);
     this.error.set(null);
-    this.ventas.pasarACredito(n.id, fiarConAtraso ? { fiar_con_atraso: true } : {}).subscribe({
+    const dias = Number(this.diasCredito);
+    this.ventas.pasarACredito(n.id, { dias_credito: dias, ...(fiarConAtraso ? { fiar_con_atraso: true } : {}) }).subscribe({
       next: (p) => {
         this.pasando.set(null);
         this.mensaje.set(
-          `${n.numero_pedido}: ${dinero(p.a_credito)} pasaron a la cuenta de crédito de ${this.quien(n)}` +
+          `${n.numero_pedido}: ${dinero(p.a_credito)} pasaron a la cuenta de crédito de ${this.quien(n)}, a ${dias} días` +
             (p.estado === 'pagado' ? '; su saldo a favor la cubrió y ya está pagada.' : '.')
         );
         this.cargar();

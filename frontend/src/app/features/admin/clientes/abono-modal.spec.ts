@@ -3,6 +3,8 @@ import { of } from 'rxjs';
 import { AbonoModal } from './abono-modal';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { VentasService } from '../../../core/services/ventas.service';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { transferenciasFalso } from '../../../core/services/transferencias.falso';
 
 /**
  * El abono:
@@ -50,7 +52,7 @@ describe('AbonoModal', () => {
   async function montar(nota: number | null = null) {
     await TestBed.configureTestingModule({
       imports: [AbonoModal],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, 
         { provide: ClientesService, useValue: clientesFalso },
         { provide: VentasService, useValue: ventasFalso },
       ],

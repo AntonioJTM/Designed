@@ -14,6 +14,11 @@ import { TicketService } from '../../../core/services/ticket.service';
 import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { Observable } from 'rxjs';
 import { nuevaClave } from '../../../core/clave-unica';
+import { CuentaDeposito } from '../../../shared/cuenta-deposito';
+import { PlazoCredito, PLAZO_CREDITO_POR_OMISION, fechaVence, plazoValido, venceEl } from '../../../shared/plazo-credito';
+import { hoyLocal } from '../../../shared/fecha.pipe';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { nombreLote, paquetes, porLote } from '../../../shared/lotes';
 import { Cotizacion } from '../../../core/models/tienda.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -95,7 +100,7 @@ export type ModoVenta = 'cobrar' | 'credito' | 'espera' | 'pendiente';
 @Component({
   selector: 'app-pos',
   host: { '(document:keydown.escape)': 'alEscape()', '(document:keydown)': 'alTeclear($event)' },
-  imports: [BotonWhatsapp, FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal, AnticipoModal],
+  imports: [BotonWhatsapp, FormsModule, RouterLink, DineroPipe, CantidadPipe, PesarModal, AnticipoModal, CuentaDeposito, PlazoCredito],
   styleUrls: ['./pos.scss', './pos-bultos.scss', './pos-busqueda.scss', './pos-cliente.scss'],
   templateUrl: './pos.html',
 })
@@ -293,6 +298,16 @@ export class Pos {
   montoPago: number | null = null;
   /** Con 'mixto': lo que paga por transferencia. */
   montoTransferencia: number | null = null;
+  /**
+   * Por transferencia, A QUÉ CUENTA llegó y su número de operación (2026-10-20,
+   * Transferencias: el usuario eligió que se pregunte al cobrar).
+   */
+  cuentaTransf: number | null = null;
+  operacionTransf = '';
+  protected readonly transferencias = inject(TransferenciasService);
+
+  /** A cuántos días es la nota a crédito (2026-10-20); se propone 15. */
+  diasCredito: number | null = PLAZO_CREDITO_POR_OMISION;
 
   // ---- Abono a la cuenta del cliente, sin salir de la venta ----
   readonly abonando = signal(false);
@@ -303,6 +318,7 @@ export class Pos {
   montoAbono: number | null = null;
   metodoAbono: number | '' = '';
   referenciaAbono = '';
+  cuentaAbono: number | null = null;
 
   constructor() {
     // EN VIVO (2026-10-19): si otra caja vende o alguien baja conos, lo que hay
@@ -747,6 +763,7 @@ export class Pos {
           saldo_favor: e.saldo_favor ?? 0,
           dias_sin_abonar: e.dias_sin_abonar ?? null,
           nota_vieja_por_pagar: e.nota_vieja_por_pagar ?? null,
+          nota_vencida: e.nota_vencida ?? null,
           atrasado: !!e.atrasado,
         });
       },
@@ -846,6 +863,13 @@ export class Pos {
    * quedaría "vendido" estando en la bodega (2026-10-06). Sin bultos, la línea
    * se va.
    */
+  /** Los paquetes de la línea por LOTE, con cuántos y cuántos kilos (2026-10-20). */
+  lotesDe(item: ItemCarrito) {
+    return porLote(item.bultos);
+  }
+  readonly nombreLote = nombreLote;
+  readonly paquetes = paquetes;
+
   quitarBulto(item: ItemCarrito, codigo: string): void {
     const quedan = (item.bultos ?? []).filter((b) => b.codigo !== codigo);
     const quitado = (item.bultos ?? []).find((b) => b.codigo === codigo);
@@ -1055,6 +1079,7 @@ export class Pos {
           saldo_favor: c.saldo_favor ?? 0,
           dias_sin_abonar: c.dias_sin_abonar ?? null,
           nota_vieja_por_pagar: c.nota_vieja_por_pagar ?? null,
+          nota_vencida: c.nota_vencida ?? null,
           atrasado: !!c.atrasado,
         });
       },
@@ -1288,10 +1313,13 @@ export class Pos {
       const libre = Math.max(0, Math.round((this.creditoDisponible() - fiado) * 100) / 100);
       const hoy = this.aPagarHoy();
       const c = this.clienteSel();
-      const atraso = c?.atrasado ? ` Ojo: su nota más vieja lleva ${c.dias_sin_abonar} días sin pagarse.` : '';
+      const atraso = c?.atrasado ? ` Ojo: ${this.textoVencida(c)}.` : '';
+      const plazo = plazoValido(this.diasCredito)
+        ? ` a ${this.diasCredito} días (vence el ${fechaVence(venceEl(hoyLocal(), Number(this.diasCredito)))})`
+        : '';
       return {
         tono: c?.atrasado ? 'atrasado' : 'credito',
-        texto: `Se lleva la mercancía hoy y ${this.dinero(fiado)} van a su cuenta` +
+        texto: `Se lleva la mercancía hoy y ${this.dinero(fiado)} van a su cuenta${plazo}` +
           (hoy > 0 ? `; paga ${this.dinero(hoy)} hoy` : '') +
           `. Le quedarán ${this.dinero(libre)} de crédito libre.${atraso}`,
       };
@@ -1396,6 +1424,10 @@ export class Pos {
         this.error.set('Elige con qué deja el pago.');
         return false;
       }
+      if (deja > 0 && this.transferencias.faltaCuenta(this.metodoEsTransferencia(), this.cuentaTransf)) {
+        this.error.set('Elige a qué cuenta llegó la transferencia.');
+        return false;
+      }
       this.error.set(null);
       this.tomarPedido(s, deja);
       return true;
@@ -1424,8 +1456,13 @@ export class Pos {
     // CUENTA ATRASADA (2026-10-16): no se le fía a ciegas. Se pregunta, con lo que
     // debe y los días; el servidor también lo detiene si no se confirmó.
     const cli = this.clienteSel();
+    // A cuántos días es la nota (2026-10-20).
+    if (fiado > 0 && !plazoValido(this.diasCredito)) {
+      this.error.set('Di a cuántos días es la nota a crédito (de 1 a 365).');
+      return false;
+    }
     if (fiado > 0 && cli?.atrasado && !this.auth.puedeOPide('hacer:fiar_atrasado')) {
-      this.error.set(`La nota más vieja de ${cli.nombre_comercial || cli.nombre} lleva ${cli.dias_sin_abonar} días sin pagarse y tu puesto no le ` +
+      this.error.set(`${cli.nombre_comercial || cli.nombre} ${this.textoVencida(cli)} y tu puesto no le ` +
         'puede dar a crédito así. Pídele un abono, o que le cobre alguien que lo pueda autorizar.');
       return false;
     }
@@ -1433,8 +1470,8 @@ export class Pos {
       return this.confirmacion
         .pedir({
           titulo: '¿Darle a crédito con la cuenta atrasada?',
-          mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y su nota más vieja lleva ` +
-            `${cli.dias_sin_abonar} días sin pagarse. Lo sano es pedirle un abono antes de darle más a crédito.`,
+          mensaje: `${cli.nombre_comercial || cli.nombre} debe ${this.dinero(cli.saldo)} y ${this.textoVencida(cli)}. ` +
+            'Lo sano es pedirle un abono antes de darle más a crédito.',
           aceptar: 'Darle a crédito de todos modos',
           peligro: true,
         })
@@ -1475,6 +1512,10 @@ export class Pos {
         return false;
       }
     }
+    if (aPagar > 0 && this.transferencias.faltaCuenta(this.llevaTransferencia(), this.cuentaTransf)) {
+      this.error.set('Elige a qué cuenta llegó la transferencia.');
+      return false;
+    }
     const enEfectivo = this.aCobrarEnEfectivo();
     const recibido = this.esEfectivoSel() ? Number(this.montoPago ?? enEfectivo) : enEfectivo;
     if (enEfectivo > 0 && recibido + 0.001 < enEfectivo) {
@@ -1488,10 +1529,13 @@ export class Pos {
       ? undefined
       : this.esMixto()
         ? [
-            { metodo_pago_id: Number(this.idTransferencia()), monto: transf },
+            { metodo_pago_id: Number(this.idTransferencia()), monto: transf, ...this.datosTransferencia() },
             ...(recibido > 0 ? [{ metodo_pago_id: Number(this.idEfectivo()), monto: recibido }] : []),
           ]
-        : [{ metodo_pago_id: Number(this.metodoSel), monto: recibido }];
+        : [{
+            metodo_pago_id: Number(this.metodoSel), monto: recibido,
+            ...(this.metodoEsTransferencia() ? this.datosTransferencia() : {}),
+          }];
 
     this.ventas
       .crearPedido({
@@ -1502,6 +1546,7 @@ export class Pos {
         // Si se identificó al cliente, la venta queda en su historial.
         cliente_id: this.clienteSel()?.id,
         a_credito: fiado > 0 ? fiado : undefined,
+        dias_credito: fiado > 0 ? Number(this.diasCredito) : undefined,
         fiar_con_atraso: fiarConAtraso || undefined,
         saldo_favor: saldo > 0 ? saldo : undefined,
         items: this.carrito().map((i) => ({
@@ -1546,6 +1591,10 @@ export class Pos {
   private ventaFallida(e: unknown): void {
     this.cobrando.set(false);
     this.error.set(this.msg(e));
+    // La cuenta se desactivó mientras: se vuelven a pedir para elegir otra.
+    if ((e as { error?: { error?: { code?: string } } })?.error?.error?.code === 'CUENTA_INVALIDA') {
+      this.transferencias.cargarCuentas(true);
+    }
   }
 
   /** Deja la caja lista para el siguiente cliente, con el lector esperando. */
@@ -1553,6 +1602,11 @@ export class Pos {
     this.carrito.set([]);
     this.montoPago = null;
     this.montoTransferencia = null;
+    // Los días de crédito son de esa nota: la siguiente vuelve a proponer 15.
+    this.diasCredito = PLAZO_CREDITO_POR_OMISION;
+    // La cuenta y el folio son de esa transferencia (con una sola cuenta, se vuelve a elegir sola).
+    this.cuentaTransf = null;
+    this.operacionTransf = '';
     // Parte y parte es de esa venta: la siguiente arranca en efectivo.
     if (this.metodoSel === 'mixto') this.metodoSel = this.idEfectivo() ?? '';
     this.qVar = '';
@@ -1579,6 +1633,39 @@ export class Pos {
 
   idTransferencia(): number | null {
     return this.idDe('transferencia');
+  }
+
+  /**
+   * "tiene una nota a crédito vencida desde el 4 de noviembre (hace 6 días; era a
+   * 15 días), le faltan $1,200.00" (2026-10-20). Sin el folio: puede ser de otra tienda.
+   */
+  textoVencida(c: { nota_vencida?: { dias_credito: number; vence_el: string; dias_vencida: number; por_pagar: number } | null }): string {
+    const v = c.nota_vencida;
+    if (!v) return 'tiene una nota a crédito vencida';
+    return `tiene una nota a crédito vencida desde el ${fechaVence(v.vence_el)} (hace ${v.dias_vencida} ` +
+      `${v.dias_vencida === 1 ? 'día' : 'días'}; era a ${v.dias_credito} días), le faltan ${this.dinero(v.por_pagar)}`;
+  }
+
+  /** El método elegido es Transferencia (sin parte y parte). Método: lee ngModel. */
+  metodoEsTransferencia(): boolean {
+    return this.metodoSel !== '' && this.metodoSel !== 'mixto' && Number(this.metodoSel) === this.idTransferencia();
+  }
+
+  /** Se cobra (algo) por transferencia: sola o parte y parte. */
+  llevaTransferencia(): boolean {
+    return this.esMixto() || this.metodoEsTransferencia();
+  }
+
+  /** A qué cuenta llegó y su número de operación, para el pago por transferencia. */
+  private datosTransferencia(): { cuenta_bancaria_id?: number; referencia_transaccion?: string } {
+    const cuenta = this.transferencias.elegida(this.cuentaTransf);
+    const op = this.operacionTransf.trim();
+    return { ...(cuenta ? { cuenta_bancaria_id: cuenta } : {}), ...(op ? { referencia_transaccion: op } : {}) };
+  }
+
+  /** El abono a su cuenta es por transferencia. */
+  abonoPorTransferencia(): boolean {
+    return this.metodoAbono !== '' && Number(this.metodoAbono) === this.idTransferencia();
   }
 
   /** Se ofrece "Efectivo y transferencia" si existen los dos métodos (2026-10-14). */
@@ -1673,7 +1760,10 @@ export class Pos {
           bultos: i.bultos?.length ? i.bultos : undefined,
           piezas: i.piezas || undefined,
         })),
-        pagos: deja > 0 ? [{ metodo_pago_id: Number(this.metodoSel), monto: deja }] : undefined,
+        pagos: deja > 0 ? [{
+          metodo_pago_id: Number(this.metodoSel), monto: deja,
+          ...(this.metodoEsTransferencia() ? this.datosTransferencia() : {}),
+        }] : undefined,
       })
       .subscribe({
         next: (pedido) => {
@@ -1766,6 +1856,7 @@ export class Pos {
     const efectivo = this.metodos().find((m) => m.nombre.toLowerCase().includes('efectivo'));
     this.metodoAbono = efectivo?.id ?? '';
     this.referenciaAbono = '';
+    this.cuentaAbono = null;
     this.errorAbono.set(null);
     this.abonando.set(true);
   }
@@ -1794,6 +1885,10 @@ export class Pos {
       this.errorAbono.set('Elige con qué está pagando.');
       return;
     }
+    if (this.transferencias.faltaCuenta(this.abonoPorTransferencia(), this.cuentaAbono)) {
+      this.errorAbono.set('Elige a qué cuenta llegó la transferencia.');
+      return;
+    }
     this.registrandoAbono.set(true);
     this.errorAbono.set(null);
     this.clientesSvc
@@ -1804,6 +1899,8 @@ export class Pos {
         // esperaría menos de lo que hay en el cajón.
         sesion_caja_id: this.abonoEnEfectivo() ? s?.id : undefined,
         referencia: this.referenciaAbono.trim() || undefined,
+        ...(this.abonoPorTransferencia() && this.transferencias.elegida(this.cuentaAbono)
+          ? { cuenta_bancaria_id: this.transferencias.elegida(this.cuentaAbono)! } : {}),
       }, this.claveAbono)
       .subscribe({
         next: (r) => {
@@ -1817,7 +1914,7 @@ export class Pos {
             ...c,
             saldo,
             credito_disponible: Math.max(0, Math.round((limite - saldo) * 100) / 100),
-            ...(saldo > 0 ? {} : { dias_sin_abonar: null, nota_vieja_por_pagar: null, atrasado: false }),
+            ...(saldo > 0 ? {} : { dias_sin_abonar: null, nota_vieja_por_pagar: null, nota_vencida: null, atrasado: false }),
           });
           // Si todavía debe, el atraso lo dice el servidor (2026-10-20): se mide por su
           // nota más vieja, y un abono chiquito no la paga.

@@ -125,3 +125,29 @@
 @if (pagando(); as n) {
   <app-pago-nota-modal [nota]="n" (cerrado)="pagando.set(null)" (registrado)="alPagar($event)" />
 }
+
+<!-- Pasar a crédito (2026-10-20): lo que se carga a su cuenta y A CUÁNTOS DÍAS. No se
+     cierra al tocar el fondo: sale con la ✕, "Cancelar" o Escape. -->
+@if (aCredito(); as n) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="acred-titulo">
+      <div class="modal-head">
+        <h2 id="acred-titulo">Pasar a crédito · {{ n.numero_pedido | folio }}</h2>
+        <button type="button" class="modal-cerrar" (click)="aCredito.set(null)" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body columna">
+        <p style="margin: 0">
+          Se cargan <b>{{ n.falta | dinero }}</b> a la cuenta de crédito de <b>{{ quien(n) }}</b> y la nota sale de
+          esta lista: desde ahí se cobra con abonos a su cuenta, en su expediente.
+        </p>
+        <app-plazo-credito [(dias)]="diasCredito" nombre="dias-credito-nota" />
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" (click)="aCredito.set(null)">Cancelar</button>
+        <button type="button" class="btn btn-primary" [disabled]="!plazoValido(diasCredito)" (click)="confirmarACredito()">
+          Pasar a crédito a {{ diasCredito }} días
+        </button>
+      </div>
+    </div>
+  </div>
+}

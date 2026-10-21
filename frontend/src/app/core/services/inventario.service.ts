@@ -1040,6 +1040,17 @@ export class InventarioService {
   }
 
   /** Paso 3: el responsable acepta y dice qué llegó. */
+  /**
+   * El PDF de un envío: lo que salió, con cada paquete (`envio`), o de lo que se
+   * recibió, con lo que faltó (`recepcion`). 2026-10-20.
+   */
+  pdfTraspaso(id: number, tipo: 'envio' | 'recepcion'): Observable<Blob> {
+    return this.http.get(`${this.base}/inventario/traspasos/${id}/pdf`, {
+      params: new HttpParams().set('tipo', tipo),
+      responseType: 'blob',
+    });
+  }
+
   recibirTraspaso(id: number, body: RecepcionInput = {}): Observable<ResultadoTraspaso> {
     return this.http
       .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos/${id}/recibir`, body)

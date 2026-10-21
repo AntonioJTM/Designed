@@ -132,15 +132,17 @@ async function expediente(id, { limitePedidos = 20, almacenes = null } = {}) {
     saldoFavor.deudaTotal(id),
   ]);
 
-  // Si debe: cuántos días lleva sin pagarse su nota más vieja (la caja lo dice al
-  // elegirlo desde aquí).
-  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
+  // Si debe: sus notas vencidas (pasaron sus días de crédito, 2026-10-20) y la que
+  // vence primero (la caja lo dice al elegirlo desde aquí).
   const atraso = Number(cliente.saldo ?? 0) > 0 ? await model.atrasoDe(id) : null;
   return {
     ...sanitizar(cliente),
     dias_sin_abonar: atraso?.dias ?? null,
     nota_vieja_por_pagar: atraso?.porPagar ?? null,
-    atrasado: atraso != null && atraso.dias > DIAS_SIN_ABONAR,
+    nota_vencida: model.notaVencimiento(atraso?.vencida),
+    notas_vencidas: atraso?.vencidas?.length ?? 0,
+    proxima_a_vencer: model.notaVencimiento(atraso?.proxima),
+    atrasado: !!atraso?.vencida,
     estadisticas: stats,
     colores_mas_comprados: colores,
     pedidos: pedidos.rows,
@@ -355,6 +357,7 @@ async function recibirAnticipo(id, datos, usuarioId) {
     transferencia: datos.transferencia ?? 0,
     sesionCajaId: datos.sesion_caja_id ?? null,
     referencia: datos.referencia ?? null,
+    cuentaId: datos.cuenta_bancaria_id ?? null,
     notas: datos.notas ?? null,
     usuarioId,
   }));

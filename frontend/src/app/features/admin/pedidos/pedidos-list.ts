@@ -53,6 +53,7 @@ function haceDias(dias: number): string {
     td .no-contado { color: var(--aviso-t); }
     td .porque { display: block; font-size: 0.75rem; color: var(--tinta-3); }
     td .porque .debe { color: var(--aviso-t); font-weight: 600; }
+    td .porque .vencida { color: var(--alerta-t); font-weight: 600; }
     .periodos { flex: 0 0 auto; }
     td.tenue { color: var(--tinta-2); }
     td .falta { color: var(--alerta-t); }

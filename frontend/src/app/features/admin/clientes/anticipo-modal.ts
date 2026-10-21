@@ -1,6 +1,8 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { CuentaDeposito } from '../../../shared/cuenta-deposito';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { VentasService } from '../../../core/services/ventas.service';
 import { SesionCaja } from '../../../core/models/ventas.models';
@@ -23,7 +25,7 @@ import { turnoPropuesto, turnosAbiertos } from './turnos-caja';
  */
 @Component({
   selector: 'app-anticipo-modal',
-  imports: [FormsModule, DineroPipe],
+  imports: [FormsModule, DineroPipe, CuentaDeposito],
   templateUrl: './anticipo-modal.html',
   host: { '(document:keydown.escape)': 'cerrar()' },
   styles: `
@@ -63,6 +65,9 @@ export class AnticipoModal implements OnInit {
   transferencia: number | null = null;
   turnoId: number | null = null;
   referencia = '';
+  /** A qué cuenta llegó la transferencia (Transferencias, 2026-10-20). */
+  cuentaId: number | null = null;
+  protected readonly transf = inject(TransferenciasService);
 
   /** Los inputs se leen AQUÍ: en el constructor todavía no están asignados. */
   ngOnInit(): void {
@@ -112,6 +117,10 @@ export class AnticipoModal implements OnInit {
       );
       return;
     }
+    if (this.transf.faltaCuenta(this.parteTransferencia() > 0, this.cuentaId)) {
+      this.error.set('Elige a qué cuenta llegó la transferencia.');
+      return;
+    }
     this.guardando.set(true);
     this.error.set(null);
     this.clientes
@@ -120,6 +129,8 @@ export class AnticipoModal implements OnInit {
         transferencia: this.parteTransferencia() || undefined,
         sesion_caja_id: this.parteEfectivo() > 0 ? Number(this.turnoId) : undefined,
         referencia: this.parteTransferencia() > 0 ? this.referencia.trim() || undefined : undefined,
+        ...(this.parteTransferencia() > 0 && this.transf.elegida(this.cuentaId)
+          ? { cuenta_bancaria_id: this.transf.elegida(this.cuentaId)! } : {}),
       }, this.clave)
       .subscribe({
         next: (r) => {

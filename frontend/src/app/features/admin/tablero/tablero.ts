@@ -294,7 +294,7 @@ export class Tablero implements OnInit {
         : c.num_clientes === 0
           ? 'nadie te debe ahora mismo'
           : `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente' : 'clientes'}` +
-            (c.num_vencidos > 0 ? ` · ${c.num_vencidos} con notas de más de ${c.dias_aviso} días` : ''),
+            (c.num_vencidos > 0 ? ` · ${c.num_vencidos} con notas vencidas` : ''),
       punto: 'var(--punto-alerta)',
     });
     return lista;
@@ -414,7 +414,9 @@ export class Tablero implements OnInit {
       .map((x) => ({
         label: x.nombre_comercial || x.nombre,
         value: Number(x.saldo),
-        detalle: `su nota más vieja, ${x.dias_sin_abonar} días`,
+        detalle: Number(x.dias_vencida ?? 0) > 0
+          ? `nota vencida hace ${x.dias_vencida} ${x.dias_vencida === 1 ? 'día' : 'días'}`
+          : 'al corriente',
         title: `${x.nombre}${x.telefono ? ' · ' + x.telefono : ''}`,
       }));
   });
@@ -425,13 +427,23 @@ export class Tablero implements OnInit {
    * significado solo (los cuatro colores de semáforo no se distinguen bien
    * entre sí y el validador lo confirmó).
    */
-  riesgo(dias: number): 'al-dia' | 'aviso' | 'serio' | 'critico' {
-    // Los mismos cortes que `cartera` y Clientes › Cuánto debe: al día hasta los
-    // 15 días de la caja y la campana (2026-10-17; antes 30).
-    if (dias <= 15) return 'al-dia';
-    if (dias <= 30) return 'aviso';
-    if (dias <= 60) return 'serio';
+  riesgo(diasVencida: number): 'al-dia' | 'aviso' | 'serio' | 'critico' {
+    // Los mismos cortes que `cartera` y Clientes › Cuánto debe, por días de VENCIDA
+    // de su nota más vencida (2026-10-20): cada nota vence a sus días de crédito.
+    if (diasVencida <= 0) return 'al-dia';
+    if (diasVencida <= 15) return 'aviso';
+    if (diasVencida <= 45) return 'serio';
     return 'critico';
+  }
+
+  /** "venció hace 6 días" o "vence 4 nov" (2026-10-20). */
+  vencimiento(c: { dias_vencida?: number; vence_el?: string | null }): string {
+    const d = Number(c.dias_vencida ?? 0);
+    if (d > 0) return `venció hace ${d} ${d === 1 ? 'día' : 'días'}`;
+    if (!c.vence_el) return '—';
+    const [, m, dia] = c.vence_el.split('-').map(Number);
+    const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    return `vence ${dia} ${MESES[m - 1]}`;
   }
 
   /** La píldora del sistema de diseño que le toca a cada riesgo. */
@@ -442,10 +454,10 @@ export class Tablero implements OnInit {
 
   etiquetaRiesgo(dias: number): string {
     const r = this.riesgo(dias);
-    return r === 'al-dia' ? 'Al día'
-      : r === 'aviso' ? 'Atrasado'
-      : r === 'serio' ? 'Muy atrasado'
-      : 'Más de 2 meses';
+    return r === 'al-dia' ? 'Al corriente'
+      : r === 'aviso' ? 'Vencida'
+      : r === 'serio' ? 'Muy vencida'
+      : 'Más de 45 días';
   }
 
   iconoRiesgo(dias: number): string {

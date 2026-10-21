@@ -24,6 +24,8 @@ export const TIPO_OPERACION: Record<string, string> = {
   fiar_atrasado: 'Dinero',
   dar_credito: 'Dinero',
   credito_alta: 'Dinero',
+  gasto_sobre_limite: 'Dinero',
+  tipo_gasto: 'Dinero',
   cambiar_precio: 'Precios',
   precio_lista: 'Precios',
   ajuste_merma: 'Inventario',
@@ -162,6 +164,13 @@ export class Autorizaciones {
   }
 
   async aceptar(a: Autorizacion): Promise<void> {
+    // Un tipo de gasto nuevo: primero su límite (2026-10-20).
+    if (a.operacion === 'tipo_gasto' && a.detalle?.tipo_gasto) {
+      this.limiteTipo = a.detalle.tipo_gasto.limite;
+      this.errorAjuste.set(null);
+      this.ajustandoTipo.set(a);
+      return;
+    }
     // Un pedido a otra tienda: primero cuánto se autoriza de cada hilo.
     if (a.ajustable && a.detalle?.lineas?.length) {
       this.cuanto = Object.fromEntries(a.detalle.lineas.map((l) => [l.variante_id, l.pedido]));
@@ -200,20 +209,24 @@ export class Autorizaciones {
     }
   }
 
-  private hacer(a: Autorizacion, items?: { variante_id: number; paquetes?: number; cantidad?: number }[]): void {
+  private hacer(
+    a: Autorizacion,
+    ajustes?: { items: { variante_id: number; paquetes?: number; cantidad?: number }[] } | { limite: number | null }
+  ): void {
     this.aceptando.set(a.id);
     this.error.set(null);
     this.mensaje.set(null);
-    this.api.aprobar(a.id, items ? { items } : undefined).subscribe({
+    this.api.aprobar(a.id, ajustes).subscribe({
       next: (r) => {
         this.aceptando.set(null);
         this.ajustando.set(null);
+        this.ajustandoTipo.set(null);
         this.mensaje.set(r.nota_aprobacion ? `Aceptada y hecha. ${r.nota_aprobacion}` : `Aceptada y hecha: ${a.resumen}.`);
         this.cargar(true);
       },
       error: (e) => {
         this.aceptando.set(null);
-        if (this.ajustando()) this.errorAjuste.set(this.msg(e));
+        if (this.ajustando() || this.ajustandoTipo()) this.errorAjuste.set(this.msg(e));
         else this.error.set(this.msg(e));
         this.cargar(true);
       },
@@ -221,6 +234,31 @@ export class Autorizaciones {
   }
 
   readonly errorAjuste = signal<string | null>(null);
+
+  // ---- Un tipo de gasto nuevo: se acepta con el límite que decide quien autoriza ----
+  readonly ajustandoTipo = signal<Autorizacion | null>(null);
+  limiteTipo: number | null = null;
+
+  /** Vacío = sin límite (todo gasto de ese tipo se autoriza). Método: lee ngModel. */
+  limiteTipoValido(): boolean {
+    const v = this.limiteTipo as unknown;
+    return v === null || v === '' || Number(v) > 0;
+  }
+
+  autorizarTipo(): void {
+    const a = this.ajustandoTipo();
+    if (!a || !this.limiteTipoValido()) return;
+    const v = this.limiteTipo as unknown;
+    this.errorAjuste.set(null);
+    this.hacer(a, { limite: v === null || v === '' ? null : Math.round(Number(v) * 100) / 100 });
+  }
+
+  cerrarAjusteTipo(): void {
+    if (this.aceptando() === null) {
+      this.ajustandoTipo.set(null);
+      this.errorAjuste.set(null);
+    }
+  }
 
   cerrarAjuste(): void {
     if (this.aceptando() === null) {
@@ -263,7 +301,7 @@ export class Autorizaciones {
     this.errorAjuste.set(null);
     const items = (a.detalle?.lineas ?? []).map((l) =>
       l.unidad === 'paquetes' ? { variante_id: l.variante_id, paquetes: this.vale(l) } : { variante_id: l.variante_id, cantidad: this.vale(l) });
-    this.hacer(a, items);
+    this.hacer(a, { items });
   }
 
   /** El error de rechazar se dice DENTRO de su ventana (2026-10-20: quedaba tapado). */
@@ -286,6 +324,7 @@ export class Autorizaciones {
   alEscape(): void {
     if (this.rechazando()) this.cerrarRechazo();
     else if (this.ajustando()) this.cerrarAjuste();
+    else if (this.ajustandoTipo()) this.cerrarAjusteTipo();
   }
 
   rechazar(): void {

@@ -12,6 +12,10 @@ import { TiendaService } from '../../../core/services/tienda.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { ClienteParaVenta, ColorComprado } from '../../../core/models/clientes.models';
 import { SesionCaja } from '../../../core/models/ventas.models';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { transferenciasFalso } from '../../../core/services/transferencias.falso';
+import { fechaVence, venceEl } from '../../../shared/plazo-credito';
+import { hoyLocal } from '../../../shared/fecha.pipe';
 
 /**
  * El punto de venta mueve dinero. Lo que se prueba aquí son los errores que ya
@@ -90,10 +94,13 @@ describe('Pos', () => {
     },
   };
 
+  /** Las cuentas de banco dadas de alta (Transferencias, 2026-10-20); sin ninguna no se pregunta. */
+  let cuentasFalsas: { id: number; banco: string; titular: string | null; ultimos: string | null }[] = [];
+
   async function montar() {
     await TestBed.configureTestingModule({
       imports: [Pos],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso(cuentasFalsas) }, 
         provideRouter([]),
         { provide: VentasService, useValue: ventasFalso },
         { provide: InventarioService, useValue: invFalso },
@@ -137,6 +144,7 @@ describe('Pos', () => {
   }
 
   beforeEach(() => {
+    cuentasFalsas = [];
     pedidoEnviado = null;
     cajaPedida = null;
     permisos = new Set(['ver:caja', 'hacer:fiar', 'pedir:fiar_atrasado']);
@@ -301,7 +309,7 @@ describe('Pos', () => {
   it('con la cuenta atrasada pregunta antes de fiarle y, si no, no vende', async () => {
     const { c } = await montar();
     llenarCarrito(c);
-    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22, nota_vencida: { dias_credito: 15, vence_el: '2026-10-05', dias_vencida: 7, por_pagar: 500 } });
     c.elegirModo('credito');
     respuesta = false;
     await c.cobrar();
@@ -312,7 +320,7 @@ describe('Pos', () => {
   it('con la cuenta atrasada y la cajera dice que sí: vende y lo avisa al servidor', async () => {
     const { c } = await montar();
     llenarCarrito(c);
-    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22, nota_vencida: { dias_credito: 15, vence_el: '2026-10-05', dias_vencida: 7, por_pagar: 500 } });
     c.elegirModo('credito');
     await c.cobrar();
     expect(pedidoEnviado!.a_credito).toBe(432);
@@ -323,12 +331,12 @@ describe('Pos', () => {
     permisos.delete('pedir:fiar_atrasado');
     const { c } = await montar();
     llenarCarrito(c);
-    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22, nota_vencida: { dias_credito: 15, vence_el: '2026-10-05', dias_vencida: 7, por_pagar: 500 } });
     c.elegirModo('credito');
     await c.cobrar();
     expect(preguntado).toBeNull();
     expect(pedidoEnviado).toBeNull();
-    expect(c.error()).toContain('22 días sin pagarse');
+    expect(c.error()).toContain('vencida desde el 5 de octubre (hace 7 días; era a 15 días)');
   });
 
   it('al corriente, fía sin preguntar', async () => {
@@ -343,11 +351,11 @@ describe('Pos', () => {
 
   it('el aviso del cliente dice los días y va en rojo cuando está atrasado', async () => {
     const { c, fixture } = await montar();
-    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22, nota_vencida: { dias_credito: 15, vence_el: '2026-10-05', dias_vencida: 7, por_pagar: 500 } });
     fixture.detectChanges();
     const aviso = (fixture.nativeElement as HTMLElement).querySelector('.aviso-cliente');
     expect(aviso?.classList.contains('atrasado')).toBe(true);
-    expect(aviso?.textContent).toContain('22 días sin pagarse');
+    expect(aviso?.textContent).toContain('tiene una nota a crédito vencida desde el 5 de octubre (hace 7 días; era a 15 días), le faltan $500.00');
   });
 
   /*
@@ -385,17 +393,35 @@ describe('Pos', () => {
     const libre = Number(mayoreo.credito_disponible);
     expect(c.cintillo().texto).toContain(`Le quedarán ${c.dinero(libre - 432)} de crédito libre`);
     c.aCredito = 100;
+    const vence = fechaVence(venceEl(hoyLocal(), 15));
     expect(c.cintillo().texto).toBe(
-      `Se lleva la mercancía hoy y $100.00 van a su cuenta; paga $332.00 hoy. Le quedarán ${c.dinero(libre - 100)} de crédito libre.`);
+      `Se lleva la mercancía hoy y $100.00 van a su cuenta a 15 días (vence el ${vence}); paga $332.00 hoy. ` +
+      `Le quedarán ${c.dinero(libre - 100)} de crédito libre.`);
+  });
+
+  it('A CUÁNTOS DÍAS (2026-10-20): se propone 15, se manda con la venta y la siguiente vuelve a 15', async () => {
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.elegirCliente(mayoreo);
+    c.elegirModo('credito');
+    expect(c.diasCredito).toBe(15);
+    c.diasCredito = 0;
+    c.cobrar();
+    expect(pedidoEnviado).toBeNull();
+    expect(c.error()).toContain('a cuántos días');
+    c.diasCredito = 30;
+    c.cobrar();
+    expect((pedidoEnviado as unknown as { dias_credito?: number }).dias_credito).toBe(30);
+    expect(c.diasCredito).toBe(15);
   });
 
   it('a crédito con la cuenta atrasada el cintillo va en rojo y dice los días', async () => {
     const { c } = await montar();
     llenarCarrito(c);
-    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22 });
+    c.elegirCliente({ ...mayoreo, saldo: '800', atrasado: true, dias_sin_abonar: 22, nota_vencida: { dias_credito: 15, vence_el: '2026-10-05', dias_vencida: 7, por_pagar: 500 } });
     c.elegirModo('credito');
     expect(c.cintillo().tono).toBe('atrasado');
-    expect(c.cintillo().texto).toContain('lleva 22 días sin pagarse');
+    expect(c.cintillo().texto).toContain('vencida desde el 5 de octubre (hace 7 días');
   });
 
   it('con saldo a favor: se usa solo si lo pide, y paga hoy lo que falte (2026-10-13)', async () => {
@@ -463,6 +489,43 @@ describe('Pos', () => {
     expect(pedidoEnviado!.pagos).toEqual([
       { metodo_pago_id: 3, monto: 132 },
       { metodo_pago_id: 1, monto: 500 },
+    ]);
+  });
+
+  it('TRANSFERENCIAS (2026-10-20): por transferencia pregunta a qué cuenta llegó y la manda con su número de operación', async () => {
+    cuentasFalsas = [
+      { id: 7, banco: 'Banamex', titular: null, ultimos: '4521' },
+      { id: 8, banco: 'Banorte', titular: null, ultimos: '0001' },
+    ];
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.metodoSel = 3;
+    expect(c.llevaTransferencia()).toBe(true);
+    c.cobrar();
+    expect(pedidoEnviado).toBeNull();
+    expect(c.error()).toContain('a qué cuenta');
+    c.cuentaTransf = 8;
+    c.operacionTransf = ' 50118293TRANSBPI ';
+    c.cobrar();
+    expect(pedidoEnviado!.pagos).toEqual([
+      { metodo_pago_id: 3, monto: 432, cuenta_bancaria_id: 8, referencia_transaccion: '50118293TRANSBPI' } as never,
+    ]);
+    // Es de esa venta: la siguiente vuelve a preguntar.
+    expect(c.cuentaTransf).toBeNull();
+    expect(c.operacionTransf).toBe('');
+  });
+
+  it('TRANSFERENCIAS: con UNA sola cuenta no pregunta; parte y parte la lleva solo en la transferencia', async () => {
+    cuentasFalsas = [{ id: 7, banco: 'Banamex', titular: null, ultimos: '4521' }];
+    const { c } = await montar();
+    llenarCarrito(c);
+    c.metodoSel = 'mixto';
+    c.montoTransferencia = 132;
+    c.montoPago = 300;
+    c.cobrar();
+    expect(pedidoEnviado!.pagos).toEqual([
+      { metodo_pago_id: 3, monto: 132, cuenta_bancaria_id: 7 } as never,
+      { metodo_pago_id: 1, monto: 300 },
     ]);
   });
 

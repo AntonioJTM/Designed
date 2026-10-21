@@ -201,6 +201,113 @@ const OPERACIONES = {
     },
   },
 
+  // GASTOS DE LA CAJA (2026-10-20): el límite es POR GASTO. Se autoriza el que
+  // pasa el tope de su tipo y TODO el de un tipo sin tope; los demás van
+  // directo (`aplica`).
+  gasto_sobre_limite: {
+    nombre: 'Gasto arriba de su límite',
+    permiso: 'hacer:gasto_sobre_limite',
+    pedir: 'pedir:gasto_sobre_limite',
+    conTienda: true,
+    vence: 'dia',
+    cerrarSiCambio: true,
+    aplica: (req) => require('../caja/gastos').seAutoriza(req.body?.tipo_gasto_id, req.body?.monto),
+    async describir(req) {
+      const b = req.body ?? {};
+      const t = await require('../caja/gastos').obtenerTipo(Number(b.tipo_gasto_id));
+      const s = await una(
+        'SELECT c.nombre AS caja FROM sesiones_caja s JOIN cajas c ON c.id = s.caja_id WHERE s.id = :id',
+        { id: Number(req.params.id) }
+      );
+      const tope = t?.limite != null ? `su límite es ${pesos(t.limite)}` : 'ese tipo no tiene límite: todo se autoriza';
+      return `Gasto de ${t?.nombre ?? 'otro tipo'} por ${pesos(b.monto)} (${tope}) ` +
+        `de ${s?.caja ?? 'la caja'}${conMotivo(b.descripcion)}`;
+    },
+    // Antes de pedirla: que se PUEDA hacer (turno abierto y efectivo en el
+    // cajón); pedir un gasto que no alcanza solo dejaría una solicitud imposible.
+    async alPedir(req) {
+      const { pool: p } = require('../../config/db');
+      const { efectivoEnCajon } = require('../caja/model');
+      const conn = await p.getConnection();
+      try {
+        const [[s]] = await conn.query('SELECT estado FROM sesiones_caja WHERE id = :id', { id: Number(req.params.id) });
+        if (!s || s.estado !== 'abierta') {
+          throw new AppError(409, 'SESION_CERRADA', 'El turno de caja ya está cerrado: abre uno para registrar el gasto.');
+        }
+        const hay = await efectivoEnCajon(conn, Number(req.params.id));
+        if (Number(req.body?.monto) > hay + 0.001) {
+          throw new AppError(409, 'EFECTIVO_INSUFICIENTE',
+            `En el cajón debería haber ${pesos(hay)}; no alcanza para un gasto de ${pesos(req.body?.monto)}.`);
+        }
+      } finally {
+        conn.release();
+      }
+    },
+    // Al aceptarla se revisa que todavía se pueda: el turno sigue abierto, el
+    // tipo activo y quien la pidió todavía registra gastos. Si no, se cierra sola.
+    contexto: (req) => ({ sesion_id: Number(req.params.id), solicitante_id: Number(req.auth.sub) }),
+    async revisarAntes(cuerpo, ctx) {
+      if (!ctx?.sesion_id) return null;
+      const s = await una('SELECT estado FROM sesiones_caja WHERE id = :id', { id: ctx.sesion_id });
+      if (!s || s.estado !== 'abierta') return 'El turno de caja ya se cerró: que se registre en el turno abierto.';
+      const t = await require('../caja/gastos').obtenerTipo(Number(cuerpo?.tipo_gasto_id));
+      if (!t || !t.activo) return `El tipo de gasto ${t ? `«${t.nombre}» ` : ''}ya no está activo.`;
+      const { puede } = require('../permisos/service');
+      if (!(await puede({ sub: ctx.solicitante_id, tipo: 'usuario' }, 'hacer:registrar_gasto'))) {
+        return 'Quien lo pidió ya no registra gastos.';
+      }
+      return null;
+    },
+  },
+
+  // UN TIPO DE GASTO NUEVO (2026-10-20): "que lo puedan hacer también cajeros y
+  // la persona que tiene a cargo autorizar, que diga si se autoriza ese tipo y
+  // el límite" (usuario). Quien autoriza lo acepta con el límite que él decida
+  // (`detalle` / `ajustar`) o lo rechaza. Los tipos son de todas las tiendas.
+  tipo_gasto: {
+    nombre: 'Nuevo tipo de gasto',
+    permiso: 'hacer:tipos_gasto',
+    pedir: 'pedir:tipos_gasto',
+    cerrarSiCambio: true,
+    async describir(req) {
+      const b = req.body ?? {};
+      const tope = b.limite != null ? `con límite de ${pesos(b.limite)} por gasto` : 'sin límite (todo gasto de ese tipo se autorizaría)';
+      return `Nuevo tipo de gasto «${String(b.nombre ?? '').trim()}» ${tope}`;
+    },
+    // Que no exista ya, antes de pedirlo.
+    alPedir: (req) => require('../caja/gastos').exigirNombreLibre(String(req.body?.nombre ?? '').trim()),
+    // Si mientras esperaba alguien dio de alta uno igual, se cierra sola.
+    async revisarAntes(cuerpo) {
+      try {
+        await require('../caja/gastos').exigirNombreLibre(String(cuerpo?.nombre ?? '').trim());
+        return null;
+      } catch {
+        return `Ya hay un tipo de gasto «${String(cuerpo?.nombre ?? '').trim()}».`;
+      }
+    },
+    /** Lo que ve quien autoriza: el nombre y el límite que propusieron, para dejarlo o cambiarlo. */
+    async detalle(cuerpo) {
+      return { tipo_gasto: { nombre: String(cuerpo?.nombre ?? '').trim(), limite: cuerpo?.limite != null ? Number(cuerpo.limite) : null } };
+    },
+    /** Se acepta con el límite que decide quien autoriza (vacío = sin límite: todo se autoriza). */
+    async ajustar(cuerpo, ajustes) {
+      const v = ajustes?.limite;
+      const limite = v === null || v === undefined || v === '' ? null : Number(v);
+      if (limite !== null && (!Number.isFinite(limite) || limite <= 0 || limite > 99999999)) {
+        throw new AppError(422, 'AJUSTE_INVALIDO', 'El límite va en pesos, mayor que 0 (o vacío para que todo se autorice).');
+      }
+      const redondo = limite === null ? null : Math.round(limite * 100) / 100;
+      const antes = cuerpo?.limite != null ? Number(cuerpo.limite) : null;
+      const igual = antes === redondo;
+      return {
+        cuerpo: { ...cuerpo, limite: redondo },
+        nota: igual ? null
+          : `Lo autorizó ${redondo != null ? `con límite de ${pesos(redondo)} por gasto` : 'sin límite (todo gasto de ese tipo se autoriza)'}` +
+            ` (se propuso ${antes != null ? pesos(antes) : 'sin límite'}).`,
+      };
+    },
+  },
+
   cancelar_venta: {
     nombre: 'Cancelar una venta',
     permiso: 'hacer:cancelar_venta',

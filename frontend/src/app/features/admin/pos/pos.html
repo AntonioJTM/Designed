@@ -225,9 +225,8 @@
               <div class="aviso aviso-cliente" [class.atrasado]="c.atrasado">
                 <span>
                   @if (num(c.saldo) > 0 && c.atrasado) {
-                    <b>Cuenta atrasada:</b> debe <b>{{ c.saldo | dinero }}</b> y su nota más vieja lleva
-                    <b>{{ c.dias_sin_abonar }} días sin pagarse</b>@if (num(c.nota_vieja_por_pagar) > 0) { (le faltan
-                    {{ c.nota_vieja_por_pagar | dinero }}) }. Pídele un abono antes de darle más a crédito.
+                    <b>Cuenta atrasada:</b> debe <b>{{ c.saldo | dinero }}</b> y {{ textoVencida(c) }}.
+                    Pídele un abono antes de darle más a crédito.
                     @if (apartadoCliente()) { También tiene }
                   } @else if (num(c.saldo) > 0) {
                     Debe <b>{{ c.saldo | dinero }}</b>@if (apartadoCliente()) { y tiene } @else {.}
@@ -402,17 +401,25 @@
                         <div class="hilo">{{ i.producto }}{{ i.presentacion ? ' · ' + i.presentacion : '' }}</div>
                         <div class="muted mono">
                           @if (i.bultos?.length) {
-                            <!-- Cada bulto con su ✕: para cobrar menos se quita el que no se lleva.
-                                 La ficha es la misma de la devolución (styles.scss). -->
-                            <span class="fichas-paquete bultos-linea">
-                              @for (b of i.bultos; track b.codigo) {
-                                <span class="ficha-paquete">
-                                  <span class="ficha-texto"><span class="mono">{{ b.codigo }}</span><b>{{ b.peso_kg | cantidad: 'kg' }}</b></span>
-                                  <button type="button" class="ficha-quitar" (click)="quitarBulto(i, b.codigo)"
-                                          [attr.aria-label]="'Quitar el bulto ' + b.codigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+                            <!-- POR LOTE (2026-10-20): cada lote con cuántos paquetes y kilos van, y
+                                 debajo sus paquetes, cada uno con su ✕ (para cobrar menos se quita el
+                                 que no se lleva). La ficha es la misma de la devolución (styles.scss). -->
+                            @for (g of lotesDe(i); track g.lote) {
+                              <div class="lote-grupo">
+                                <span class="lote-cabeza">
+                                  <b>{{ nombreLote(g.lote) }}</b> · {{ paquetes(g.bultos.length) }} · {{ g.kg | cantidad: 'kg' }}
                                 </span>
-                              }
-                            </span>
+                                <span class="fichas-paquete bultos-linea">
+                                  @for (b of g.bultos; track b.codigo) {
+                                    <span class="ficha-paquete">
+                                      <span class="ficha-texto"><span class="mono">{{ b.codigo }}</span><b>{{ b.peso_kg | cantidad: 'kg' }}</b></span>
+                                      <button type="button" class="ficha-quitar" (click)="quitarBulto(i, b.codigo)"
+                                              [attr.aria-label]="'Quitar el bulto ' + b.codigo + (b.lote ? ', lote ' + b.lote : '')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+                                    </span>
+                                  }
+                                </span>
+                              </div>
+                            }
                           } @else {
                             {{ comoSeVende(i) }} · {{ i.sku }}
                           }
@@ -519,6 +526,8 @@
                      [placeholder]="propuestaCredito().toFixed(2)" />
               <span class="ayuda">Vacío = todo lo que le alcance. Le quedan {{ creditoDisponible() | dinero }} de crédito.</span>
             </label>
+            <!-- A cuántos días es la nota (2026-10-20): pasados, la campana avisa. -->
+            <app-plazo-credito [(dias)]="diasCredito" nombre="dias-credito" />
             <div class="dato"><span>Paga hoy</span><span>{{ aPagarHoy() | dinero }}</span></div>
           </div>
         }
@@ -567,6 +576,13 @@
                 @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
               </select>
             </label>
+            @if (metodoEsTransferencia()) {
+              <app-cuenta-deposito [(cuenta)]="cuentaTransf" nombre="cuenta-ped" [marcar]="!!error()" />
+              <label class="field">
+                <span>No. de operación <span class="muted">(opcional)</span></span>
+                <input type="text" [(ngModel)]="operacionTransf" name="op-ped" maxlength="120" autocomplete="off" />
+              </label>
+            }
           }
         }
 
@@ -587,6 +603,15 @@
               Por transferencia
               <input type="number" min="0" step="0.01" [(ngModel)]="montoTransferencia" name="transf" placeholder="0.00" />
               <span class="ayuda">El resto, {{ aCobrarEnEfectivo() | dinero }}, en efectivo.</span>
+            </label>
+          }
+          @if (llevaTransferencia()) {
+            <!-- A qué cuenta llegó y su folio (Transferencias, 2026-10-20). -->
+            <app-cuenta-deposito [(cuenta)]="cuentaTransf" nombre="cuenta" [marcar]="!!error()" />
+            <label class="field">
+              <span>No. de operación <span class="muted">(opcional)</span></span>
+              <input type="text" [(ngModel)]="operacionTransf" name="operacion" maxlength="120" autocomplete="off"
+                     placeholder="El folio que trae el comprobante" />
             </label>
           }
           @if (esEfectivoSel()) {
@@ -690,9 +715,13 @@
               @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
             </select>
           </label>
-          <label class="field full">
-            <span>Referencia <span class="muted">(opcional)</span></span>
-            <input type="text" [(ngModel)]="referenciaAbono" name="refab" placeholder="Folio del depósito, por ejemplo" />
+          @if (abonoPorTransferencia()) {
+            <app-cuenta-deposito [(cuenta)]="cuentaAbono" nombre="cuenta-ab" [marcar]="!!errorAbono()" />
+          }
+          <label class="field" [class.full]="!abonoPorTransferencia()">
+            <span>{{ abonoPorTransferencia() ? 'No. de operación' : 'Referencia' }} <span class="muted">(opcional)</span></span>
+            <input type="text" [(ngModel)]="referenciaAbono" name="refab"
+                   [placeholder]="abonoPorTransferencia() ? 'El folio que trae el comprobante' : 'Folio del depósito, por ejemplo'" />
           </label>
         </div>
         @if (abonoEnEfectivo()) {

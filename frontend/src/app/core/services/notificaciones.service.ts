@@ -19,14 +19,27 @@ export interface TraspasoPendiente {
   enviado_en?: string;
 }
 
-/** Un cliente que debe y lleva tiempo sin abonar. */
-export interface DeudorPendiente {
+/**
+ * Una nota a crédito que ya pasó sus días sin pagarse (2026-10-20: "después de los
+ * días, si no paga, una notificación").
+ */
+export interface NotaVencida {
   cliente_id: number;
   nombre: string;
   nombre_comercial?: string | null;
   telefono?: string | null;
-  saldo: string | number;
-  dias_sin_abonar: number;
+  /** null = un ajuste que subió su deuda (no es una venta). */
+  pedido_id: number | null;
+  folio: string | null;
+  ajuste?: boolean;
+  /** Única: para la lista. */
+  clave: string;
+  /** A cuántos días se fió. */
+  dias_credito: number;
+  vence_el: string;
+  /** Hace cuántos días venció. */
+  dias_vencida: number;
+  por_pagar: number;
 }
 
 /** Un cliente que compraba y dejó de venir. */
@@ -63,12 +76,12 @@ export interface Pendientes {
     num: number;
     hilos: { producto_id: number; nombre: string; calibre: string | null; llego_en: string | null }[];
   };
-  /** Quién debe y lleva tiempo sin abonar. */
+  /** Las notas a crédito vencidas: las 8 más vencidas, y todas contadas. */
   cobranza: {
-    clientes: DeudorPendiente[];
+    notas: NotaVencida[];
+    num_notas: number;
     num_clientes: number;
     monto: number;
-    dias: number;
   };
   /** Quién dejó de venir. */
   enfriados: {

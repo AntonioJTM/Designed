@@ -1,4 +1,6 @@
 import { DevolucionHecha, Pedido, PedidoLinea } from '../../core/models/ventas.models';
+import { nombreLote, paquetes, porLote } from '../lotes';
+import { fechaVence } from '../plazo-credito';
 import { ClienteTicket, TicketAbonoCuenta, TicketAnticipo, TicketPagoNota } from '../../core/models/tickets.models';
 
 /**
@@ -172,7 +174,10 @@ function lineaHtml(d: PedidoLinea): string {
   if (bultos.length === 1) {
     detalle.push(`Paquete ${esc(bultos[0].codigo)}${bultos[0].lote ? ` · lote ${esc(bultos[0].lote)}` : ''}`);
   } else if (bultos.length > 1) {
-    detalle.push(`${bultos.length} paquetes: ${bultos.map((b) => esc(b.codigo)).join(', ')}`);
+    // POR LOTE (2026-10-20): cuántos paquetes van de cada lote, con sus códigos.
+    for (const g of porLote(bultos)) {
+      detalle.push(`${esc(nombreLote(g.lote))}: ${paquetes(g.bultos.length)} (${g.bultos.map((b) => esc(b.codigo)).join(', ')})`);
+    }
   }
   if (Number(d.piezas) > 0) detalle.push(`${Number(d.piezas)} conos`);
   return `<div class="art">
@@ -233,6 +238,10 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
   const saldo: string[] = [];
   if (tipo === 'A crédito') {
     saldo.push(renglon('Quedó a deber', esc(dineroTicket(fiado)), 'fuerte'));
+    // A cuántos días es la nota y cuándo vence (2026-10-20).
+    if (p.dias_credito && p.credito_vence_el) {
+      saldo.push(renglon(`A ${p.dias_credito} días`, `vence el ${esc(fechaVence(p.credito_vence_el))}`));
+    }
     // Al reimprimirlo después: cómo va esa deuda hoy (los abonos se aplican a lo más antiguo).
     const debeHoy = p.credito_por_pagar;
     if (debeHoy != null && Number(debeHoy) < fiado - 0.004) {

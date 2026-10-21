@@ -1,0 +1,174 @@
+<section class="card gastos-card" id="gastos">
+  <div class="card-head">
+    <div>
+      <h2>Gastos</h2>
+      <p>Lo que se pagó con el cajón: viajes, limpieza, papelería… No es nómina: sale de la caja y el corte lo resta.</p>
+    </div>
+    @if (administraTipos()) {
+      <button type="button" class="btn btn-ghost btn-sm" (click)="verTipos.set(true)">Tipos de gasto</button>
+    }
+  </div>
+
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+  @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+
+  <div class="gastos-filtros">
+    <div class="seg" role="group" aria-label="Periodo">
+      <button type="button" [class.on]="periodo === 'hoy'" [attr.aria-pressed]="periodo === 'hoy'" (click)="elegirPeriodo('hoy')">Hoy</button>
+      <button type="button" [class.on]="periodo === 'semana'" [attr.aria-pressed]="periodo === 'semana'" (click)="elegirPeriodo('semana')">7 días</button>
+      <button type="button" [class.on]="periodo === 'mes'" [attr.aria-pressed]="periodo === 'mes'" (click)="elegirPeriodo('mes')">Este mes</button>
+    </div>
+    <label class="field">
+      <span class="oculto">Tipo de gasto</span>
+      <select [(ngModel)]="tipoSel" (ngModelChange)="cargar(false)" name="tipo-gasto-filtro">
+        <option value="">Todos los tipos</option>
+        @for (t of tipos(); track t.id) { <option [ngValue]="t.id">{{ t.nombre }}</option> }
+      </select>
+    </label>
+  </div>
+
+  @if (lista(); as l) {
+    <!-- Cuánto se gastó y en qué. -->
+    <p class="gastos-total">
+      <b>{{ dinero(l.total) }}</b> {{ textoPeriodo() }} en {{ l.num }} {{ l.num === 1 ? 'gasto' : 'gastos' }}
+      @if (l.pasaron_limite) {
+        · <span class="pill naranja">{{ l.pasaron_limite }} {{ l.pasaron_limite === 1 ? 'pasó su límite' : 'pasaron su límite' }}</span>
+      }
+    </p>
+    @if (l.por_tipo.length > 1) {
+      <ul class="gastos-por-tipo" aria-label="Lo gastado por tipo">
+        @for (t of l.por_tipo; track t.tipo_gasto_id) {
+          <li>
+            <span class="nombre">{{ t.tipo }}</span>
+            <span class="barra" aria-hidden="true"><span [style.width.%]="pct(t.total)"></span></span>
+            <span class="monto-tipo"><b>{{ dinero(t.total) }}</b> · {{ pct(t.total) }}%</span>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (l.hay_mas) {
+      <p class="muted" style="margin: 0 0 8px; font-size: 0.8125rem">Se ven los 500 más recientes; las cifras de arriba son de todos.</p>
+    }
+    @if (l.items.length === 0) {
+      <p class="vacio">No hay gastos {{ textoPeriodo() }}.</p>
+    } @else {
+      <div class="tabla-scroll">
+        <table class="grid" style="min-width: 760px">
+          <thead>
+            <tr>
+              <th>Cuándo</th>
+              <th>Tipo</th>
+              <th>Qué se compró</th>
+              <th>Caja</th>
+              <th>Quién</th>
+              <th class="num">Monto</th>
+              <th><span class="oculto">Foto y acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (g of l.items; track g.id) {
+              <tr [class.cancelado]="g.estado === 'cancelado'">
+                <td class="muted">{{ cuando(g.creado_en) }}</td>
+                <td>
+                  {{ g.tipo }}
+                  @if (g.paso_limite) {
+                    <div class="sub aviso-txt">pasó su límite de {{ dinero(g.limite) }}</div>
+                  } @else if (g.se_autorizaba) {
+                    <div class="sub">tipo sin límite: se autoriza</div>
+                  }
+                </td>
+                <td>
+                  {{ g.descripcion }}
+                  @if (g.estado === 'cancelado') {
+                    <div class="sub"><span class="pill gris">Cancelado</span> {{ g.motivo_cancelacion }}</div>
+                  }
+                </td>
+                <td>{{ g.caja }} <div class="sub">{{ g.almacen }}</div></td>
+                <td>
+                  {{ g.usuario }}
+                  @if (g.autorizo) {
+                    <div class="sub">autorizó {{ g.autorizo }}</div>
+                  } @else if (g.se_autorizaba) {
+                    <div class="sub">lo registró directo (puede autorizar)</div>
+                  }
+                </td>
+                <td class="num"><b [class.tachado]="g.estado === 'cancelado'">{{ dinero(g.monto) }}</b></td>
+                <td class="acciones">
+                  @if (g.con_comprobante) {
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="verFoto(g)">Ver ticket</button>
+                  } @else if (puedeRegistrar() && g.estado === 'registrado') {
+                    <label class="btn btn-ghost btn-sm" [class.disabled]="subiendoFoto() === g.id">
+                      {{ subiendoFoto() === g.id ? 'Subiendo…' : 'Subir ticket' }}
+                      <input type="file" class="oculto" accept="image/jpeg,image/png,image/webp,application/pdf"
+                             (change)="subirFoto(g, $event)" [attr.aria-label]="'Subir el ticket del gasto ' + g.descripcion" />
+                    </label>
+                  }
+                  @if (puedeCancelar() && g.estado === 'registrado' && g.turno_estado === 'abierta') {
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="abrirCancelar(g)">Cancelar</button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  } @else if (cargando()) {
+    <p class="muted vacio">Cargando…</p>
+  }
+</section>
+
+<!-- Cancelar: pide el motivo. No se cierra al tocar el fondo. -->
+@if (cancelando(); as g) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="cancelar-gasto-titulo">
+      <div class="modal-head">
+        <h2 id="cancelar-gasto-titulo">Cancelar el gasto</h2>
+        <button type="button" class="modal-cerrar" (click)="cancelando.set(null)" aria-label="Cerrar">✕</button>
+      </div>
+      <form (ngSubmit)="cancelar()">
+        <div class="modal-body columna">
+          @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+          <p><b>{{ g.tipo }}</b> · {{ g.descripcion }} · <b>{{ dinero(g.monto) }}</b></p>
+          <p class="muted">El dinero regresa al cajón de {{ g.caja }} y el gasto queda cancelado, con su motivo.</p>
+          <label class="field">
+            Por qué se cancela
+            <input type="text" maxlength="255" [(ngModel)]="motivo" name="motivo" required placeholder="Ej. Se registró dos veces" />
+          </label>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="cancelando.set(null)">Regresar</button>
+          <button type="submit" class="btn btn-danger" [disabled]="guardando() || motivo.trim().length < 3">
+            {{ guardando() ? 'Cancelando…' : 'Cancelar el gasto' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- La foto del ticket. -->
+@if (foto(); as f) {
+  <div class="modal-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="foto-gasto-titulo">
+      <div class="modal-head">
+        <h2 id="foto-gasto-titulo">Ticket · {{ f.gasto.tipo }} · {{ dinero(f.gasto.monto) }}</h2>
+        <button type="button" class="modal-cerrar" (click)="soltarFoto()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <img class="foto-ticket" [src]="f.url" [alt]="'Ticket del gasto: ' + f.gasto.descripcion" />
+      </div>
+      <div class="modal-foot">
+        @if (puedeCambiarFoto(f.gasto)) {
+          <button type="button" class="btn btn-ghost" (click)="quitarFoto(f.gasto)">Quitar la foto</button>
+        }
+        <button type="button" class="btn btn-primary" (click)="soltarFoto()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (verTipos()) {
+  <app-tipos-gasto-modal (cerrado)="alCerrarTipos($event)" />
+}

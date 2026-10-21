@@ -5,8 +5,9 @@ const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
 const { unaVez } = require('../../middlewares/una-vez');
-const { authRequired, requireTipo, requirePermiso, requireTodasLasTiendas } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requirePermisoAlguno, requireTodasLasTiendas } = require('../../middlewares/auth');
 const { autorizable } = require('../autorizaciones/autorizable');
+const gastos = require('./gastos-controller');
 
 const router = Router();
 const soloStaff = [authRequired, requireTipo('usuario')];
@@ -44,6 +45,33 @@ const movimientoSchema = z
 
 const cerrarSchema = z.object({ monto_final: z.coerce.number().nonnegative() }).strict();
 
+// GASTOS (2026-10-20). El límite es POR GASTO; sin límite (null) no se pide nada.
+const tipoGastoSchema = z
+  .object({
+    nombre: z.string().trim().min(2).max(60),
+    limite: z.coerce.number().positive().max(99999999).nullable().optional(),
+    activo: z.coerce.boolean().optional(),
+  })
+  .strict();
+// Qué se compró es obligatorio: un gasto sin explicación no se aclara en el corte.
+const gastoSchema = z
+  .object({
+    tipo_gasto_id: z.coerce.number().int().positive(),
+    monto: z.coerce.number().positive().max(99999999),
+    descripcion: z.string().trim().min(3, 'Escribe qué se compró o para qué fue.').max(255),
+  })
+  .strict();
+const gastosConsultaSchema = z.object({
+  desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  tipo_gasto_id: z.coerce.number().int().positive().optional(),
+  almacen_id: z.coerce.number().int().positive().optional(),
+  sesion_caja_id: z.coerce.number().int().positive().optional(),
+});
+const cancelarGastoSchema = z
+  .object({ motivo: z.string().trim().min(3, 'Escribe por qué se cancela.').max(255) })
+  .strict();
+
 // Todo el módulo es de staff.
 router.use(...soloStaff);
 
@@ -63,5 +91,23 @@ router.get('/sesiones/:id', controller.obtenerSesion);
 // Con su llave de un solo uso (`X-Clave-Unica`, 2026-10-20): un doble clic no saca dos veces.
 router.post('/sesiones/:id/movimientos', validate(movimientoSchema), unaVez(), autorizable('mover_efectivo'), controller.registrarMovimiento);
 router.post('/sesiones/:id/cerrar', validate(cerrarSchema), controller.cerrarSesion);
+
+// GASTOS DE LA CAJA (2026-10-20). Los tipos y sus límites los da quien tiene
+// «Tipos de gasto» (el administrador siempre). Registrar pide «Registrar gastos»;
+// un gasto ARRIBA del límite de su tipo pide autorización (`gasto_sobre_limite`).
+router.get('/tipos-gasto', gastos.listarTipos);
+// Los tipos son de TODAS las tiendas: los cambia quien las ve todas.
+// Darlo de alta: directo quien tiene «Tipos de gasto» (y todas las tiendas); el
+// cajero lo PIDE y quien autoriza lo acepta poniéndole su límite (`tipo_gasto`).
+router.post('/tipos-gasto', requirePermisoAlguno('hacer:tipos_gasto', 'pedir:tipos_gasto'), validate(tipoGastoSchema),
+  unaVez(), autorizable('tipo_gasto'), gastos.crearTipo);
+router.put('/tipos-gasto/:id', requirePermiso('hacer:tipos_gasto'), requireTodasLasTiendas, validate(tipoGastoSchema.partial()), gastos.actualizarTipo);
+router.get('/gastos', requirePermiso('ver:caja'), validate(gastosConsultaSchema, 'query'), gastos.listar);
+router.post('/sesiones/:id/gastos', requirePermiso('hacer:registrar_gasto'), validate(gastoSchema), unaVez(),
+  autorizable('gasto_sobre_limite'), gastos.registrar);
+router.post('/gastos/:id/cancelar', requirePermiso('hacer:mover_efectivo'), validate(cancelarGastoSchema), unaVez(), gastos.cancelar);
+router.post('/gastos/:id/comprobante', requirePermiso('hacer:registrar_gasto'), gastos.fotoEnCrudo, gastos.subirComprobante);
+router.get('/gastos/:id/comprobante', requirePermiso('ver:caja'), gastos.verComprobante);
+router.delete('/gastos/:id/comprobante', requirePermiso('hacer:registrar_gasto'), gastos.quitarComprobante);
 
 module.exports = router;

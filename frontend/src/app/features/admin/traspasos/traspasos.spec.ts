@@ -106,6 +106,8 @@ describe('Traspasos', () => {
   /** Los pedidos con autorización (2026-10-20). */
   let solicitudesActuales: SolicitudTraspaso[] = [];
   let retiradas: number[] = [];
+  /** Los PDF que se pidieron (2026-10-20): "77-envio", "77-recepcion". */
+  let pdfs: string[] = [];
 
   const invFalso = {
     almacenes: () => of(almacenesActuales),
@@ -129,6 +131,10 @@ describe('Traspasos', () => {
     recibirTraspaso: (id: number, body: RecepcionInput) => {
       recibido = { id, body };
       return of({ id, folio: 'TRA-77', estado: 'recibido' as const, faltantes: 1, lineas: [] });
+    },
+    pdfTraspaso: (id: number, tipo: string) => {
+      pdfs.push(`${id}-${tipo}`);
+      return of(new Blob(['%PDF'], { type: 'application/pdf' }));
     },
   };
 
@@ -173,6 +179,9 @@ describe('Traspasos', () => {
     todasLasTiendas = true;
     almacenesActuales = almacenes;
     pidioEquivalencia = false;
+    pdfs = [];
+    // Que la prueba no descargue de verdad.
+    spyOn(HTMLAnchorElement.prototype, 'click');
   });
   afterEach(() => TestBed.resetTestingModule());
 
@@ -518,6 +527,37 @@ describe('Traspasos', () => {
     const botones = [...el.querySelectorAll('.traspaso-acciones button')].map((b) => b.textContent!.trim());
     expect(botones).not.toContain('Enviar');
     expect(botones).toContain('Cancelar');
+  });
+
+  it('LOS PDF (2026-10-20): bajan solos al enviar y al recibir', async () => {
+    const c = await montar();
+    c.alEnviar({ id: 77, folio: 'TRA-77', estado: 'en_transito', lineas: [] });
+    expect(pdfs).toEqual(['77-envio']);
+    expect(c.mensaje()).toContain('Se bajó el PDF del envío');
+
+    c.abrirRecepcion(enTransito);
+    c.confirmarRecepcion();
+    expect(pdfs).toEqual(['77-envio', '77-recepcion']);
+    expect(c.mensaje()).toContain('Se bajó el PDF de la recepción');
+  });
+
+  it('LOS PDF: en camino se saca el del envío; recibido, los dos; sin enviar, ninguno', async () => {
+    const recibidoT: Traspaso = { ...enTransito, id: 78, folio: 'TRA-78', estado: 'recibido', enviado_en: '2026-10-20 10:00:00', recibido_en: '2026-10-20 12:00:00' };
+    // Cancelado en camino: ya regresó al origen, no tiene PDF.
+    const canceladoT: Traspaso = { ...enTransito, id: 79, folio: 'TRA-79', estado: 'cancelado', enviado_en: '2026-10-20 09:00:00' };
+    historial = [{ ...enTransito, enviado_en: '2026-10-20 10:00:00' }, recibidoT, canceladoT];
+    const fixture = await montarFixture();
+    const el: HTMLElement = fixture.nativeElement;
+    const botones = (texto: string) =>
+      [...el.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.textContent?.trim() === texto);
+    expect(botones('PDF del envío').length).toBe(1);
+    // En Traspasos cerrados: el recibido trae los dos; el cancelado, ninguno.
+    expect(botones('Envío').length).toBe(1);
+    expect(botones('Recepción').length).toBe(1);
+
+    botones('Recepción')[0].click();
+    botones('PDF del envío')[0].click();
+    expect(pdfs).toEqual(['78-recepcion', '77-envio']);
   });
 
   it('enseña los pedidos con autorización: esperando, autorizado por menos y rechazado (2026-10-20)', async () => {

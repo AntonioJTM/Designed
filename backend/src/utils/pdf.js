@@ -203,7 +203,13 @@ function tabla(doc, columnas, filas, { total = null } = {}) {
 
   asegurar(doc, altoEnc + 24);
   dibujarEncabezado();
-  for (const fila of filas) dibujarFila(fila);
+  filas.forEach((fila, i) => {
+    // El total no se va solo a la página siguiente: se lleva el último renglón con él.
+    if (total && i === filas.length - 1 && asegurar(doc, altoDe(fila, 'Helvetica') + altoDe(total, 'Helvetica-Bold'))) {
+      dibujarEncabezado();
+    }
+    dibujarFila(fila);
+  });
   if (total) dibujarFila(total, { negrita: true, rayaArriba: true });
   doc.x = MARGEN;
   doc.moveDown(1);

@@ -9,3 +9,6 @@
 .avance-linea.completo .avance-barra > span { background: var(--ok-t); }
 .avance-texto { flex: 0 0 auto; font-size: 0.75rem; color: var(--tinta-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .avance-linea.completo .avance-texto { color: var(--ok-t); font-weight: 500; }
+
+// Los PDF de un traspaso cerrado (envío y recepción), 2026-10-20.
+.pdfs { display: flex; flex-wrap: wrap; gap: 6px; }
