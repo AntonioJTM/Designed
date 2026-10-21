@@ -108,12 +108,12 @@ export class Hoy {
     }
     if (p && this.veCobranza()) {
       lista.push({
-        etiqueta: 'Cobranza atrasada',
+        etiqueta: 'Notas vencidas',
         valor: this.pesos(p.cobranza?.monto ?? 0),
         pie:
-          (p.cobranza?.num_clientes ?? 0) === 0
-            ? `nadie debe una nota de más de ${p.cobranza?.dias ?? 15} días`
-            : `${p.cobranza.num_clientes} ${p.cobranza.num_clientes === 1 ? 'cliente' : 'clientes'} con notas de más de ${p.cobranza.dias} días sin pagar`,
+          (p.cobranza?.num_notas ?? 0) === 0
+            ? 'ninguna nota a crédito pasó sus días'
+            : `${p.cobranza.num_notas} ${p.cobranza.num_notas === 1 ? 'nota pasó' : 'notas pasaron'} sus días sin pagarse`,
         punto: 'var(--punto-alerta)',
       });
     }
@@ -223,13 +223,16 @@ export class Hoy {
 
     if (this.veClientes()) {
       const c = p.cobranza;
-      if (c && c.num_clientes > 0) {
-        const peor = [...c.clientes].sort((a, b) => b.dias_sin_abonar - a.dias_sin_abonar)[0];
+      if (c && c.num_notas > 0) {
+        // Ya vienen de la más vencida a la menos (2026-10-20).
+        const peor = c.notas[0];
         clientes.push({
           icono: ICONO.cobro,
           tono: 'naranja',
-          titulo: `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente debe una nota' : 'clientes deben notas'} de más de ${c.dias} días · ${this.pesos(c.monto)}`,
-          detalle: peor ? `La más vieja: ${peor.nombre_comercial || peor.nombre}, ${peor.dias_sin_abonar} días` : '',
+          titulo: `${c.num_notas} ${c.num_notas === 1 ? 'nota a crédito vencida' : 'notas a crédito vencidas'} · ${this.pesos(c.monto)}`,
+          detalle: peor
+            ? `La más vencida: ${peor.nombre_comercial || peor.nombre}, a ${peor.dias_credito} días, venció hace ${peor.dias_vencida} ${peor.dias_vencida === 1 ? 'día' : 'días'}`
+            : '',
           accion: 'Cobrar',
           ...DESTINO_AVISO.cobranza,
         });

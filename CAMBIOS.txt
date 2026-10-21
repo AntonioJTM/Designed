@@ -53,6 +53,36 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  DÍAS DE CRÉDITO DE CADA NOTA: al vender a crédito se dice a cuántos días (8 /
+  15 / 30 u otro); la nota vence ese día y, si no se paga, la campana la avisa.
+  Reemplaza la regla fija de 15 días en la caja, la campana, Cuánto debe y Cómo
+  va el negocio (2026-10-20, entrada 99; DESPLEGADO en 20261020-174812, migración
+  2026-10_dias_credito en las dos bases).
+  Antes:
+  TRANSFERENCIAS: pantalla nueva en Vender con todo lo que entró por
+  transferencia (ventas, notas, abonos, anticipos), a qué cuenta llegó, no. de
+  operación, material, importe, Por revisar / Procesada y Facturada; la cuenta
+  se pregunta al cobrar (2026-10-20, entrada 98; DESPLEGADO en 20261020-162648,
+  migración 2026-10_transferencias en las dos bases).
+  Antes:
+  SURTIR SUCURSAL: PDF de lo que se ENVÍA (cada paquete por hilo y lote, con
+  firmas) y de lo que se RECIBE (lo que llegó y lo que faltó); bajan solos al
+  enviar y al recibir (2026-10-20, entrada 97; DESPLEGADO en 20261020-152647, sin base).
+  Antes:
+  PUNTO DE VENTA: los paquetes escaneados van POR LOTE, con cuántos paquetes y
+  kilos de cada lote; igual en el ticket y en el detalle de la venta
+  (2026-10-20, entrada 96; DESPLEGADO en 20261020-144005, sin base).
+  Antes:
+  TIPOS DE GASTO PEDIDOS: el cajero da de alta un tipo y quien autoriza lo
+  acepta poniéndole su límite (2026-10-20, entrada 95; DESPLEGADO en 20261020-142613,
+  migración 2026-10_gastos_tipo_pedir en las dos bases).
+  Antes:
+  GASTOS DE LA CAJA: tipos con límite por gasto, el que lo pasa pide
+  autorización, foto opcional del ticket (2026-10-20, entrada 94; DESPLEGADO en
+  20261020-140004, migración 2026-10_gastos en las dos bases). FALTA que el
+  usuario les ponga su límite a Viajes, Limpieza y Papelería (nacen sin tope).
+  Después: "Nuevo tipo" ahí mismo en Registrar gasto (DESPLEGADO en 20261020-141259).
+  Antes:
   PRESENTACIONES: ya no se eliminan, y el Reporte de entradas del hilo va por
   lote (2026-10-20, entrada 93; DESPLEGADO en 20261020-122727, sin base).
   Antes:
@@ -790,6 +820,353 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (99) · A cuántos días es cada nota a crédito, y su aviso al vencer
+-------------------------------------------------------------------------------
+
+"Cuando se realiza una venta a crédito, que diga a cuántos días es la nota;
+después de los días ingresados, si no paga, hacerse acreedor a una
+notificación" (usuario). DESPLEGADO en 20261020-174812; migración
+2026-10_dias_credito.sql en LAS DOS bases (respaldo previo de hitex:
+C:/Program Files/Git/root/respaldos/hitex_antes_dias_credito_20261020-173936.sql.gz).
+
+  Decidió (2026-10-20): la notificación es para la TIENDA, en la campana; los
+  días se escriben en CADA venta (la caja propone 15: botones 8 / 15 / 30 u
+  otro); y la regla fija de "15 días sin pagarse" SE CAMBIA por el vencimiento
+  de cada nota. Las notas de antes (sin días) cuentan con 15: dan lo mismo que
+  antes.
+
+  · `pedidos.dias_credito` (1 a 365). La nota vence el día en que se fió (su
+    primer movimiento de crédito) más sus días. Lo guarda
+    `clientes/model.js → cargarVentaACredito`, que usan los TRES caminos de
+    fiar: la venta (POST /pedidos `dias_credito`), pasar una nota pendiente a
+    crédito (POST /pedidos/:id/a-credito) y entregar una nota en espera a
+    crédito (POST /pedidos/:id/entregar). Sin decirlos, 15. El cargo de su
+    cuenta dice "Venta a crédito POS-… a 30 días".
+  · `vencimientoDe` (clientes/model.js): de lo que todavía se debe (el mismo
+    reparto de siempre, `repartirAbonos`, que ahora lleva el plazo de cada
+    nota) saca la MÁS vencida, todas las vencidas y la próxima a vencer.
+    ATRASADO = alguna nota ya pasó su fecha (el día que vence todavía no).
+  · LA CAJA: en "A crédito", "A cuántos días" (`shared/plazo-credito.ts`) con
+    "Vence el 4 de noviembre. Si no la paga para entonces, la campana lo avisa";
+    el cintillo lo repite. Con la cuenta atrasada: "tiene una nota a crédito
+    vencida desde el 18 de julio (hace 94 días; era a 15 días), le faltan
+    $5,083.14" (sin el folio: puede ser de otra tienda); el candado
+    (CREDITO_ATRASADO, se autoriza como siempre) dice lo mismo. Lo mismo al
+    entregar una nota en espera a crédito, y "Pasar a crédito" en Notas
+    pendientes ahora es una ventana con el plazo (antes, solo una pregunta).
+  · LA NOTA: el ticket dice "A 15 días · vence el 4 de noviembre"; el detalle
+    de la venta, "debe $X · a 15 días, vence el …" o "venció el … (hace N
+    días)"; Ventas, "a crédito · falta $X · vencida hace N días".
+  · LA CAMPANA (y Hoy): "N notas a crédito vencidas · $X — pasaron sus días sin
+    pagarse · M clientes", con las 8 más vencidas: cliente, "a 15 días · venció
+    hace 94 días", teléfono y lo que falta; lleva a esa venta. Antes: "N
+    clientes con notas de más de 15 días".
+  · CUÁNTO DEBE y CÓMO VA EL NEGOCIO: columna "Vencimiento" ("venció hace 6
+    días" / "vence 4 nov") y los tramos por días de VENCIDA: Al corriente /
+    Vencida hasta 15 días / 16 a 45 / más de 45 (con notas a 15 días caen igual
+    que los de antes: hasta 15 / 16-30 / 31-60 / más de 60 días sin pagarse).
+    "Con notas vencidas" en lugar de "Atrasado (más de 15 días)".
+  · El verificador y su guía (/verificar, revisor-general) describen la regla
+    nueva.
+  · Pruebas: en vivo 21/21 (0 días 422; a 30 días: la nota y la venta recién
+    hecha dicen a 30 y su vencimiento, el cargo también; sin decir, 15; al
+    corriente no sale atrasado; 20 días después la de 15 venció hace 5 y la de
+    30 no, el expediente la cuenta y dice la próxima; fiarle otra vez 409 con la
+    fecha; confirmado, a 8 días; campana; Cuánto debe y sus tramos; Ventas;
+    pasar a crédito a 45 días; pagada la vencida ya no está atrasado), base
+    idéntica; E2E crédito, notas pendientes, notas en espera, devoluciones,
+    tiendas y permisos: todo bien; backend 71/71 (5 nuevas del vencimiento);
+    pantallas 584/584. Visto en Chrome: la caja en A crédito, el aviso rojo, la
+    campana y Cuánto debe.
+  · Revisor de tiendas: nada grave (la caja, el expediente y el candado no
+    dicen folio ni id de una nota de otra tienda; la campana con folios, solo a
+    quien ve todas; los tres caminos de fiar guardan los días y pasan por el
+    candado). Se corrigió: Ventas medía 'vencida' con lo que falta de toda la
+    venta y no con lo que falta de ESA nota en el reparto (una devolución
+    descontada la dejaba 'vencida' ya pagada); un ajuste que sube la deuda (sin
+    venta) salía en la campana como nota y llevaba a /admin/ventas/null: ahora
+    dice 'ajuste a su cuenta' y lleva al cliente; y la campana lleva a la venta
+    solo si el puesto ve Ventas (si no, al cliente).
+  · Quedan como estaban (avisados al usuario): una fiada cancelada y
+    reactivada cuenta desde el día en que se fió la primera vez; una nota
+    pendiente que se pasa a crédito cuenta desde el día en que se pasa; y los
+    días no tienen tope (de 1 a 365, sin autorización).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (98) · Transferencias: todo lo que entró por transferencia
+-------------------------------------------------------------------------------
+
+"Un apartado en ventas que se llame transferencias, más o menos con estos
+datos" (usuario, con la imagen de su hoja "REGISTRO DE TRANSFERENCIAS": fecha,
+folio de venta, cliente, cuenta, no. de operación, producto, importe, estado y
+"FACTURADO"). DESPLEGADO en 20261020-162648; migración 2026-10_transferencias.sql en
+LAS DOS bases (respaldo previo de hitex: C:/Program Files/Git/root/respaldos/hitex_antes_transferencias_20261020-161801.sql.gz).
+
+  Decidió (2026-10-20): la lista sale SOLA de lo que ya se cobra (no se vuelve
+  a capturar); la cuenta y el no. de operación se preguntan AL COBRAR; el
+  estado es Por revisar → Procesada; Facturada es Sí / No.
+
+  · De dónde sale cada renglón (`transferencias/model.js`): un `pagos` con
+    método Transferencia (venta de la caja, pago de nota pendiente, abono a una
+    nota en espera, entrega, captura subida), un abono por transferencia
+    (credito_movimientos; el abono a VARIAS notas son varios renglones con la
+    misma hora: es UN depósito y sale en UN renglón "2164, 2323", su llave es el
+    primero) y la parte por transferencia de un anticipo. Producto = el
+    MATERIAL de lo que se llevó (ACRILAN, VISCOSA). El no. de operación vive
+    donde siempre (referencia_transaccion / referencia) y corregirlo aquí lo
+    corrige ahí (en los dos renglones del abono).
+  · Lo nuevo en la tabla `transferencias` (fuente, fuente_id): la cuenta, el
+    estado (quién y cuándo la marcó procesada) y facturada (quién y cuándo).
+    Sin su renglón sale igual, "Por revisar" y "Sin cuenta": ninguna se queda
+    fuera aunque algún camino no anote la cuenta.
+  · AL COBRAR: "¿A qué cuenta llegó?" (`shared/cuenta-deposito.ts`) y "No. de
+    operación" en la caja (Cobrar, Efectivo y transferencia, Nota en espera con
+    pago y el abono), Abonar, Recibir anticipo, Registrar su pago (nota
+    pendiente) y Entregar (nota en espera). Con UNA cuenta activa se elige
+    sola; con varias hay que escogerla (si no, no deja cobrar); sin cuentas no
+    se pregunta. El servidor acepta `cuenta_bancaria_id` (422 CUENTA_INVALIDA
+    si no existe o está desactivada, y no se registra nada) y solo lo anota si
+    el método ES transferencia.
+  · Pantalla Vender → Transferencias (`ver:transferencias`, y como suma todas
+    las tiendas —y un abono por transferencia no tiene tienda— solo quien ve
+    todas): cifras (entró, por revisar, procesadas, sin facturar), "A qué
+    cuenta llegó" (barras por cuenta, para cotejar cada estado de cuenta),
+    filtros (buscar cliente / número / folio / no. de operación, cuenta o "Sin
+    cuenta", estado, facturada, de qué y periodo; por omisión TODO), la tabla
+    como la hoja y "Ver más". Se eligen varias y se marcan Procesadas o
+    Facturadas de una vez (`POST /transferencias/marcar`, todo o nada) y el
+    lápiz corrige una (`PUT /transferencias/:clave`) — con
+    `hacer:revisar_transferencias`. Se pone al día sola (tiempo real).
+  · Permisos nuevos: ver:transferencias y hacer:revisar_transferencias; la
+    migración se los dio a quien ve Reportes (gerente y Contabilidad).
+  · Una cuenta de banco a la que ya llegaron transferencias no se borra (409
+    CUENTA_CON_TRANSFERENCIAS): se desactiva.
+  · Pruebas: en vivo 34/34 (cobrar con cuenta, cuenta desactivada 422 sin
+    vender, efectivo no anota, abono a dos notas = un renglón de $100 con sus
+    dos folios, anticipo, pago de nota, cifras y por cuenta, buscar y filtrar,
+    corregir el número en los dos renglones del abono, el segundo renglón 404,
+    marcar varias todo o nada, cajero 403, gerente de una tienda 403, borrar
+    cuenta 409), base idéntica; E2E notas pendientes, crédito, devoluciones,
+    notas en espera, permisos y tiendas: todo bien; pantallas 582/582 (nuevas:
+    la caja pide la cuenta y la manda con su no. de operación, con una sola
+    cuenta no pregunta, el selector, la pantalla y su ventana); backend 66/66.
+    Visto en Chrome a 1366 y 390 px, y la caja con el selector.
+  · Revisor de tiendas: nada grave. Se corrigió lo menor: marcar pide también
+    ver la pantalla (el PUT contesta el renglón completo) y un cuerpo vacío es
+    422; el aviso en vivo de /transferencias le llega solo a quien ve todas
+    (`tiempo-real/almacenes.js`) y avisa también 'ventas' y 'clientes' (el no.
+    de operación vive ahí); las cuentas se vuelven a pedir cada vez que se abre
+    un cobro (la que se eligió sola se suelta si aparecen más o si se
+    desactiva) y la caja las vuelve a pedir con un 422 CUENTA_INVALIDA; y
+    cuando una nota en espera que pesó menos BORRA un pago de transferencia
+    (`_devolverDiferencia`), se borra también su renglón de `transferencias`.
+    Se queda así (caso raro): si esa devolución solo ACHICA el pago de
+    transferencia, la lista enseña lo que quedó como pago de la nota, no lo
+    que llegó al banco.
+  · OJO (base de pruebas): para las capturas se cambió por un momento el no. de
+    operación de 4 pagos de `desarrollo`; 3 volvieron a NULL y el del pago 523
+    (venta de la muestra, con un "SPEI" al azar) quedó con otro "SPEI" al azar.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (97) · Surtir sucursal: PDF de lo que se envía y de lo que se recibe
+-------------------------------------------------------------------------------
+
+"En surtir sucursal, que dé PDF de lo que se envía y de lo que se recibe"
+(usuario). DESPLEGADO en 20261020-152647; no toca la base.
+
+  · `inventario/traspaso-pdf.js` (nuevo), con `utils/pdf.js` como las cargas:
+    - ENVÍO A SUCURSAL (`pdfEnvio`): de dónde a dónde, quién lo pidió y quién
+      lo surtió (con la hora), cómo va (en camino / recibido por… / cancelado
+      en camino), las notas del pedido y del envío; cifras (hilos, paquetes,
+      kilos reales, lotes); "Qué se pidió y qué salió" por hilo (5 paquetes →
+      4 paquetes, 67.7 kg; "No salió (no había)"); y "Paquetes que salieron":
+      cada hilo con sus lotes ("4 paquetes · 67.7 kg · Lote 0094853: 2 · Lote
+      0094860: 2") y la tabla de cada paquete (código, lote, peso real, conos).
+      Rayas para firmar: Surtió (su nombre), Lo llevó, Recibió. Sale en camino
+      y ya recibido; sin enviar o CANCELADO, 409 TRASPASO_SIN_ENVIAR (el
+      revisor de tiendas: uno cancelado en camino ya regresó al origen y sus
+      paquetes no se le enseñan a la otra tienda, como en la lista).
+    - RECEPCIÓN DE ENVÍO (`pdfRecepcion`): quién lo recibió y cuándo, cómo
+      llegó (completo / incompleto), la nota al recibir; cifras (se enviaron,
+      llegaron, kilos que entraron, faltante); "Qué se envió y qué llegó" por
+      hilo (4 paquetes · 67.7 kg → 3 paquetes · 56.95 kg, faltó 1 paquete ·
+      10.75 kg); "Paquetes que no llegaron" (código, lote, peso: la merma); y
+      cada paquete del envío con "Llegó" / "NO LLEGÓ". Firmas: Surtió y
+      Recibió. Solo ya recibido (si no, 409 TRASPASO_SIN_RECIBIR).
+    - Un envío de antes de escanear no trae la lista de paquetes: lo dice.
+    - Sin costo y sin lo que hay en el origen (surtir a ciegas).
+  · `GET /inventario/traspasos/:id/pdf?tipo=envio|recepcion` (`ver:surtir`;
+    las tiendas las revisa el router.param de siempre: de otra tienda, 404).
+  · `utils/pdf.js → tabla`: el renglón del TOTAL ya no se va solo a la página
+    siguiente: se lleva el último renglón con él (vale para todos los PDF).
+  · PANTALLA: en Pendientes, el envío en camino trae "PDF del envío"; en
+    Traspasos cerrados, columna PDF con "Envío" y "Recepción". Y BAJAN SOLOS:
+    al enviar (el aviso dice "Se bajó el PDF del envío: va con la camioneta")
+    y al confirmar que llegó ("Se bajó el PDF de la recepción").
+  · Pruebas: en vivo 12/12 (en camino, sin recibir 409, sin enviar 409, no
+    existe 404, cajero sin ver:surtir 403, de otra tienda 404, recibirlo con
+    un paquete que no llegó y los dos PDF), base idéntica; pantallas 572/572
+    (nuevas: bajan solos; qué botones salen en cada estado); backend 66/66.
+    Vistos los PDF (convertidos a imagen) y la pantalla en Chrome.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (96) · Los paquetes de una venta, por lote
+-------------------------------------------------------------------------------
+
+"En el punto de venta cada paquete que se escanea tiene que tener el lote y, si
+hay más paquetes, que los ponga del lote que le corresponda y cuántos paquetes
+van de cada lote en una venta" (usuario). DESPLEGADO en 20261020-144005; no toca la base
+(la caja ya traía el lote de cada paquete al escanearlo).
+
+  · `shared/lotes.ts → porLote` (agrupa en el orden en que se escaneó el primero
+    de cada lote, con sus kilos), `nombreLote` ("Lote 0094853" / "Sin lote") y
+    `paquetes` ("1 paquete" / "3 paquetes"). La usan los tres lugares:
+  · CAJA: en el carrito, cada hilo escaneado dice "Lote 0096952 · 3 paquetes ·
+    58.45 kg" y debajo sus paquetes, cada uno con su ✕; luego el siguiente lote.
+    Escanear revuelto (lote A, lote B, lote A…) los junta en su lote.
+  · TICKET: un paquete sigue "Paquete X · lote Y"; varios, por lote: "Lote
+    0094853: 2 paquetes (A1, A2) · Lote 0094860: 1 paquete (B1)".
+  · DETALLE DE LA VENTA: "Se entregaron 4 paquetes de 2 lotes:" y la tabla con
+    un renglón por lote (cuántos y kilos) y sus paquetes debajo. Los estilos de
+    los paquetes pasaron a `pedido-bultos.scss` (pedido-detalle.scss pasaba el
+    límite de 4 kB por 23 bytes).
+  · Pantallas 570/570 (nuevas: porLote, el ticket con dos lotes; la del ticket
+    con varios paquetes cambió a "Sin lote: 2 paquetes (…)"). Visto en Chrome:
+    la caja con 4 paquetes de OPTIK de 2 lotes escaneados revueltos.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (95) · Los tipos de gasto los pide el cajero; quien autoriza pone el límite
+-------------------------------------------------------------------------------
+
+"Nada más el admin puede crear [tipos de] gastos; que lo puedan hacer también
+cajeros, y ya la persona que tiene a cargo autorizar, que diga si se autoriza
+ese tipo y el límite" (usuario). DESPLEGADO en 20261020-142613; migración
+2026-10_gastos_tipo_pedir.sql en LAS DOS bases (respaldo previo de hitex:
+/root/respaldos/hitex_antes_tipo_pedir_20261020-142527.sql.gz).
+
+  · Permiso nuevo «pedir:tipos_gasto» (la migración se lo dio a quien registra
+    gastos y no los da de alta directo: cajero y gerente). «Tipos de gasto y sus
+    límites» (hacer:tipos_gasto) los da de alta directo Y autoriza los que se
+    piden; hoy solo el administrador.
+  · POST /caja/tipos-gasto: requirePermisoAlguno(hacer, pedir) + autorizable
+    ('tipo_gasto'). Directo, quien tiene «Tipos de gasto» y ve todas las tiendas
+    (403 SOLO_TODAS_LAS_TIENDAS si no); el cajero lo PIDE. Antes de pedirlo se
+    revisa que no exista (409 TIPO_GASTO_REPETIDO); si mientras espera alguien da
+    de alta uno igual, al aceptarla se cierra sola.
+  · Operación «Nuevo tipo de gasto» (Dinero): "Nuevo tipo de gasto «Fletes» con
+    límite de $500.00 por gasto". Quien autoriza aprieta "Aceptar…" y se abre
+    "Autorizar el tipo de gasto" con el límite propuesto para dejarlo o
+    cambiarlo (vacío = todo gasto de ese tipo se autoriza); al aceptar se crea
+    con ESE límite y la nota lo dice ("Lo autorizó con límite de $750.00 por
+    gasto (se propuso $500.00)"). Rechazarlo: no se crea. (`detalle` / `ajustar`
+    de la operación, como "autorizar por menos" de un pedido a otra tienda.)
+  · En "Registrar gasto", "Nuevo tipo" ahora lo ve también el cajero: al
+    agregarlo sale la ventana de autorización (pedirla, o que alguien con clave
+    lo autorice ahí mismo) y, pedido, dice "Se pidió dar de alta «Fletes».
+    Cuando lo autoricen (con su límite) aparece aquí para elegirlo".
+  · Pruebas: en vivo 13/13 (pedirlo, verlo con su detalle, límite negativo 422,
+    aceptarlo con otro límite y su nota, repetido 409, el que se cierra solo,
+    rechazado no se crea, directo del administrador) y la de gastos 45/45;
+    pantallas 567/567 (nuevas: el cajero lo pide; aceptarlo manda el límite);
+    backend 66/66. Visto en Chrome "Autorizar el tipo de gasto".
+
+
+-------------------------------------------------------------------------------
+ 2026-10-20 (94) · Gastos de la caja, con tipo y límite
+-------------------------------------------------------------------------------
+
+"Ahora vamos a hacer otro apartado de gastos con límites; va en caja porque el
+dinero sale de caja y no se calcula en nómina; tiene que llevar tipo, por
+ejemplo viajes, limpieza, papelería" (usuario). Eligió: el límite es POR GASTO,
+pasarlo PIDE AUTORIZACIÓN y la foto del ticket es OPCIONAL. DESPLEGADO en
+20261020-140004; migración 2026-10_gastos.sql en LAS DOS bases (respaldo previo de
+hitex: /root/respaldos/hitex_antes_gastos_20261020-135843.sql.gz).
+
+QUÉ HAY
+  · Caja → "Registrar gasto" (con el turno abierto): de qué es (dice su tope),
+    cuánto, qué se compró y la foto opcional. Dice cómo queda el cajón ("En el
+    cajón debería haber $1,298.50 → quedaría $848.50") y, si pasa el tope,
+    "Pasa el límite de $300.00 de Papelería: se pide autorización". No deja
+    gastar más de lo que hay en el cajón.
+  · Arriba del tope: el cajero lo PIDE (el dinero no sale hasta que lo acepten
+    en Autorizaciones) o lo autoriza ahí mismo alguien con su clave; el gerente
+    lo hace directo. La solicitud dice "Gasto de Papelería por $450.00 (su
+    límite es $300.00) de Caja 1 · «Tóner»" y sale como Dinero.
+  · Tarjeta "Gastos" en Caja: Hoy / 7 días / Este mes y tipo; cuánto se gastó y
+    en cuántos, cuántos pasaron su límite, una barra por tipo con su parte; cada
+    gasto con cuándo, tipo ("pasó su límite de $300.00"), qué se compró, caja y
+    tienda, quién y quién autorizó, monto, "Subir ticket" / "Ver ticket" y
+    "Cancelar" (con motivo, solo con su turno abierto: el dinero regresa).
+  · "Tipos de gasto" (el administrador): nombre, límite por gasto y activo; se
+    desactiva en vez de borrar. Nacen Viajes, Limpieza y Papelería SIN límite.
+  · UN TIPO SIN LÍMITE NO ES "PASA TODO": todo gasto de ese tipo SE AUTORIZA
+    (quien autoriza lo registra directo). Lo encontró el revisor de tiendas: con
+    "sin límite" la cajera sacaba $8,000 como "Viajes · gasolina" sin pedir
+    nada, cuando el mismo retiro por "Sacar dinero" sí se lo pide desde el
+    2026-10-19. Como los tres tipos nacen sin límite, hasta que se les ponga uno
+    a la cajera todo gasto le pide autorización.
+  · El corte resta los gastos (movimiento de caja nuevo 'gasto', SIGNO −1) y
+    "Salió del cajón" los cuenta ("3 gastos"). No tocan la nómina.
+  · La ventana de retiros ya no dice "gasto" en "Sacar dinero" (ahora: "los
+    gastos van en «Registrar gasto»").
+  · Permisos nuevos: «Registrar gastos de la caja» (a quien saca o pide sacar
+    efectivo: cajero y gerente), «Gastos arriba de su límite» (gerente) y su
+    pedir (cajero), «Tipos de gasto y sus límites» (solo el administrador).
+
+LO QUE ENCONTRÓ EL REVISOR DE TIENDAS (corregido antes de subir)
+  · GRAVE: "sin límite" dejaba sacar cualquier monto sin autorización (arriba).
+    Ojo: como el límite es POR GASTO, con tope de $500 se pueden registrar 16
+    gastos de $500; se le dijo al usuario (puede pedirse un tope por turno o día).
+  · El tope se vuelve a mirar DENTRO del registro: si lo bajan entre el candado
+    y el registro, 409 GASTO_SE_AUTORIZA (no queda "pasado" sin autorización).
+  · Con la llave de una autorización aceptada (X-Autorizacion) el candado ya no
+    se salta por `aplica` (autorizable.js, para todas las operaciones): si
+    subieron el tope mientras esperaba, el gasto queda LIGADO a su autorización.
+  · Tipo desactivado: 422 en el acto, ya no pide una autorización imposible.
+  · Antes de pedirla (`alPedir`): turno abierto y efectivo suficiente.
+  · Al aceptarla (`revisarAntes` + cerrarSiCambio): turno cortado, tipo
+    desactivado o quien la pidió ya no registra gastos → se cierra sola.
+  · La foto: la primera, cualquiera que registra gastos de esa tienda;
+    cambiarla o quitarla, quien registró el gasto con su turno abierto, o quien
+    saca efectivo (403 SOLO_QUIEN_LO_REGISTRO); a un cancelado, 409; "Quitar la
+    foto" pregunta antes.
+  · Los tipos los cambia quien ve todas las tiendas (requireTodasLasTiendas).
+  · La lista: las cifras se suman sobre TODOS (la lista se recorta a 500 y lo
+    dice), la consulta se valida (un filtro mal escrito es 422, no 500) y una
+    tienda o turno de la consulta se exige de sus tiendas.
+  · En Caja, el dinero que regresa de un gasto cancelado sale como "Gasto
+    cancelado" (no "ingreso a mano"), y la lista dice "lo registró directo
+    (puede autorizar)" cuando no hubo autorización ligada.
+
+Y UN DETALLE ("que me deje agregar más tipos de gastos", usuario; DESPLEGADO en
+20261020-141259, sin base): en la ventana "Registrar gasto", junto a "De qué
+es", el botón "Nuevo tipo" abre ahí mismo el nombre y su "Límite por gasto
+(vacío: todo se autoriza)"; "Agregar tipo" lo da de alta y lo deja elegido para
+ese gasto (`gasto-modal.ts → agregarTipo`). Lo ve quien tiene «Tipos de gasto» y
+todas las tiendas (lo mismo que exige el servidor); sin ningún tipo, empieza
+abierto. Pantallas 565/565 (nuevas: el alta ahí mismo queda elegida, y sin el
+permiso no sale). En Chrome se vio la ventana con el botón y con el alta
+abierta (la herramienta de capturas no deja guardar).
+
+PRUEBAS
+  De punta a punta con la base de pruebas (45 tras los arreglos, datos TMP que
+  se borran; la base quedó igual): alta de tipos y nombre repetido, gasto dentro del tope, 428 y
+  202 arriba del tope, aceptarlo, el gerente directo, efectivo insuficiente,
+  tipo sin tope, cancelar (403 al cajero, 409 dos veces y con el turno cortado),
+  la foto (422 si no es foto, se ve con sesión, 401 sin ella, se quita), la
+  lista con sus totales, tipo desactivado y el corte que cuadra; y lo del
+  revisor (tipo sin límite, tope subido mientras esperaba, foto con permisos,
+  filtro mal escrito, solicitud que se cierra al cortar). Pantallas 563/563 (nuevas: la ventana de gasto, el gasto en "Salió del cajón" y el
+  botón según el permiso), backend 66/66; e2e-cancelacion-caja, e2e-tiendas,
+  e2e-permisos, e2e-notas-pendientes, e2e-pedidos-encargo y e2e-devoluciones
+  pasan. Visto en Chrome a 1280 y 390 px.
 
 
 -------------------------------------------------------------------------------

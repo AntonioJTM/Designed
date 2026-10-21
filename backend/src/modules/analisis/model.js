@@ -18,19 +18,21 @@ const ESTADOS_MUERTOS = "('cancelado', 'devuelto')";
 // ---------------------------------------------------------------------------
 
 /**
- * La cartera por ANTIGÜEDAD. Los días son los que lleva sin pagarse su NOTA MÁS
- * VIEJA (2026-10-20, auditoría; el usuario eligió "por la nota más vieja"): lo
- * pagado se reparte de lo más viejo a lo más nuevo, así que abonar poquito no
- * "rejuvenece" una deuda de hace meses. Es la MISMA cuenta y el MISMO plazo que
- * la caja y la campana (`clientes/model.js → diasSinAbonarDeTodos`).
+ * La cartera por VENCIMIENTO (2026-10-20, usuario: "que diga a cuántos días es la
+ * nota; después de los días, si no paga, una notificación"). Cada nota vence el
+ * día en que se fió más sus días de crédito (sin decirlo, 15); lo pagado se
+ * reparte de lo más viejo a lo más nuevo (y el abono a una nota, a esa nota). Es
+ * la MISMA cuenta que la caja y la campana (`clientes/model.js →
+ * diasSinAbonarDeTodos`): un cliente está atrasado si alguna nota ya venció.
  *
- * `dias_sin_abonar` (se quedó el nombre) es lo que de verdad importa para
- * decidir a quién llamar; `nota_vieja_por_pagar`, lo que le falta de esa nota.
+ * `dias_vencida`: hace cuántos días venció su nota MÁS vencida (0 si ninguna ha
+ * vencido); `vence_el`: esa fecha, o la de la que vence primero si va al
+ * corriente. `dias_sin_abonar` (los días de su nota más vieja) se queda.
+ * `diasAviso`: las que vencieron hace MÁS de esos días (0 = todas las vencidas).
  */
 async function cartera({ diasAviso } = {}) {
-  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
   const { diasSinAbonarDeTodos } = require('../clientes/model');
-  if (diasAviso == null) diasAviso = DIAS_SIN_ABONAR;
+  if (diasAviso == null) diasAviso = 0;
   const [rows] = await pool.query(
     `SELECT c.id AS cliente_id, c.codigo, c.nombre, c.nombre_comercial,
             c.telefono, c.limite_credito,
@@ -52,23 +54,29 @@ async function cartera({ diasAviso } = {}) {
     const a = dias.get(Number(r.cliente_id));
     r.dias_sin_abonar = a?.dias ?? 0;
     r.nota_vieja_por_pagar = a?.porPagar ?? Number(r.saldo);
+    // Su nota más vencida (o, al corriente, la que vence primero) — 2026-10-20.
+    const v = a?.vencida ?? null;
+    r.dias_vencida = v ? v.diasVencida : 0;
+    r.vence_el = v?.venceEl ?? a?.proxima?.venceEl ?? null;
+    r.notas_vencidas = a?.vencidas?.length ?? 0;
+    r.vencido_por_pagar = Math.round((a?.vencidas ?? []).reduce((s, n) => s + n.porPagar, 0) * 100) / 100;
   }
-  // De la nota más vieja a la más reciente; con los mismos días, el que debe más.
-  rows.sort((a, b) => b.dias_sin_abonar - a.dias_sin_abonar || Number(b.saldo) - Number(a.saldo));
+  // De la nota más vencida a la que va al corriente; con los mismos días, el que debe más.
+  rows.sort((a, b) => b.dias_vencida - a.dias_vencida || Number(b.saldo) - Number(a.saldo));
 
-  // Los tramos se arman aquí y no en SQL: el corte lo decide el negocio y así
-  // se puede cambiar sin tocar la consulta. "Al día" llega hasta el plazo de
-  // la caja y la campana (15 días): pasado eso, la caja ya pregunta antes de fiarle.
+  // Los tramos se arman aquí y no en SQL: el corte lo decide el negocio. Por días
+  // de VENCIDA (2026-10-20). Con una nota a 15 días dan lo mismo que los de antes
+  // por días sin pagarse (hasta 15 / 16-30 / 31-60 / más de 60).
   const TRAMOS = [
-    { clave: 'al_dia', etiqueta: `Al día (hasta ${DIAS_SIN_ABONAR} días)`, hasta: DIAS_SIN_ABONAR },
-    { clave: 'atrasado', etiqueta: `${DIAS_SIN_ABONAR + 1} a 30 días`, hasta: 30 },
-    { clave: 'un_mes', etiqueta: '31 a 60 días', hasta: 60 },
-    { clave: 'vencido', etiqueta: 'Más de 60 días', hasta: Infinity },
+    { clave: 'al_dia', etiqueta: 'Al corriente (ninguna nota vencida)', hasta: 0 },
+    { clave: 'atrasado', etiqueta: 'Vencida hasta 15 días', hasta: 15 },
+    { clave: 'un_mes', etiqueta: 'Vencida 16 a 45 días', hasta: 45 },
+    { clave: 'vencido', etiqueta: 'Vencida hace más de 45 días', hasta: Infinity },
   ];
   const porTramo = TRAMOS.map((t) => ({ ...t, hasta: undefined, monto: 0, clientes: 0 }));
 
   for (const r of rows) {
-    const dias = Number(r.dias_sin_abonar);
+    const dias = Number(r.dias_vencida);
     const i = TRAMOS.findIndex((t) => dias <= t.hasta);
     const idx = i === -1 ? TRAMOS.length - 1 : i;
     porTramo[idx].monto = Math.round((porTramo[idx].monto + Number(r.saldo)) * 100) / 100;
@@ -77,8 +85,8 @@ async function cartera({ diasAviso } = {}) {
   }
 
   const total = Math.round(rows.reduce((s, r) => s + Number(r.saldo), 0) * 100) / 100;
-  // MÁS de N días, como la caja (`atrasado`) y la campana.
-  const porAvisar = rows.filter((r) => Number(r.dias_sin_abonar) > diasAviso);
+  // Con alguna nota vencida (hace más de `diasAviso` días), como la caja y la campana.
+  const porAvisar = rows.filter((r) => r.notas_vencidas > 0 && Number(r.dias_vencida) > diasAviso);
 
   return {
     total_por_cobrar: total,

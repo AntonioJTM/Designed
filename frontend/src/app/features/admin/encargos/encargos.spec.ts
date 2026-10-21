@@ -11,6 +11,8 @@ import { ConfirmacionService } from '../../../core/services/confirmacion.service
 import { TicketService } from '../../../core/services/ticket.service';
 import { Encargo, Encargos, ModificarPedidoInput, Pedido } from '../../../core/models/ventas.models';
 import { hoyLocal } from '../../../shared/fecha.pipe';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { transferenciasFalso } from '../../../core/services/transferencias.falso';
 
 /**
  * PEDIDOS de clientes (2026-10-06), EN ESPERA desde el 2026-10-07 ("mejor que
@@ -37,7 +39,7 @@ describe('EncargosPantalla', () => {
     const datos: Encargos = { items: [porPreparar, conChofer, paraHoy], conteo: { en_preparacion: 3, listo: 0, enviado: 0 }, por_cobrar: 4500 };
     await TestBed.configureTestingModule({
       imports: [EncargosPantalla],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, 
         provideRouter([]),
         { provide: VentasService, useValue: { encargos: () => of(datos) } },
         { provide: AuthService, useValue: { puede: () => true, puedeOPide: () => true } },
@@ -106,7 +108,7 @@ describe('EntregarPedidoModal', () => {
     enviado = null;
     await TestBed.configureTestingModule({
       imports: [EntregarPedidoModal],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, 
         {
           provide: VentasService,
           useValue: {
@@ -161,7 +163,10 @@ describe('EntregarPedidoModal', () => {
     expect(c.motivo()).toBeNull();
     c.metodoId = 2;
     c.entregar();
-    expect(enviado).toEqual({ pagos: [{ metodo_pago_id: 2, monto: 500 }], sesion_caja_id: undefined, a_credito: 1000 });
+    // Lo que se fía va con sus días: se proponen 15 (2026-10-20).
+    expect(enviado).toEqual({ pagos: [{ metodo_pago_id: 2, monto: 500 }], sesion_caja_id: undefined, a_credito: 1000, dias_credito: 15 });
+    c.diasCredito = 0;
+    expect(c.motivo()).toContain('a cuántos días');
   });
 
   it('sin permiso de vender a crédito no lo ofrece', async () => {
@@ -226,7 +231,7 @@ describe('ModificarPedidoModal', () => {
     enviado = null;
     await TestBed.configureTestingModule({
       imports: [ModificarPedidoModal],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, 
         {
           provide: VentasService,
           useValue: {

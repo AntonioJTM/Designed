@@ -8,6 +8,7 @@ const almacenesModel = require('../almacenes/model');
 const configuracionModel = require('../configuracion/model');
 const clientesModel = require('../clientes/model');
 const saldoFavor = require('../clientes/saldo-favor');
+const transferencias = require('../transferencias/model');
 const cajaModel = require('../caja/model');
 // Se pide al usarse: devoluciones.js carga variantes/service → inventario/model,
 // que pide este archivo (se haría un ciclo al arrancar).
@@ -735,7 +736,7 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       if (monto <= 0) continue;
       // Lo que ENTREGÓ en efectivo, solo informativo (2026-10-16): la venta lo
       // dice al abrirla ("recibió $2,300, cambio $50"); se asienta lo cobrado.
-      await conn.query(
+      const [pagoIns] = await conn.query(
         `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, recibido, estado, referencia_transaccion)
          VALUES (:pedido_id, :metodo_pago_id, :monto, :recibido, 'completado', :ref)`,
         {
@@ -744,6 +745,11 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
           ref: p.referencia_transaccion ?? null,
         }
       );
+      // Por transferencia: a qué cuenta llegó (Transferencias, 2026-10-20).
+      await transferencias.anotar(conn, {
+        fuente: 'pago', fuenteId: pagoIns.insertId, metodoPagoId: p.metodo_pago_id,
+        cuentaId: p.cuenta_bancaria_id, usuarioId,
+      });
       if (!esEfectivo[p.metodo_pago_id]) noEfectivo = round2(noEfectivo + monto);
     }
 
@@ -845,6 +851,7 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         pedidoId,
         numeroPedido: numero,
         usuarioId,
+        diasCredito: datos.dias_credito ?? null,
       });
       // Si tenía saldo a favor (se le canceló una venta que ya había abonado),
       // eso paga esta: queda 'pagado' desde ya.
@@ -981,6 +988,13 @@ async function _obtenerConn(ejecutor, id) {
       .find((d) => d.pedidoId === Number(id));
     pedido.credito_pagado = deuda ? deuda.pagado : 0;
     pedido.credito_por_pagar = deuda ? deuda.porPagar : 0;
+    // A cuántos días es y cuándo vence (2026-10-20): desde el día en que se fió.
+    const fiada = credito.find((m) => m.tipo === 'cargo');
+    if (fiada) {
+      const dia = String(credito[0].creado_en).slice(0, 10);
+      pedido.dias_credito = pedido.dias_credito ?? clientesModel.plazoPorOmision();
+      pedido.credito_vence_el = clientesModel.sumarDias(dia, Number(pedido.dias_credito));
+    }
   }
   // Los abonos a la CUENTA después de la venta. No son de este pedido —lo fiado
   // se paga en la cuenta, no venta por venta— pero sin ellos el pedido parece
@@ -1098,6 +1112,8 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
   // se reparten de lo más antiguo a lo más nuevo (la misma cuenta que la da por
   // pagada). Sin esto una fiada ya pagada salía con "Falta" el total.
   const pagadoConAbonos = new Map();
+  const venceDe = new Map();
+  const plazo = clientesModel.plazoPorOmision();
   if (rows.length) {
     const [fiadas] = await pool.query(
       `SELECT DISTINCT cliente_id FROM credito_movimientos
@@ -1106,7 +1122,12 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
     );
     for (const { cliente_id } of fiadas) {
       for (const d of await clientesModel.aplicarAbonos(pool, cliente_id)) {
-        if (d.pedidoId != null) pagadoConAbonos.set(d.pedidoId, d.pagado);
+        if (d.pedidoId != null) {
+          pagadoConAbonos.set(d.pedidoId, d.pagado);
+          // Cuándo vence (2026-10-20): el día en que se fió más sus días; y lo que
+          // falta de ELLA en el reparto (resta lo que una devolución le descontó).
+          if (d.dia) venceDe.set(d.pedidoId, { vence: clientesModel.sumarDias(d.dia, d.plazo ?? plazo), porPagar: d.porPagar });
+        }
       }
     }
   }
@@ -1118,6 +1139,11 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
     // pago, apartado ni nota en espera (esas se pagan después o en partes).
     r.contado = !Number(r.fiada) && !Number(r.nota_pendiente) && !Number(r.encargo) && r.estado !== 'apartado';
     r.fiada = !!Number(r.fiada);
+    // A crédito que todavía se debe: cuándo vence y, si ya pasó, hace cuántos días.
+    const v = r.fiada ? venceDe.get(Number(r.id)) ?? null : null;
+    r.credito_vence_el = v?.vence ?? null;
+    r.credito_dias_vencida = v && !INACTIVOS.includes(r.estado) && v.porPagar > 0.004 && v.vence < hoyLocal()
+      ? Math.round((Date.parse(hoyLocal()) - Date.parse(v.vence)) / 86400000) : null;
     r.devuelto_total = round2(Number(r.devuelto_total ?? 0));
     r.situacion = situacionDe(r);
   }
@@ -1880,24 +1906,35 @@ async function _revisarReactivarFiada(conn, { id, numero, estado, clienteFiado, 
 
 /**
  * CUENTA ATRASADA (2026-10-16: "no fiarle a ciegas cuando trae cuenta vencida"):
- * si su nota más vieja lleva más de DIAS_SIN_ABONAR días sin pagarse (2026-10-20;
- * antes, días sin abonar), no se le fía sin que se confirme (`fiar_con_atraso`). Desde el 2026-10-19 confirmarlo pide AUTORIZACIÓN
+ * si alguna de sus notas ya pasó sus días de crédito (2026-10-20; antes, la más
+ * vieja con más de 15 días), no se le fía sin que se confirme (`fiar_con_atraso`). Desde el 2026-10-19 confirmarlo pide AUTORIZACIÓN
  * (`autorizable('fiar_atrasado')`) a quien no fía atrasados directo. Vale para
  * los TRES caminos de fiar: la venta, pasar una nota pendiente a crédito y
  * entregar una nota en espera a crédito (antes estos dos ni lo revisaban).
  */
 async function _exigirSinAtraso(conn, clienteId, fiarConAtraso) {
   if (fiarConAtraso === true || !clienteId) return;
-  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
   const atraso = await clientesModel.atrasoDe(clienteId, conn);
-  const dias = atraso?.dias ?? null;
-  if (dias != null && dias > DIAS_SIN_ABONAR) {
-    const falta = atraso.porPagar.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+  const v = atraso?.vencida;
+  if (v) {
+    const falta = v.porPagar.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+    const otras = atraso.vencidas.length - 1;
+    // Sin el folio: la nota puede ser de otra tienda (el cliente es compartido).
     throw new AppError(409, 'CREDITO_ATRASADO',
-      `Su nota más vieja lleva ${dias} días sin pagarse y le faltan ${falta} (el plazo es de ` +
-      `${DIAS_SIN_ABONAR} días). Pídele un abono, o confirma que se le da a crédito de todos modos.`,
-      { dias, plazo: DIAS_SIN_ABONAR, por_pagar: atraso.porPagar });
+      `Tiene una nota a crédito vencida desde el ${fechaLarga(v.venceEl)} (hace ${v.diasVencida} ` +
+      `${v.diasVencida === 1 ? 'día' : 'días'}; era a ${v.plazo} días) y le faltan ${falta}` +
+      `${otras > 0 ? `, y ${otras} ${otras === 1 ? 'nota vencida más' : 'notas vencidas más'}` : ''}. ` +
+      'Pídele un abono, o confirma que se le da a crédito de todos modos.',
+      { dias_vencida: v.diasVencida, vence_el: v.venceEl, dias_credito: v.plazo, por_pagar: v.porPagar, vencidas: atraso.vencidas.length });
   }
+}
+
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+  'septiembre', 'octubre', 'noviembre', 'diciembre'];
+/** '2026-11-04' → '4 de noviembre'. */
+function fechaLarga(dia) {
+  const [, m, d] = String(dia).split('-').map(Number);
+  return m && d ? `${d} de ${MESES_LARGOS[m - 1]}` : String(dia);
 }
 
 /** Estados que dicen que el pedido ya se cobró. */
@@ -2308,6 +2345,10 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
         ref: datos.referencia ?? null,
       }
     );
+    await transferencias.anotar(conn, {
+      fuente: 'pago', fuenteId: pagoIns.insertId, metodoPagoId: datos.metodo_pago_id,
+      cuentaId: datos.cuenta_bancaria_id, usuarioId,
+    });
 
     if (esEfectivo) {
       await conn.query(
@@ -2388,6 +2429,7 @@ async function pasarACredito(pedidoId, usuarioId, datos = {}) {
       pedidoId,
       numeroPedido: pedido.numero_pedido,
       usuarioId,
+      diasCredito: datos.dias_credito ?? null,
     });
     await clientesModel.liquidarVentasACredito(conn, pedido.cliente_id);
     const resultado = await _obtenerConn(conn, pedidoId);
@@ -2684,6 +2726,8 @@ async function _devolverDiferencia(conn, pedido, monto, datos) {
     // cero); el rastro queda en el movimiento de caja.
     if (quita >= Number(p.monto) - 0.004) {
       await conn.query('DELETE FROM pagos WHERE id = :id', { id: p.id });
+      // Si era una transferencia, se va con él lo que se anotó de ella (Transferencias).
+      await conn.query("DELETE FROM transferencias WHERE fuente = 'pago' AND fuente_id = :id", { id: p.id });
     } else {
       await conn.query('UPDATE pagos SET monto = monto - :q WHERE id = :id', { q: quita, id: p.id });
     }
@@ -3155,7 +3199,7 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
       cambioPorDar = round2(cambioPorDar - quita);
     }
     if (monto <= 0) continue;
-    await conn.query(
+    const [pagoIns] = await conn.query(
       `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, recibido, estado, referencia_transaccion)
        VALUES (:pedido, :metodo, :monto, :recibido, 'completado', :ref)`,
       {
@@ -3164,6 +3208,10 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
         ref: p.referencia_transaccion ?? null,
       }
     );
+    await transferencias.anotar(conn, {
+      fuente: 'pago', fuenteId: pagoIns.insertId, metodoPagoId: p.metodo_pago_id,
+      cuentaId: p.cuenta_bancaria_id, usuarioId,
+    });
     if (esEfectivo[p.metodo_pago_id]) efectivo = round2(efectivo + monto);
   }
   if (efectivo > 0) {
@@ -3178,6 +3226,7 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
     // Dentro de la misma transacción: si la entrega se revierte, la deuda no queda.
     await clientesModel.cargarVentaACredito(conn, {
       clienteId: pedido.cliente_id, monto: aCredito, pedidoId: pedido.id, numeroPedido: num, usuarioId,
+      diasCredito: datos.dias_credito ?? null,
     });
   }
   return { cambio, aCredito };

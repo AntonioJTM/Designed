@@ -1,4 +1,5 @@
 import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { nombreLote, paquetes, porLote } from '../../../shared/lotes';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
@@ -15,6 +16,7 @@ import {
   ResultadoDevolucion,
 } from '../../../core/models/ventas.models';
 import { FechaPipe, hoyLocal } from '../../../shared/fecha.pipe';
+import { fechaVence } from '../../../shared/plazo-credito';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { ApiError } from '../../../core/models/auth.models';
@@ -77,7 +79,7 @@ const MESES_LARGOS = [
   host: { '(document:keydown.escape)': 'alEscape()' },
   imports: [BotonWhatsapp, FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal, AbonoModal],
   templateUrl: './pedido-detalle.html',
-  styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss'],
+  styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss', './pedido-bultos.scss'],
 })
 export class PedidoDetalle implements OnDestroy {
   private readonly ventas = inject(VentasService);
@@ -220,6 +222,20 @@ export class PedidoDetalle implements OnDestroy {
       .reduce((s, g) => s + Number(g.monto), 0);
   }
 
+  /**
+   * " · a 15 días, vence el 4 de noviembre" o " · a 15 días, venció el 4 de
+   * noviembre (hace 6 días)" (2026-10-20). Ya pagada, solo a cuántos días era.
+   */
+  plazoTexto(p: Pedido, debe: number): string {
+    if (!p.dias_credito || !p.credito_vence_el) return '';
+    const dias = `a ${p.dias_credito} días`;
+    if (debe <= 0.004) return ` · era ${dias}`;
+    const hoy = hoyLocal();
+    if (p.credito_vence_el >= hoy) return ` · ${dias}, vence el ${fechaVence(p.credito_vence_el)}`;
+    const hace = Math.round((Date.parse(hoy) - Date.parse(p.credito_vence_el)) / 86400000);
+    return ` · ${dias}, venció el ${fechaVence(p.credito_vence_el)} (hace ${hace} ${hace === 1 ? 'día' : 'días'})`;
+  }
+
   /** Lo que se cargó a su cuenta con esta venta (el cargo original). */
   fiado(p: Pedido): number {
     return (p.credito ?? [])
@@ -280,7 +296,7 @@ export class PedidoDetalle implements OnDestroy {
       const debe = this.fiadoPorPagar(p);
       const pie = this.fiadoVigente(p) <= 0
         ? 'se quitó de su cuenta'
-        : debe <= 0.004 ? 'ya está pagado' : `debe ${this.dinero(debe)}`;
+        : (debe <= 0.004 ? 'ya está pagado' : `debe ${this.dinero(debe)}`) + this.plazoTexto(p, debe);
       return [
         { etiqueta: 'Total', valor: total },
         { etiqueta: 'Pagó al comprar', valor: pagado },
@@ -1013,6 +1029,13 @@ export class PedidoDetalle implements OnDestroy {
    * Por qué una línea no muestra bultos. Un pedido en línea no escanea nada, y
    * decirlo evita que se lea como un dato perdido.
    */
+  /** Los paquetes entregados por LOTE, con cuántos y cuántos kilos (2026-10-20). */
+  lotesDe(bultos: { lote?: string | null; peso_kg: number | string; codigo: string }[]) {
+    return porLote(bultos);
+  }
+  readonly nombreLote = nombreLote;
+  readonly paquetes = paquetes;
+
   porQueSinBultos(): string {
     return this.pedido()?.canal === 'tienda_linea'
       ? 'Venta en línea: no se escanearon bultos.'

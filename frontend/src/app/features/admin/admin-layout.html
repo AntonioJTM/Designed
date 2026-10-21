@@ -214,29 +214,29 @@
                 </div>
               }
 
-              @if (veClientes() && (p.cobranza.num_clientes > 0 || p.nuevos_sin_credito.num_clientes > 0
+              @if (veClientes() && (p.cobranza.num_notas > 0 || p.nuevos_sin_credito.num_clientes > 0
                    || p.enfriados.num_clientes > 0)) {
                 <div class="avisos-grupo">
                   <h3>Clientes</h3>
-                  @if (p.cobranza && p.cobranza.num_clientes > 0) {
+                  @if (p.cobranza && p.cobranza.num_notas > 0) {
                     <button type="button" class="aviso-fila" (click)="irA(url(destino.cobranza))">
                       <span class="icono tono-naranja" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.cobro"></path></svg></span>
                       <span class="que">
-                        <b>{{ p.cobranza.num_clientes }} {{ p.cobranza.num_clientes === 1 ? 'cliente debe' : 'clientes deben' }} {{ dinero(p.cobranza.monto) }}</b>
-                        <span>con notas de más de {{ p.cobranza.dias }} días sin pagar</span>
+                        <b>{{ p.cobranza.num_notas }} {{ p.cobranza.num_notas === 1 ? 'nota a crédito vencida' : 'notas a crédito vencidas' }} · {{ dinero(p.cobranza.monto) }}</b>
+                        <span>pasaron sus días sin pagarse · {{ p.cobranza.num_clientes }} {{ p.cobranza.num_clientes === 1 ? 'cliente' : 'clientes' }}</span>
                       </span>
                       <span class="ir" aria-hidden="true">Cobrar ›</span>
                     </button>
-                    <!-- Quiénes son, para llamarles desde aquí: nombre, días y teléfono. -->
+                    <!-- Cuáles son (2026-10-20): de quién, a cuántos días, hace cuánto vencieron y lo que falta. -->
                     <ul class="deudores">
-                      @for (c of p.cobranza.clientes; track c.cliente_id) {
+                      @for (n of p.cobranza.notas; track n.clave) {
                         <li>
-                          <button type="button" (click)="irA('/admin/clientes/' + c.cliente_id)">
+                          <button type="button" (click)="irA(destinoNota(n))">
                             <span class="deudor">
-                              <b>{{ c.nombre_comercial || c.nombre }}</b>
-                              <span>su nota más vieja, {{ c.dias_sin_abonar }} días{{ c.telefono ? ' · ' + c.telefono : '' }}</span>
+                              <b>{{ n.nombre_comercial || n.nombre }}</b>
+                              <span>{{ n.ajuste ? 'ajuste a su cuenta' : 'a ' + n.dias_credito + ' días' }} · venció hace {{ n.dias_vencida }} {{ n.dias_vencida === 1 ? 'día' : 'días' }}{{ n.telefono ? ' · ' + n.telefono : '' }}</span>
                             </span>
-                            <b class="monto">{{ dinero(c.saldo) }}</b>
+                            <b class="monto">{{ dinero(n.por_pagar) }}</b>
                           </button>
                         </li>
                       }

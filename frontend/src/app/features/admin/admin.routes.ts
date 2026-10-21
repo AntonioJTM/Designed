@@ -47,6 +47,8 @@ export const ADMIN_ROUTES: Routes = [
       // Las VENTAS (antes "Pedidos"). Los enlaces viejos a una venta
       // (/admin/pedidos/123) llevan a su nuevo lugar.
       { path: 'ventas', ...p('ver:pedidos'), title: nombreDe('ventas'), loadComponent: () => import('./pedidos/pedidos-list').then((m) => m.PedidosList) },
+      { path: 'transferencias', canActivate: [permisoGuard], data: { permiso: 'ver:transferencias', todasLasTiendas: true },
+        title: nombreDe('transferencias'), loadComponent: () => import('./transferencias/transferencias').then((m) => m.Transferencias) },
       { path: 'ventas/:id', ...p('ver:pedidos'), title: 'Detalle de la venta', loadComponent: () => import('./pedidos/pedido-detalle').then((m) => m.PedidoDetalle) },
       { path: 'pedidos/:id', redirectTo: 'ventas/:id' },
       // Las NOTAS EN ESPERA (antes "Pedidos", encargos): se modifican y se entregan

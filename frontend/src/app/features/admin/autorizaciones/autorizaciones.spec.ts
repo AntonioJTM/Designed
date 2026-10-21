@@ -93,6 +93,26 @@ describe('Autorizaciones', () => {
     expect(aprobados.length).toBe(0);
   });
 
+  it('un tipo de gasto nuevo se acepta con el límite que decide quien autoriza (2026-10-20)', async () => {
+    const f = await montar();
+    const c = f.componentInstance;
+    const tipo = { ...PEDIDO, id: 12, operacion: 'tipo_gasto', operacion_nombre: 'Nuevo tipo de gasto',
+      resumen: 'Nuevo tipo de gasto «Fletes» con límite de $500.00 por gasto', detalle: { tipo_gasto: { nombre: 'Fletes', limite: 500 } } };
+    await c.aceptar(tipo);
+    f.detectChanges();
+    expect(c.ajustandoTipo()).toBe(tipo);
+    expect(c.limiteTipo).toBe(500);
+    expect((f.nativeElement as HTMLElement).textContent).toContain('Autorizar el tipo de gasto');
+    c.limiteTipo = 750;
+    c.autorizarTipo();
+    expect(aprobados).toEqual([{ id: 12, ajustes: { limite: 750 } }]);
+    // Vacío = sin límite; un número negativo no.
+    c.limiteTipo = -5;
+    expect(c.limiteTipoValido()).toBeFalse();
+    c.limiteTipo = null;
+    expect(c.limiteTipoValido()).toBeTrue();
+  });
+
   it('cada solicitud dice de qué tipo es (2026-10-20, ronda 4)', async () => {
     const f = await montar();
     expect((f.nativeElement as HTMLElement).querySelector('.tipo-op')?.textContent?.trim()).toBe('Inventario');

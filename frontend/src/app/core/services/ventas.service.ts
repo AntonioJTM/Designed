@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { conClave } from '../clave-unica';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse } from '../models/auth.models';
@@ -23,6 +23,9 @@ import {
   PreviaDevolucion,
   DevolverInput,
   ResultadoDevolucion,
+  Gasto,
+  ListaGastos,
+  TipoGasto,
 } from '../models/ventas.models';
 
 function data<T>(r: ApiResponse<T>): T {
@@ -50,6 +53,8 @@ export interface PagoPedido {
   metodo_pago_id: number;
   monto: number;
   referencia_transaccion?: string;
+  /** A qué cuenta llegó una transferencia (Transferencias, 2026-10-20). */
+  cuenta_bancaria_id?: number;
 }
 export interface CrearPedidoInput {
   canal: CanalVenta;
@@ -97,6 +102,8 @@ export interface CrearPedidoInput {
    * no se le fía a un desconocido.
    */
   a_credito?: number;
+  /** A cuántos días es la nota a crédito (2026-10-20). */
+  dias_credito?: number;
   /** Fiarle aunque traiga la cuenta atrasada: la caja lo preguntó antes (2026-10-16). */
   fiar_con_atraso?: boolean;
   sesion_caja_id?: number;
@@ -160,6 +167,53 @@ export class VentasService {
       .post<ApiResponse<SesionCaja>>(`${this.base}/caja/sesiones/${id}/movimientos`, body, conClave(clave))
       .pipe(map(data));
   }
+  // ---- Gastos de la caja (2026-10-20) ----
+  tiposGasto(todos = false): Observable<TipoGasto[]> {
+    const params = todos ? new HttpParams().set('todos', '1') : undefined;
+    return this.http.get<ApiResponse<TipoGasto[]>>(`${this.base}/caja/tipos-gasto`, { params }).pipe(map(data));
+  }
+  crearTipoGasto(body: { nombre: string; limite: number | null; activo?: boolean }): Observable<TipoGasto> {
+    return this.http.post<ApiResponse<TipoGasto>>(`${this.base}/caja/tipos-gasto`, body).pipe(map(data));
+  }
+  actualizarTipoGasto(id: number, body: Partial<{ nombre: string; limite: number | null; activo: boolean }>): Observable<TipoGasto> {
+    return this.http.put<ApiResponse<TipoGasto>>(`${this.base}/caja/tipos-gasto/${id}`, body).pipe(map(data));
+  }
+  /** Sale del cajón del turno; arriba del tope de su tipo pide autorización (el interceptor pregunta). */
+  registrarGasto(
+    sesionId: number,
+    body: { tipo_gasto_id: number; monto: number; descripcion: string },
+    clave?: string
+  ): Observable<{ gasto: Gasto; sesion: SesionCaja }> {
+    return this.http
+      .post<ApiResponse<{ gasto: Gasto; sesion: SesionCaja }>>(`${this.base}/caja/sesiones/${sesionId}/gastos`, body, conClave(clave))
+      .pipe(map(data));
+  }
+  gastos(filtros: { desde?: string; hasta?: string; tipo_gasto_id?: number }): Observable<ListaGastos> {
+    let params = new HttpParams();
+    for (const [k, v] of Object.entries(filtros)) if (v !== undefined && v !== null && v !== '') params = params.set(k, String(v));
+    return this.http.get<ApiResponse<ListaGastos>>(`${this.base}/caja/gastos`, { params }).pipe(map(data));
+  }
+  cancelarGasto(id: number, motivo: string, clave?: string): Observable<Gasto> {
+    return this.http
+      .post<ApiResponse<Gasto>>(`${this.base}/caja/gastos/${id}/cancelar`, { motivo }, conClave(clave))
+      .pipe(map(data));
+  }
+  /** La foto o el PDF del ticket, en CRUDO (como el comprobante de un pago). */
+  subirFotoGasto(id: number, archivo: File): Observable<Gasto> {
+    return this.http
+      .post<ApiResponse<Gasto>>(`${this.base}/caja/gastos/${id}/comprobante`, archivo, {
+        headers: new HttpHeaders({ 'X-Nombre-Archivo': encodeURIComponent(archivo.name) }),
+      })
+      .pipe(map(data));
+  }
+  /** Con `HttpClient`: un `<img src>` no manda el token. */
+  fotoGasto(id: number): Observable<Blob> {
+    return this.http.get(`${this.base}/caja/gastos/${id}/comprobante`, { responseType: 'blob' });
+  }
+  quitarFotoGasto(id: number): Observable<Gasto> {
+    return this.http.delete<ApiResponse<Gasto>>(`${this.base}/caja/gastos/${id}/comprobante`).pipe(map(data));
+  }
+
   cerrarSesion(id: number, monto_final: number): Observable<SesionCaja> {
     return this.http
       .post<ApiResponse<SesionCaja>>(`${this.base}/caja/sesiones/${id}/cerrar`, { monto_final })
@@ -298,7 +352,7 @@ export class VentasService {
   pagarNota(
     pedidoId: number,
     // Sin método si se paga con su saldo a favor (`con_saldo_favor`, 2026-10-20).
-    body: { monto: number; metodo_pago_id?: number; con_saldo_favor?: boolean; sesion_caja_id?: number; referencia?: string },
+    body: { monto: number; metodo_pago_id?: number; con_saldo_favor?: boolean; sesion_caja_id?: number; referencia?: string; cuenta_bancaria_id?: number },
     clave?: string
   ): Observable<ResultadoAbono> {
     return this.http
@@ -307,7 +361,7 @@ export class VentasService {
   }
 
   /** Pasa a la cuenta de crédito del cliente lo que falta de una nota pendiente. */
-  pasarACredito(pedidoId: number, body: { fiar_con_atraso?: boolean } = {}): Observable<Pedido & { a_credito: number }> {
+  pasarACredito(pedidoId: number, body: { fiar_con_atraso?: boolean; dias_credito?: number } = {}): Observable<Pedido & { a_credito: number }> {
     return this.http
       .post<ApiResponse<Pedido & { a_credito: number }>>(`${this.base}/pedidos/${pedidoId}/a-credito`, body)
       .pipe(map(data));
@@ -349,7 +403,7 @@ export class VentasService {
   entregarPedido(
     pedidoId: number,
     body: {
-      pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number; pendiente_pago?: boolean; fiar_con_atraso?: boolean;
+      pagos?: PagoPedido[]; sesion_caja_id?: number; a_credito?: number; dias_credito?: number; pendiente_pago?: boolean; fiar_con_atraso?: boolean;
       // Lo que se paga con su saldo a favor antes de cobrar lo demás (2026-10-20).
       saldo_favor?: number;
     },

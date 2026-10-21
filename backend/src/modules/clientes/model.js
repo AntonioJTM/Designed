@@ -5,6 +5,7 @@ const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const { hoyLocal } = require('../../utils/fechas');
 const { anotarCompartido } = require('../tiempo-real/contexto');
+const transferencias = require('../transferencias/model');
 
 // Acceso a datos de la tabla `clientes`.
 //
@@ -245,11 +246,87 @@ function diasDeLaMasVieja(movs, hoy = hoyLocal()) {
  */
 async function atrasoDe(clienteId, ejecutor = pool) {
   const [movs] = await ejecutor.query(
-    `SELECT tipo, monto, pedido_id, DATE_FORMAT(creado_en, '%Y-%m-%d') AS dia
-       FROM credito_movimientos WHERE cliente_id = :id ORDER BY creado_en, id`,
+    `SELECT m.tipo, m.monto, m.pedido_id, DATE_FORMAT(m.creado_en, '%Y-%m-%d') AS dia, p.dias_credito
+       FROM credito_movimientos m LEFT JOIN pedidos p ON p.id = m.pedido_id
+      WHERE m.cliente_id = :id ORDER BY m.creado_en, m.id`,
     { id: clienteId }
   );
-  return diasDeLaMasVieja(movs);
+  const a = vencimientoDe(movs);
+  if (a) await _conFolios(ejecutor, [a]);
+  return a;
+}
+
+/** El plazo de una nota que no dijo sus días (las de antes): el de siempre, 15. */
+function plazoPorOmision() {
+  return require('../notificaciones/model').DIAS_SIN_ABONAR;
+}
+
+/** 'YYYY-MM-DD' + n días. */
+function sumarDias(dia, n) {
+  const d = new Date(Date.parse(dia));
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Días de `a` a `b` ('YYYY-MM-DD'): b − a. */
+function diasEntre(a, b) {
+  return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+}
+
+/**
+ * EL VENCIMIENTO DE SUS NOTAS (2026-10-20, usuario: "que diga a cuántos días es la
+ * nota; después de los días, si no paga, una notificación"). Cada nota que todavía
+ * se debe vence el día en que se fió más sus días de crédito (`pedidos.dias_credito`;
+ * sin decirlo, 15). Con sus movimientos en orden (con `dia` y `dias_credito`):
+ *   · `dias`, `porPagar`: los de su nota MÁS VIEJA (como antes);
+ *   · `vencida`: la MÁS vencida ({ pedidoId, dia, plazo, venceEl, diasVencida,
+ *     porPagar }), o null si ninguna pasó su fecha: eso es "cuenta atrasada";
+ *   · `vencidas`: todas las que ya pasaron su fecha (la campana las lista);
+ *   · `proxima`: la que vence primero de las que todavía no.
+ * null si no debe. Pura (salvo el plazo por omisión): se prueba sola.
+ * Con 15 días da lo mismo que la regla de antes ("más de 15 días sin pagarse").
+ */
+function vencimientoDe(movs, hoy = hoyLocal(), plazoSinDecir = plazoPorOmision()) {
+  const notas = repartirAbonos(movs)
+    .filter((d) => d.porPagar > 0.004 && d.dia)
+    .map((d) => {
+      const plazo = d.plazo ?? plazoSinDecir;
+      const venceEl = sumarDias(d.dia, plazo);
+      return { pedidoId: d.pedidoId, dia: d.dia, plazo, venceEl, diasVencida: diasEntre(venceEl, hoy), porPagar: d.porPagar };
+    });
+  if (!notas.length) return null;
+  const vencidas = notas.filter((n) => n.diasVencida > 0).sort((a, b) => b.diasVencida - a.diasVencida);
+  const proxima = notas.filter((n) => n.diasVencida <= 0).sort((a, b) => a.venceEl.localeCompare(b.venceEl))[0] ?? null;
+  const vieja = notas[0];
+  return {
+    dias: Math.max(0, diasEntre(vieja.dia, hoy)),
+    porPagar: vieja.porPagar,
+    vencida: vencidas[0] ?? null,
+    vencidas,
+    proxima,
+  };
+}
+
+/** Les pone su folio a las notas de `vencida`, `vencidas` y `proxima` (una consulta). */
+async function _conFolios(ejecutor, atrasos) {
+  const notas = atrasos.flatMap((a) => [a.vencida, a.proxima, ...(a.vencidas ?? [])]).filter((n) => n?.pedidoId);
+  if (!notas.length) return;
+  const [rows] = await ejecutor.query(
+    'SELECT id, numero_pedido FROM pedidos WHERE id IN (:ids)', { ids: [...new Set(notas.map((n) => n.pedidoId))] }
+  );
+  const folio = new Map(rows.map((r) => [Number(r.id), r.numero_pedido]));
+  for (const n of notas) n.folio = folio.get(n.pedidoId) ?? null;
+}
+
+/**
+ * La nota vencida (o la próxima) como la manda la API. Sin su folio salvo que se
+ * pida (`conFolio`, solo a quien ve todas): la nota puede ser de otra tienda.
+ */
+function notaVencimiento(n, { conFolio = false } = {}) {
+  return n ? {
+    ...(conFolio ? { pedido_id: n.pedidoId, folio: n.folio ?? null } : {}),
+    dias_credito: n.plazo, vence_el: n.venceEl, dias_vencida: n.diasVencida, por_pagar: n.porPagar,
+  } : null;
 }
 
 /** Solo los días de `atrasoDe` (null si no debe). */
@@ -265,8 +342,9 @@ async function diasSinAbonar(clienteId, ejecutor = pool) {
  */
 async function diasSinAbonarDeTodos(ejecutor = pool) {
   const [movs] = await ejecutor.query(
-    `SELECT m.cliente_id, m.tipo, m.monto, m.pedido_id, DATE_FORMAT(m.creado_en, '%Y-%m-%d') AS dia
+    `SELECT m.cliente_id, m.tipo, m.monto, m.pedido_id, DATE_FORMAT(m.creado_en, '%Y-%m-%d') AS dia, p.dias_credito
        FROM credito_movimientos m
+       LEFT JOIN pedidos p ON p.id = m.pedido_id
       WHERE m.cliente_id IN (SELECT s.cliente_id FROM v_clientes_saldo s WHERE s.saldo > 0)
       ORDER BY m.cliente_id, m.creado_en, m.id`
   );
@@ -277,11 +355,13 @@ async function diasSinAbonarDeTodos(ejecutor = pool) {
     porCliente.get(id).push(m);
   }
   const hoy = hoyLocal();
+  const plazo = plazoPorOmision();
   const atrasos = new Map();
   for (const [id, lista] of porCliente) {
-    const a = diasDeLaMasVieja(lista, hoy);
+    const a = vencimientoDe(lista, hoy, plazo);
     if (a) atrasos.set(id, a);
   }
+  await _conFolios(ejecutor, [...atrasos.values()]);
   return atrasos;
 }
 
@@ -308,12 +388,13 @@ async function buscarParaVenta(q, limite = 10) {
   );
   // Si debe, cuántos días lleva sin pagarse su nota más vieja y cuánto le falta
   // de ella: la caja avisa antes de fiarle a ciegas.
-  const { DIAS_SIN_ABONAR } = require('../notificaciones/model');
   for (const r of rows) {
     const a = Number(r.saldo) > 0 ? await atrasoDe(r.id) : null;
     r.dias_sin_abonar = a?.dias ?? null;
     r.nota_vieja_por_pagar = a?.porPagar ?? null;
-    r.atrasado = r.dias_sin_abonar != null && r.dias_sin_abonar > DIAS_SIN_ABONAR;
+    // Atrasada = alguna nota ya pasó su fecha (sus días de crédito, 2026-10-20).
+    r.nota_vencida = notaVencimiento(a?.vencida);
+    r.atrasado = !!a?.vencida;
   }
   return rows;
 }
@@ -719,6 +800,12 @@ async function registrarAbono(clienteId, datos, usuarioId, { almacenes = null } 
       }, conn);
       movimientos.push(movId);
     }
+    // Por transferencia: a qué cuenta llegó (Transferencias, 2026-10-20). El
+    // abono a varias notas es UN depósito: su llave es el primer renglón.
+    await transferencias.anotar(conn, {
+      fuente: 'abono', fuenteId: movimientos[0], metodoPagoId: datos.metodo_pago_id,
+      cuentaId: datos.cuenta_bancaria_id, usuarioId,
+    });
 
     // Al cajón entra UN movimiento por el abono, aunque vaya a varias notas
     // (2026-10-20, auditoría: un abono a 3 notas salía como "3 abonos" en Caja).
@@ -764,9 +851,10 @@ async function registrarAbono(clienteId, datos, usuarioId, { almacenes = null } 
  */
 async function aplicarAbonos(ejecutor, clienteId) {
   const [movs] = await ejecutor.query(
-    `SELECT id, tipo, monto, pedido_id, creado_en
-       FROM credito_movimientos WHERE cliente_id = :id
-      ORDER BY creado_en, id`,
+    `SELECT m.id, m.tipo, m.monto, m.pedido_id, m.creado_en, p.dias_credito
+       FROM credito_movimientos m LEFT JOIN pedidos p ON p.id = m.pedido_id
+      WHERE m.cliente_id = :id
+      ORDER BY m.creado_en, m.id`,
     { id: clienteId }
   );
   return repartirAbonos(movs);
@@ -792,6 +880,8 @@ function repartirAbonos(movs) {
       porPedido.set(pedidoId, d);
       deudas.push(d);
     }
+    // Sus días de crédito (2026-10-20), si los movimientos los traen.
+    if (d.plazo == null && m.dias_credito != null) d.plazo = Number(m.dias_credito);
     return d;
   };
   let pago = 0;
@@ -823,8 +913,10 @@ function repartirAbonos(movs) {
     d.porPagar = r2(d.monto - d.pagado);
     pago -= aplica;
   }
-  // El día solo cuando se sabe (los movimientos lo traen): de ahí la nota más vieja.
-  return deudas.map(({ directo, dia, ...d }) => (dia == null ? d : { ...d, dia }));
+  // El día y el plazo solo cuando se saben (los movimientos los traen).
+  return deudas.map(({ directo, dia, plazo, ...d }) => ({
+    ...d, ...(dia == null ? {} : { dia }), ...(plazo == null ? {} : { plazo }),
+  }));
 }
 
 /**
@@ -980,7 +1072,7 @@ async function liquidarVentasACredito(conn, clienteId, { ids = false } = {}) {
  * Valida el límite con las filas bloqueadas, para que dos cajas cobrando a la
  * vez no puedan pasarlo entre las dos.
  */
-async function cargarVentaACredito(conn, { clienteId, monto, pedidoId, numeroPedido, usuarioId }) {
+async function cargarVentaACredito(conn, { clienteId, monto, pedidoId, numeroPedido, usuarioId, diasCredito = null }) {
   const [crows] = await conn.query(
     'SELECT id, nombre, limite_credito, activo FROM clientes WHERE id = :id FOR UPDATE',
     { id: clienteId }
@@ -1006,12 +1098,16 @@ async function cargarVentaACredito(conn, { clienteId, monto, pedidoId, numeroPed
       `de $${monto.toFixed(2)}.`);
   }
 
+  // A CUÁNTOS DÍAS es la nota (2026-10-20): los que se dijeron al venderla; sin
+  // decirlo, los de siempre. Vence el día en que se fía más esos días.
+  const dias = diasCredito ?? plazoPorOmision();
+  await conn.query('UPDATE pedidos SET dias_credito = :dias WHERE id = :id', { dias, id: pedidoId });
   return agregarMovimiento({
     cliente_id: clienteId,
     tipo: 'cargo',
     monto,
     pedido_id: pedidoId,
-    notas: `Venta a crédito ${numeroPedido}`,
+    notas: `Venta a crédito ${numeroPedido} a ${dias} ${dias === 1 ? 'día' : 'días'}`,
     usuario_id: usuarioId ?? null,
   }, conn);
 }
@@ -1192,6 +1288,7 @@ module.exports = {
   listar,
   obtener,
   buscarParaVenta, diasSinAbonar, atrasoDe, deudaMasVieja, diasDeLaMasVieja, diasSinAbonarDeTodos,
+  vencimientoDe, notaVencimiento, sumarDias, plazoPorOmision,
   crearDesdeStaff,
   actualizar,
   fijarLimiteCredito,

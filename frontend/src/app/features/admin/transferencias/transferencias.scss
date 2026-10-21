@@ -1,0 +1,34 @@
+// Transferencias (2026-10-20). Lo común (kpis, filtros, tabla, pills) vive en styles.scss.
+.periodos { flex: 0 0 auto; }
+.mas { display: flex; justify-content: center; padding-top: 14px; }
+
+table.grid.transferencias { min-width: 960px; }
+table.grid.transferencias td { vertical-align: top; }
+th.elegir, td.elegir { width: 36px; }
+td.elegir input { width: 18px; height: 18px; margin: 2px 0 0; }
+@media (max-width: 900px), (pointer: coarse) { td.elegir input { width: 24px; height: 24px; } }
+td.fecha { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.folios a { font-family: var(--mono); font-size: 0.8125rem; text-decoration: none; white-space: nowrap; }
+td.folios .sin-folio { font-weight: 500; }
+td.folios .de { display: block; font-size: 0.75rem; color: var(--tinta-3); }
+td.folios .pill { margin-top: 4px; }
+td.cliente a { font-weight: 500; text-decoration: none; color: var(--tinta); }
+td.cliente .num-cli { display: block; font-family: var(--mono); font-size: 0.75rem; color: var(--tinta-3); }
+// El número largo del banco se parte solo si no cabe, no a la mitad de cada palabra.
+td.operacion { font-family: var(--mono); font-size: 0.8125rem; overflow-wrap: anywhere; min-width: 13ch; max-width: 220px; }
+td.cuenta { white-space: nowrap; }
+td.num { white-space: nowrap; }
+td.tenue { color: var(--tinta-2); font-size: 0.8125rem; }
+.sin-cuenta { color: var(--aviso-t); }
+tr.fila-elegida td { background: var(--acento-suave); }
+
+// Lo elegido y sus botones, arriba de la tabla.
+.seleccion {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 12px; padding: 10px 12px; border-radius: 8px;
+  background: var(--acento-suave); font-variant-numeric: tabular-nums;
+}
+.seleccion-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+// La barra de "Sin cuenta" va en el color de aviso: falta decir a dónde llegó.
+.barra-valor > .relleno.relleno-sin { background: var(--punto-aviso); }

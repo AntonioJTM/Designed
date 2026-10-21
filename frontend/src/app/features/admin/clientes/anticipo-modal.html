@@ -53,9 +53,10 @@
             }
 
             @if (parteTransferencia() > 0) {
-              <label class="field full">
-                <span>Referencia de la transferencia <span class="muted">(opcional)</span></span>
-                <input type="text" [(ngModel)]="referencia" name="referencia" maxlength="120" placeholder="Folio del depósito" />
+              <app-cuenta-deposito [(cuenta)]="cuentaId" [marcar]="!!error()" />
+              <label class="field">
+                <span>No. de operación <span class="muted">(opcional)</span></span>
+                <input type="text" [(ngModel)]="referencia" name="referencia" maxlength="120" placeholder="El folio que trae el comprobante" />
               </label>
             }
           </div>

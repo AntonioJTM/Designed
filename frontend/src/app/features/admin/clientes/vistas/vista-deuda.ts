@@ -5,15 +5,15 @@ import { DineroPipe } from '../../../../shared/dinero.pipe';
 import { COLOR, fechaCorta, pesos, plural } from '../clientes-ui';
 
 /**
- * Cómo va cada cuenta según los días de su nota más vieja sin pagar (los tramos de `cartera`).
- * "Al día" llega hasta los 15 días de la caja y la campana (2026-10-17): pasado
- * eso, la caja ya avisa antes de fiarle.
+ * Cómo va cada cuenta según sus NOTAS VENCIDAS (los tramos de `cartera`, 2026-10-20):
+ * cada nota vence el día en que se fió más sus días de crédito (sin decirlos, 15).
+ * Pasada esa fecha la caja avisa antes de fiarle y la campana la cuenta.
  */
 const TRAMO: Record<DeudorCartera['tramo'], { texto: string; pill: string; leyenda: string }> = {
-  al_dia: { texto: 'Al día', pill: 'azul', leyenda: 'Al día (hasta 15 días)' },
-  atrasado: { texto: 'Atrasado', pill: 'ambar', leyenda: '16 a 30 días' },
-  un_mes: { texto: 'Muy atrasado', pill: 'naranja', leyenda: '31 a 60 días' },
-  vencido: { texto: 'Más de 2 meses', pill: 'rojo', leyenda: 'Más de 60 días' },
+  al_dia: { texto: 'Al corriente', pill: 'azul', leyenda: 'Al corriente (ninguna nota vencida)' },
+  atrasado: { texto: 'Vencida', pill: 'ambar', leyenda: 'Vencida hasta 15 días' },
+  un_mes: { texto: 'Muy vencida', pill: 'naranja', leyenda: 'Vencida 16 a 45 días' },
+  vencido: { texto: 'Más de 45 días', pill: 'rojo', leyenda: 'Vencida hace más de 45 días' },
 };
 
 /** Cuántos renglones caben en las dos gráficas de barras; el resto va en la tabla. */
@@ -44,6 +44,13 @@ export class VistaDeuda {
   readonly fechaCorta = fechaCorta;
   readonly pesos = pesos;
 
+  /** "venció hace 6 días" o "vence 4 nov" (2026-10-20). */
+  vencimiento(r: DeudorCartera): string {
+    const d = Number(r.dias_vencida ?? 0);
+    if (d > 0) return `venció hace ${plural(d, 'día', 'días')}`;
+    return r.vence_el ? `vence ${fechaCorta(r.vence_el)}` : '—';
+  }
+
   readonly kpis = computed(() => {
     const d = this.datos();
     const usado = d.credito_autorizado > 0 ? Math.round((100 * d.credito_usado) / d.credito_autorizado) : null;
@@ -55,11 +62,11 @@ export class VistaDeuda {
         punto: COLOR.acento,
       },
       {
-        etiqueta: 'Atrasado',
+        etiqueta: 'Con notas vencidas',
         valor: pesos(d.vencido),
         pie: d.num_vencidos
-          ? `${plural(d.num_vencidos, 'cliente debe una nota', 'clientes deben notas')} de más de ${d.dias_aviso} días`
-          : `nadie debe una nota de más de ${d.dias_aviso} días`,
+          ? `${plural(d.num_vencidos, 'cliente tiene', 'clientes tienen')} notas que pasaron sus días`
+          : 'ninguna nota pasó sus días',
         punto: COLOR.alerta,
       },
       {

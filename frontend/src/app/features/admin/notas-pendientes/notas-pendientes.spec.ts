@@ -7,6 +7,8 @@ import { VentasService } from '../../../core/services/ventas.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { NotaPendiente } from '../../../core/models/ventas.models';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { transferenciasFalso } from '../../../core/services/transferencias.falso';
 
 /**
  * NOTAS PENDIENTES DE PAGO (2026-10-13): lo que se llevaron sin pagar. Se paga
@@ -23,10 +25,12 @@ const nota: NotaPendiente = {
 describe('NotasPendientesPantalla', () => {
   let permisos: Set<string>;
   let pasada: number | null;
+  let cuerpoCredito: unknown = null;
   const ventas = {
     notasPendientes: () => of({ items: [nota], por_cobrar: 1350, num_notas: 1, num_clientes: 1, mas_antigua_dias: 3 }),
-    pasarACredito: (id: number) => {
+    pasarACredito: (id: number, body: unknown) => {
       pasada = id;
+      cuerpoCredito = body;
       return of({ id, estado: 'pendiente', a_credito: 1350 });
     },
   };
@@ -34,7 +38,7 @@ describe('NotasPendientesPantalla', () => {
   async function montar() {
     await TestBed.configureTestingModule({
       imports: [NotasPendientesPantalla],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, 
         provideRouter([]),
         { provide: VentasService, useValue: ventas },
         { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k), puedeOPide: (k: string) => permisos.has(k) } },
@@ -49,6 +53,7 @@ describe('NotasPendientesPantalla', () => {
   beforeEach(() => {
     permisos = new Set(['ver:clientes', 'hacer:fiar']);
     pasada = null;
+    cuerpoCredito = null;
   });
   afterEach(() => TestBed.resetTestingModule());
 
@@ -69,10 +74,15 @@ describe('NotasPendientesPantalla', () => {
     expect((f.nativeElement as HTMLElement).textContent).not.toContain('Pasar a crédito');
   });
 
-  it('pasar a crédito pregunta y dice cuánto se cargó', async () => {
+  it('pasar a crédito pide A CUÁNTOS DÍAS (2026-10-20) y dice cuánto se cargó', async () => {
     const f = await montar();
-    await f.componentInstance.pasarACredito(nota);
+    f.componentInstance.pasarACredito(nota);
+    expect(f.componentInstance.aCredito()).toBe(nota);
+    expect(f.componentInstance.diasCredito).toBe(15);
+    f.componentInstance.diasCredito = 30;
+    f.componentInstance.confirmarACredito();
     expect(pasada).toBe(7);
+    expect(cuerpoCredito).toEqual({ dias_credito: 30 });
     expect(f.componentInstance.mensaje()).toContain('$1,350.00 pasaron a la cuenta de crédito de Doña Chela');
   });
 
@@ -98,7 +108,7 @@ describe('PagoNotaModal', () => {
   async function montar() {
     await TestBed.configureTestingModule({
       imports: [PagoNotaModal],
-      providers: [{ provide: VentasService, useValue: ventas }],
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, { provide: VentasService, useValue: ventas }],
     }).compileComponents();
     const f = TestBed.createComponent(PagoNotaModal);
     f.componentRef.setInput('nota', nota);

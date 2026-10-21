@@ -18,7 +18,7 @@
         <label class="opcion" [class.on]="tipo === 'retiro'">
           <input type="radio" name="tipo-mov" value="retiro" [(ngModel)]="tipo" />
           <b>Sacar dinero</b>
-          <span class="muted">depósito, pago de una compra, gasto</span>
+          <span class="muted">depósito al banco, pago a un proveedor (los gastos van en «Registrar gasto»)</span>
         </label>
         <label class="opcion" [class.on]="tipo === 'ingreso'">
           <input type="radio" name="tipo-mov" value="ingreso" [(ngModel)]="tipo" />

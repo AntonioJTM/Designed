@@ -32,6 +32,9 @@ describe('CajaPantalla', () => {
   const pedidas: number[] = [];
   const ventasFalso = {
     cajas: () => of(cajas),
+    // La tarjeta de gastos (2026-10-20).
+    tiposGasto: () => of([]),
+    gastos: () => of({ items: [], total: 0, num: 0, pasaron_limite: 0, por_tipo: [] }),
     sesionAbierta: (id: number) => {
       pedidas.push(id);
       return of(id === 7 ? sesion : null);
@@ -115,6 +118,35 @@ describe('CajaPantalla', () => {
       sesion.movimientos = original;
       sesion.esperado_actual = 1640;
     }
+  });
+
+  it('un GASTO sale del cajón: cuenta en "Salió del cajón" y su renglón dice "Gasto" (2026-10-20)', async () => {
+    const c = (await montar(['hacer:registrar_gasto'])).componentInstance;
+    c.sesion.set({
+      ...c.sesion()!,
+      movimientos: [
+        ...(c.sesion()!.movimientos ?? []),
+        { id: 9, tipo: 'gasto', monto: '150.00', referencia_id: 3, motivo: 'Limpieza: escobas', creado_en: '2026-10-02 14:00:00' },
+      ],
+    });
+    const salio = c.kpis()[3];
+    expect(salio.valor).toContain('310');
+    expect(salio.pie).toContain('1 gasto');
+    const fila = c.movimientos().find((m) => m.id === 9)!;
+    expect(fila.tipo).toBe('Gasto');
+    expect(fila.entra).toBeFalse();
+    expect(fila.detalle).toBe('Limpieza: escobas');
+  });
+
+  it('con «Registrar gastos» ofrece "Registrar gasto"; sin él, no', async () => {
+    let f = await montar(['hacer:registrar_gasto']);
+    f.detectChanges();
+    const boton = () => [...(f.nativeElement as HTMLElement).querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Registrar gasto');
+    expect(boton()).toBeTruthy();
+    TestBed.resetTestingModule();
+    f = await montar([]);
+    f.detectChanges();
+    expect(boton()).toBeUndefined();
   });
 
   it('sin permiso no ofrece sacar o meter efectivo', async () => {

@@ -616,14 +616,14 @@ function verificarModulosEnCodigo() {
   for (const vista of ['todos', 'frecuencia', 'dejaron', 'deuda', 'que-compra', 'cuando', 'gasto', 'lugares']) {
     revisar('modulos', adminRoutesTs.includes(`'${vista}'`), `Falta la pestaña "${vista}" del CRM de Clientes en admin.routes.ts.`, 'GRAVE', M05);
   }
-  // Unificación del plazo de atraso en todo el sistema (15 días desde el último abono en Caja, Campana, Cuánto debe y Cómo va el negocio)
+  // Unificación del atraso en todo el sistema: el vencimiento de CADA nota (sus días de crédito; sin decirlos, 15) en Caja, Campana, Cuánto debe y Cómo va el negocio (2026-10-20)
   revisar(
     'modulos',
     cliModel.includes('diasSinAbonarDeTodos') &&
       anaModel.includes('diasSinAbonarDeTodos') &&
       !anaService.includes('dias_aviso ?? 30') &&
       !tableroTs.includes('dias_aviso: 30'),
-    'El plazo de cuenta atrasada debe ser uno solo (15 días desde el último abono) en Caja, Campana, Clientes › Cuánto debe y Cómo va el negocio (sin mezclar 15 y 30 días).',
+    'La cuenta atrasada se mide igual en Caja, Campana, Clientes › Cuánto debe y Cómo va el negocio: por el vencimiento de cada nota (diasSinAbonarDeTodos / vencimientoDe), sin plazos sueltos de 30 días.',
     'GRAVE',
     M05
   );

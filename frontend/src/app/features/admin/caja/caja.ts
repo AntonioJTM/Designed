@@ -10,6 +10,8 @@ import { ApiError } from '../../../core/models/auth.models';
 import { fechaRelativa } from '../../../shared/fecha.pipe';
 import { folioCorto } from '../../../shared/folio.pipe';
 import { MovimientoCajaModal } from './movimiento-caja-modal';
+import { GastoModal } from './gasto-modal';
+import { GastosCaja } from './gastos-caja';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
@@ -61,7 +63,7 @@ interface FilaMovimiento {
  */
 @Component({
   selector: 'app-caja',
-  imports: [FormsModule, RouterLink, MovimientoCajaModal],
+  imports: [FormsModule, RouterLink, MovimientoCajaModal, GastoModal, GastosCaja],
   templateUrl: './caja.html',
   host: { '(document:keydown.escape)': 'cerrarModalCaja()' },
   styles: `
@@ -114,6 +116,14 @@ export class CajaPantalla {
     this.auth.sesion();
     return this.auth.puede('ver:almacenes');
   });
+  /** Gastos de la caja (2026-10-20): limpieza, papelería, viajes… */
+  readonly puedeRegistrarGasto = computed(() => {
+    this.auth.sesion();
+    return this.auth.puede('hacer:registrar_gasto');
+  });
+  readonly gastoAbierto = signal(false);
+  /** Sube al registrar un gasto: la tarjeta de gastos se vuelve a pedir. */
+  readonly versionGastos = signal(0);
   readonly vePos = computed(() => {
     this.auth.sesion();
     return this.auth.puede('ver:pos');
@@ -145,8 +155,11 @@ export class CajaPantalla {
     const ingresos = movs.filter((m) => m.tipo === 'ingreso');
     const retiros = movs.filter((m) => m.tipo === 'retiro');
     const devoluciones = movs.filter((m) => m.tipo === 'devolucion');
-    const salio = [...retiros, ...devoluciones];
+    // Los gastos de la caja (2026-10-20) también salen del cajón.
+    const gastos = movs.filter((m) => m.tipo === 'gasto');
+    const salio = [...retiros, ...devoluciones, ...gastos];
     const partes: string[] = [];
+    if (gastos.length) partes.push(`${gastos.length} ${gastos.length === 1 ? 'gasto' : 'gastos'}`);
     if (retiros.length) partes.push(`${retiros.length} ${retiros.length === 1 ? 'retiro' : 'retiros'}`);
     if (devoluciones.length) partes.push(`${devoluciones.length} ${devoluciones.length === 1 ? 'devolución' : 'devoluciones'}`);
     // Qué fue cada ingreso: "2 abonos · 1 anticipo · 1 pago de nota".
@@ -331,6 +344,17 @@ export class CajaPantalla {
     this.mensaje.set(`Listo. En el cajón debería haber ${this.pesos2(s.esperado_actual)}.`);
   }
 
+  gastoRegistrado(r: { sesion: SesionCaja; aviso: string }): void {
+    this.gastoAbierto.set(false);
+    this.sesion.set(r.sesion);
+    this.mensaje.set(r.aviso);
+    this.versionGastos.update((v) => v + 1);
+  }
+
+  gastoPedido(texto: string): void {
+    this.mensaje.set(texto);
+  }
+
   // ---- Modal de caja ----
 
   nuevaCaja(): void {
@@ -434,6 +458,8 @@ export class CajaPantalla {
     const motivo = m.motivo ?? '';
     const quita = (re: RegExp) => motivo.replace(re, '');
     if (/^abono/i.test(motivo)) return { tipo: 'Abono', detalle: quita(/^Abono (de |al |a la )?/i), plural: 'abono|abonos' };
+    // El dinero de un gasto que se canceló regresa al cajón (2026-10-20).
+    if (/^se canceló el gasto/i.test(motivo)) return { tipo: 'Gasto cancelado', detalle: quita(/^Se canceló el gasto de /i), plural: 'gasto cancelado|gastos cancelados' };
     if (/^anticipo/i.test(motivo)) return { tipo: 'Anticipo', detalle: quita(/^Anticipo de /i), plural: 'anticipo|anticipos' };
     if (/^pago de la nota/i.test(motivo)) return { tipo: 'Pago de nota', detalle: quita(/^Pago de la nota /i), plural: 'pago de nota|pagos de notas' };
     if (/^cobro al entregar/i.test(motivo)) return { tipo: 'Cobro de nota', detalle: quita(/^Cobro al entregar (el pedido )?/i), plural: 'cobro de nota|cobros de notas' };
@@ -451,6 +477,8 @@ export class CajaPantalla {
         return { ...base, tipo: 'Devolución', tono: 'rojo', detalle: m.motivo || folio, entra: false };
       case 'retiro':
         return { ...base, tipo: 'Retiro', tono: 'naranja', detalle: m.motivo || 'Sin motivo', entra: false };
+      case 'gasto':
+        return { ...base, tipo: 'Gasto', tono: 'naranja', detalle: m.motivo || 'Gasto', entra: false };
       default: {
         const c = this.claseIngreso(m);
         return { ...base, tipo: c.tipo, tono: c.tipo === 'Ingreso' ? 'gris' : 'verde', detalle: c.detalle, entra: true };

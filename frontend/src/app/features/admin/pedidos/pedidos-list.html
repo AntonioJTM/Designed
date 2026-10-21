@@ -134,6 +134,10 @@
                             @if (ct.porque) { · }
                             @if (ct.falta > 0.004) { <span class="debe">falta {{ ct.falta | dinero }}</span> }
                             @else { ya liquidada }
+                            <!-- Pasó sus días sin pagarse (2026-10-20). -->
+                            @if (ct.falta > 0.004 && p.credito_dias_vencida) {
+                              · <span class="vencida">vencida hace {{ p.credito_dias_vencida }} {{ p.credito_dias_vencida === 1 ? 'día' : 'días' }}</span>
+                            }
                           }
                         </span>
                       }

@@ -111,7 +111,7 @@
     <div class="card-head">
       <div>
         <h2>A quién cobrarle primero</h2>
-        <p>De la nota más vieja sin pagar a la más reciente. El abono se registra aquí mismo.</p>
+        <p>De la nota más vencida a la que va al corriente. El abono se registra aquí mismo.</p>
       </div>
     </div>
     <div class="tabla-scroll">
@@ -123,7 +123,7 @@
             <th class="num">En notas</th>
             <th class="num">Límite</th>
             <th>Último abono</th>
-            <th class="num">Nota más vieja</th>
+            <th>Vencimiento</th>
             <th>Cómo va</th>
             <th><span class="oculto">Acciones</span></th>
           </tr>
@@ -140,7 +140,7 @@
               <td class="num">{{ num(r.notas_pendientes) > 0 ? (r.notas_pendientes | dinero) : '—' }}</td>
               <td class="num muted">{{ num(r.limite_credito) > 0 ? (r.limite_credito | dinero) : 'sin límite' }}</td>
               <td style="white-space: nowrap">{{ r.ultimo_abono ? fechaCorta(r.ultimo_abono) : 'nunca ha abonado' }}</td>
-              <td class="num">{{ r.dias_sin_abonar }} {{ r.dias_sin_abonar === 1 ? 'día' : 'días' }}</td>
+              <td style="white-space: nowrap" [style.color]="num(r.dias_vencida) > 0 ? 'var(--alerta-t)' : null">{{ vencimiento(r) }}</td>
               <td><span [class]="'pill ' + TRAMO[r.tramo].pill">{{ TRAMO[r.tramo].texto }}</span></td>
               <td class="acciones">
                 <button type="button" class="btn btn-primary btn-sm" (click)="abonar.emit(r)">Abonar</button>

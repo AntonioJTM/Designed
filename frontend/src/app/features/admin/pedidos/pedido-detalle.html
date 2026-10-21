@@ -160,20 +160,29 @@
             -->
             @if (d.bultos?.length) {
               <div class="bultos">
+                @let grupos = lotesDe(d.bultos!);
                 <span class="bultos-titulo">
-                  Se entregaron {{ d.bultos!.length }} {{ d.bultos!.length === 1 ? 'paquete' : 'paquetes' }}:
+                  Se entregaron {{ d.bultos!.length }} {{ d.bultos!.length === 1 ? 'paquete' : 'paquetes' }}@if (grupos.length > 1) { de {{ grupos.length }} lotes}:
                 </span>
+                <!-- POR LOTE (2026-10-20): cada lote con cuántos paquetes y kilos, y sus paquetes. -->
                 <table>
                   <thead><tr><th>Código de barras</th><th class="num">Peso real</th><th>Lote</th></tr></thead>
-                  <tbody>
-                    @for (b of d.bultos; track b.codigo) {
-                      <tr>
-                        <td class="mono">{{ b.codigo }}</td>
-                        <td class="num">{{ b.peso_kg | cantidad: 'kg' }}</td>
-                        <td>{{ b.lote || '—' }}</td>
+                  @for (g of grupos; track g.lote) {
+                    <tbody>
+                      <tr class="lote-fila">
+                        <th colspan="3" scope="rowgroup">
+                          {{ nombreLote(g.lote) }} · {{ paquetes(g.bultos.length) }} · {{ g.kg | cantidad: 'kg' }}
+                        </th>
                       </tr>
-                    }
-                  </tbody>
+                      @for (b of g.bultos; track b.codigo) {
+                        <tr>
+                          <td class="mono">{{ b.codigo }}</td>
+                          <td class="num">{{ b.peso_kg | cantidad: 'kg' }}</td>
+                          <td>{{ b.lote || '—' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  }
                 </table>
               </div>
             } @else {

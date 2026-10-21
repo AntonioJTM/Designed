@@ -5,7 +5,8 @@ const { AppError } = require('../../middlewares/error');
 
 // Caja / punto de venta: cajas físicas, sesiones (turnos) y sus movimientos.
 // Signo del movimiento de caja sobre el efectivo esperado.
-const SIGNO_CAJA = { venta: 1, ingreso: 1, retiro: -1, devolucion: -1 };
+// 'gasto' (2026-10-20): un gasto de la caja (limpieza, papelería…) sale del cajón como un retiro.
+const SIGNO_CAJA = { venta: 1, ingreso: 1, retiro: -1, devolucion: -1, gasto: -1 };
 
 // El efectivo se suma en JS a partir de DECIMAL; redondear evita colas como
 // 232.00000000000003 tanto en pantalla como en el corte.

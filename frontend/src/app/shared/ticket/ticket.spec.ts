@@ -178,8 +178,21 @@ describe('Ticket impreso', () => {
     ];
     p.detalle![0].piezas = 6;
     const html = armarTicket(p, tienda);
-    expect(html).toContain('2 paquetes: 00632967, 00632970');
+    // Sin lote, juntos (2026-10-20: por lote).
+    expect(html).toContain('Sin lote: 2 paquetes (00632967, 00632970)');
     expect(html).toContain('6 conos');
+  });
+
+  it('varios paquetes de distintos lotes: cuántos van de cada lote (2026-10-20)', () => {
+    const p = venta();
+    p.detalle![0].bultos = [
+      { codigo: 'A1', peso_kg: '19.1', lote: '0094853' },
+      { codigo: 'B1', peso_kg: '18.4', lote: '0094860' },
+      { codigo: 'A2', peso_kg: '19.45', lote: '0094853' },
+    ];
+    const html = armarTicket(p, tienda);
+    expect(html).toContain('Lote 0094853: 2 paquetes (A1, A2)');
+    expect(html).toContain('Lote 0094860: 1 paquete (B1)');
   });
 
   it('escapa lo que se capturó a mano', () => {

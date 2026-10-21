@@ -94,7 +94,7 @@
                 <button type="button" class="btn btn-ghost" (click)="abrirRechazo(a)" [disabled]="aceptando() !== null">Rechazar</button>
                 <!-- Verde, como un cobro: aceptar es confirmar. Un solo azul por pantalla (2026-10-20). -->
                 <button type="button" class="btn btn-ok" (click)="aceptar(a)" [disabled]="aceptando() !== null">
-                  {{ aceptando() === a.id ? 'Haciéndolo…' : (a.ajustable && a.detalle?.lineas?.length ? 'Aceptar…' : 'Aceptar') }}
+                  {{ aceptando() === a.id ? 'Haciéndolo…' : (a.ajustable && (a.detalle?.lineas?.length || a.detalle?.tipo_gasto) ? 'Aceptar…' : 'Aceptar') }}
                 </button>
               } @else if (vista() === 'mias' && a.estado === 'pendiente') {
                 <button type="button" class="btn btn-ghost" (click)="retirar(a)" [disabled]="retirando() === a.id">
@@ -135,6 +135,49 @@
           <button type="button" class="btn btn-ghost" (click)="cerrarRechazo()">Cancelar</button>
           <button type="submit" class="btn btn-primary" [disabled]="guardando() || !motivo.trim()">
             {{ guardando() ? 'Guardando…' : (a.interrumpida ? 'Cerrarla' : 'Rechazar') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Un tipo de gasto nuevo (2026-10-20): quien autoriza decide su límite al aceptarlo. -->
+@if (ajustandoTipo(); as a) {
+  <div class="modal-overlay">
+    <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="ajuste-tipo-titulo">
+      <div class="modal-head">
+        <h2 id="ajuste-tipo-titulo">Autorizar el tipo de gasto</h2>
+        <button type="button" class="modal-cerrar" (click)="cerrarAjusteTipo()" aria-label="Cerrar">✕</button>
+      </div>
+      <form (ngSubmit)="autorizarTipo()">
+        <div class="modal-body columna">
+          <p>
+            <b>«{{ a.detalle!.tipo_gasto!.nombre }}»</b>, lo pidió {{ a.solicitante }} {{ cuando(a.solicitado_en) }}.
+            @if (a.detalle!.tipo_gasto!.limite != null) {
+              Propuso un límite de <b class="dinero-res">{{ a.detalle!.tipo_gasto!.limite | dinero }}</b> por gasto.
+            } @else {
+              No propuso límite.
+            }
+          </p>
+          @if (errorAjuste()) { <p class="alert" role="alert">{{ errorAjuste() }}</p> }
+          <label class="field">
+            <span>Límite por gasto <span class="muted">(vacío: todo gasto de ese tipo se autoriza)</span></span>
+            <span class="campo-moneda">
+              <span>$</span>
+              <input type="number" min="0" step="0.01" name="limite-tipo" [(ngModel)]="limiteTipo" placeholder="Sin límite"
+                     [attr.aria-invalid]="!limiteTipoValido()" />
+            </span>
+          </label>
+          <p class="muted" style="font-size: 0.8125rem">
+            Un gasto de este tipo hasta el límite sale directo del cajón; uno que lo pase pide autorización. Lo puedes
+            cambiar después en Caja → Gastos → Tipos de gasto. Para no darlo de alta, recházalo.
+          </p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="cerrarAjusteTipo()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" [disabled]="aceptando() !== null || !limiteTipoValido()">
+            {{ aceptando() !== null ? 'Haciéndolo…' : 'Autorizar el tipo' }}
           </button>
         </div>
       </form>

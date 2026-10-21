@@ -114,6 +114,11 @@ const MIGRACIONES = [
   ['2026-10_bulto_faltante', "variante_codigos^'faltante'"],
   ['2026-10_destare_tope', 'configuracion#clave=desarme_destare_max_kg'],
   ['2026-10_operaciones_unicas', 'operaciones_unicas'],
+  ['2026-10_gastos', "movimientos_caja^'gasto'"],
+  ['2026-10_gastos_tipo_pedir', 'permisos#clave=pedir:tipos_gasto'],
+  ['2026-10_transferencias', 'transferencias'],
+  ['2026-10_transferencias (permisos)', 'permisos#clave=ver:transferencias'],
+  ['2026-10_dias_credito', 'pedidos.dias_credito'],
 ];
 
 (async () => {

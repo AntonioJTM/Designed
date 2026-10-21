@@ -149,6 +149,8 @@ router.get('/traspasos/autorizaciones', ...soloStaff, requirePermiso('ver:surtir
   }
 });
 router.get('/traspasos/:id', ...soloStaff, controller.obtenerTraspaso);
+// El PDF de lo que se envió (?tipo=envio) o de lo que se recibió (?tipo=recepcion).
+router.get('/traspasos/:id/pdf', ...soloStaff, requirePermiso('ver:surtir'), controller.pdfTraspaso);
 
 // Escrituras (staff): movimientos, desarmes, traspasos y configuración de umbrales.
 // Un costo de quien no lo puede ver se rechaza ANTES de guardar la solicitud: si

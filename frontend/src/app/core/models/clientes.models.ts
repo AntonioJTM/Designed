@@ -156,6 +156,8 @@ export interface Expediente extends Cliente {
   dias_sin_abonar?: number | null;
   /** Lo que le falta de esa nota más vieja. */
   nota_vieja_por_pagar?: number | null;
+  /** Su nota a crédito MÁS vencida (pasó sus días), o null (2026-10-20). */
+  nota_vencida?: NotaVencimiento | null;
   atrasado?: boolean;
   estadisticas: EstadisticasCliente;
   colores_mas_comprados: ColorComprado[];
@@ -210,6 +212,8 @@ export interface AnticipoInput {
   /** El turno al que entra el efectivo. */
   sesion_caja_id?: number;
   referencia?: string;
+  /** A qué cuenta llegó la transferencia (2026-10-20). */
+  cuenta_bancaria_id?: number;
   notas?: string;
 }
 
@@ -270,6 +274,8 @@ export interface ClienteParaVenta {
   /** Lo que le falta de esa nota más vieja. */
   nota_vieja_por_pagar?: number | null;
   /** Su nota más vieja pasó el plazo: la caja lo avisa y pregunta antes de fiarle. */
+  /** Su nota a crédito MÁS vencida (pasó sus días), o null (2026-10-20). */
+  nota_vencida?: NotaVencimiento | null;
   atrasado?: boolean;
 }
 
@@ -305,5 +311,16 @@ export interface AbonoInput {
   /** Obligatoria si el abono es en efectivo: el dinero entra al turno. */
   sesion_caja_id?: number;
   referencia?: string;
+  /** A qué cuenta llegó, si es por transferencia (2026-10-20). */
+  cuenta_bancaria_id?: number;
   notas?: string;
+}
+
+/** Una nota a crédito con su vencimiento (2026-10-20): a cuántos días y cuándo vence o venció. */
+export interface NotaVencimiento {
+  dias_credito: number;
+  vence_el: string;
+  /** Hace cuántos días venció (negativo: faltan esos días). */
+  dias_vencida: number;
+  por_pagar: number;
 }

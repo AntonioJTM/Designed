@@ -24,6 +24,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 import { AutorizacionesService } from '../../../core/services/autorizaciones.service';
 import { RouterLink } from '@angular/router';
+import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
 
 /**
  * Línea en captura. Se pide en PAQUETES y la pantalla dice cuántos kilos son
@@ -125,6 +126,8 @@ export class Traspasos {
   readonly enviando = signal(false);
   readonly error = signal<string | null>(null);
   readonly mensaje = signal<string | null>(null);
+  /** El PDF que se está armando ("12-envio"), para apagar su botón mientras. */
+  readonly bajandoPdf = signal<string | null>(null);
 
   /** Traspaso que se está surtiendo: el modal donde se escanean los paquetes. */
   readonly porEnviar = signal<Traspaso | null>(null);
@@ -581,9 +584,38 @@ export class Traspasos {
         `${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg reales.` +
         (incompletos
           ? ` ${incompletos === 1 ? 'Un hilo no salió completo' : `${incompletos} hilos no salieron completos`}: quedó en la nota del envío.`
-          : '')
+          : '') +
+        ' Se bajó el PDF del envío: va con la camioneta.'
     );
     this.cargarHistorial();
+    this.bajarPdf(r, 'envio');
+  }
+
+  /**
+   * LOS PDF DEL TRASPASO (2026-10-20, usuario: "que dé PDF de lo que se envía y de
+   * lo que se recibe"): el del envío, con cada paquete que salió por hilo y lote, y
+   * el de la recepción, con lo que llegó y lo que faltó. Bajan solos al enviar y al
+   * recibir, y se vuelven a sacar desde Pendientes y Traspasos cerrados.
+   */
+  bajarPdf(t: { id: number; folio: string }, tipo: 'envio' | 'recepcion'): void {
+    const clave = `${t.id}-${tipo}`;
+    if (this.bajandoPdf() === clave) return;
+    this.bajandoPdf.set(clave);
+    this.inv.pdfTraspaso(t.id, tipo).subscribe({
+      next: (blob) => {
+        this.bajandoPdf.set(null);
+        guardarArchivo(blob, `${tipo === 'envio' ? 'Envío' : 'Recepción'} ${t.folio}.pdf`);
+      },
+      error: async (e) => {
+        this.bajandoPdf.set(null);
+        this.error.set(await mensajeDeError(e));
+      },
+    });
+  }
+
+  /** Va en camino o ya llegó: hay hoja de envío (cancelado, ya no: regresó al origen). */
+  tienePdfEnvio(t: Traspaso): boolean {
+    return t.estado === 'en_transito' || t.estado === 'recibido';
   }
 
   // ---- Paso 3 · Recibir ----
@@ -674,11 +706,13 @@ export class Traspasos {
               (r.faltantes
                 ? ` ${r.faltantes === 1 ? 'Un hilo llegó incompleto' : `${r.faltantes} hilos llegaron incompletos`}: ` +
                   'lo que faltó quedó como merma en el kardex y esos paquetes ya no cuentan en la sucursal.'
-                : ' Llegó completo.')
+                : ' Llegó completo.') +
+              ' Se bajó el PDF de la recepción.'
           );
           this.enviando.set(false);
           this.cerrarRecepcion();
           this.cargarHistorial();
+          this.bajarPdf(r, 'recepcion');
         },
         error: (e) => {
           this.error.set(this.msg(e));

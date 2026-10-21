@@ -15,7 +15,7 @@ import { NotificacionesService, Pendientes } from '../../core/services/notificac
 describe('Campana · WhatsApp de la tienda desconectado', () => {
   const vacio = (extra: Partial<Pendientes> = {}): Pendientes => ({
     traspasos_por_enviar: [], traspasos_por_recibir: [], alertas_stock: 0,
-    cobranza: { clientes: [], num_clientes: 0, monto: 0, dias: 15 },
+    cobranza: { notas: [], num_notas: 0, num_clientes: 0, monto: 0 },
     enfriados: { clientes: [], num_clientes: 0, dias: 60 },
     nuevos_sin_credito: { clientes: [], num_clientes: 0, dias: 15 },
     total: 0,

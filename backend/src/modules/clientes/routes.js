@@ -100,6 +100,8 @@ const abonoSchema = z
     // al turno o el corte no cuadra.
     sesion_caja_id: z.coerce.number().int().positive().optional(),
     referencia: z.string().trim().max(120).optional(),
+    // A qué cuenta llegó, si es por transferencia (2026-10-20, Transferencias).
+    cuenta_bancaria_id: z.coerce.number().int().positive().optional(),
     notas: z.string().trim().max(255).optional(),
   })
   .strict()
@@ -181,6 +183,8 @@ const anticipoSchema = z
     transferencia: z.coerce.number().nonnegative().max(99999999).optional(),
     sesion_caja_id: z.coerce.number().int().positive().optional(),
     referencia: z.string().trim().max(120).optional(),
+    // A qué cuenta llegó la parte por transferencia (2026-10-20).
+    cuenta_bancaria_id: z.coerce.number().int().positive().optional(),
     notas: z.string().trim().max(255).optional(),
   })
   .strict();

@@ -23,6 +23,7 @@
 const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const clientesModel = require('./model');
+const transferencias = require('../transferencias/model');
 const { aFavorDe } = require('./a-favor');
 const { anotarCompartido } = require('../tiempo-real/contexto');
 
@@ -98,7 +99,7 @@ async function agregar(conn, {
  *   · La transferencia no toca la caja; lleva su referencia (el folio).
  * Va dentro de la transacción de quien llama.
  */
-async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 0, sesionCajaId = null, referencia = null, notas = null, usuarioId = null }) {
+async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 0, sesionCajaId = null, referencia = null, cuentaId = null, notas = null, usuarioId = null }) {
   const ef = round2(efectivo);
   const tr = round2(transferencia);
   if (!(ef > 0) && !(tr > 0)) {
@@ -151,6 +152,10 @@ async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 
       clienteId, tipo: 'anticipo', monto: tr, metodoPagoId: idTransferencia, usuarioId,
       referencia: referencia ? String(referencia).trim().slice(0, 120) || null : null,
       notas: nota ?? 'Anticipo por transferencia', creadoEn: ahora,
+    });
+    // A qué cuenta llegó (Transferencias, 2026-10-20).
+    await transferencias.anotar(conn, {
+      fuente: 'anticipo', fuenteId: movId, metodoPagoId: idTransferencia, cuentaId, usuarioId,
     });
     primero = primero ?? movId;
   }

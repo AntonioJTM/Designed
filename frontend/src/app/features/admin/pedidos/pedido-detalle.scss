@@ -39,14 +39,7 @@
   .linea-top > .linea-hilo { grid-column: 1 / -1; }
 }
 
-/* Los bultos de la línea: una tabla chica, debajo y con sangría. */
-.bultos { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--superficie-2); border-radius: 8px; }
-.bultos-titulo { font-size: 0.8125rem; color: var(--tinta-2); font-weight: 500; }
-.bultos table { border-collapse: collapse; width: 100%; max-width: 520px; font-size: 0.8125rem; }
-.bultos th { text-align: left; font-weight: 600; color: var(--tinta-3); font-size: 0.75rem; padding: 4px 8px 4px 0; }
-.bultos td { padding: 4px 8px 4px 0; border-top: 1px solid var(--borde-suave); }
-.bultos .num { text-align: right; font-variant-numeric: tabular-nums; }
-.sin-bultos { font-size: 0.8125rem; }
+/* Los bultos de la línea viven en pedido-bultos.scss (el límite de 4 kB por hoja). */
 
 .totales {
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px;

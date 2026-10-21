@@ -10,6 +10,8 @@ import { ClientesService } from '../../../core/services/clientes.service';
 import { VentasService } from '../../../core/services/ventas.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { Deuda, Frecuencia, Gasto, VistaClientes } from '../../../core/models/rediseno.models';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { transferenciasFalso } from '../../../core/services/transferencias.falso';
 
 /**
  * La sección Clientes:
@@ -82,7 +84,7 @@ describe('ClientesPantalla', () => {
   async function montar(vista: VistaClientes, dias: string | null = null) {
     await TestBed.configureTestingModule({
       imports: [ClientesPantalla],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, 
         provideRouter([]),
         { provide: RedisenoService, useValue: apiFalsa },
         { provide: AuthService, useValue: { puede: () => true, veTodasLasTiendas: () => true } },

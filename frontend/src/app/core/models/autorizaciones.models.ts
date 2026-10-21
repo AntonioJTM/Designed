@@ -17,6 +17,9 @@ export const PERMISOS_QUE_AUTORIZAN = [
   'hacer:cargar_inventario', 'hacer:surtir_sucursal', 'hacer:autorizar_vacaciones',
   // Fase 3 (2026-10-19).
   'hacer:pagar_nomina',
+  // Gastos de la caja arriba de su límite y tipos de gasto nuevos (2026-10-20).
+  'hacer:gasto_sobre_limite',
+  'hacer:tipos_gasto',
 ];
 
 /** Un renglón que quien autoriza puede dar por MENOS (un pedido a otra tienda). */
@@ -36,6 +39,8 @@ export interface DetalleAjuste {
   /** Pagar una nómina (fase 3): cada recibo con su total, solo para mirar. */
   /** `dias` en null: sin horario, se paga la semana completa. */
   recibos?: { nombre: string; dias: number | null; total: number }[];
+  /** Un tipo de gasto nuevo (2026-10-20): quien autoriza le pone su límite al aceptarlo. */
+  tipo_gasto?: { nombre: string; limite: number | null };
   total?: number;
 }
 

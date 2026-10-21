@@ -1,6 +1,9 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { nuevaClave } from '../../../core/clave-unica';
 import { FormsModule } from '@angular/forms';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { CuentaDeposito } from '../../../shared/cuenta-deposito';
+import { PlazoCredito, PLAZO_CREDITO_POR_OMISION, plazoValido } from '../../../shared/plazo-credito';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { VentasService } from '../../../core/services/ventas.service';
@@ -26,7 +29,7 @@ import { DineroPipe } from '../../../shared/dinero.pipe';
  */
 @Component({
   selector: 'app-entregar-pedido-modal',
-  imports: [FormsModule, DineroPipe],
+  imports: [FormsModule, DineroPipe, CuentaDeposito, PlazoCredito],
   templateUrl: './entregar-modal.html',
   styleUrl: './entregar-modal.scss',
   host: { '(document:keydown.escape)': 'cerrar()' },
@@ -53,11 +56,17 @@ export class EntregarPedidoModal implements OnInit {
   /** Lo que se cobra ahora (vacío = todo lo que falta). */
   cobra: number | null = null;
   metodoId: number | null = null;
+  /** Por transferencia: a qué cuenta llegó y su número de operación (Transferencias, 2026-10-20). */
+  cuentaId: number | null = null;
+  operacion = '';
+  protected readonly transf = inject(TransferenciasService);
   /** Lo que entrega en efectivo (vacío = justo). */
   recibido: number | null = null;
   turnoId: number | null = null;
   /** Lo que no se cobra, va a crédito. */
   fiarResto = false;
+  /** A cuántos días queda lo que se fía (2026-10-20). */
+  diasCredito: number | null = PLAZO_CREDITO_POR_OMISION;
   /**
    * Se la lleva como NOTA PENDIENTE DE PAGO: no se cobra nada ahora y el pago se
    * registra después, en Notas pendientes de pago.
@@ -121,6 +130,11 @@ export class EntregarPedidoModal implements OnInit {
     return (m?.nombre ?? '').toLowerCase().includes('efectivo');
   }
 
+  esTransferencia(): boolean {
+    const m = this.metodos().find((x) => x.id === Number(this.metodoId));
+    return (m?.nombre ?? '').toLowerCase().includes('transferencia');
+  }
+
   cambio(): number {
     if (!this.esEfectivo() || this.recibido == null || (this.recibido as unknown) === '') return 0;
     return Math.max(0, Math.round((Number(this.recibido) - this.aCobrar()) * 100) / 100);
@@ -136,12 +150,18 @@ export class EntregarPedidoModal implements OnInit {
         : 'Elige de qué caja sale lo que se le devuelve.';
     }
     if (this.aCobrar() > this.falta() + 0.001) return 'No se puede cobrar más de lo que falta.';
+    if (this.resto() > 0.004 && this.fiarResto && !plazoValido(this.diasCredito)) {
+      return 'Di a cuántos días queda la nota a crédito (de 1 a 365).';
+    }
     if (this.resto() > 0.004 && !this.fiarResto) {
       return this.puedeFiar()
         ? `Faltan ${this.dinero(this.resto())}: cóbralos, márcalos a crédito o entrégala como pendiente de pago.`
         : `Faltan ${this.dinero(this.resto())}: cóbralos o entrégala como pendiente de pago.`;
     }
     if (this.aCobrar() > 0 && !this.metodoId) return 'Elige con qué paga.';
+    if (this.aCobrar() > 0 && this.transf.faltaCuenta(this.esTransferencia(), this.cuentaId)) {
+      return 'Elige a qué cuenta llegó la transferencia.';
+    }
     if (this.aCobrar() > 0 && this.esEfectivo()) {
       if (!this.turnoId) {
         return this.turnos().length === 0
@@ -176,9 +196,14 @@ export class EntregarPedidoModal implements OnInit {
     const recibido = efectivo && this.recibido != null && (this.recibido as unknown) !== '' ? Number(this.recibido) : cobra;
     const fiado = this.fiarResto ? this.resto() : 0;
     this.enviar({
-      pagos: cobra > 0 ? [{ metodo_pago_id: Number(this.metodoId), monto: recibido }] : undefined,
+      pagos: cobra > 0 ? [{
+        metodo_pago_id: Number(this.metodoId), monto: recibido,
+        ...(this.esTransferencia() && this.transf.elegida(this.cuentaId) ? { cuenta_bancaria_id: this.transf.elegida(this.cuentaId)! } : {}),
+        ...(this.esTransferencia() && this.operacion.trim() ? { referencia_transaccion: this.operacion.trim() } : {}),
+      }] : undefined,
       sesion_caja_id: cobra > 0 && efectivo ? Number(this.turnoId) : undefined,
       a_credito: fiado > 0 ? fiado : undefined,
+      ...(fiado > 0 ? { dias_credito: Number(this.diasCredito) } : {}),
       ...conFavor,
     });
   }

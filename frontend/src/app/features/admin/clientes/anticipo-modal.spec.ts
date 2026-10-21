@@ -4,6 +4,8 @@ import { AnticipoModal } from './anticipo-modal';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { VentasService } from '../../../core/services/ventas.service';
 import { AnticipoInput } from '../../../core/models/clientes.models';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { transferenciasFalso } from '../../../core/services/transferencias.falso';
 
 /**
  * El ANTICIPO (2026-10-14): el cliente deja dinero a cuenta, sin nota, en
@@ -17,7 +19,7 @@ describe('AnticipoModal', () => {
   async function montar(sesionId: number | null) {
     await TestBed.configureTestingModule({
       imports: [AnticipoModal],
-      providers: [
+      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, 
         {
           provide: ClientesService,
           useValue: {

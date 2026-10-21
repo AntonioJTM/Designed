@@ -26,6 +26,7 @@ const permisosRoutes = require('./modules/permisos/routes');
 const hoyRoutes = require('./modules/hoy/routes');
 const tiempoRealRoutes = require('./modules/tiempo-real/routes');
 const autorizacionesRoutes = require('./modules/autorizaciones/routes');
+const transferenciasRoutes = require('./modules/transferencias/routes');
 const { avisarAlTerminar } = require('./modules/tiempo-real/bus');
 
 // Enrutador raíz de la API v1. Aquí se montan los módulos por dominio.
@@ -70,6 +71,8 @@ router.use('/remesas', remesasRoutes);
 // Ventas y caja
 router.use('/caja', cajaRoutes);
 router.use('/pedidos', pedidosRoutes);
+// Todo lo que entró por transferencia y su revisión contra el banco (2026-10-20).
+router.use('/transferencias', transferenciasRoutes);
 
 // Nómina del personal
 router.use('/nomina', nominaRoutes);
