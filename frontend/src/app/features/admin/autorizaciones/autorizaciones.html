@@ -102,6 +102,11 @@
                 </button>
               }
             </div>
+            @if (a.detalle?.carga; as carga) {
+              <!-- Cargar mercancía: qué hilos, sus lotes y cada paquete, antes de aceptarla (2026-10-21).
+                   A todo lo ancho de la tarjeta, debajo de los botones: la tabla no cabe al lado. -->
+              <app-carga-solicitud class="detalle-ancho" [carga]="carga" [solicitud]="a.id" />
+            }
           </li>
         }
       </ul>

@@ -76,12 +76,16 @@ async function quienPidioPuede(fila) {
 async function conDetalle(auth, filas) {
   const mias = await almacenesDe(auth);
   const veAlmacen = (id) => mias === null || mias.includes(Number(id));
+  // El costo por kilo de una carga solo lo ve quien tiene «Ver costos».
+  const veCostos = await puede(auth, 'hacer:ver_costos');
   for (const f of filas) {
     const op = OPERACIONES[f.operacion];
     if (!op?.detalle || f.estado !== 'pendiente') continue;
     const p = await model.paraHacer(f.id);
     try {
-      f.detalle = await op.detalle(JSON.parse(p?.cuerpo ?? '{}'), { veAlmacen, ruta: p?.ruta });
+      f.detalle = await op.detalle(JSON.parse(p?.cuerpo ?? '{}'), {
+        veAlmacen, veCostos, ruta: p?.ruta, puede: (clave) => puede(auth, clave),
+      });
     } catch {
       f.detalle = null;
     }

@@ -1,0 +1,151 @@
+@let c = carga();
+<section class="carga" [attr.aria-label]="'Qué se va a cargar a ' + c.almacen">
+  @if (c.registrados) {
+    <!-- Esos códigos ya están en el sistema: la carga entra completa o no entra. -->
+    <p class="aviso">
+      {{ plural(c.registrados, 'paquete ya está registrado', 'paquetes ya están registrados') }} en el sistema:
+      al aceptarla no entraría nada. Recházala y que se revise la lista (van en rojo abajo).
+    </p>
+  }
+
+  @if (papeles().length) {
+    <p class="papeles">
+      @for (p of papeles(); track p.k) {
+        <span class="papel"><span class="muted">{{ p.k }}</span>
+          @if (p.fecha) { {{ p.v | fecha: true }} } @else if (p.mono) { <span class="mono">{{ p.v }}</span> } @else { {{ p.v }} }
+        </span>
+      }
+    </p>
+  }
+
+  <p class="pista-paquetes">Toca un color para ver sus lotes y cada paquete: renglón del Excel, código, peso y conos.</p>
+  <div class="tabla-scroll con-paquetes">
+    <table class="grid hilos">
+      <thead>
+        <tr>
+          <th scope="col">Hilo</th>
+          <th scope="col">Lotes</th>
+          <th scope="col" class="num">Paquetes</th>
+          <th scope="col" class="num">Kilos</th>
+          <th scope="col" class="num">Peso por paquete</th>
+          <th scope="col" class="num">Conos</th>
+          @if (hayHoy()) { <th scope="col" class="num">En el almacén<div class="sub">hoy → con la carga</div></th> }
+          @if (hayCosto()) { <th scope="col" class="num">Costo por kg</th> }
+        </tr>
+      </thead>
+      <tbody>
+        @for (h of visibles(); track h.clave; let i = $index) {
+          @let idPaquetes = 'carga-' + solicitud() + '-hilo-' + i;
+          <tr [class.abierto]="abierto(h.clave)">
+            <td>
+              <button type="button" class="hilo-abrir" (click)="alternar(h.clave)"
+                      [attr.aria-expanded]="abierto(h.clave)" [attr.aria-controls]="idPaquetes">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+                <b>{{ h.nombre }} {{ h.calibre }}</b>
+              </button>
+              @switch (h.estado) {
+                @case ('existe') { <span class="pill verde">Ya existe</span> }
+                @case ('nuevo') { <span class="pill azul">Nuevo</span> }
+                @case ('ambiguo') { <span class="pill rojo">{{ h.iguales }} hilos iguales</span> }
+                @default { <span class="pill rojo">Ya no está en el catálogo</span> }
+              }
+              @if (h.registrados) { <span class="pill rojo">{{ h.registrados }} ya {{ h.registrados === 1 ? 'registrado' : 'registrados' }}</span> }
+              <div class="sub">
+                @switch (h.estado) {
+                  @case ('existe') {
+                    {{ h.crea_presentacion ? 'Se le crea su presentación' : 'Se le agregan paquetes' }}
+                    @if (h.material) { · {{ h.material }}{{ h.linea ? ' ' + h.linea : '' }} }
+                    @if (h.sin_precio) { · <span class="falta">sin precio: no se vende hasta ponérselo</span> }
+                    @if (h.desactivado) { · <span class="falta">desactivado</span> }
+                  }
+                  @case ('nuevo') {
+                    Se crea sin precio
+                    @if (h.material) { · {{ h.material }}{{ h.linea ? ' ' + h.linea : '' }} }
+                  }
+                  @case ('ambiguo') { No se sabe a cuál cargarlo: al aceptarla no entraría. }
+                  @default { Al aceptarla no entraría. }
+                }
+              </div>
+            </td>
+            <td>
+              @if (h.lotes[0]?.lote) { <span class="mono lote-uno">{{ h.lotes[0].lote }}</span> } @else { <span class="muted lote-uno">Sin lote</span> }
+              @if (h.lotes.length > 1) {
+                <div class="sub" [title]="nombresLotes(h)">y {{ plural(h.lotes.length - 1, 'lote', 'lotes') }} más</div>
+              }
+            </td>
+            <td class="num">{{ h.paquetes | cantidad }}</td>
+            <td class="num"><b>{{ h.kg | cantidad: 'kg' }}</b></td>
+            <td class="num">{{ rango(h) }} kg</td>
+            <td class="num">
+              {{ h.conos | cantidad }}
+              @if (h.sin_conos) { <div class="sub">{{ h.sin_conos }} sin conos</div> }
+            </td>
+            @if (hayHoy()) {
+              <td class="num">
+                @if (h.estado === 'existe' || h.estado === 'nuevo') {
+                  {{ (h.hoy_kg ?? 0) | cantidad }} → <b>{{ despues(h) | cantidad: 'kg' }}</b>
+                } @else { <span class="muted">—</span> }
+              </td>
+            }
+            <!-- Solo administración y contabilidad (el servidor ni lo manda a los demás). -->
+            @if (hayCosto()) {
+              <td class="num">@if (h.costo_kg != null) { {{ h.costo_kg | dinero }} } @else { <span class="muted">Sin costo</span> }</td>
+            }
+          </tr>
+          @if (abierto(h.clave)) {
+            <tr class="fila-paquetes">
+              <td [attr.colspan]="columnas()" [id]="idPaquetes">
+                <div class="paquetes-hilo">
+                  @for (l of h.lotes; track $index) {
+                    <section class="lote-paquetes" [attr.aria-label]="(l.lote ? 'Lote ' + l.lote : 'Sin lote') + ' de ' + h.nombre + ' ' + h.calibre">
+                      <h4>
+                        <span>@if (l.lote) { Lote <span class="mono">{{ l.lote }}</span> } @else { Sin lote }</span>
+                        <span class="lote-cifras">
+                          {{ plural(l.paquetes, 'paquete', 'paquetes') }} · {{ l.kg | cantidad: 'kg' }} ·
+                          {{ l.conos | cantidad }} {{ l.conos === 1 ? 'cono' : 'conos' }}
+                          @if (l.sin_conos) { <span class="muted">({{ l.sin_conos }} sin conos en el Excel)</span> }
+                        </span>
+                        @if (registradosDe(l); as n) { <span class="pill rojo">{{ n }} ya {{ n === 1 ? 'registrado' : 'registrados' }}</span> }
+                      </h4>
+                      <ol class="paquetes-lista">
+                        @for (b of l.bultos; track $index) {
+                          <li [class.con-error]="b.registrado" [title]="b.registrado ? 'Ese código ya está registrado en el sistema' : ''">
+                            <span class="renglon" [attr.aria-label]="b.fila != null ? 'Renglón ' + b.fila : null">{{ b.fila ?? '' }}</span>
+                            <span class="mono codigo">{{ b.codigo }}</span>
+                            <span class="kg">{{ b.peso_kg | cantidad: 'kg' }}</span>
+                            <span class="conos">{{ b.conos != null ? (b.conos + (b.conos === 1 ? ' cono' : ' conos')) : 'sin conos' }}</span>
+                            @if (b.registrado) { <span class="problema">Ya está registrado en el sistema</span> }
+                          </li>
+                        }
+                      </ol>
+                    </section>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+      @if (c.hilos.length > 1) {
+        <tfoot>
+          <tr>
+            <th scope="row">Total · {{ plural(c.hilos.length, 'hilo', 'hilos') }}</th>
+            <td>{{ plural(c.lotes, 'lote', 'lotes') }}</td>
+            <td class="num">{{ c.paquetes | cantidad }}</td>
+            <td class="num"><b>{{ c.kg | cantidad: 'kg' }}</b></td>
+            <td></td>
+            <td class="num">{{ c.conos | cantidad }}</td>
+            @if (hayHoy()) { <td></td> }
+            @if (hayCosto()) { <td></td> }
+          </tr>
+        </tfoot>
+      }
+    </table>
+  </div>
+  @if (c.hilos.length > HILOS) {
+    <button type="button" class="btn btn-ghost btn-sm ver-mas" (click)="verTodos.set(!verTodos())" [attr.aria-expanded]="verTodos()">
+      {{ verTodos() ? 'Ver menos' : 'Ver los ' + c.hilos.length + ' hilos' }}
+    </button>
+  }
+</section>

@@ -556,6 +556,12 @@ module.exports = {
   analizarLista,
   previaLista,
   confirmarLista,
+  // Lo que enseña una solicitud de carga a quien la autoriza (`solicitud.js`):
+  // el mismo empate contra el catálogo que al cargarla.
+  catalogo: _catalogo,
+  empatar: _empatar,
+  textoDocumento: _textoDocumento,
+  limpiarNombre,
   // Para las pruebas.
   normalizar,
   normalizarCalibre,

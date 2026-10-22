@@ -29,7 +29,9 @@ const { hoyLocal } = require('../../utils/fechas');
 //                          por partes con `?progreso=1`; al aceptarla, completa).
 //   completar(req)       → lo que falta para saber de qué tienda es, antes de revisarla.
 //   alPedir(req)         → revisa que se PUEDA hacer antes de guardarla o preguntar.
-//   detalle(cuerpo, ctx) → los renglones que quien autoriza puede ajustar.
+//   detalle(cuerpo, ctx) → los renglones que quien autoriza puede ajustar, o lo
+//                          que tiene que ver antes de aceptarla (qué se va a
+//                          cargar). `ctx`: { veAlmacen(id), veCostos, puede(clave), ruta }.
 //   ajustar(cuerpo, a)   → autorizar MENOS de lo pedido (10 de 20 paquetes):
 //                          { cuerpo, nota }; se hace con ese cuerpo.
 //   alResolver(fila, r)  → algo más al aceptarla o rechazarla (el WhatsApp de
@@ -531,6 +533,14 @@ const OPERACIONES = {
       const total = bultos.reduce((s, x) => s + Number(x.peso_kg ?? 0), 0);
       return `Cargar a ${donde}: ${hilo} · ${nPaquetes(bultos.length)} · ${kg(total)}${cola}`;
     },
+    // Qué se va a cargar, para revisarlo antes de aceptarla (2026-10-21, usuario:
+    // "qué color de hilo, peso de paquetes"): cada hilo con sus lotes y paquetes.
+    async detalle(cuerpo, { veCostos, veAlmacen, puede }) {
+      // Lo que hay hoy en ese almacén, solo a quien ve esa tienda y su Inventario
+      // (un puesto armado a mano podría autorizar cargas sin ver existencias).
+      const veExistencias = veAlmacen(Number(cuerpo.almacen_id)) && (await puede('ver:inventario'));
+      return { carga: await require('../remesas/solicitud').detalleDeCarga(cuerpo, { veCostos, veExistencias }) };
+    },
   },
 
   bulto_a_mano: {
@@ -569,7 +579,8 @@ const OPERACIONES = {
     async describir(req) {
       const b = req.body ?? {};
       return `Agregar a mano el paquete ${b.codigo} de ${(await hiloDe(req.params.id)).hilo} · ${kg(b.peso_kg)} ` +
-        `· entra a ${await nombreAlmacen(b.almacen_id)}${b.lote ? ` · lote ${b.lote}` : ''}`;
+        `· entra a ${await nombreAlmacen(b.almacen_id)}${b.lote ? ` · lote ${b.lote}` : ''}` +
+        `${b.conos ? ` · ${b.conos} ${Number(b.conos) === 1 ? 'cono' : 'conos'}` : ''}`;
     },
   },
 
