@@ -8,11 +8,13 @@
 
 .solicitudes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .solicitud {
-  display: flex; gap: 16px; align-items: flex-start; justify-content: space-between;
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between;
   padding: 16px 4px; border-bottom: 1px solid var(--borde);
 }
 .solicitud:last-child { border-bottom: 0; }
-.solicitud .que { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.solicitud .que { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* Lo que se va a cargar: su propio renglón, a todo lo ancho (2026-10-21). */
+.detalle-ancho { flex: 1 0 100%; min-width: 0; }
 .arriba { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .operacion { font-weight: 600; }
 /* El tipo (Dinero, Precios, Inventario, Personal), neutro: el color es del estado. */
@@ -33,7 +35,9 @@
 
 @media (max-width: 640px) {
   .solicitud { flex-direction: column; }
-  .acciones { width: 100%; justify-content: flex-end; }
+  .solicitud .que { flex: 0 0 auto; width: 100%; }
+  /* En el celular los botones van al final, después de lo que se va a cargar. */
+  .acciones { order: 2; width: 100%; justify-content: flex-end; }
 }
 
 /* Lo que se autorizó si fue menos de lo pedido (fase 2). */

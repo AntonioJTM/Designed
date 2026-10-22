@@ -1,0 +1,21 @@
+// QUÉ SE VA A CARGAR, dentro de la solicitud (2026-10-21). Los lotes y los
+// paquetes llevan la hoja de Surtir inventario (`carga-lista-paquetes.scss`).
+:host { display: block; min-width: 0; margin-top: -4px; }
+.carga { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.carga > * { margin: 0; }
+
+// De quién llegó y con qué papeles, en una línea que se parte.
+.papeles { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.8125rem; }
+.papel { display: inline-flex; gap: 6px; align-items: baseline; }
+
+table.grid.hilos { min-width: 820px; }
+table.grid .sub { font-size: 0.75rem; color: var(--tinta-3); margin-top: 2px; font-weight: 400; }
+table.grid td .pill { margin-left: 6px; }
+.lote-uno { white-space: nowrap; }
+table.grid td.num, table.grid th.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.grid tfoot th, table.grid tfoot td { background: var(--superficie-2); border-top: 1px solid var(--borde); font-weight: 600; }
+table.grid tfoot th { text-align: left; }
+// Lo que falta para venderlo: la pareja de aviso, sin pintar el renglón entero.
+.falta { color: var(--aviso-t); }
+
+.ver-mas { align-self: flex-start; }

@@ -1564,6 +1564,16 @@ tienda-hilos/
   su propia nómina (recibo ni sueldo; `noEsSuya`, 403 ES_TU_NOMINA) salvo el administrador, y las vacaciones
   en Nómina las registra solo «Autorizar vacaciones». Lo demás (calcular, bonos, sueldos de otros,
   cancelar) va directo: así lo eligió el usuario.
+  **Qué se va a CARGAR (2026-10-21**, usuario: "en la solicitud solo me sale el resumen; quiero qué color
+  de hilo, peso de paquetes"): `cargar_inventario` tiene `detalle` (`remesas/solicitud.js → detalleDeCarga`,
+  de lo guardado al pedirla, sin releer el Excel; empata con `lista.js → catalogo/empatar`, la MISMA regla
+  de la carga): cada hilo (el que ya existe con su nombre del catálogo) con material, línea, "Ya existe" /
+  "Nuevo" (se crea sin precio) / "N hilos iguales", lo que hay HOY en ese almacén → con la carga, el rango
+  de peso, sus lotes y CADA paquete (renglón del Excel, código, peso, conos), los papeles, y en rojo el
+  código que mientras tanto se registró en otra carga (al aceptarla no entraría). El costo por kilo solo
+  con «Ver costos» (`conDetalle` pasa `veCostos`). En la pantalla, `autorizaciones/carga-solicitud.ts`, a
+  todo lo ancho bajo los botones; tocar el color abre lotes y paquetes con la hoja de Surtir inventario
+  (`remesas/carga-lista-paquetes.scss`, compartida).
 - **Permisos por PUESTO (2026-10).** Los asigna el administrador en Admin → Permisos ("los
   permisos los asigna el administrador"). Viven en `permisos` + `rol_permisos` (migración
   `2026-10_permisos_por_puesto.sql`, solo datos) y el catálogo con nombre y ayuda está en

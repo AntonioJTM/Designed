@@ -1,6 +1,8 @@
 // LOS PAQUETES DE CADA COLOR antes de cargar (2026-10-20, usuario): tocar el
 // color abre sus lotes y, en cada lote, sus paquetes con renglón, código, peso
 // y conos. Se leen de arriba abajo por columnas, como la lista del Excel.
+// También la usa la solicitud de una carga en Autorizaciones
+// (`autorizaciones/carga-solicitud.ts`): si cambias una clase, cambia allá.
 .pista-paquetes { margin: 0 0 8px; font-size: 0.8125rem; color: var(--tinta-3); }
 
 .hilo-abrir {

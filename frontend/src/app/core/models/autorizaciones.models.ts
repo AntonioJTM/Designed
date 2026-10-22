@@ -41,7 +41,84 @@ export interface DetalleAjuste {
   recibos?: { nombre: string; dias: number | null; total: number }[];
   /** Un tipo de gasto nuevo (2026-10-20): quien autoriza le pone su límite al aceptarlo. */
   tipo_gasto?: { nombre: string; limite: number | null };
+  /** Una carga de mercancía (2026-10-21): qué hilos, sus lotes y cada paquete, solo para mirar. */
+  carga?: DetalleCarga;
   total?: number;
+}
+
+/** Un paquete de la carga, como venía en el Excel. */
+export interface PaqueteCarga {
+  /** El renglón del Excel. */
+  fila: number | null;
+  codigo: string;
+  peso_kg: number;
+  conos: number | null;
+  /** El código ya está registrado en el sistema: al aceptarla no entraría. */
+  registrado: boolean;
+}
+
+export interface LoteCarga {
+  /** null: el paquete no traía lote. */
+  lote: string | null;
+  paquetes: number;
+  kg: number;
+  conos: number;
+  /** Paquetes sin conos en el Excel. */
+  sin_conos: number;
+  bultos: PaqueteCarga[];
+}
+
+export interface HiloCarga {
+  clave: string;
+  nombre: string;
+  calibre: string;
+  /** Lo que pasa al aceptarla, con la misma regla de la carga. */
+  estado: 'existe' | 'nuevo' | 'ambiguo' | 'no_existe';
+  /** Cuántos hilos iguales hay en el catálogo (si son varios, no se sabe a cuál cargar). */
+  iguales: number;
+  material: string | null;
+  linea: string | null;
+  sin_precio: boolean;
+  desactivado: boolean;
+  /** Ya existe pero no tiene presentación en kilos: la carga se la crea. */
+  crea_presentacion: boolean;
+  /** Lo que hay hoy de este hilo en ese almacén (null: es nuevo, o quien mira no ve esas existencias). */
+  hoy_kg: number | null;
+  /** Solo para quien tiene «Ver costos». */
+  costo_kg?: number | null;
+  paquetes: number;
+  kg: number;
+  conos: number;
+  sin_conos: number;
+  peso_min: number | null;
+  peso_max: number | null;
+  registrados: number;
+  lotes: LoteCarga[];
+}
+
+export interface DetalleCarga {
+  almacen: string;
+  archivo: string | null;
+  papeles: {
+    proveedor: string | null;
+    factura: string | null;
+    pedimento: string | null;
+    contenedor: string | null;
+    fecha_ingreso: string | null;
+    /** La hoja DOCUMENTO de la lista del proveedor. */
+    documento: string | null;
+    notas: string | null;
+  };
+  ve_costos: boolean;
+  /** Quien mira ve las existencias de ese almacén (la columna "En el almacén"). */
+  ve_existencias: boolean;
+  hilos: HiloCarga[];
+  paquetes: number;
+  kg: number;
+  conos: number;
+  lotes: number;
+  registrados: number;
+  nuevos: number;
 }
 
 /** Lo que dice el servidor cuando una operación necesita autorización (428). */
