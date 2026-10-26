@@ -89,25 +89,32 @@ async function cuentasActivas() {
  * Todas las transferencias, una por renglón (las tres fuentes juntas), con lo
  * que se anotó de cada una. `:metodos` = los métodos de transferencia.
  */
+/** La transferencia de una venta cancelada que quedó a su saldo a favor (su `reintegro` con ese método). */
+const A_FAVOR_SQL = `EXISTS (SELECT 1 FROM saldo_favor_movimientos sf
+   WHERE sf.pedido_id = g.pedido_id AND sf.tipo = 'reintegro' AND sf.metodo_pago_id = g.metodo_pago_id)`;
+
 const FUENTES_SQL = `
   SELECT 'pago' AS fuente, g.id AS fuente_id, g.creado_en AS fecha, g.monto AS importe,
          g.referencia_transaccion AS referencia, p.cliente_id,
          CAST(g.pedido_id AS CHAR) AS pedidos, p.numero_pedido AS folios,
          CASE WHEN p.encargo = 1 THEN 'espera' WHEN p.nota_pendiente = 1 THEN 'nota' ELSE 'venta' END AS de,
-         (g.estado = 'reembolsado' OR p.estado IN ('cancelado', 'devuelto')) AS cancelada
+         -- Cancelada Y regresada: no suma. Si al cancelar quedó a su SALDO A FAVOR
+         -- (2026-10-26), el dinero sigue en el banco: suma, y se marca \`a_favor\`.
+         ((g.estado = 'reembolsado' OR p.estado IN ('cancelado', 'devuelto')) AND NOT ${A_FAVOR_SQL}) AS cancelada,
+         ${A_FAVOR_SQL} AS a_favor
     FROM pagos g
     JOIN pedidos p ON p.id = g.pedido_id
    WHERE g.metodo_pago_id IN (:metodos) AND g.estado IN ('completado', 'reembolsado')
   UNION ALL
   SELECT 'abono', MIN(c.id), c.creado_en, SUM(c.monto), MAX(c.referencia), c.cliente_id,
          GROUP_CONCAT(c.pedido_id ORDER BY c.id), GROUP_CONCAT(pa.numero_pedido ORDER BY c.id SEPARATOR ', '),
-         'abono', 0
+         'abono', 0, 0
     FROM credito_movimientos c
     LEFT JOIN pedidos pa ON pa.id = c.pedido_id
    WHERE c.tipo = 'abono' AND c.metodo_pago_id IN (:metodos)
    GROUP BY c.cliente_id, c.creado_en, c.usuario_id, c.metodo_pago_id
   UNION ALL
-  SELECT 'anticipo', s.id, s.creado_en, s.monto, s.referencia, s.cliente_id, NULL, NULL, 'anticipo', 0
+  SELECT 'anticipo', s.id, s.creado_en, s.monto, s.referencia, s.cliente_id, NULL, NULL, 'anticipo', 0, 0
     FROM saldo_favor_movimientos s
    WHERE s.tipo = 'anticipo' AND s.metodo_pago_id IN (:metodos)`;
 
@@ -120,7 +127,7 @@ const DESDE_SQL = `
 const RENGLON_SQL = `
   SELECT x.fuente, x.fuente_id, DATE_FORMAT(x.fecha, '%Y-%m-%d %H:%i:%s') AS fecha, x.importe,
          x.referencia, x.cliente_id, cl.nombre AS cliente, cl.codigo AS cliente_codigo,
-         x.pedidos, x.folios, x.de, x.cancelada,
+         x.pedidos, x.folios, x.de, x.cancelada, x.a_favor,
          t.cuenta_bancaria_id, cb.banco AS cuenta_banco,
          RIGHT(COALESCE(cb.numero_cuenta, cb.clabe), 4) AS cuenta_ultimos,
          COALESCE(t.estado, 'por_revisar') AS estado, COALESCE(t.facturada, 0) AS facturada,
@@ -170,14 +177,20 @@ async function listar(filtros = {}, { limit = 100, offset = 0 } = {}) {
     { ...base, limit, offset }
   );
 
+  // LO DE UNA VENTA CANCELADA NO SUMA (2026-10-26, usuario: "se canceló una venta pagada
+  // en transferencia y efectivo, y en las transferencias no descuenta la transferencia de
+  // la venta cancelada"): las cifras y "A qué cuenta llegó" cuentan solo lo vigente; lo
+  // cancelado se dice aparte y su renglón sigue en la lista, marcado.
+  const vigente = (expr) => `CASE WHEN x.cancelada THEN 0 ELSE ${expr} END`;
   const [[c]] = await pool.query(
-    `SELECT COUNT(*) AS cuantas, COALESCE(SUM(x.importe), 0) AS importe,
-            COALESCE(SUM(CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN 1 ELSE 0 END), 0) AS por_revisar,
-            COALESCE(SUM(CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN x.importe ELSE 0 END), 0) AS importe_por_revisar,
-            COALESCE(SUM(CASE WHEN t.estado = 'procesada' THEN x.importe ELSE 0 END), 0) AS importe_procesado,
-            COALESCE(SUM(CASE WHEN COALESCE(t.facturada, 0) = 0 THEN 1 ELSE 0 END), 0) AS sin_facturar,
-            COALESCE(SUM(CASE WHEN COALESCE(t.facturada, 0) = 0 THEN x.importe ELSE 0 END), 0) AS importe_sin_facturar,
-            COALESCE(SUM(CASE WHEN t.cuenta_bancaria_id IS NULL THEN 1 ELSE 0 END), 0) AS sin_cuenta,
+    `SELECT COALESCE(SUM(${vigente('1')}), 0) AS cuantas, COALESCE(SUM(${vigente('x.importe')}), 0) AS importe,
+            COALESCE(SUM(${vigente("CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN 1 ELSE 0 END")}), 0) AS por_revisar,
+            COALESCE(SUM(${vigente("CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN x.importe ELSE 0 END")}), 0) AS importe_por_revisar,
+            COALESCE(SUM(${vigente("CASE WHEN t.estado = 'procesada' THEN x.importe ELSE 0 END")}), 0) AS importe_procesado,
+            COALESCE(SUM(${vigente('CASE WHEN COALESCE(t.facturada, 0) = 0 THEN 1 ELSE 0 END')}), 0) AS sin_facturar,
+            COALESCE(SUM(${vigente('CASE WHEN COALESCE(t.facturada, 0) = 0 THEN x.importe ELSE 0 END')}), 0) AS importe_sin_facturar,
+            COALESCE(SUM(${vigente('CASE WHEN t.cuenta_bancaria_id IS NULL THEN 1 ELSE 0 END')}), 0) AS sin_cuenta,
+            COALESCE(SUM(CASE WHEN x.cancelada THEN 1 ELSE 0 END), 0) AS canceladas,
             COALESCE(SUM(CASE WHEN x.cancelada THEN x.importe ELSE 0 END), 0) AS importe_cancelado
        ${DESDE_SQL} ${where}`,
     base
@@ -185,7 +198,7 @@ async function listar(filtros = {}, { limit = 100, offset = 0 } = {}) {
   const [cuentas] = await pool.query(
     `SELECT t.cuenta_bancaria_id AS id, cb.banco, RIGHT(COALESCE(cb.numero_cuenta, cb.clabe), 4) AS ultimos,
             COUNT(*) AS cuantas, SUM(x.importe) AS importe
-       ${DESDE_SQL} ${where}
+       ${DESDE_SQL} ${where ? `${where} AND` : 'WHERE'} NOT x.cancelada
       GROUP BY t.cuenta_bancaria_id, cb.banco, ultimos
       ORDER BY importe DESC`,
     base
@@ -206,6 +219,7 @@ async function listar(filtros = {}, { limit = 100, offset = 0 } = {}) {
       sin_facturar: Number(c.sin_facturar),
       importe_sin_facturar: round2(c.importe_sin_facturar),
       sin_cuenta: Number(c.sin_cuenta),
+      canceladas: Number(c.canceladas),
       importe_cancelado: round2(c.importe_cancelado),
     },
     por_cuenta: cuentas.map((k) => ({
@@ -217,7 +231,7 @@ async function listar(filtros = {}, { limit = 100, offset = 0 } = {}) {
 function _cifrasVacias() {
   return {
     cuantas: 0, importe: 0, por_revisar: 0, importe_por_revisar: 0, importe_procesado: 0,
-    sin_facturar: 0, importe_sin_facturar: 0, sin_cuenta: 0, importe_cancelado: 0,
+    sin_facturar: 0, importe_sin_facturar: 0, sin_cuenta: 0, canceladas: 0, importe_cancelado: 0,
   };
 }
 
@@ -398,6 +412,7 @@ function _renglon(r) {
     cliente_codigo: r.cliente_codigo,
     de: r.de,
     cancelada: Boolean(Number(r.cancelada)),
+    a_favor: Boolean(Number(r.a_favor)),
     ventas: [],
     materiales: null,
     _pedidos: String(r.pedidos ?? '').split(',').map(Number).filter((n) => n > 0),

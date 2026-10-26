@@ -1,0 +1,14 @@
+// AL CANCELAR, ¿QUÉ PASA CON EL DINERO? (2026-10-26): cada forma con su pregunta,
+// el monto arriba y sus dos opciones abajo. Aparte de pedido-detalle.scss (límite de 4 kB).
+.dinero-cancelar {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
+  .pregunta-dinero { display: flex; flex-direction: column; gap: 6px; }
+  .que { font-variant-numeric: tabular-nums; color: var(--tinta-2); }
+  p { margin: 0; }
+}

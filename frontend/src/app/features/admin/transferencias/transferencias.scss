@@ -18,6 +18,9 @@ td.cliente .num-cli { display: block; font-family: var(--mono); font-size: 0.75r
 td.operacion { font-family: var(--mono); font-size: 0.8125rem; overflow-wrap: anywhere; min-width: 13ch; max-width: 220px; }
 td.cuenta { white-space: nowrap; }
 td.num { white-space: nowrap; }
+// Lo de una venta cancelada no suma (2026-10-26): tachado y en gris.
+td.num .no-suma { color: var(--tinta-3); }
+td.num .no-suma-pie { display: block; font-size: 0.75rem; color: var(--tinta-3); }
 td.tenue { color: var(--tinta-2); font-size: 0.8125rem; }
 .sin-cuenta { color: var(--aviso-t); }
 tr.fila-elegida td { background: var(--acento-suave); }

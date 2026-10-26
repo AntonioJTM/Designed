@@ -79,7 +79,7 @@ const MESES_LARGOS = [
   host: { '(document:keydown.escape)': 'alEscape()' },
   imports: [BotonWhatsapp, FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal, AbonoModal],
   templateUrl: './pedido-detalle.html',
-  styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss', './pedido-bultos.scss'],
+  styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss', './pedido-bultos.scss', './pedido-cancelar.scss'],
 })
 export class PedidoDetalle implements OnDestroy {
   private readonly ventas = inject(VentasService);
@@ -595,6 +595,9 @@ export class PedidoDetalle implements OnDestroy {
 
   /** El botón "Cancelar venta" (o "Cancelar apartado") de la cabecera. */
   abrirCancelar(): void {
+    this.efectivoAFavor = true;
+    this.transferenciaAFavor = true;
+    this.abonado = 'favor';
     this.nuevoEstado = 'cancelado';
     this.abrirDevolucion();
   }
@@ -725,6 +728,38 @@ export class PedidoDetalle implements OnDestroy {
       .reduce((s, g) => s + Number(g.monto), 0);
   }
 
+  /** Lo que pagó por transferencia (lo que no fue efectivo ni su saldo a favor). */
+  transferidoDeLaVenta(): number {
+    const p = this.pedido();
+    if (!p || p.canal !== 'punto_venta') return 0;
+    return (p.pagos ?? [])
+      .filter((g) => g.estado === 'completado' && !/efectivo/i.test(g.metodo) && !/saldo a favor/i.test(g.metodo))
+      .reduce((s, g) => s + Number(g.monto), 0);
+  }
+
+  /**
+   * AL CANCELAR, ¿QUÉ PASA CON EL DINERO? (2026-10-26, usuario: "aquí no se regresa
+   * dinero la mayor parte; a veces se abona como saldo a favor al cliente"). Se
+   * pregunta por el efectivo y por la transferencia; empieza en «Queda a su saldo
+   * a favor». Sin cliente no se pregunta: se le regresa, como siempre.
+   */
+  efectivoAFavor = true;
+  transferenciaAFavor = true;
+
+  /** Una venta a crédito ya abonada: qué pasa con lo abonado (2026-10-26). */
+  abonado: 'favor' | 'efectivo' | 'banco' = 'favor';
+
+  /** Lo que ya abonó a esta venta a crédito (con abonos a su cuenta). */
+  abonadoDeLaVenta(p: Pedido): number {
+    return this.fiado(p) > 0 ? Math.max(0, Number(p.credito_pagado ?? 0)) : 0;
+  }
+
+  /** Se pregunta qué pasa con el dinero (al cancelar, con cliente y con algo pagado). */
+  preguntaDinero(p: Pedido): boolean {
+    return this.nuevoEstado === 'cancelado' && !!p.cliente_id && !this.esApartadoSinEntregar(p)
+      && (this.efectivoADevolver() > 0 || this.transferidoDeLaVenta() > 0 || this.abonadoDeLaVenta(p) > 0);
+  }
+
   confirmarDevolucion(): void {
     const p = this.pedido();
     if (!p?.detalle || !this.nuevoEstado) return;
@@ -739,7 +774,15 @@ export class PedidoDetalle implements OnDestroy {
     this.aplicando.set(true);
     this.error.set(null);
     this.mensaje.set(null);
-    this.ventas.cambiarEstado(p.id, estado).subscribe({
+    const aFavor = estado === 'cancelado' && this.preguntaDinero(p)
+      ? {
+        ...(this.efectivoADevolver() > 0 ? { efectivo: this.efectivoAFavor } : {}),
+        ...(this.transferidoDeLaVenta() > 0 ? { transferencia: this.transferenciaAFavor } : {}),
+      }
+      : undefined;
+    const abonadoSeRegresa = estado === 'cancelado' && this.preguntaDinero(p) && this.abonadoDeLaVenta(p) > 0 && this.abonado !== 'favor'
+      ? this.abonado : undefined;
+    this.ventas.cambiarEstado(p.id, estado, undefined, aFavor, abonadoSeRegresa).subscribe({
       next: (r) => {
         this.aplicando.set(false);
         this.confirmando.set(false);
@@ -749,6 +792,14 @@ export class PedidoDetalle implements OnDestroy {
         const sinEfectivo = aFavor > 0
           ? ` En la caja no había efectivo para devolverle todo: ${aFavor.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} le quedaron a favor.`
           : '';
+        // Lo que se eligió dejarle a su saldo a favor al cancelar (2026-10-26).
+        const quedo = Number(r?.efectivo_a_favor ?? 0) + Number(r?.transferencia_a_favor ?? 0);
+        const regresado = Number(r?.abonado_regresado ?? 0);
+        const quedoTxt = (quedo > 0
+          ? ` ${quedo.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} de lo que pagó le quedaron a su saldo a favor.`
+          : '') + (regresado > 0
+          ? ` Se le regresaron ${regresado.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} de lo que había abonado.`
+          : '');
         // Venta a crédito ya abonada: lo abonado pasó a su saldo a favor (2026-10-20).
         const abonado = Number(r?.abonado_a_favor ?? 0);
         const abonadoTxt = abonado > 0
@@ -760,7 +811,7 @@ export class PedidoDetalle implements OnDestroy {
               ? `Se volvió a apartar la mercancía en ${almacen}.`
               : `Apartado cancelado. Se liberó lo apartado en ${almacen}.`
             : estado === 'cancelado' || estado === 'devuelto'
-              ? `${estado === 'cancelado' ? 'Venta cancelada' : 'Mercancía devuelta'}. Regresó al inventario de ${almacen}.${sinEfectivo}${abonadoTxt}`
+              ? `${estado === 'cancelado' ? 'Venta cancelada' : 'Mercancía devuelta'}. Regresó al inventario de ${almacen}.${quedoTxt}${sinEfectivo}${abonadoTxt}`
               : `Pedido marcado como ${etiquetaEstado(estado, p.canal, p.encargo).toLowerCase()}.`
         );
         // Se recarga: cambiaron los bultos, los pagos y las alternativas.

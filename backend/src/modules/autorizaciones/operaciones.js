@@ -56,7 +56,7 @@ const nombreCliente = async (id) =>
   (await una('SELECT COALESCE(nombre_comercial, nombre) AS n FROM clientes WHERE id = :id', { id: Number(id) }))?.n ?? 'el cliente';
 
 const ventaDe = (id) => una(
-  `SELECT p.numero_pedido, p.total, COALESCE(c.nombre_comercial, c.nombre, 'Mostrador') AS cliente
+  `SELECT p.numero_pedido, p.total, p.cliente_id, COALESCE(c.nombre_comercial, c.nombre, 'Mostrador') AS cliente
      FROM pedidos p LEFT JOIN clientes c ON c.id = p.cliente_id WHERE p.id = :id`,
   { id: Number(id) }
 );
@@ -76,11 +76,50 @@ const saldoEn = async (varianteId, almacenId) =>
   Number((await una('SELECT cantidad FROM inventario WHERE variante_id = :v AND almacen_id = :a',
     { v: Number(varianteId), a: Number(almacenId) }))?.cantidad ?? 0);
 
+/**
+ * Qué es lo que se cancela, en palabras de la tienda (2026-10-26, usuario: "cuando se
+ * haga la solicitud de cancelación de notas en espera o notas pendientes de pago,
+ * no diga venta"): una nota en espera que no se ha entregado, una nota pendiente de
+ * pago que todavía se debe (sin pasar a crédito), un apartado o una venta. Se mira
+ * cómo está HOY: si mientras tanto se entregó o se pagó, ya es una venta. Ya
+ * cancelada (el historial) sigue diciendo lo que era: la nota en espera nunca
+ * descontó, y la pendiente de pago no se había pagado ni pasado a crédito.
+ */
+async function queSeCancela(pedidoId) {
+  const p = await una(
+    `SELECT p.encargo, p.nota_pendiente, p.estado, p.inventario_descontado, p.total,
+            EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo') AS fiada,
+            (SELECT COALESCE(SUM(pg.monto), 0) FROM pagos pg
+              WHERE pg.pedido_id = p.id AND pg.estado IN ('completado', 'reembolsado')) AS pagado
+       FROM pedidos p WHERE p.id = :id`,
+    { id: Number(pedidoId) || 0 }
+  );
+  if (!p) return 'una venta';
+  const vivaOCancelada = (...estados) => [...estados, 'cancelado'].includes(p.estado);
+  if (Number(p.encargo) && !Number(p.inventario_descontado)) return 'una nota en espera';
+  if (Number(p.nota_pendiente) && vivaOCancelada('pendiente') && !Number(p.fiada)
+      && Number(p.pagado) + 0.004 < Number(p.total)) return 'una nota pendiente de pago';
+  if (!Number(p.inventario_descontado) && vivaOCancelada('apartado')) return 'un apartado';
+  return 'una venta';
+}
+
+/** El id de la venta de una ruta guardada ("/pedidos/123/estado"). */
+const pedidoDeRuta = (ruta) => Number(String(ruta ?? '').match(/\/pedidos\/(\d+)/)?.[1] ?? 0);
+
 /** El efectivo que cobró una venta (sale de la caja al cancelarla). */
 const efectivoDe = async (pedidoId) =>
   Number((await una(
     `SELECT COALESCE(SUM(pg.monto), 0) AS total FROM pagos pg JOIN metodos_pago mp ON mp.id = pg.metodo_pago_id
       WHERE pg.pedido_id = :id AND pg.estado = 'completado' AND LOWER(mp.nombre) LIKE '%efectivo%'`,
+    { id: Number(pedidoId) }
+  ))?.total ?? 0);
+
+/** Lo que se cobró de una venta por transferencia (lo que no fue efectivo ni su saldo a favor). */
+const transferidoDe = async (pedidoId) =>
+  Number((await una(
+    `SELECT COALESCE(SUM(pg.monto), 0) AS total FROM pagos pg JOIN metodos_pago mp ON mp.id = pg.metodo_pago_id
+      WHERE pg.pedido_id = :id AND pg.estado = 'completado' AND mp.interno = 0
+        AND LOWER(mp.nombre) NOT LIKE '%efectivo%'`,
     { id: Number(pedidoId) }
   ))?.total ?? 0);
 
@@ -312,6 +351,8 @@ const OPERACIONES = {
 
   cancelar_venta: {
     nombre: 'Cancelar una venta',
+    // «Cancelar una nota en espera» / «… una nota pendiente de pago» (2026-10-26).
+    nombreDe: async (ruta) => `Cancelar ${await queSeCancela(pedidoDeRuta(ruta))}`,
     permiso: 'hacer:cancelar_venta',
     pedir: 'pedir:cancelar_venta',
     conTienda: true,
@@ -321,8 +362,23 @@ const OPERACIONES = {
       const p = await ventaDe(req.params.id);
       const verbo = req.body?.estado === 'devuelto' ? 'Devolver completa' : 'Cancelar';
       const efectivo = await efectivoDe(req.params.id);
-      return `${verbo} ${p?.numero_pedido ?? 'la venta'} (${pesos(p?.total)}) · ${p?.cliente ?? ''}` +
-        (efectivo > 0 ? ` · sale ${pesos(efectivo)} de efectivo de la caja` : '');
+      const transferido = await transferidoDe(req.params.id);
+      // Qué pasa con el dinero: a su saldo a favor o se le regresa (2026-10-26).
+      const af = p?.cliente_id && req.body?.estado === 'cancelado' ? (req.body?.a_favor ?? {}) : {};
+      const dinero = [];
+      if (efectivo > 0) {
+        dinero.push(af.efectivo ? `${pesos(efectivo)} de efectivo quedan a su saldo a favor` : `sale ${pesos(efectivo)} de efectivo de la caja`);
+      }
+      if (transferido > 0) {
+        dinero.push(af.transferencia ? `${pesos(transferido)} de la transferencia quedan a su saldo a favor`
+          : `${pesos(transferido)} de la transferencia se le regresan por el banco`);
+      }
+      // Una venta a crédito ya abonada: lo abonado se le regresa en vez de quedarle a favor.
+      if (req.body?.estado === 'cancelado' && req.body?.abonado_se_regresa) {
+        dinero.push(`lo que abonó se le regresa ${req.body.abonado_se_regresa === 'efectivo' ? 'en efectivo de la caja' : 'por el banco'}`);
+      }
+      return `${verbo} ${p?.numero_pedido ?? (await queSeCancela(req.params.id)).replace(/^una? /, 'la ')} (${pesos(p?.total)}) · ${p?.cliente ?? ''}` +
+        dinero.map((d) => ` · ${d}`).join('');
     },
   },
 
@@ -462,7 +518,10 @@ const OPERACIONES = {
         return `Fiar ${pesos(req.body?.a_credito)} a ${await nombreCliente(req.body?.cliente_id)}, que trae su cuenta atrasada`;
       }
       const p = await ventaDe(req.params.id);
-      const como = /\/a-credito$/.test(req.path) ? 'Pasar a crédito' : `Entregar a crédito ${pesos(req.body?.a_credito)} de`;
+      const como = /\/a-credito$/.test(req.path) ? 'Pasar a crédito'
+        // Al registrar el pago de una nota pendiente, lo que falte (2026-10-26).
+        : /\/pago-nota$/.test(req.path) ? 'Pasar a crédito lo que falta de'
+          : `Entregar a crédito ${pesos(req.body?.a_credito)} de`;
       return `${como} ${p?.numero_pedido ?? 'la nota'} · ${p?.cliente ?? ''}, que trae su cuenta atrasada`;
     },
   },
@@ -809,6 +868,19 @@ const OPERACIONES = {
 
 for (const [clave, op] of Object.entries(OPERACIONES)) op.clave = clave;
 
+/**
+ * El nombre de lo que se pide: el de la operación o, si la operación lo sabe decir
+ * mejor según lo que toca (`nombreDe`, con la ruta guardada), ese. Si falla, el de siempre.
+ */
+async function nombreDe(op, ruta) {
+  if (!op?.nombreDe) return op?.nombre;
+  try {
+    return (await op.nombreDe(ruta)) || op.nombre;
+  } catch {
+    return op.nombre;
+  }
+}
+
 /** Lo que se pide en palabras; si algo falla al armarlo, al menos el nombre de la operación. */
 async function describir(op, req) {
   try {
@@ -818,4 +890,4 @@ async function describir(op, req) {
   }
 }
 
-module.exports = { OPERACIONES, describir, resumenNomina, lineasPedido, nombreAlmacen };
+module.exports = { OPERACIONES, describir, nombreDe, resumenNomina, lineasPedido, nombreAlmacen };

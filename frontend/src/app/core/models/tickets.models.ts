@@ -63,6 +63,10 @@ export interface TicketPagoNota {
   monto: number;
   metodo?: string | null;
   referencia?: string | null;
+  /** Con dos formas a la vez (2026-10-26): cada una con lo suyo. */
+  partes?: { metodo: string; monto: number; referencia?: string | null }[];
+  /** Lo que faltaba y pasó a su cuenta de crédito en ese momento. */
+  credito?: { monto: number; dias: number; vence_el: string | null } | null;
   llevaba_pagado: number;
   pagado: number;
   falta: number;

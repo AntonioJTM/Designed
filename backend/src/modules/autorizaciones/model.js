@@ -23,7 +23,7 @@ const { AppError } = require('../../middlewares/error');
 const sha256 = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 
 const SELECT = `
-  SELECT a.id, a.operacion, a.estado, a.resumen, a.almacenes,
+  SELECT a.id, a.operacion, a.estado, a.resumen, a.almacenes, a.ruta,
          a.solicitante_id, us.nombre AS solicitante,
          DATE_FORMAT(a.solicitado_en, '%Y-%m-%d %H:%i:%s') AS solicitado_en,
          a.autorizador_id, ua.nombre AS autorizador, a.en_el_momento,

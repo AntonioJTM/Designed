@@ -86,6 +86,12 @@ describe('NotasPendientesPantalla', () => {
     expect(f.componentInstance.mensaje()).toContain('$1,350.00 pasaron a la cuenta de crédito de Doña Chela');
   });
 
+  it('si lo demás pasó a crédito, lo dice', async () => {
+    const f = await montar();
+    f.componentInstance.alPagar({ pedido_id: 7, pago_id: 9, numero_pedido: 'POS-1-AAAA', total: 2350, abonado: 1350, pendiente: 0, liquidado: false, a_credito: 1000 });
+    expect(f.componentInstance.mensaje()).toBe('POS-1-AAAA: $1,000.00 pasaron a su cuenta de crédito y se registró lo que pagó hoy.');
+  });
+
   it('al registrar el último pago dice que quedó pagada', async () => {
     const f = await montar();
     f.componentInstance.alPagar({ pedido_id: 7, numero_pedido: 'POS-1-AAAA', total: 2350, abonado: 2350, pendiente: 0, liquidado: true });
@@ -95,6 +101,7 @@ describe('NotasPendientesPantalla', () => {
 
 describe('PagoNotaModal', () => {
   let enviado: unknown = null;
+  let permisosModal = new Set(['hacer:fiar']);
   const ventas = {
     metodosPago: () => of([{ id: 1, nombre: 'Efectivo' }, { id: 3, nombre: 'Transferencia' }]),
     cajas: () => of([{ id: 5, nombre: 'Caja 1', activo: 1 }]),
@@ -105,21 +112,28 @@ describe('PagoNotaModal', () => {
     },
   };
 
-  async function montar() {
+  async function montarF(n: NotaPendiente = nota) {
     await TestBed.configureTestingModule({
       imports: [PagoNotaModal],
-      providers: [{ provide: TransferenciasService, useValue: transferenciasFalso() }, { provide: VentasService, useValue: ventas }],
+      providers: [
+        { provide: TransferenciasService, useValue: transferenciasFalso() }, { provide: VentasService, useValue: ventas },
+        { provide: AuthService, useValue: { puede: (k: string) => permisosModal.has(k), puedeOPide: (k: string) => permisosModal.has(k) } },
+        { provide: ConfirmacionService, useValue: { pedir: () => Promise.resolve(true) } },
+      ],
     }).compileComponents();
     const f = TestBed.createComponent(PagoNotaModal);
-    f.componentRef.setInput('nota', nota);
+    f.componentRef.setInput('nota', n);
     f.detectChanges();
     await f.whenStable();
-    return f.componentInstance;
+    f.detectChanges();
+    return f;
   }
+  const montar = async (n: NotaPendiente = nota) => (await montarF(n)).componentInstance;
 
   afterEach(() => {
     TestBed.resetTestingModule();
     enviado = null;
+    permisosModal = new Set(['hacer:fiar']);
   });
 
   it('propone lo que falta, en efectivo, y el efectivo entra al único turno abierto', async () => {
@@ -129,7 +143,7 @@ describe('PagoNotaModal', () => {
     c.monto = 500;
     expect(c.quedaria()).toBe(850);
     c.registrar();
-    expect(enviado).toEqual({ monto: 500, metodo_pago_id: 1, sesion_caja_id: 70, referencia: undefined });
+    expect(enviado).toEqual({ partes: [{ metodo_pago_id: 1, monto: 500, referencia: undefined }], sesion_caja_id: 70 });
   });
 
   it('no deja cobrar más de lo que falta', async () => {
@@ -142,8 +156,80 @@ describe('PagoNotaModal', () => {
 
   it('por transferencia no toca la caja', async () => {
     const c = await montar();
-    c.metodoId = 3;
+    c.cambiarForma(3);
     c.registrar();
-    expect(enviado).toEqual({ monto: 1350, metodo_pago_id: 3, sesion_caja_id: undefined, referencia: undefined });
+    expect(enviado).toEqual({ partes: [{ metodo_pago_id: 3, monto: 1350, referencia: undefined }], sesion_caja_id: undefined });
+  });
+
+  // HASTA DOS FORMAS (2026-10-26, usuario: "múltiples formas de pago: crédito, efectivo y
+  // transferencia o aplicación de saldo a favor"). Le faltan $1,350.00.
+  it('efectivo y crédito: lo de hoy al turno y el resto a su cuenta, con sus días', async () => {
+    const c = await montar();
+    c.cambiarForma('efectivo_credito');
+    expect(c.pideMonto()).toBe(false);
+    expect(c.motivo()).toBe('Pon cuánto paga hoy en efectivo.');
+    c.parte = 350;
+    expect(c.aCredito()).toBe(1000);
+    expect(c.ayudaParte()).toBe('El resto, $1,000.00, va a crédito.');
+    expect(c.reparto()).toBe('Paga $350.00 en efectivo y $1,000.00 a su cuenta de crédito.');
+    expect(c.textoBoton()).toBe('Registrar $350.00 y lo demás a crédito');
+    c.registrar();
+    expect(enviado).toEqual({
+      partes: [{ metodo_pago_id: 1, monto: 350, referencia: undefined }], sesion_caja_id: 70, a_credito: true, dias_credito: 15,
+    });
+  });
+
+  it('todo a crédito: no se cobra nada hoy', async () => {
+    const c = await montar();
+    c.cambiarForma('credito');
+    expect(c.aCredito()).toBe(1350);
+    expect(c.textoBoton()).toBe('Pasarla a crédito');
+    c.registrar();
+    expect(enviado).toEqual({ partes: undefined, sesion_caja_id: undefined, a_credito: true, dias_credito: 15 });
+  });
+
+  it('efectivo y transferencia: lo que paga hoy, parte y parte', async () => {
+    const c = await montar();
+    c.cambiarForma('mixto');
+    c.parte = 1350;
+    expect(c.motivo()).toContain('elige solo «Transferencia»');
+    c.parte = 350;
+    c.registrar();
+    expect(enviado).toEqual({
+      partes: [{ metodo_pago_id: 3, monto: 350, referencia: undefined }, { metodo_pago_id: 1, monto: 1000, referencia: undefined }],
+      sesion_caja_id: 70,
+    });
+  });
+
+  it('con su saldo a favor: lo usa todo y el resto en efectivo o a crédito', async () => {
+    let c = await montar({ ...nota, saldo_favor: 300 });
+    c.cambiarForma('saldo_efectivo');
+    expect(c.saldoUsado()).toBe(300);
+    expect(c.enEfectivo()).toBe(1050);
+    c.registrar();
+    expect(enviado).toEqual({
+      partes: [{ con_saldo_favor: true, monto: 300 }, { metodo_pago_id: 1, monto: 1050, referencia: undefined }], sesion_caja_id: 70,
+    });
+    TestBed.resetTestingModule();
+    c = await montar({ ...nota, saldo_favor: 300 });
+    c.cambiarForma('saldo_credito');
+    expect(c.aCredito()).toBe(1050);
+    c.registrar();
+    expect(enviado).toEqual({ partes: [{ con_saldo_favor: true, monto: 300 }], sesion_caja_id: undefined, a_credito: true, dias_credito: 15 });
+  });
+
+  it('la lista ofrece una forma o dos, y el crédito solo con «Vender a crédito»', async () => {
+    const opciones = (f: { nativeElement: HTMLElement }) =>
+      [...f.nativeElement.querySelectorAll('select[name="forma"] option')].map((o) => o.textContent?.trim()).filter((t) => t !== 'Elige…');
+    let f = await montarF({ ...nota, saldo_favor: 300 });
+    expect(opciones(f)).toEqual([
+      'Efectivo', 'Transferencia', 'A crédito', 'Su saldo a favor (tiene $300.00)',
+      'Efectivo y transferencia', 'Efectivo y crédito', 'Transferencia y crédito',
+      'Saldo a favor y efectivo', 'Saldo a favor y transferencia', 'Saldo a favor y crédito',
+    ]);
+    TestBed.resetTestingModule();
+    permisosModal = new Set();
+    f = await montarF();
+    expect(opciones(f)).toEqual(['Efectivo', 'Transferencia', 'Efectivo y transferencia']);
   });
 });

@@ -479,7 +479,53 @@
           </div>
         }
 
-        @if (efectivoADevolver() > 0) {
+        @if (preguntaDinero(p)) {
+          <!-- ¿Qué pasa con lo que pagó? (2026-10-26: "aquí no se regresa dinero la mayor
+               parte; a veces se abona como saldo a favor"). Empieza en saldo a favor. -->
+          <fieldset class="dinero-cancelar">
+            <legend>¿Qué pasa con lo que pagó?</legend>
+            @if (efectivoADevolver() > 0) {
+              <div class="pregunta-dinero">
+                <span class="que" id="que-efectivo">{{ efectivoADevolver() | dinero }} en efectivo</span>
+                <div class="seg" role="radiogroup" aria-labelledby="que-efectivo">
+                <button type="button" role="radio" [class.on]="efectivoAFavor" [attr.aria-checked]="efectivoAFavor"
+                        (click)="efectivoAFavor = true">Quedan a su saldo a favor</button>
+                <button type="button" role="radio" [class.on]="!efectivoAFavor" [attr.aria-checked]="!efectivoAFavor"
+                        (click)="efectivoAFavor = false">Salen de la caja</button>
+                </div>
+              </div>
+            }
+            @if (transferidoDeLaVenta() > 0) {
+              <div class="pregunta-dinero">
+                <span class="que" id="que-transferencia">{{ transferidoDeLaVenta() | dinero }} de la transferencia</span>
+                <div class="seg" role="radiogroup" aria-labelledby="que-transferencia">
+                <button type="button" role="radio" [class.on]="transferenciaAFavor" [attr.aria-checked]="transferenciaAFavor"
+                        (click)="transferenciaAFavor = true">Quedan a su saldo a favor</button>
+                <button type="button" role="radio" [class.on]="!transferenciaAFavor" [attr.aria-checked]="!transferenciaAFavor"
+                        (click)="transferenciaAFavor = false">Se le regresan por el banco</button>
+                </div>
+              </div>
+            }
+            @if (abonadoDeLaVenta(p) > 0) {
+              <!-- Venta a crédito ya abonada (2026-10-26): lo abonado también se puede regresar. -->
+              <div class="pregunta-dinero">
+                <span class="que" id="que-abonado">{{ abonadoDeLaVenta(p) | dinero }} que ya abonó a esta nota</span>
+                <div class="seg" role="radiogroup" aria-labelledby="que-abonado">
+                  <button type="button" role="radio" [class.on]="abonado === 'favor'" [attr.aria-checked]="abonado === 'favor'"
+                          (click)="abonado = 'favor'">Quedan a su saldo a favor</button>
+                  <button type="button" role="radio" [class.on]="abonado === 'efectivo'" [attr.aria-checked]="abonado === 'efectivo'"
+                          (click)="abonado = 'efectivo'">Se le regresan en efectivo</button>
+                  <button type="button" role="radio" [class.on]="abonado === 'banco'" [attr.aria-checked]="abonado === 'banco'"
+                          (click)="abonado = 'banco'">Se le regresan por el banco</button>
+                </div>
+                <span class="muted">Si debe otras notas a crédito, lo abonado primero las paga; esto es para lo que sobre.</span>
+              </div>
+            }
+            <p class="muted">Lo que queda a su saldo a favor lo usa en su siguiente compra.</p>
+          </fieldset>
+        }
+
+        @if (efectivoADevolver() > 0 && !(preguntaDinero(p) && efectivoAFavor)) {
           <p class="aviso">
             Salen <b>{{ efectivoADevolver() | dinero }}</b> en efectivo de la caja, para que el corte cuadre.
             @if (p.cliente_id) {

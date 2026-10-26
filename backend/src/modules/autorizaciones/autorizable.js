@@ -3,7 +3,7 @@
 const { AppError } = require('../../middlewares/error');
 const { puede, almacenesDe, esAdmin } = require('../permisos/service');
 const { almacenesDelCambio } = require('../tiempo-real/almacenes');
-const { OPERACIONES, describir } = require('./operaciones');
+const { OPERACIONES, describir, nombreDe } = require('./operaciones');
 
 // EL CANDADO DE UNA OPERACIÓN QUE SE AUTORIZA (2026-10-19). Va en su ruta
 // DESPUÉS de validar los datos (`validate(...)`):
@@ -81,6 +81,8 @@ function autorizable(clave) {
       if (op.completar && !repeticion) await op.completar(req);
       const ruta = rutaDe(req);
       const tiendas = await tiendasDe(op, req, ruta);
+      // "Cancelar una nota en espera" en vez de "Cancelar una venta" (2026-10-26).
+      const nombre = await nombreDe(op, ruta);
 
       if (repeticion) {
         const id = await model.consumirLlave(repeticion, { metodo: req.method, ruta, solicitanteId: req.auth.sub });
@@ -97,7 +99,7 @@ function autorizable(clave) {
       const conClave = req.get('X-Autoriza');
       if (conClave && op.soloADistancia) {
         throw new AppError(403, 'SE_AUTORIZA_EN_AUTORIZACIONES',
-          `«${op.nombre}» se pide y se acepta en Autorizaciones, viendo lo que se autoriza.`);
+          `«${nombre}» se pide y se acepta en Autorizaciones, viendo lo que se autoriza.`);
       }
       if (conClave) {
         const quien = await service.revisarClave(conClave, op, { solicitanteId: req.auth.sub, tiendas: tiendasAutoriza });
@@ -148,9 +150,9 @@ function autorizable(clave) {
         return res.status(202).json({ data: { autorizacion: solicitud }, error: null });
       }
 
-      return next(new AppError(428, 'NECESITA_AUTORIZACION', `«${op.nombre}» necesita autorización.`, {
+      return next(new AppError(428, 'NECESITA_AUTORIZACION', `«${nombre}» necesita autorización.`, {
         operacion: clave,
-        nombre: op.nombre,
+        nombre,
         resumen,
         solo_en_el_momento: Boolean(op.soloEnElMomento),
         autorizadores: await service.autorizadores(op, tiendasAutoriza, { excluir: op.noASiMismo ? req.auth.sub : null }),

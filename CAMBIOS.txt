@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-23
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-26
 ===============================================================================
 
 ⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
@@ -53,6 +53,27 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  CANCELAR UNA VENTA A CRÉDITO YA PAGADA también pregunta: lo abonado queda a su
+  saldo a favor o se le regresa en efectivo / por el banco (entrada 120;
+  DESPLEGADO en 20261026-111603, sin base).
+  Antes:
+  CANCELAR UNA VENTA pregunta qué pasa con lo que pagó: efectivo y transferencia
+  «Quedan a su saldo a favor» (ya marcado) o se le regresan; lo que queda a favor
+  no sale del cajón y en Transferencias sigue sumando (entrada 119; DESPLEGADO en
+  20261026-105650, sin base).
+  Antes:
+  TRANSFERENCIAS: la de una venta cancelada ya no suma en las cifras ni en "A qué
+  cuenta llegó"; sigue en la lista, tachada (entrada 118; DESPLEGADO en
+  20261026-102900, sin base).
+  Antes:
+  NOTAS PENDIENTES DE PAGO: «Registrar su pago» con hasta DOS formas —efectivo,
+  transferencia, a crédito o su saldo a favor, y sus pares— en una sola operación
+  (entrada 117; DESPLEGADO en 20261026-102137, sin base).
+  Antes:
+  AUTORIZACIONES: la solicitud dice «Cancelar una nota en espera» o «Cancelar una
+  nota pendiente de pago» en vez de «Cancelar una venta» (entrada 116; DESPLEGADO
+  en 20261026-095606, sin base).
+  Antes:
   ENTREGAR LA NOTA CON SU SALDO A FAVOR: «Todo con su saldo a favor» o «Saldo a
   favor y efectivo / transferencia / crédito» en «Con qué paga» (entrada 115;
   DESPLEGADO en 20261023-133721, sin base).
@@ -890,6 +911,182 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (120) · Cancelar: también la VENTA A CRÉDITO ya pagada pregunta qué pasa
+-------------------------------------------------------------------------------
+
+"En la cancelación de ventas, también haya opción de regresar dinero o que se vaya
+como saldo a favor si es que la nota ya está pagada; me lo acaban de pasar"
+(usuario). Casi todo ya lo hacía la entrada 119 (contado, nota pendiente pagada con
+sus pagos, nota en espera con lo que dejó). Faltaba la VENTA A CRÉDITO ya pagada con
+abonos a su cuenta: lo abonado se iba SIEMPRE a su saldo a favor y la ventana no lo
+decía antes. DESPLEGADO en 20261026-111603 (sin base).
+
+  · La ventana de cancelar, con cliente, pregunta por "$X que ya abonó a esta nota"
+    (`p.credito_pagado` de una venta con cargo): «Quedan a su saldo a favor» (ya
+    marcado), «Se le regresan en efectivo» o «Se le regresan por el banco", con la
+    nota "Si debe otras notas a crédito, lo abonado primero las paga; esto es para lo
+    que sobre" (el reparto de lo más viejo a lo más nuevo no cambia).
+  · SERVIDOR: `abonado_se_regresa: 'efectivo' | 'banco'` en `PATCH /estado`. Después
+    de `pasarSobranteAFavor` (que sigue igual), lo que sobró se le regresa: en
+    efectivo sale del turno (`_sesionParaDevolucion`, sin turno 409 CAJA_CERRADA;
+    hasta lo que haya en el cajón, lo demás le queda a favor) con un movimiento
+    'devolucion'; por el banco no toca la caja. En su libro de saldo a favor queda el
+    reintegro y un `ajuste` negativo "Se le regresó…". La respuesta trae
+    `abonado_regresado` (y `abonado_a_favor` con lo que le quedó).
+  · La pagada con su saldo a favor sigue regresando a su saldo a favor (no se ofrece
+    regresar dinero que no entró). El resumen de la autorización lo dice.
+  · Pruebas: `e2e-transferencias-canceladas.js` (22: y ahora la venta a crédito
+    pagada que se cancela regresándole en efectivo, por el banco o dejándoselo a
+    favor); clientes-credito, cancelacion-caja, devoluciones, notas-pendientes y
+    nombre-cancelacion siguen bien; pantallas 657/657. Visto en Chrome a 1440 y
+    390 px.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (119) · Cancelar una venta: lo que pagó puede quedar a su SALDO A FAVOR
+-------------------------------------------------------------------------------
+
+"Como dato: aquí no se regresa dinero la mayor parte, y a veces se abona como saldo
+a favor al cliente" (usuario, tras la entrada 118). Se le preguntó y eligió "que
+pregunte cada vez", para la transferencia Y para el efectivo, empezando en saldo a
+favor. DESPLEGADO en 20261026-105650 (sin base).
+
+  · ANTES: al cancelar, el efectivo salía del cajón (si no había, lo que faltaba
+    quedaba a favor) y la transferencia se daba por "regresada por el banco" sin
+    dejar rastro.
+  · AHORA la ventana de cancelar (`pedido-detalle.html`, `preguntaDinero`; estilos en
+    `pedido-cancelar.scss`: `pedido-detalle.scss` está en el límite de 4 kB)
+    pregunta "¿Qué pasa con lo que pagó?": por el efectivo «Quedan a su saldo a
+    favor» / «Salen de la caja» y por la transferencia «Quedan a su saldo a favor» /
+    «Se le regresan por el banco», las dos ya en saldo a favor. Solo con cliente
+    (sin cliente no hay a quién dejárselo: se regresa, como siempre) y si pagó algo
+    con eso. El aviso "Salen $X de la caja" solo sale si el efectivo sale.
+  · SERVIDOR: `PATCH /pedidos/:id/estado` acepta `a_favor: { efectivo, transferencia }`
+    (solo al cancelar y con cliente). Lo que queda a favor es un `reintegro` en su
+    libro de saldo a favor POR MÉTODO (`metodo_pago_id`): el efectivo NO sale del
+    cajón (sin movimiento 'devolucion' ni turno abierto que exigir) y la
+    transferencia sigue en el banco. La respuesta trae `efectivo_a_favor` y
+    `transferencia_a_favor`. Una venta así ya no se reactiva (409
+    VENTA_CON_SALDO_FAVOR, la regla de siempre con un reintegro).
+  · TRANSFERENCIAS: la de una venta cancelada cuyo dinero quedó a su saldo a favor
+    SÍ suma (sigue en el banco) y lleva «Cancelada · quedó a su saldo a favor»; solo
+    la que se regresó deja de sumar y va tachada (entrada 118). Lo sabe por ese
+    `reintegro` con el método de la transferencia (`A_FAVOR_SQL`).
+  · AUTORIZACIONES: el resumen de «Cancelar…» dice qué pasa con el dinero ("$600 de
+    efectivo quedan a su saldo a favor · $400 de la transferencia quedan a su saldo
+    a favor", o "sale $X de efectivo de la caja" / "se le regresan por el banco").
+  · `hitex`: POS-D41A se canceló antes de esto y se dio por regresada; sigue sin
+    sumar. Si en realidad se le dejó a favor al cliente, eso se arregla con «Ajustar»
+    en su saldo a favor (el expediente) — se le dijo al usuario.
+  · Pruebas: `e2e-transferencias-canceladas.js` (17: lo de la entrada 118 y ahora
+    los dos a favor sin tocar el cajón, que sí suma en Transferencias, que no se
+    reactiva, mitad y mitad, y sin cliente); cancelacion-caja, devolucion-
+    presentacion, devoluciones, nombre-cancelacion, notas-pendientes,
+    pedidos-encargo, clientes-credito y apartados siguen bien; pantallas 656/656.
+    Visto en Chrome a 1440 y 390 px.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (118) · Transferencias: lo de una venta CANCELADA ya no suma
+-------------------------------------------------------------------------------
+
+"Se realizó una cancelación de venta que fue pagada en transferencia y efectivo,
+pero en las transferencias no descuenta la transferencia de la venta cancelada"
+(usuario, con la captura: Banorte …2123 sumaba $2,500.00 con los $500.00 de
+POS-D41A, marcada «Venta cancelada»). DESPLEGADO en 20261026-102900 (sin base).
+
+  · LA CAUSA: la lista ya marcaba el renglón como cancelado (`x.cancelada`: pago
+    'reembolsado' o venta cancelada/devuelta), pero las cifras de arriba y "A qué
+    cuenta llegó" lo sumaban; arriba solo decía "· $500.00 de ventas canceladas".
+  · AHORA (`transferencias/model.js → listar`): "Entró por transferencia", "Por
+    revisar", "Procesadas", "Sin facturar", "sin cuenta" y la barra de cada cuenta
+    cuentan SOLO lo vigente; lo cancelado sale aparte (`canceladas`,
+    `importe_cancelado`) y arriba dice "· sin contar $500.00 de 1 venta
+    cancelada". El renglón SIGUE en la lista con «Venta cancelada» y su importe
+    tachado con "no suma" (para saber que hay que regresar ese dinero o cancelar su
+    factura).
+  · En `hitex`: Banorte …2123 queda en $2,000.00 (1 transferencia, el anticipo de
+    INES) y POS-D41A aparte.
+  · Pruebas: `e2e-transferencias-canceladas.js` (10: antes suma, después no suma en
+    ninguna cifra ni en su cuenta, se dice aparte y el renglón sigue marcado);
+    pantallas 654/654 (nueva: el texto de arriba y el importe tachado).
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (117) · Notas pendientes de pago: «Registrar su pago» con hasta DOS formas
+-------------------------------------------------------------------------------
+
+"Cuando se registra pago, no aparece para que tenga múltiples formas de pago
+(crédito, efectivo y transferencia o aplicación de saldo a favor); revisa si ya
+está y si no, vamos a hacerlo" (usuario, con la captura de la ventana). No estaba:
+la ventana aceptaba UNA forma (efectivo, transferencia o su saldo) y el crédito
+era el botón aparte «Pasar a crédito» (todo lo que falta). DESPLEGADO en
+20261026-102137 (sin base).
+
+  · SERVIDOR: `POST /pedidos/:id/pago-nota` (`pedidos/model.js →
+    pagarNotaPendiente`): `partes` (hasta dos: efectivo, transferencia o
+    `con_saldo_favor`) y `a_credito: true` (lo que falte después va a su cuenta,
+    con `dias_credito`, su límite y el candado de la cuenta atrasada). A lo más DOS
+    formas en total (422 MAS_DE_DOS_FORMAS), no la misma dos veces (422
+    FORMA_REPETIDA), no más de lo que falta (422 ABONO_EXCEDE_PENDIENTE), crédito
+    con algo que pasar (422 NADA_A_CREDITO), nada (422 PAGO_VACIO). TODO O NADA:
+    una transacción, así un crédito que no alcanza o un efectivo sin turno no deja
+    ni el pago que iba antes. El crédito pide «Vender a crédito» (403) y con la
+    cuenta atrasada se autoriza (`autorizable('fiar_atrasado')`, que ahora dice
+    "Pasar a crédito lo que falta de…"). Con `unaVez()` y su llave.
+    Lo de asentar UN pago se separó de `abonarApartado` en `_registrarAbono` (sin
+    cambiar lo que hace; `/abonos` sigue igual para las notas en espera).
+  · Los pagos y el cargo de esa vez quedan con la MISMA hora, y su TICKET los junta
+    (`pedidos/tickets.js → pagoDeNota`): ABONÓ el total de hoy, cada forma en su
+    renglón, "A su cuenta de crédito $X · a N días · vence el …" y "Lo demás quedó
+    en su cuenta de crédito". Una referencia que repite el método ("Saldo a
+    favor") ya no se escribe dos veces.
+  · VENTANA (`notas-pendientes/pago-nota-modal.*`): «Con qué paga» en tres grupos —
+    Una forma (Efectivo, Transferencia, A crédito, Su saldo a favor), Dos formas
+    (Efectivo y transferencia, Efectivo y crédito, Transferencia y crédito) y "Con
+    su saldo a favor · tiene $X" (y efectivo, y transferencia, y crédito; si no le
+    alcanza para toda la nota)—. Sin crédito se dice «Cuánto paga» (puede ser una
+    parte); con crédito se salda la nota completa: se teclea lo que paga hoy y el
+    resto va a crédito, con «A cuántos días». Abajo, el reparto ("Paga $1,000.00
+    en efectivo y $2,017.55 a su cuenta de crédito") y el botón dice lo que hace
+    ("Registrar $1,000.00 y lo demás a crédito" / "Pasarla a crédito"). El botón
+    «Pasar a crédito» de la lista se queda.
+  · Pruebas: `e2e-pago-nota-formas.js` (25: las combinaciones, el ticket, todo o
+    nada y lo que no se deja); notas-pendientes, pedidos-encargo, apartados,
+    devoluciones, tiendas y nomina-pdf siguen bien; servidor 94/94 y pantallas
+    653/653. Visto en Chrome a 1440 y 390 px.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (116) · Autorizaciones: «Cancelar una nota en espera / pendiente de pago»
+-------------------------------------------------------------------------------
+
+"Cuando se haga la solicitud de cancelación de notas en espera o notas pendientes
+de pago, no diga venta sino nota en espera" (usuario, con la captura de Por
+autorizar: «Cancelar una venta · Cancelar POS-927F ($2,668.00) · INES…»).
+DESPLEGADO en 20261026-095606 (sin base).
+
+  · El nombre de la solicitud ya no es fijo: `operaciones.js → cancelar_venta.nombreDe`
+    dice «Cancelar una nota en espera», «Cancelar una nota pendiente de pago»,
+    «Cancelar un apartado» o «Cancelar una venta» según lo que se cancela
+    (`queSeCancela`): nota en espera = encargo que no ha descontado; pendiente de
+    pago = `nota_pendiente`, sin cargo a crédito y sin pagarse completa. Se mira
+    cómo está HOY (si se entrega mientras espera, ya dice «venta»), y ya cancelada
+    sigue diciendo lo que era (el historial).
+  · Gancho nuevo de una operación: `nombreDe(ruta)` (con la ruta guardada;
+    `operaciones.js → nombreDe(op, ruta)`). Lo usan la lista de Autorizaciones
+    (`service.js → conNombres`; el SELECT trae `a.ruta`, que NO se manda) y la
+    ventana "«…» necesita autorización" (428, `autorizable.js`).
+  · En `hitex`, la solicitud de la captura (POS-927F, una nota en espera que se
+    entregó como pendiente de pago y se canceló) ahora dice «Cancelar una nota
+    pendiente de pago»; la de POS-D41A (venta) sigue «Cancelar una venta».
+  · Pruebas: `e2e-nombre-cancelacion.js` (15: la ventana 428 y la lista para nota
+    en espera, pendiente de pago y venta; lo que ve quien autoriza; que no se manda
+    la ruta; la nota entregada que pasa a «venta»; y la aceptada en el historial).
+    Servidor 94/94.
 
 
 -------------------------------------------------------------------------------

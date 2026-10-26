@@ -495,4 +495,27 @@ describe('Tickets de abono y de anticipo', () => {
     expect(pagada).toContain('Nota pagada completa');
     expect(pagada).not.toContain('Le falta por pagar');
   });
+
+  // DOS FORMAS (2026-10-26): cada una en su renglón, y lo que pasó a su crédito.
+  it('abono a una nota con dos formas y lo demás a crédito', () => {
+    const d: TicketPagoNota = {
+      id: 78, cliente, fecha: '2026-10-26 12:00:00', monto: 1000, metodo: 'Efectivo', referencia: null,
+      pedido: { id: 5, numero_pedido: 'POS-1792036260049-468D', creado_en: '2026-10-14 21:51:03', total: 4000, de: 'Nota pendiente de pago' },
+      partes: [{ metodo: 'Saldo a favor', monto: 300, referencia: 'Saldo a favor' }, { metodo: 'Efectivo', monto: 700, referencia: null }],
+      credito: { monto: 3000, dias: 20, vence_el: '2026-11-15' },
+      llevaba_pagado: 0, pagado: 1000, falta: 0, falta_hoy: 0,
+    };
+    const html = armarTicketPagoNota(d, tienda);
+    expect(html).toContain('$1,000.00');
+    expect(html).toContain('Saldo a favor');
+    expect(html).toContain('$300.00');
+    expect(html).toContain('$700.00');
+    expect(html).toContain('A su cuenta de crédito');
+    expect(html).toContain('$3,000.00');
+    expect(html).toContain('A 20 días');
+    expect(html).toContain('Lo demás quedó en su cuenta de crédito');
+    expect(html).not.toContain('Nota pagada completa');
+    // La referencia que solo repite el método no se escribe dos veces.
+    expect(html).not.toContain('Referencia: Saldo a favor');
+  });
 });

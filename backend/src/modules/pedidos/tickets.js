@@ -7,6 +7,10 @@
  * después de este pago y cuánto le falta hoy. Los datos se arman aquí y el
  * ticket lo dibuja la pantalla (`shared/ticket/ticket.ts`). Sale igual al
  * registrarlo que al reimprimirlo: se cuenta con los pagos hasta ese.
+ *
+ * DOS FORMAS (2026-10-26): los pagos de la MISMA hora son una sola operación
+ * (efectivo y transferencia, o con su saldo a favor): el ticket los junta, y si lo
+ * que faltaba pasó a su cuenta de crédito en ese momento, también lo dice.
  */
 
 const { pool } = require('../../config/db');
@@ -37,14 +41,28 @@ async function pagoDeNota(pedidoId, pagoId) {
   }
 
   const [pagos] = await pool.query(
-    `SELECT id, monto FROM pagos WHERE pedido_id = :id AND estado = 'completado' ORDER BY creado_en, id`,
+    `SELECT g.id, g.monto, g.creado_en, g.referencia_transaccion AS referencia, mp.nombre AS metodo
+       FROM pagos g JOIN metodos_pago mp ON mp.id = g.metodo_pago_id
+      WHERE g.pedido_id = :id AND g.estado = 'completado' ORDER BY g.creado_en, g.id`,
     { id: pedidoId }
   );
-  const i = pagos.findIndex((x) => Number(x.id) === Number(pagoId));
+  // Los de la misma hora que este son la misma operación (dos formas).
+  const grupo = pagos.filter((x) => String(x.creado_en) === String(g.creado_en));
+  const primero = pagos.indexOf(grupo[0]);
+  const ultimo = pagos.indexOf(grupo[grupo.length - 1]);
   const suma = (lista) => round2(lista.reduce((s, x) => s + Number(x.monto), 0));
   const total = round2(p.total);
-  const llevaba = suma(pagos.slice(0, i));
-  const pagado = suma(pagos.slice(0, i + 1));
+  const llevaba = suma(pagos.slice(0, primero));
+  const pagado = suma(pagos.slice(0, ultimo + 1));
+  // Lo que faltaba y pasó a su cuenta de crédito en ese mismo momento.
+  const [[cr]] = await pool.query(
+    `SELECT COALESCE(SUM(cm.monto), 0) AS monto, MAX(COALESCE(pe.dias_credito, 15)) AS dias,
+            DATE_FORMAT(DATE_ADD(MAX(cm.creado_en), INTERVAL MAX(COALESCE(pe.dias_credito, 15)) DAY), '%Y-%m-%d') AS vence_el
+       FROM credito_movimientos cm JOIN pedidos pe ON pe.id = cm.pedido_id
+      WHERE cm.pedido_id = :id AND cm.tipo = 'cargo' AND cm.creado_en = :en`,
+    { id: pedidoId, en: g.creado_en }
+  );
+  const aCredito = round2(cr?.monto ?? 0);
 
   const de = Number(p.nota_pendiente) ? 'Nota pendiente de pago'
     : Number(p.encargo) ? 'Nota en espera'
@@ -62,13 +80,16 @@ async function pagoDeNota(pedidoId, pagoId) {
       }
       : null,
     fecha: g.creado_en,
-    monto: round2(g.monto),
+    monto: suma(grupo),
     metodo: g.metodo,
     referencia: g.referencia,
+    // Cada forma con lo suyo (una sola, si se pagó con una).
+    partes: grupo.map((x) => ({ metodo: x.metodo, monto: round2(x.monto), referencia: x.referencia })),
+    credito: aCredito > 0.004 ? { monto: aCredito, dias: Number(cr.dias), vence_el: cr.vence_el } : null,
     llevaba_pagado: llevaba,
     pagado,
-    falta: Math.max(0, round2(total - pagado)),
-    falta_hoy: Math.max(0, round2(total - suma(pagos))),
+    falta: Math.max(0, round2(total - pagado - aCredito)),
+    falta_hoy: Math.max(0, round2(total - suma(pagos) - aCredito)),
   };
 }
 

@@ -159,7 +159,8 @@ async function cambiarEstado(req, res, next) {
       Number(req.params.id),
       req.body.estado,
       req.auth?.sub,
-      req.body.devoluciones
+      req.body.devoluciones,
+      { aFavor: req.body.a_favor, abonadoSeRegresa: req.body.abonado_se_regresa }
     );
     res.json({ data, error: null });
   } catch (err) { next(err); }
@@ -216,6 +217,18 @@ async function abonarApartado(req, res, next) {
   try {
     await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
     const data = await service.abonarApartado(Number(req.params.id), req.body, req.auth?.sub);
+    res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/** Pagar una nota pendiente con hasta dos formas (2026-10-26): lo de crédito pide su permiso. */
+async function pagarNota(req, res, next) {
+  try {
+    if (req.body?.a_credito === true && !(await permisos.puede(req.auth, 'hacer:fiar'))) {
+      throw new AppError(403, 'SIN_PERMISO', sinPermiso('hacer:fiar'));
+    }
+    await _cajaDeSusTiendas(req.auth, req.body?.sesion_caja_id);
+    const data = await service.pagarNotaPendiente(Number(req.params.id), req.body ?? {}, req.auth?.sub);
     res.status(201).json({ data, error: null });
   } catch (err) { next(err); }
 }
@@ -290,5 +303,5 @@ module.exports = {
   crear, obtener, listar, misPedidos, cambiarEstado, cotizar, vendedores,
   subirComprobante, verComprobante, eliminarComprobante,
   apartados, abonarApartado, entregarApartado, modificarEncargo, encargos, ticketPago,
-  notasPendientes, pasarACredito, previaDevolucion, devolver,
+  notasPendientes, pasarACredito, pagarNota, previaDevolucion, devolver,
 };

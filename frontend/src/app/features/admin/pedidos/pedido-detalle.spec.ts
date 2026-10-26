@@ -240,7 +240,7 @@ describe('PedidoDetalle', () => {
     c.cambiarEstado();
     c.confirmarDevolucion();
 
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado']);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, undefined, undefined]);
     expect(c.mensaje()).toContain('Se liberó lo apartado');
   });
 
@@ -257,7 +257,68 @@ describe('PedidoDetalle', () => {
     expect(modal.textContent).not.toContain('Regresa como');
     expect(modal.querySelector('select, input[type=number]')).toBeNull();
     c.confirmarDevolucion();
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado']);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, undefined, undefined]);
+  });
+
+  // 2026-10-26: "aquí no se regresa dinero la mayor parte; a veces se abona como saldo a favor".
+  it('al cancelar pregunta qué pasa con lo que pagó: empieza en su saldo a favor', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, cliente_id: 20,
+      pagos: [
+        { id: 3, metodo_pago_id: 3, metodo: 'Transferencia', monto: '148.00', estado: 'completado', creado_en: '2026-09-05 10:00:00' },
+        { id: 4, metodo_pago_id: 1, metodo: 'Efectivo', monto: '200.00', estado: 'completado', creado_en: '2026-09-05 10:00:00' },
+      ],
+    } as Pedido;
+    const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
+    const f = await montar();
+    const c = f.componentInstance;
+    c.abrirCancelar();
+    f.detectChanges();
+    const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
+    expect(modal.textContent).toContain('¿Qué pasa con lo que pagó?');
+    expect(modal.textContent).toContain('$200.00 en efectivo');
+    expect(modal.textContent).toContain('$148.00 de la transferencia');
+    // Con el efectivo a su saldo a favor no se avisa que sale de la caja.
+    expect(modal.textContent).not.toContain('en efectivo de la caja');
+    c.efectivoAFavor = false;
+    f.detectChanges();
+    expect(modal.textContent).toContain('en efectivo de la caja');
+    c.confirmarDevolucion();
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, { efectivo: false, transferencia: true }, undefined]);
+  });
+
+  it('una venta a crédito ya abonada pregunta qué pasa con lo abonado', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, cliente_id: 20,
+      pagos: [], credito: [{ tipo: 'cargo', monto: '348.00', creado_en: '2026-09-05 10:00:00' }], credito_pagado: 348,
+    } as unknown as Pedido;
+    const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
+    const f = await montar();
+    const c = f.componentInstance;
+    c.abrirCancelar();
+    f.detectChanges();
+    const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
+    expect(modal.textContent).toContain('$348.00 que ya abonó a esta nota');
+    expect(c.abonado).toBe('favor');
+    c.confirmarDevolucion();
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, {}, undefined]);
+    c.abrirCancelar();
+    c.abonado = 'efectivo';
+    c.confirmarDevolucion();
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, {}, 'efectivo']);
+  });
+
+  it('sin cliente no pregunta: se le regresa como siempre', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, cliente_id: null,
+      pagos: [{ id: 4, metodo_pago_id: 1, metodo: 'Efectivo', monto: '348.00', estado: 'completado', creado_en: '2026-09-05 10:00:00' }],
+    } as unknown as Pedido;
+    const f = await montar();
+    f.componentInstance.abrirCancelar();
+    f.detectChanges();
+    const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
+    expect(modal.textContent).not.toContain('¿Qué pasa con lo que pagó?');
+    expect(modal.textContent).toContain('en efectivo de la caja');
   });
 
   // Subir la captura donde no hay pago al cual pegarla creaba otro por el total.

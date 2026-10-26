@@ -458,7 +458,8 @@ function datosCliente(c: ClienteTicket | null | undefined): string {
 /** El método con su referencia ("Transferencia · folio 12345"). */
 function metodoHtml(metodo: string | null | undefined, monto: number, referencia?: string | null): string {
   return renglon(esc(metodo || 'Pago'), esc(dineroTicket(monto))) +
-    (referencia ? `<div class="art-extra">Referencia: ${esc(referencia)}</div>` : '');
+    // Una referencia que solo repite el método ("Saldo a favor") no se escribe dos veces.
+    (referencia && referencia !== metodo ? `<div class="art-extra">Referencia: ${esc(referencia)}</div>` : '');
 }
 
 /**
@@ -559,6 +560,12 @@ export function armarTicketPagoNota(d: TicketPagoNota, tienda: DatosTienda): str
   ].join('');
   const pagada = d.falta <= 0.004;
   const hoy = Math.abs(d.falta_hoy - d.falta) > 0.004 ? renglon('Hoy le falta', esc(dineroTicket(d.falta_hoy))) : '';
+  // Dos formas a la vez (2026-10-26): cada una en su renglón; y lo que pasó a crédito.
+  const partes = d.partes?.length ? d.partes : [{ metodo: d.metodo ?? '', monto: d.monto, referencia: d.referencia }];
+  const credito = d.credito
+    ? `${renglon('A su cuenta de crédito', esc(dineroTicket(d.credito.monto)))}
+  <div class="art-extra">A ${d.credito.dias} días${d.credito.vence_el ? ` · vence el ${esc(fechaVence(d.credito.vence_el))}` : ''}</div>`
+    : '';
   return hojaTicket(folio, papelDe(tienda.papelMm), `
   ${cabeceraTienda(tienda)}
   <div class="tipo">Abono</div>
@@ -569,10 +576,13 @@ export function armarTicketPagoNota(d: TicketPagoNota, tienda: DatosTienda): str
   ${renglon('Total de la nota', esc(dineroTicket(d.pedido.total)))}
   ${d.llevaba_pagado > 0.004 ? renglon('Llevaba pagado', esc(dineroTicket(d.llevaba_pagado))) : ''}
   <div class="total"><span>ABONÓ</span><span>${esc(dineroTicket(d.monto))}</span></div>
-  ${metodoHtml(d.metodo, d.monto, d.referencia)}
-  ${pagada
-    ? '<div class="aviso">Nota pagada completa</div>'
-    : `<div class="aviso">Le falta por pagar<b>${esc(dineroTicket(d.falta))}</b></div>`}
+  ${partes.map((x) => metodoHtml(x.metodo, x.monto, x.referencia)).join('')}
+  ${credito}
+  ${d.credito && pagada
+    ? '<div class="aviso">Lo demás quedó en su cuenta de crédito</div>'
+    : pagada
+      ? '<div class="aviso">Nota pagada completa</div>'
+      : `<div class="aviso">Le falta por pagar<b>${esc(dineroTicket(d.falta))}</b></div>`}
   ${hoy}
   <div class="gracias">¡Gracias por su pago!</div>
   <div class="pie">${esc(folio)}</div>

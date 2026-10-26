@@ -129,6 +129,12 @@ const estadoSchema = z
       'apartado', 'pendiente', 'pagado', 'en_preparacion', 'listo', 'enviado', 'entregado', 'cancelado', 'devuelto',
     ]),
     devoluciones: z.array(devolucionSchema).max(200).optional(),
+    // Al CANCELAR, lo que pagó queda a su saldo a favor en vez de regresárselo
+    // (2026-10-26): por el efectivo y por la transferencia. Sin cliente no aplica.
+    a_favor: z.object({ efectivo: z.boolean().optional(), transferencia: z.boolean().optional() }).strict().optional(),
+    // Una venta A CRÉDITO ya abonada: lo abonado que queda libre se le REGRESA
+    // (en efectivo de la caja o por el banco) en vez de quedarle a favor (2026-10-26).
+    abonado_se_regresa: z.enum(['efectivo', 'banco']).optional(),
   })
   .strict();
 
@@ -201,6 +207,28 @@ const abonoApartadoSchema = z
 
 // Con su llave de un solo uso (`X-Clave-Unica`, 2026-10-20).
 router.post('/:id/abonos', ...soloStaff, validate(abonoApartadoSchema), unaVez(), controller.abonarApartado);
+// PAGAR UNA NOTA PENDIENTE CON HASTA DOS FORMAS (2026-10-26): efectivo, transferencia,
+// su saldo a favor y/o lo que falte a crédito, en UNA operación (o todo o nada). Lo
+// que va a crédito pide «Vender a crédito», y con la cuenta atrasada se autoriza.
+const parteNotaSchema = z
+  .object({
+    metodo_pago_id: z.coerce.number().int().positive().optional(),
+    con_saldo_favor: z.boolean().optional(),
+    monto: z.coerce.number().positive().max(99999999),
+    referencia: z.string().trim().max(120).optional(),
+    cuenta_bancaria_id: z.coerce.number().int().positive().optional(),
+  })
+  .strict();
+const pagoNotaSchema = z
+  .object({
+    partes: z.array(parteNotaSchema).max(2).optional(),
+    sesion_caja_id: z.coerce.number().int().positive().optional(),
+    a_credito: z.boolean().optional(),
+    dias_credito: z.coerce.number().int().min(1).max(365).optional(),
+    fiar_con_atraso: z.boolean().optional(),
+  })
+  .strict();
+router.post('/:id/pago-nota', ...soloStaff, validate(pagoNotaSchema), unaVez(), autorizable('fiar_atrasado'), controller.pagarNota);
 // Los datos del ticket de uno de sus pagos, al registrarlo o para reimprimirlo (2026-10-15).
 router.get('/:id/pagos/:pagoId/ticket', ...soloStaff, controller.ticketPago);
 // Pasar a crédito lo que falta de una nota pendiente de pago (es vender a crédito: pide su permiso).

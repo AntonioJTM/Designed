@@ -31,8 +31,10 @@ export interface Transferencia {
   cliente: string | null;
   cliente_codigo: string | null;
   de: DeTransferencia;
-  /** La venta se canceló o se devolvió (el dinero sí llegó al banco). */
+  /** La venta se canceló o se devolvió y el dinero se le regresó: no suma. */
   cancelada: boolean;
+  /** La venta se canceló y el dinero quedó a su saldo a favor: sigue en el banco y suma (2026-10-26). */
+  a_favor?: boolean;
   /** Las ventas que pagó (un abono a varias notas trae varias). */
   ventas: { id: number; folio: string; estado: string }[];
   /** El material de lo que se llevó ("ACRILAN, VISCOSA"). */
@@ -57,6 +59,8 @@ export interface CifrasTransferencias {
   sin_facturar: number;
   importe_sin_facturar: number;
   sin_cuenta: number;
+  /** Las de ventas canceladas: NO suman en las demás cifras (2026-10-26). */
+  canceladas: number;
   importe_cancelado: number;
 }
 

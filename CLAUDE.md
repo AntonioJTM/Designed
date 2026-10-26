@@ -524,9 +524,24 @@ tienda-hilos/
   (`ver:transferencias` y todas las tiendas; marcar con `hacer:revisar_transferencias`, varias de
   una vez con `POST /transferencias/marcar`). Una cuenta con transferencias no se borra (409
   `CUENTA_CON_TRANSFERENCIAS`). Un cobro NUEVO por transferencia lleva su `anotar`.
+  **Lo de una venta CANCELADA y REGRESADA no suma** (2026-10-26, usuario): las cifras y "A qué
+  cuenta llegó" cuentan solo lo vigente; lo regresado va aparte (`canceladas`, `importe_cancelado`:
+  "sin contar $X de N ventas canceladas") y su renglón sigue en la lista, tachado ("no suma"). Si al
+  cancelar quedó a su SALDO A FAVOR, sigue en el banco y SÍ suma (`a_favor`, `A_FAVOR_SQL`).
+  `e2e-transferencias-canceladas.js`.
 - **CANCELAR regresa TODO tal cual se vendió** (2026-10-23, usuario: "no pregunte cómo lo regresa ni
   el peso"): la ventana solo enseña lo que se vendió y `cambiarEstado` IGNORA `devoluciones` al pasar
-  a `cancelado` (se devuelve todo el dinero: vuelve toda la mercancía como salió). Lo que el cliente
+  a `cancelado` (se devuelve todo el dinero: vuelve toda la mercancía como salió).
+  **Y PREGUNTA QUÉ PASA CON LO QUE PAGÓ** (2026-10-26, usuario: "aquí no se regresa dinero la mayor
+  parte; a veces se abona como saldo a favor"; eligió que pregunte cada vez): con cliente, por el
+  efectivo («Quedan a su saldo a favor» / «Salen de la caja») y por la transferencia («Quedan a su
+  saldo a favor» / «Se le regresan por el banco»), empezando en saldo a favor. `a_favor: { efectivo,
+  transferencia }` en `PATCH /estado`: un `reintegro` por método (el efectivo NO sale del cajón; la
+  transferencia sigue sumando en Transferencias, «Cancelada · quedó a su saldo a favor»); ya no se
+  reactiva. Sin cliente, se regresa como siempre. **Y la venta A CRÉDITO ya abonada** (2026-10-26):
+  "lo que ya abonó a esta nota" queda a su saldo a favor (como siempre, `pasarSobranteAFavor`) o se le
+  regresa (`abonado_se_regresa: 'efectivo'` —sale del turno, hasta lo que haya en el cajón— o
+  `'banco'`), con un `ajuste` negativo en su saldo a favor. `e2e-transferencias-canceladas.js`. Lo que el cliente
   regresa a medias o en otra presentación va por «Devolución» (saldo a favor). Lo de abajo queda solo
   para el estado viejo `devuelto`, que la pantalla ya no ofrece.
 - **La mercancía puede regresar en OTRA presentación** (solo `devuelto`, ver arriba). Se entrega el paquete y el cliente devuelve
@@ -1232,6 +1247,13 @@ tienda-hilos/
     `con_saldo_favor: true` (sin método; `saldo-favor.js → pagarConSaldo`: un `pagos` "Saldo a
     favor" y su `uso`, 409 `SALDO_FAVOR_INSUFICIENTE`). En la ventana es la forma de pago "Su saldo
     a favor (tiene $X)"; la lista trae `saldo_favor` del cliente. No toca la caja.
+  · **«Registrar su pago» con hasta DOS formas** (2026-10-26, usuario: "múltiples formas de pago:
+    crédito, efectivo y transferencia o aplicación de saldo a favor"): `POST /pedidos/:id/pago-nota`
+    (`pagarNotaPendiente`): `partes` (efectivo, transferencia o `con_saldo_favor`) y `a_credito: true`
+    (lo que falte, a su cuenta con sus días), a lo más dos formas, en UNA transacción (todo o nada).
+    Los pagos y el cargo llevan la MISMA hora y su ticket los junta (`tickets.js → pagoDeNota`:
+    `partes`, `credito`). La ventana (`pago-nota-modal`) ofrece Una forma / Dos formas / Con su saldo
+    a favor, como al entregar una nota en espera. `e2e-pago-nota-formas.js`.
   · **Pasar a crédito**: `POST /pedidos/:id/a-credito` (`hacer:fiar`) carga lo que FALTA (total −
     abonado) a su cuenta con `cargarVentaACredito` (su límite: 409 `SIN_CREDITO` /
     `CREDITO_INSUFICIENTE`) y desde ahí es una venta a crédito como cualquiera (se liquida con abonos
@@ -1600,6 +1622,10 @@ tienda-hilos/
   deuda, saldo a favor, precios (y de lista), ajuste y merma, fiar atrasado (`soloEnElMomento`) y dar
   crédito. Una operación nueva: su entrada en `operaciones.js`, sus dos permisos (catálogo + migración) y
   `autorizable` en su ruta. Pantalla Autorizaciones (`ver:autorizaciones`) y aviso en la campana.
+  **El nombre puede depender de lo que toca** (2026-10-26, usuario: "no diga venta sino nota en
+  espera"): gancho `nombreDe(ruta)` (`operaciones.js → nombreDe(op, ruta)`, en la lista y en el 428);
+  `cancelar_venta` dice «Cancelar una nota en espera / una nota pendiente de pago / un apartado / una
+  venta» (`queSeCancela`, cómo está hoy; ya cancelada, lo que era). `e2e-nombre-cancelacion.js`.
   **Fase 2 (2026-10-19):** cargar mercancía (`cargar_inventario`, también el paquete a mano `bulto_a_mano`;
   directo gerente y administrador, piden almacenista y Contabilidad), pedir a OTRA TIENDA (`surtir_sucursal`:
   hasta aceptarla no hay traspaso; quien autoriza puede dar MENOS por renglón con `ajustes` —"de esos 20,

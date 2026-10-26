@@ -21,30 +21,69 @@
           </p>
           @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
+          <!-- Una forma o DOS (2026-10-26, usuario: "múltiples formas de pago: crédito, efectivo y
+               transferencia o aplicación de saldo a favor"), como al entregar una nota en espera. -->
           <div class="form-grid">
             <label class="field">
-              Cuánto paga
-              <span class="moneda">
-                <span aria-hidden="true">$</span>
-                <input type="number" min="0.01" step="0.01" [(ngModel)]="monto" name="monto" />
-              </span>
-              <span class="ayuda">
-                @if (quedaria() > 0) { Le quedarían {{ quedaria() | dinero }} por pagar. } @else { Con esto queda pagada. }
-              </span>
-            </label>
-            <label class="field">
               Con qué paga
-              <select [(ngModel)]="metodoId" name="metodo">
-                <option [ngValue]="null">Elige…</option>
-                @for (m of metodos(); track m.id) {
-                  <option [ngValue]="m.id">{{ m.nombre }}</option>
+              <select [ngModel]="forma" (ngModelChange)="cambiarForma($event)" name="forma">
+                <option [ngValue]="null" disabled>Elige…</option>
+                <optgroup label="Una forma">
+                  @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
+                  @if (puedeFiar()) { <option [ngValue]="'credito'">A crédito</option> }
+                  <!-- Lo que la tienda le guarda (anticipos, lo que regresó; 2026-10-20). -->
+                  @if (saldoFavor() > 0) { <option [ngValue]="'saldo'">Su saldo a favor (tiene {{ saldoFavor() | dinero }})</option> }
+                </optgroup>
+                @if (permiteMixto() || puedeFiar()) {
+                  <optgroup label="Dos formas">
+                    @if (permiteMixto()) { <option [ngValue]="'mixto'">Efectivo y transferencia</option> }
+                    @if (puedeFiar() && idDe('efectivo')) { <option [ngValue]="'efectivo_credito'">Efectivo y crédito</option> }
+                    @if (puedeFiar() && idDe('transferencia')) { <option [ngValue]="'transferencia_credito'">Transferencia y crédito</option> }
+                  </optgroup>
                 }
-                <!-- Lo que la tienda le guarda (anticipos, lo que regresó; 2026-10-20). -->
-                @if (saldoFavor() > 0) {
-                  <option [ngValue]="SALDO">Su saldo a favor (tiene {{ saldoFavor() | dinero }})</option>
+                <!-- Su saldo no alcanza para toda la nota: lo demás con otra forma. -->
+                @if (saldoFavor() > 0 && saldoFavor() < falta()) {
+                  <optgroup [label]="'Con su saldo a favor · tiene ' + (saldoFavor() | dinero)">
+                    @if (idDe('efectivo')) { <option [ngValue]="'saldo_efectivo'">Saldo a favor y efectivo</option> }
+                    @if (idDe('transferencia')) { <option [ngValue]="'saldo_transferencia'">Saldo a favor y transferencia</option> }
+                    @if (puedeFiar()) { <option [ngValue]="'saldo_credito'">Saldo a favor y crédito</option> }
+                  </optgroup>
                 }
               </select>
             </label>
+
+            @if (pideMonto()) {
+              <label class="field">
+                Cuánto paga
+                <span class="moneda">
+                  <span aria-hidden="true">$</span>
+                  <input type="number" min="0.01" step="0.01" [(ngModel)]="monto" name="monto" [placeholder]="falta().toFixed(2)" />
+                </span>
+                <span class="ayuda">
+                  @if (quedaria() > 0) { Le quedarían {{ quedaria() | dinero }} por pagar. } @else { Con esto queda pagada. }
+                </span>
+              </label>
+            } @else if (tecleaParte()) {
+              <label class="field">
+                {{ etiquetaParte() }}
+                <span class="moneda">
+                  <span aria-hidden="true">$</span>
+                  <input type="number" min="0.01" step="0.01" [(ngModel)]="parte" name="parte" inputmode="decimal" placeholder="0.00" />
+                </span>
+                <span class="ayuda">{{ ayudaParte() }}</span>
+              </label>
+            }
+
+            @if (forma === 'mixto') {
+              <label class="field">
+                Por transferencia
+                <span class="moneda">
+                  <span aria-hidden="true">$</span>
+                  <input type="number" min="0.01" step="0.01" [(ngModel)]="parte" name="parte" inputmode="decimal" placeholder="0.00" />
+                </span>
+                <span class="ayuda">{{ ayudaParte() }}</span>
+              </label>
+            }
 
             @if (esEfectivo() && turnos().length > 1) {
               <!-- Dos tiendas con turno abierto: el efectivo entra al cajón que lo recibió. -->
@@ -62,12 +101,23 @@
             @if (esTransferencia()) {
               <app-cuenta-deposito [(cuenta)]="cuentaId" [marcar]="!!error()" />
             }
-            <label class="field" [class.full]="!(esEfectivo() && turnos().length > 1) && !esTransferencia()">
-              <span>{{ esTransferencia() ? 'No. de operación' : 'Referencia' }} <span class="muted">(opcional)</span></span>
-              <input type="text" [(ngModel)]="referencia" name="referencia" maxlength="120"
-                     [placeholder]="esTransferencia() ? 'El folio que trae el comprobante' : 'Folio de la transferencia, por ejemplo'" />
-            </label>
+            @if (esEfectivo() || esTransferencia() || enOtroMetodo() > 0) {
+              <label class="field">
+                <span>{{ esTransferencia() ? 'No. de operación' : 'Referencia' }} <span class="muted">(opcional)</span></span>
+                <input type="text" [(ngModel)]="referencia" name="referencia" maxlength="120" autocomplete="off"
+                       [placeholder]="esTransferencia() ? 'El folio que trae el comprobante' : 'Folio de la transferencia, por ejemplo'" />
+              </label>
+            }
           </div>
+
+          @if (reparto(); as r) {
+            <p class="nota-info" role="status">{{ r }}</p>
+          }
+
+          @if (aCredito() > 0) {
+            <!-- A cuántos días (2026-10-20): pasados, la campana avisa. -->
+            <app-plazo-credito [(dias)]="diasCredito" nombre="dias-credito-nota" />
+          }
 
           @if (esEfectivo()) {
             @if (turnos().length === 1) {
@@ -87,7 +137,7 @@
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
         <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando()">
-          {{ guardando() ? 'Registrando…' : 'Registrar el pago' }}
+          {{ textoBoton() }}
         </button>
       </div>
     </form>

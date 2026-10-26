@@ -1457,7 +1457,7 @@ async function _sesionParaDevolucion(conn, pedido) {
   return arows[0]?.id ?? null;
 }
 
-async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) {
+async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null, opciones = {}) {
   if (!ESTADOS.includes(estado)) {
     throw new AppError(422, 'ESTADO_INVALIDO', `Estado inválido: ${estado}`);
   }
@@ -1545,14 +1545,56 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     // reactivar. Va antes de tocar inventario para que un 409 por caja cerrada
     // no deje nada movido.
     let aFavorSinEfectivo = 0;
+    // LO QUE PAGÓ PUEDE QUEDAR A SU SALDO A FAVOR (2026-10-26, usuario: "aquí no se
+    // regresa dinero la mayor parte; a veces se abona como saldo a favor al
+    // cliente"). Al cancelar se pregunta, por el efectivo y por la transferencia:
+    // queda a su saldo a favor (el efectivo no sale del cajón; la transferencia
+    // sigue en el banco) o se le regresa. Un `reintegro` por cada uno, con su
+    // método: así Transferencias sabe que ese dinero se quedó. Sin cliente no hay
+    // a quién dejárselo: se regresa, como siempre.
+    let efectivoAFavor = 0;
+    let transferenciaAFavor = 0;
+    const aFavor = esInactivo && !eraInactivo && pedido.cliente_id ? (opciones.aFavor ?? {}) : {};
     if (eraInactivo !== esInactivo && pedido.canal === 'punto_venta') {
       const efectivo = await _efectivoDelPedido(
         conn,
         id,
         esInactivo ? 'completado' : 'reembolsado'
       );
+      if (aFavor.efectivo === true && efectivo > 0.004) {
+        efectivoAFavor = round2(efectivo);
+        const [[mEf]] = await conn.query(
+          "SELECT id FROM metodos_pago WHERE interno = 0 AND LOWER(nombre) LIKE '%efectivo%' ORDER BY id LIMIT 1"
+        );
+        await saldoFavor.agregar(conn, {
+          clienteId: pedido.cliente_id, tipo: 'reintegro', monto: efectivoAFavor, pedidoId: id, usuarioId,
+          metodoPagoId: mEf?.id ?? null,
+          notas: `El efectivo de ${numero} (se canceló) quedó a su saldo a favor`,
+        });
+      }
+      if (aFavor.transferencia === true) {
+        // Lo que NO fue efectivo ni su saldo a favor (la transferencia), por método.
+        const [noEf] = await conn.query(
+          `SELECT g.metodo_pago_id, SUM(g.monto) AS monto
+             FROM pagos g JOIN metodos_pago mp ON mp.id = g.metodo_pago_id
+            WHERE g.pedido_id = :id AND g.estado = 'completado' AND mp.interno = 0
+              AND LOWER(mp.nombre) NOT LIKE '%efectivo%'
+            GROUP BY g.metodo_pago_id`,
+          { id }
+        );
+        for (const t of noEf) {
+          const monto = round2(t.monto);
+          if (monto <= 0.004) continue;
+          transferenciaAFavor = round2(transferenciaAFavor + monto);
+          await saldoFavor.agregar(conn, {
+            clienteId: pedido.cliente_id, tipo: 'reintegro', monto, pedidoId: id, usuarioId,
+            metodoPagoId: Number(t.metodo_pago_id),
+            notas: `La transferencia de ${numero} (se canceló) quedó a su saldo a favor`,
+          });
+        }
+      }
 
-      if (efectivo > 0) {
+      if (efectivo > 0 && !efectivoAFavor) {
         const sesionId = await _sesionParaDevolucion(conn, pedido);
         if (!sesionId) {
           throw new AppError(409, 'CAJA_CERRADA',
@@ -1870,6 +1912,7 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
     // vuelven a repartir. Cancelar la más antigua deja libre lo que se le había
     // abonado y eso paga la siguiente; si no hay siguiente, queda a su favor.
     let sobranteAFavor = 0;
+    let abonadoRegresado = 0;
     if (clienteFiado && eraInactivo !== esInactivo) {
       await clientesModel.liquidarVentasACredito(conn, clienteFiado);
       // UN SOLO "A FAVOR" (2026-10-20): lo abonado que ya no paga nada pasa a su
@@ -1879,12 +1922,50 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
           clienteId: clienteFiado, pedidoId: id, numeroPedido: numero, usuarioId,
         });
       }
+      // ...O SE LE REGRESA (2026-10-26, usuario: "en la cancelación, opción de regresar
+      // dinero o que se vaya como saldo a favor si la nota ya está pagada"): en efectivo
+      // sale de la caja (hasta lo que haya en el cajón; lo demás le queda a favor) o
+      // se le regresa por el banco. En su libro de saldo a favor queda el reintegro y
+      // un ajuste por lo que se le regresó.
+      const como = esInactivo && sobranteAFavor > 0.004 ? opciones.abonadoSeRegresa : null;
+      if (como === 'efectivo' || como === 'banco') {
+        let regresa = sobranteAFavor;
+        if (como === 'efectivo') {
+          const sesionId = await _sesionParaDevolucion(conn, pedido);
+          if (!sesionId) {
+            throw new AppError(409, 'CAJA_CERRADA',
+              `Para regresarle en efectivo lo que abonó a ${numero} ($${sobranteAFavor.toFixed(2)}) hay que tener ` +
+              'un turno de caja abierto. Ábrelo en Caja, o déjaselo a su saldo a favor.');
+          }
+          const hay = Math.max(0, await cajaModel.efectivoEnCajon(conn, sesionId));
+          regresa = round2(Math.min(sobranteAFavor, hay));
+          if (regresa > 0.004) {
+            await conn.query(
+              `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
+               VALUES (:sesion, 'devolucion', :monto, :pedido, :motivo)`,
+              { sesion: sesionId, monto: regresa, pedido: id, motivo: `Se le regresó lo abonado a ${numero} (se canceló)` }
+            );
+          }
+        }
+        if (regresa > 0.004) {
+          await saldoFavor.agregar(conn, {
+            clienteId: clienteFiado, tipo: 'ajuste', monto: -regresa, pedidoId: id, usuarioId,
+            notas: `Se le regresó ${como === 'efectivo' ? 'en efectivo' : 'por el banco'} lo abonado a ${numero} (se canceló)`,
+          });
+          abonadoRegresado = regresa;
+          sobranteAFavor = round2(sobranteAFavor - regresa);
+        }
+      }
     }
 
     const resultado = await _obtenerConn(conn, id);
     if (sobranteAFavor > 0.004) resultado.abonado_a_favor = sobranteAFavor;
+    if (abonadoRegresado > 0.004) resultado.abonado_regresado = abonadoRegresado;
     // Lo que no hubo en el cajón y le quedó a favor (la pantalla lo dice).
     if (aFavorSinEfectivo > 0.004) resultado.a_favor_sin_efectivo = aFavorSinEfectivo;
+    // Lo que se eligió dejarle a su saldo a favor al cancelar (2026-10-26).
+    if (efectivoAFavor > 0.004) resultado.efectivo_a_favor = efectivoAFavor;
+    if (transferenciaAFavor > 0.004) resultado.transferencia_a_favor = transferenciaAFavor;
     return resultado;
   });
 }
@@ -2330,89 +2411,7 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
         `Le faltan $${pendiente.toFixed(2)} y el abono es de $${monto.toFixed(2)}.`);
     }
 
-    // CON SU SALDO A FAVOR (2026-10-20): un pago "Saldo a favor" y su `uso` en el
-    // libro; no toca la caja.
-    if (datos.con_saldo_favor === true) {
-      if (!pedido.cliente_id) {
-        throw new AppError(422, 'FALTA_CLIENTE', `${pedido.numero_pedido} no tiene cliente: no hay saldo a favor que usar.`);
-      }
-      const pagoId = await saldoFavor.pagarConSaldo(conn, {
-        clienteId: pedido.cliente_id, pedidoId, numeroPedido: pedido.numero_pedido, monto, usuarioId,
-      });
-      const abonadoSf = round2(abonado + monto);
-      const pendienteSf = round2(Number(pedido.total) - abonadoSf);
-      if (esNota && pendienteSf <= 0.0001) {
-        await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id", { id: pedidoId });
-      }
-      return {
-        pedido_id: pedidoId, pago_id: pagoId, numero_pedido: pedido.numero_pedido, total: round2(pedido.total),
-        abonado: abonadoSf, pendiente: pendienteSf, liquidado: pendienteSf <= 0.0001, con_saldo_favor: true,
-      };
-    }
-
-    // ¿Entra al cajón? Lo decide el nombre del método, como en la venta.
-    let esEfectivo = false;
-    const [mrows] = await conn.query(
-      'SELECT nombre, activo, interno FROM metodos_pago WHERE id = :id LIMIT 1',
-      { id: datos.metodo_pago_id }
-    );
-    if (!mrows[0] || !mrows[0].activo || Number(mrows[0].interno)) {
-      throw new AppError(422, 'METODO_PAGO_INVALIDO',
-        'Ese método de pago no existe o está inactivo');
-    }
-    esEfectivo = mrows[0].nombre.toLowerCase().includes('efectivo');
-
-    let sesionId = datos.sesion_caja_id ?? null;
-    if (esEfectivo) {
-      // Se valida ANTES de registrar el pago, para que un 409 no deje el abono
-      // asentado y el dinero fuera del corte.
-      if (!sesionId) {
-        throw new AppError(409, 'FALTA_SESION_CAJA',
-          'Un abono en efectivo tiene que entrar en un turno de caja abierto, ' +
-          'o el corte no va a cuadrar.');
-      }
-      const [srows] = await conn.query(
-        'SELECT id, estado FROM sesiones_caja WHERE id = :id FOR UPDATE',
-        { id: sesionId }
-      );
-      if (!srows[0]) throw new AppError(404, 'SESION_NO_ENCONTRADA', 'Sesión de caja no encontrada');
-      if (srows[0].estado !== 'abierta') {
-        throw new AppError(409, 'CAJA_CERRADA', 'La sesión de caja está cerrada');
-      }
-    } else {
-      sesionId = null;
-    }
-
-    const [pagoIns] = await conn.query(
-      `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
-       VALUES (:pedido, :metodo, :monto, 'completado', :ref)`,
-      {
-        pedido: pedidoId,
-        metodo: datos.metodo_pago_id,
-        monto,
-        ref: datos.referencia ?? null,
-      }
-    );
-    await transferencias.anotar(conn, {
-      fuente: 'pago', fuenteId: pagoIns.insertId, metodoPagoId: datos.metodo_pago_id,
-      cuentaId: datos.cuenta_bancaria_id, usuarioId,
-    });
-
-    if (esEfectivo) {
-      await conn.query(
-        `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
-         VALUES (:sesion, 'ingreso', :monto, :pedido, :motivo)`,
-        {
-          sesion: sesionId,
-          monto,
-          pedido: pedidoId,
-          motivo: esNota
-            ? `Pago de la nota ${pedido.numero_pedido}`
-            : `Abono a la nota en espera ${pedido.numero_pedido}`,
-        }
-      );
-    }
-
+    const pagoId = await _registrarAbono(conn, pedido, { ...datos, monto }, usuarioId);
     const nuevoAbonado = round2(abonado + monto);
     const nuevoPendiente = round2(Number(pedido.total) - nuevoAbonado);
     // La nota pendiente queda PAGADA en cuanto sus abonos llegan al total.
@@ -2422,15 +2421,100 @@ async function abonarApartado(pedidoId, datos, usuarioId) {
     return {
       pedido_id: pedidoId,
       // Con él se pide su ticket (2026-10-15).
-      pago_id: Number(pagoIns.insertId),
+      pago_id: pagoId,
       numero_pedido: pedido.numero_pedido,
       total: round2(pedido.total),
       abonado: nuevoAbonado,
       pendiente: nuevoPendiente,
       // Ya lo pagó todo: se puede entregar.
       liquidado: nuevoPendiente <= 0.0001,
+      ...(datos.con_saldo_favor === true ? { con_saldo_favor: true } : {}),
     };
   });
+}
+
+/**
+ * Asienta UN abono a una nota (o a un apartado) ya revisada y bloqueada por quien
+ * llama: con su SALDO A FAVOR (un pago "Saldo a favor" y su `uso` en el libro; no
+ * toca la caja) o con un método (el efectivo entra al turno ABIERTO como
+ * 'ingreso'; la transferencia guarda su cuenta). No cambia el estado de la nota:
+ * eso lo decide quien llama. Devuelve el id del pago.
+ */
+async function _registrarAbono(conn, pedido, datos, usuarioId) {
+  const pedidoId = Number(pedido.id);
+  const monto = round2(datos.monto);
+  const esNota = Number(pedido.nota_pendiente) === 1;
+  if (datos.con_saldo_favor === true) {
+    if (!pedido.cliente_id) {
+      throw new AppError(422, 'FALTA_CLIENTE', `${pedido.numero_pedido} no tiene cliente: no hay saldo a favor que usar.`);
+    }
+    return saldoFavor.pagarConSaldo(conn, {
+      clienteId: pedido.cliente_id, pedidoId, numeroPedido: pedido.numero_pedido, monto, usuarioId,
+    });
+  }
+
+  // ¿Entra al cajón? Lo decide el nombre del método, como en la venta.
+  const [mrows] = await conn.query(
+    'SELECT nombre, activo, interno FROM metodos_pago WHERE id = :id LIMIT 1',
+    { id: datos.metodo_pago_id }
+  );
+  if (!mrows[0] || !mrows[0].activo || Number(mrows[0].interno)) {
+    throw new AppError(422, 'METODO_PAGO_INVALIDO',
+      'Ese método de pago no existe o está inactivo');
+  }
+  const esEfectivo = mrows[0].nombre.toLowerCase().includes('efectivo');
+
+  let sesionId = datos.sesion_caja_id ?? null;
+  if (esEfectivo) {
+    // Se valida ANTES de registrar el pago, para que un 409 no deje el abono
+    // asentado y el dinero fuera del corte.
+    if (!sesionId) {
+      throw new AppError(409, 'FALTA_SESION_CAJA',
+        'Un abono en efectivo tiene que entrar en un turno de caja abierto, ' +
+        'o el corte no va a cuadrar.');
+    }
+    const [srows] = await conn.query(
+      'SELECT id, estado FROM sesiones_caja WHERE id = :id FOR UPDATE',
+      { id: sesionId }
+    );
+    if (!srows[0]) throw new AppError(404, 'SESION_NO_ENCONTRADA', 'Sesión de caja no encontrada');
+    if (srows[0].estado !== 'abierta') {
+      throw new AppError(409, 'CAJA_CERRADA', 'La sesión de caja está cerrada');
+    }
+  } else {
+    sesionId = null;
+  }
+
+  const [pagoIns] = await conn.query(
+    `INSERT INTO pagos (pedido_id, metodo_pago_id, monto, estado, referencia_transaccion)
+     VALUES (:pedido, :metodo, :monto, 'completado', :ref)`,
+    {
+      pedido: pedidoId,
+      metodo: datos.metodo_pago_id,
+      monto,
+      ref: datos.referencia ?? null,
+    }
+  );
+  await transferencias.anotar(conn, {
+    fuente: 'pago', fuenteId: pagoIns.insertId, metodoPagoId: datos.metodo_pago_id,
+    cuentaId: datos.cuenta_bancaria_id, usuarioId,
+  });
+
+  if (esEfectivo) {
+    await conn.query(
+      `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
+       VALUES (:sesion, 'ingreso', :monto, :pedido, :motivo)`,
+      {
+        sesion: sesionId,
+        monto,
+        pedido: pedidoId,
+        motivo: esNota
+          ? `Pago de la nota ${pedido.numero_pedido}`
+          : `Abono a la nota en espera ${pedido.numero_pedido}`,
+      }
+    );
+  }
+  return Number(pagoIns.insertId);
 }
 
 /**
@@ -2483,6 +2567,112 @@ async function pasarACredito(pedidoId, usuarioId, datos = {}) {
     const resultado = await _obtenerConn(conn, pedidoId);
     resultado.a_credito = falta;
     return resultado;
+  });
+}
+
+/**
+ * PAGAR UNA NOTA PENDIENTE CON HASTA DOS FORMAS (2026-10-26, usuario: "cuando se
+ * registra pago, que tenga múltiples formas de pago: crédito, efectivo y
+ * transferencia o aplicación de saldo a favor"). En UNA transacción —o entra todo
+ * o nada—:
+ *   · `partes`: lo que paga hoy, hasta dos: efectivo, transferencia o su saldo a
+ *     favor (`con_saldo_favor`). Cada una se asienta como un abono de siempre.
+ *   · `a_credito`: lo que falte DESPUÉS de las partes va a su cuenta de crédito
+ *     (su límite, sus días y el candado de la cuenta atrasada), como «Pasar a
+ *     crédito».
+ * Entre las dos cosas, a lo más DOS formas. Sin crédito puede pagar una parte (la
+ * nota sigue pendiente). Los pagos y el cargo quedan con la MISMA hora: así su
+ * ticket los junta (`tickets.js → pagoDeNota`).
+ */
+async function pagarNotaPendiente(pedidoId, datos, usuarioId) {
+  return withTransaction(async (conn) => {
+    const [prows] = await conn.query(
+      `SELECT id, numero_pedido, estado, total, encargo, nota_pendiente, inventario_descontado, cliente_id
+         FROM pedidos WHERE id = :id FOR UPDATE`,
+      { id: pedidoId }
+    );
+    const pedido = prows[0];
+    if (!pedido) throw new AppError(404, 'NO_ENCONTRADO', 'Pedido no encontrado');
+    if (!(await _notaPorCobrar(conn, pedido))) {
+      throw new AppError(409, 'NO_ES_NOTA_PENDIENTE',
+        `${pedido.numero_pedido} no es una nota pendiente de pago por cobrar.`);
+    }
+
+    const partes = (datos.partes ?? []).map((x) => ({ ...x, monto: round2(x.monto) }));
+    const conCredito = datos.a_credito === true;
+    const formas = partes.length + (conCredito ? 1 : 0);
+    if (formas === 0) throw new AppError(422, 'PAGO_VACIO', 'Di con qué paga: efectivo, transferencia, su saldo a favor o a crédito.');
+    if (formas > 2) throw new AppError(422, 'MAS_DE_DOS_FORMAS', 'Se paga con dos formas a lo más.');
+    const clave = (x) => (x.con_saldo_favor === true ? 'saldo' : `m${Number(x.metodo_pago_id)}`);
+    if (partes.length === 2 && clave(partes[0]) === clave(partes[1])) {
+      throw new AppError(422, 'FORMA_REPETIDA', 'Las dos partes son con lo mismo: ponlo en una sola.');
+    }
+    for (const x of partes) {
+      if (x.con_saldo_favor !== true && !x.metodo_pago_id) {
+        throw new AppError(422, 'FALTA_METODO_PAGO', 'Di con qué paga cada parte.');
+      }
+      if (!(x.monto > 0)) throw new AppError(422, 'MONTO_INVALIDO', 'Cada parte tiene que ser mayor a cero.');
+    }
+
+    const abonado = await _abonado(conn, pedidoId);
+    const falta = round2(Number(pedido.total) - abonado);
+    const hoy = round2(partes.reduce((s, x) => s + x.monto, 0));
+    if (hoy > falta + 0.0001) {
+      throw new AppError(422, 'ABONO_EXCEDE_PENDIENTE',
+        `Le faltan $${falta.toFixed(2)} y se quieren registrar $${hoy.toFixed(2)}.`);
+    }
+    const aCredito = conCredito ? round2(falta - hoy) : 0;
+    if (conCredito && aCredito <= 0.004) {
+      throw new AppError(422, 'NADA_A_CREDITO',
+        `Con lo que paga hoy ($${hoy.toFixed(2)}) queda pagada: no queda nada para su crédito.`);
+    }
+    // Antes de asentar nada: la cuenta atrasada se confirma (y se autoriza).
+    if (conCredito) await _exigirSinAtraso(conn, pedido.cliente_id, datos.fiar_con_atraso);
+
+    const [[{ ahora }]] = await conn.query("SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS ahora");
+    const pagoIds = [];
+    for (const x of partes) {
+      pagoIds.push(await _registrarAbono(conn, pedido, { ...x, sesion_caja_id: datos.sesion_caja_id }, usuarioId));
+    }
+    if (pagoIds.length) {
+      await conn.query('UPDATE pagos SET creado_en = :ahora WHERE id IN (:ids)', { ahora, ids: pagoIds });
+    }
+
+    let estado = pedido.estado;
+    if (conCredito) {
+      await clientesModel.cargarVentaACredito(conn, {
+        clienteId: pedido.cliente_id,
+        monto: aCredito,
+        pedidoId,
+        numeroPedido: pedido.numero_pedido,
+        usuarioId,
+        diasCredito: datos.dias_credito ?? null,
+      });
+      // El único cargo de la nota (por cobrar no tenía): con la hora de los pagos.
+      await conn.query(
+        "UPDATE credito_movimientos SET creado_en = :ahora WHERE pedido_id = :id AND tipo = 'cargo'",
+        { ahora, id: pedidoId }
+      );
+      await clientesModel.liquidarVentasACredito(conn, pedido.cliente_id);
+    } else if (round2(falta - hoy) <= 0.0001) {
+      // Con esto quedó pagada.
+      await conn.query("UPDATE pedidos SET estado = 'pagado' WHERE id = :id", { id: pedidoId });
+      estado = 'pagado';
+    }
+    const pendiente = conCredito ? 0 : round2(falta - hoy);
+    return {
+      pedido_id: pedidoId,
+      // Con el primero se pide su ticket, que junta los de la misma hora.
+      pago_id: pagoIds[0] ?? null,
+      pago_ids: pagoIds,
+      numero_pedido: pedido.numero_pedido,
+      total: round2(pedido.total),
+      abonado: round2(abonado + hoy),
+      pendiente,
+      a_credito: aCredito,
+      liquidado: !conCredito && pendiente <= 0.0001,
+      estado,
+    };
   });
 }
 
@@ -3498,7 +3688,7 @@ module.exports = {
   resumen,
   crearPedido, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,
-  abonarApartado, entregarApartado, modificarEncargo,
+  abonarApartado, pagarNotaPendiente, entregarApartado, modificarEncargo,
   listarEncargos, listarApartados,
   ESTADOS, METODOS_ENTREGA,
 };

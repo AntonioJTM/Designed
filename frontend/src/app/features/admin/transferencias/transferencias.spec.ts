@@ -25,7 +25,7 @@ describe('Transferencias', () => {
     facturada_por: null, facturada_en: null, ...x,
   });
 
-  const lista: ListaTransferencias = {
+  let lista: ListaTransferencias = {
     items: [
       renglon({}),
       renglon({
@@ -41,7 +41,7 @@ describe('Transferencias', () => {
     total: 3,
     cifras: {
       cuantas: 3, importe: 32535.25, por_revisar: 2, importe_por_revisar: 31310, importe_procesado: 1225.25,
-      sin_facturar: 2, importe_sin_facturar: 15615.25, sin_cuenta: 1, importe_cancelado: 0,
+      sin_facturar: 2, importe_sin_facturar: 15615.25, sin_cuenta: 1, canceladas: 0, importe_cancelado: 0,
     },
     por_cuenta: [
       { id: 7, banco: 'Banamex', ultimos: '4521', cuantas: 2, importe: 18145.25 },
@@ -97,6 +97,28 @@ describe('Transferencias', () => {
     expect(texto).toContain('Sin cuenta');
     expect(texto).toContain('S/N');
     expect(texto).toContain('Anticipo');
+  });
+
+  // LO DE UNA VENTA CANCELADA NO SUMA (2026-10-26): se dice aparte y su importe va tachado.
+  it('la transferencia de una venta cancelada no suma: lo dice arriba y la tacha en la lista', async () => {
+    const original = lista;
+    lista = {
+      ...original,
+      items: [renglon({ cancelada: true, importe: 500 }), ...original.items.slice(1)],
+      cifras: { ...original.cifras, canceladas: 1, importe_cancelado: 500 },
+    };
+    try {
+      const f = await montar();
+      await f.whenStable();
+      f.detectChanges();
+      const html = (f.nativeElement as HTMLElement).textContent ?? '';
+      expect(html).toContain('sin contar $500.00 de 1 venta cancelada');
+      const tachada = (f.nativeElement as HTMLElement).querySelector('td.num s.no-suma');
+      expect(tachada?.textContent).toContain('$500.00');
+      expect(html).toContain('no suma');
+    } finally {
+      lista = original;
+    }
   });
 
   it('por omisión pide TODAS (sin periodo) y los filtros van al servidor', async () => {

@@ -124,9 +124,13 @@ export class NotasPendientesPantalla {
   alPagar(r: ResultadoAbono): void {
     this.pagando.set(null);
     const dinero = (n: number) => `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const texto = r.liquidado
-      ? `${r.numero_pedido} quedó pagada.`
-      : `Pago registrado en ${r.numero_pedido}. Le faltan ${dinero(r.pendiente)}.`;
+    // Lo que faltaba pasó a su crédito (2026-10-26): ya no está en esta lista.
+    const texto = Number(r.a_credito ?? 0) > 0
+      ? `${r.numero_pedido}: ${dinero(r.a_credito!)} pasaron a su cuenta de crédito` +
+        `${r.pago_id ? ' y se registró lo que pagó hoy' : ''}.`
+      : r.liquidado
+        ? `${r.numero_pedido} quedó pagada.`
+        : `Pago registrado en ${r.numero_pedido}. Le faltan ${dinero(r.pendiente)}.`;
     this.mensaje.set(texto);
     if (r.pago_id) {
       const pagoId = r.pago_id;

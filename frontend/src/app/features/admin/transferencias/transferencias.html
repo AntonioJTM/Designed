@@ -19,7 +19,10 @@
         <span class="kpi-valor">{{ c.importe | dinero }}</span>
         <span class="kpi-pie">
           {{ plural(c.cuantas, 'transferencia', 'transferencias') }}
-          @if (c.importe_cancelado > 0) { · {{ c.importe_cancelado | dinero }} de ventas canceladas }
+          <!-- Lo de una venta cancelada ya no suma aquí ni en las barras (2026-10-26). -->
+          @if (c.importe_cancelado > 0) {
+            · sin contar {{ c.importe_cancelado | dinero }} de {{ plural(c.canceladas, 'venta cancelada', 'ventas canceladas') }}
+          }
         </span>
       </div>
       <div class="kpi">
@@ -197,6 +200,8 @@
                   }
                   <span class="de">{{ de_(t) }}</span>
                   @if (t.cancelada) { <span class="pill rojo">Venta cancelada</span> }
+                  <!-- Se canceló y el dinero quedó a su saldo a favor: sigue en el banco (2026-10-26). -->
+                  @if (t.a_favor) { <span class="pill aviso">Cancelada · quedó a su saldo a favor</span> }
                 </td>
                 <td class="cliente">
                   @if (t.cliente_id) {
@@ -209,7 +214,15 @@
                   @if (t.referencia) { {{ t.referencia }} } @else { <span class="muted">S/N</span> }
                 </td>
                 <td class="tenue">{{ t.materiales || '—' }}</td>
-                <td class="num"><b>{{ t.importe | dinero }}</b></td>
+                <td class="num">
+                  @if (t.cancelada) {
+                    <!-- No suma: la venta se canceló (2026-10-26). -->
+                    <s class="no-suma" title="No suma: la venta se canceló">{{ t.importe | dinero }}</s>
+                    <span class="no-suma-pie">no suma</span>
+                  } @else {
+                    <b>{{ t.importe | dinero }}</b>
+                  }
+                </td>
                 <td>
                   @if (t.estado === 'procesada') {
                     <span class="pill verde" [title]="(t.revisada_por ? 'La marcó ' + t.revisada_por : '') + (t.revisada_en ? ' el ' + (t.revisada_en | fecha) : '')">Procesada</span>

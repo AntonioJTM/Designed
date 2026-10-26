@@ -57,6 +57,23 @@ export interface PagoPedido {
   /** A qué cuenta llegó una transferencia (Transferencias, 2026-10-20). */
   cuenta_bancaria_id?: number;
 }
+/** El pago de una nota pendiente con hasta dos formas (2026-10-26). */
+export interface PagoNotaInput {
+  /** Lo que paga hoy: efectivo, transferencia o su saldo a favor (`con_saldo_favor`, sin método). */
+  partes?: {
+    metodo_pago_id?: number;
+    con_saldo_favor?: boolean;
+    monto: number;
+    referencia?: string;
+    cuenta_bancaria_id?: number;
+  }[];
+  sesion_caja_id?: number;
+  /** Lo que falte después de las partes va a su cuenta de crédito. */
+  a_credito?: boolean;
+  dias_credito?: number;
+  fiar_con_atraso?: boolean;
+}
+
 export interface CrearPedidoInput {
   canal: CanalVenta;
   /** Llave de un solo uso de la caja: la misma venta no se registra dos veces. */
@@ -360,14 +377,14 @@ export class VentasService {
    * falta `sesion_caja_id`: entra al turno, al corte del día en que paga. Con
    * el último abono la nota queda pagada sola.
    */
-  pagarNota(
-    pedidoId: number,
-    // Sin método si se paga con su saldo a favor (`con_saldo_favor`, 2026-10-20).
-    body: { monto: number; metodo_pago_id?: number; con_saldo_favor?: boolean; sesion_caja_id?: number; referencia?: string; cuenta_bancaria_id?: number },
-    clave?: string
-  ): Observable<ResultadoAbono> {
+  /**
+   * Paga una nota pendiente con hasta DOS formas (2026-10-26): las partes de hoy
+   * (efectivo, transferencia o su saldo a favor) y/o lo que falte a crédito, en
+   * una sola operación.
+   */
+  pagarNota(pedidoId: number, body: PagoNotaInput, clave?: string): Observable<ResultadoAbono> {
     return this.http
-      .post<ApiResponse<ResultadoAbono>>(`${this.base}/pedidos/${pedidoId}/abonos`, body, conClave(clave))
+      .post<ApiResponse<ResultadoAbono>>(`${this.base}/pedidos/${pedidoId}/pago-nota`, body, conClave(clave))
       .pipe(map(data));
   }
 
@@ -431,12 +448,18 @@ export class VentasService {
   cambiarEstado(
     id: number,
     estado: EstadoPedido,
-    devoluciones?: DevolucionLinea[]
+    devoluciones?: DevolucionLinea[],
+    // Al cancelar, lo que pagó queda a su saldo a favor en vez de regresárselo (2026-10-26).
+    aFavor?: { efectivo?: boolean; transferencia?: boolean },
+    // Una venta a crédito ya abonada: lo abonado se le regresa (2026-10-26).
+    abonadoSeRegresa?: 'efectivo' | 'banco'
   ): Observable<Pedido> {
     return this.http
       .patch<ApiResponse<Pedido>>(`${this.base}/pedidos/${id}/estado`, {
         estado,
         devoluciones: devoluciones?.length ? devoluciones : undefined,
+        ...(aFavor ? { a_favor: aFavor } : {}),
+        ...(abonadoSeRegresa ? { abonado_se_regresa: abonadoSeRegresa } : {}),
       })
       .pipe(map(data));
   }

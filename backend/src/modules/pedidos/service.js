@@ -31,8 +31,8 @@ async function listar(filtros) {
   return paginado(rows, total, filtros.page, filtros.limit);
 }
 
-async function cambiarEstado(id, estado, usuarioId, devoluciones) {
-  return model.cambiarEstado(id, estado, usuarioId, devoluciones);
+async function cambiarEstado(id, estado, usuarioId, devoluciones, opciones = {}) {
+  return model.cambiarEstado(id, estado, usuarioId, devoluciones, opciones);
 }
 
 /**
@@ -105,6 +105,11 @@ async function notasPendientes(filtros = {}, almacenes = null) {
   return model.listarNotasPendientes({ q: filtros.q, almacenes });
 }
 
+/** Pagar una nota pendiente con hasta dos formas (2026-10-26). Lo valida el modelo. */
+async function pagarNotaPendiente(id, datos, usuarioId) {
+  return model.pagarNotaPendiente(id, datos, usuarioId);
+}
+
 /** Lo que falta de una nota pendiente de pago, a la cuenta de crédito del cliente. */
 async function pasarACredito(id, usuarioId, datos = {}) {
   return model.pasarACredito(id, usuarioId, datos);
@@ -121,7 +126,7 @@ async function devolver(id, datos, usuarioId) {
 }
 
 module.exports = {
-  notasPendientes, pasarACredito, previaDevolucion, devolver,
+  notasPendientes, pasarACredito, pagarNotaPendiente, previaDevolucion, devolver,
   resumen,
   crear, cotizar, obtener, listar, cambiarEstado,
   guardarComprobante, leerComprobante, borrarComprobante,

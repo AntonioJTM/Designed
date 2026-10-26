@@ -355,6 +355,9 @@ export interface ResultadoAbono {
   pendiente: number;
   /** Ya lo pagó todo: se puede entregar. */
   liquidado: boolean;
+  /** Con dos formas (2026-10-26): todos los pagos de esa vez, y lo que pasó a su crédito. */
+  pago_ids?: number[];
+  a_credito?: number;
 }
 
 /** Alguien del personal que puede quedar como vendedor de una venta de esa tienda. */
@@ -468,6 +471,11 @@ export interface Pedido {
   a_favor_sin_efectivo?: number;
   /** Al cancelar una venta a crédito ya abonada: lo abonado que pasó a su saldo a favor (2026-10-20). */
   abonado_a_favor?: number;
+  /** Al cancelar (2026-10-26): lo que se eligió dejarle a su saldo a favor. */
+  efectivo_a_favor?: number;
+  transferencia_a_favor?: number;
+  /** Una venta a crédito ya abonada: lo abonado que se le regresó (2026-10-26). */
+  abonado_regresado?: number;
   /** Al modificarlo: el total de antes, lo que falta o lo que tiene a favor, y qué cambió. */
   total_antes?: number;
   a_favor?: number;

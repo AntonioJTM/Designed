@@ -6,7 +6,7 @@ const { AppError } = require('../../middlewares/error');
 const { firmarToken } = require('../../utils/jwt');
 const { puede, almacenesDe, esAdmin } = require('../permisos/service');
 const { avisar } = require('../tiempo-real/bus');
-const { OPERACIONES } = require('./operaciones');
+const { OPERACIONES, nombreDe } = require('./operaciones');
 const model = require('./model');
 
 /**
@@ -41,13 +41,18 @@ const vencio = (fila) => fila.estado === 'pendiente' && fila.de_otro_dia && OPER
 
 async function conNombres(filas) {
   const tiendas = await model.nombresDeAlmacenes();
-  return filas.map((f) => ({
-    ...f,
-    operacion_nombre: OPERACIONES[f.operacion]?.nombre ?? f.operacion,
-    tiendas: (f.almacenes ?? []).map((a) => tiendas.get(Number(a))).filter(Boolean),
-    // Se puede autorizar MENOS de lo pedido (un pedido a otra tienda).
-    ajustable: Boolean(OPERACIONES[f.operacion]?.ajustar),
-  }));
+  const res = [];
+  // La ruta solo sirve para nombrarla ("Cancelar una nota en espera"); no se manda.
+  for (const { ruta, ...f } of filas) {
+    res.push({
+      ...f,
+      operacion_nombre: (await nombreDe(OPERACIONES[f.operacion], ruta)) ?? f.operacion,
+      tiendas: (f.almacenes ?? []).map((a) => tiendas.get(Number(a))).filter(Boolean),
+      // Se puede autorizar MENOS de lo pedido (un pedido a otra tienda).
+      ajustable: Boolean(OPERACIONES[f.operacion]?.ajustar),
+    });
+  }
+  return res;
 }
 
 /**
