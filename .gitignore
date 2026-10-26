@@ -23,9 +23,16 @@ db/dump_*.sql
 backend/uploads/
 
 # Listas reales del proveedor con el inventario del negocio. El repositorio es
-# PÚBLICO: no se suben. Las pruebas arman su propio Excel en memoria.
-/HTX 1.ARAC FFAU 721502-4 - INVENTARIO.xlsx
+# PÚBLICO: no se suben, ESTÉN DONDE ESTÉN (2026-10-26: seis estaban en muestras/ y
+# se borraron de la historia). Las pruebas arman su propio Excel en memoria.
+HTX*.xlsx
 /carga de productos.xlsx
+
+# Respaldos de la base: traen correos, teléfonos y contraseñas cifradas (2026-10-26:
+# db/dump_desarrollo_2026-07-24.sql estaba publicado y se borró de la historia).
+*.sql.gz
+db/dump_*.sql
+dump_*.sql
 
 # Superpowers (complemento de Claude Code): sus diseños y planes van FUERA del
 # repositorio, en D:\Imagenes\Hitex - planes\ (el repo es público). Por si acaso.
