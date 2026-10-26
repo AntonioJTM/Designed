@@ -917,6 +917,9 @@ CREATE TABLE `pedidos` (
   `cliente_id` bigint(20) unsigned DEFAULT NULL,
   `tipo_cliente_id` smallint(5) unsigned DEFAULT NULL,
   `usuario_id` bigint(20) unsigned DEFAULT NULL,
+  -- Quien la VENDIÓ (2026-10-23): a esa persona va la comisión. NULL = quien la
+  -- registró (`usuario_id`, «Elaboró»). Migración 2026-10_vendedor_en_venta.sql.
+  `vendedor_id` bigint(20) unsigned DEFAULT NULL,
   `sesion_caja_id` bigint(20) unsigned DEFAULT NULL,
   `almacen_id` smallint(5) unsigned DEFAULT NULL,
   `direccion_envio_id` bigint(20) unsigned DEFAULT NULL,
@@ -938,6 +941,7 @@ CREATE TABLE `pedidos` (
   KEY `idx_pedidos_nota_pendiente` (`nota_pendiente`,`estado`),
   UNIQUE KEY `numero_pedido` (`numero_pedido`),
   KEY `usuario_id` (`usuario_id`),
+  KEY `idx_pedidos_vendedor` (`vendedor_id`),
   KEY `sesion_caja_id` (`sesion_caja_id`),
   KEY `almacen_id` (`almacen_id`),
   KEY `direccion_envio_id` (`direccion_envio_id`),
@@ -950,6 +954,7 @@ CREATE TABLE `pedidos` (
   CONSTRAINT `fk_pedidos_tipo_cliente` FOREIGN KEY (`tipo_cliente_id`) REFERENCES `tipos_cliente` (`id`),
   CONSTRAINT `pedidos_ibfk_1` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`),
   CONSTRAINT `pedidos_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_pedidos_vendedor` FOREIGN KEY (`vendedor_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `pedidos_ibfk_3` FOREIGN KEY (`sesion_caja_id`) REFERENCES `sesiones_caja` (`id`),
   CONSTRAINT `pedidos_ibfk_4` FOREIGN KEY (`almacen_id`) REFERENCES `almacenes` (`id`),
   CONSTRAINT `pedidos_ibfk_5` FOREIGN KEY (`direccion_envio_id`) REFERENCES `direcciones` (`id`),
@@ -1369,6 +1374,32 @@ CREATE TABLE `transferencias` (
   CONSTRAINT `fk_transferencias_creado` FOREIGN KEY (`creado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `chk_transferencias_fuente` CHECK (`fuente` in ('pago','abono','anticipo')),
   CONSTRAINT `chk_transferencias_estado` CHECK (`estado` in ('por_revisar','procesada'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Tabla: ventas_anteriores ----------
+-- Rotación de inventario (2026-10-22): kilos vendidos en AÑOS ANTERIORES por hilo,
+-- mes y tienda (almacen_id NULL = las dos tiendas), para ver la temporada sin
+-- esperar un año. En un mes donde el sistema ya tiene ventas del hilo, mandan las suyas.
+DROP TABLE IF EXISTS `ventas_anteriores`;
+CREATE TABLE `ventas_anteriores` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `producto_id` bigint(20) unsigned NOT NULL,
+  `almacen_id` smallint(5) unsigned DEFAULT NULL,
+  `anio` smallint(5) unsigned NOT NULL,
+  `mes` tinyint(3) unsigned NOT NULL,
+  `kg` decimal(12,3) NOT NULL,
+  `usuario_id` bigint(20) unsigned DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ventas_anteriores` (`producto_id`,`almacen_id`,`anio`,`mes`),
+  KEY `idx_ventas_anteriores_mes` (`anio`,`mes`),
+  KEY `fk_ventas_anteriores_almacen` (`almacen_id`),
+  KEY `fk_ventas_anteriores_usuario` (`usuario_id`),
+  CONSTRAINT `fk_ventas_anteriores_producto` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`),
+  CONSTRAINT `fk_ventas_anteriores_almacen` FOREIGN KEY (`almacen_id`) REFERENCES `almacenes` (`id`),
+  CONSTRAINT `fk_ventas_anteriores_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `chk_ventas_anteriores_mes` CHECK (`mes` between 1 and 12),
+  CONSTRAINT `chk_ventas_anteriores_kg` CHECK (`kg` > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP VIEW IF EXISTS `v_ventas_por_empleado`;

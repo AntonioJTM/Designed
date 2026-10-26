@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<title>¿Cómo se calcula? · Rotación de inventario · Hitex</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2457C5}a:hover{color:#1D4596}
+</style>
+</helmet>
+<div style="min-height: 1700px; background: #6C6F75; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #161A23; padding: 40px 16px; box-sizing: border-box; display: flex; justify-content: center; align-items: flex-start">
+
+  <div role="dialog" aria-modal="true" aria-labelledby="titulo-calculo" style="width: 100%; max-width: 900px; background: #FFFFFF; border-radius: 12px; box-shadow: 0 20px 50px rgba(18, 22, 31, 0.25); display: flex; flex-direction: column; overflow: hidden">
+
+    <div style="padding: 18px 24px; border-bottom: 1px solid #E3E6EB; display: flex; align-items: flex-start; gap: 16px">
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+        <h2 id="titulo-calculo" style="margin: 0; font-size: 19px; font-weight: 600">¿Cómo se calcula?</h2>
+        <p style="margin: 0; font-size: 13.5px; color: #5B6270; line-height: 1.45">Con el ejemplo de MARINO 2/30. Todo en kilos; aquí no entra dinero.</p>
+      </div>
+      <a href="Main.dc.html" aria-label="Cerrar" style="width: 44px; height: 44px; flex: none; border-radius: 8px; color: #3F4552; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18"></path></svg></a>
+    </div>
+
+    <div style="padding: 8px 24px 20px; display: flex; flex-direction: column">
+
+      <section style="display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid #EEF0F3">
+        <span style="width: 32px; height: 32px; border-radius: 999px; background: #E8EEFB; color: #1D4596; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">1</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600">Qué cuenta como venta</h3>
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #3F4552">Los kilos que salieron del inventario por una venta, con paquete y cono sumados. No cuentan las ventas canceladas, lo devuelto ni lo apartado que todavía no se entrega. Los envíos entre almacenes y las mermas no son venta. Es lo mismo que cuenta Reportes → Venta por color.</p>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 14px; line-height: 1.5">MARINO vendió <b style="font-weight: 600">6,799 kg</b> en los últimos 12 meses: 5,711 kg en paquete y 1,088 kg en cono.</p>
+        </div>
+      </section>
+
+      <section style="display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid #EEF0F3">
+        <span style="width: 32px; height: 32px; border-radius: 999px; background: #E8EEFB; color: #1D4596; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">2</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600">Rotación: cuántas veces al año se renueva</h3>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #E8EEFB; color: #1D4596; font-size: 14.5px; font-weight: 600">Rotación = kilos vendidos en 12 meses ÷ kilos que hubo en promedio</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #3F4552">Lo que hubo en promedio sale del kardex: cuánto había al cerrar cada día, sumado y dividido entre 365.</p>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 14px; line-height: 1.5">6,799 kg ÷ 2,615 kg = <b style="font-weight: 600">2.6 veces al año</b>. O sea, se renueva cada 365 ÷ 2.6 = <b style="font-weight: 600">140 días</b>.</p>
+          <p style="margin: 0; font-size: 13.5px; color: #5B6270">Más de 2: rápido · de 1 a 2: normal · menos de 1: lento, se queda más de un año.</p>
+        </div>
+      </section>
+
+      <section style="display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid #EEF0F3">
+        <span style="width: 32px; height: 32px; border-radius: 999px; background: #E8EEFB; color: #1D4596; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">3</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600">Temporada: qué tan fuerte es cada mes</h3>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #E8EEFB; color: #1D4596; font-size: 14.5px; font-weight: 600">Qué tan fuerte = kilos de ese mes ÷ kilos de un mes normal del mismo hilo</p>
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #3F4552">Un mes normal es lo que vendió en el año entre 12. Su temporada son los meses seguidos en que vende 30% o más arriba de un mes normal.</p>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 14px; line-height: 1.5">En 2025 MARINO vendió 6,205 kg: un mes normal son 517 kg. En septiembre vendió 851 kg: 851 ÷ 517 = <b style="font-weight: 600">1.65</b>, o sea <b style="font-weight: 600">65% más</b> que un mes normal. Agosto, septiembre y octubre pasan del 30%: esa es su temporada.</p>
+        </div>
+      </section>
+
+      <section style="display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid #EEF0F3">
+        <span style="width: 32px; height: 32px; border-radius: 999px; background: #E8EEFB; color: #1D4596; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">4</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600">Cuánto se espera vender</h3>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #E8EEFB; color: #1D4596; font-size: 14.5px; font-weight: 600">Se espera = lo del mismo mes del año pasado × cómo va este año contra el pasado</p>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 14px; line-height: 1.5">De enero a septiembre MARINO vendió 4,824 kg en 2026 y 4,304 kg en 2025: va 12% arriba (× 1.12). En noviembre de 2025 vendió 626 kg, así que para este noviembre se esperan 626 × 1.12 = <b style="font-weight: 600">701 kg</b>.</p>
+        </div>
+      </section>
+
+      <section style="display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid #EEF0F3">
+        <span style="width: 32px; height: 32px; border-radius: 999px; background: #E8EEFB; color: #1D4596; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">5</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600">Cuándo pedir</h3>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #E8EEFB; color: #1D4596; font-size: 14.5px; font-weight: 600">Pedir a más tardar = el día en que se acaba − lo que tarda el proveedor − el colchón</p>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 14px; line-height: 1.5">Con 1,720 kg y lo que se espera vender cada semana, MARINO se acaba hacia el <b style="font-weight: 600">14 de enero</b>. Menos 10 semanas del proveedor y 3 de colchón (13 semanas, 91 días): <b style="font-weight: 600">15 de octubre</b>. Como esa fecha ya pasó, sale «Pedir ya».</p>
+        </div>
+      </section>
+
+      <section style="display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid #EEF0F3">
+        <span style="width: 32px; height: 32px; border-radius: 999px; background: #E8EEFB; color: #1D4596; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">6</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600">Cuánto pedir</h3>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #E8EEFB; color: #1D4596; font-size: 14.5px; font-weight: 600">Cuánto = lo que se venderá desde que llega hasta 4 meses después, más 3 semanas de colchón, menos lo que quede cuando llegue</p>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 14px; line-height: 1.5">Si se pide hoy, llega hacia el 30 de diciembre y todavía hay 221 kg. De ahí a 4 meses y 3 semanas se esperan vender unos 1,800 kg: 1,800 − 221 ≈ <b style="font-weight: 600">1,580 kg</b>, unos 96 paquetes de 16.4 kg.</p>
+        </div>
+      </section>
+
+      <section style="display: flex; gap: 16px; padding: 18px 0 4px">
+        <span style="width: 32px; height: 32px; border-radius: 999px; background: #E8EEFB; color: #1D4596; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">7</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600">Cuánta historia hace falta</h3>
+          <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #3F4552">La rotación y «Qué pedir» funcionan desde el primer mes. La temporada necesita un año completo de ventas, y se confía con dos. Si hay ventas de años anteriores en Excel o en libretas, se pueden cargar en kilos, por mes y por hilo.</p>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+            <button type="button" style="height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #D5D9E0; background: #FFFFFF; color: #161A23; font-family: inherit; font-size: 14px; font-weight: 500">Cargar ventas de años anteriores</button>
+            <span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #E8EEFB; color: #1D4596">Nuevo</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div style="padding: 14px 24px; background: #FAFBFC; border-top: 1px solid #E3E6EB; display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+      <span style="flex: 1 1 14rem; font-size: 13px; color: #5B6270; line-height: 1.45">Los números se recalculan solos cada vez que se abre la pantalla.</span>
+      <a href="Main.dc.html" style="margin-left: auto; height: 44px; padding: 0 18px; border-radius: 8px; background: #2457C5; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center">Entendido</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

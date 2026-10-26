@@ -36,6 +36,8 @@
 @media (max-width: 640px) {
   .solicitud { flex-direction: column; }
   .solicitud .que { flex: 0 0 auto; width: 100%; }
+  // En columna, el detalle (carga o devolución) mide lo que la pantalla, no lo que su texto.
+  .detalle-ancho { flex: 0 0 auto; width: 100%; }
   /* En el celular los botones van al final, después de lo que se va a cargar. */
   .acciones { order: 2; width: 100%; justify-content: flex-end; }
 }

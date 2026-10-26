@@ -8,7 +8,6 @@ import { llevaTicket } from '../../../shared/ticket/ticket';
 import { AuthService } from '../../../core/services/auth.service';
 import {
   DevolucionHecha,
-  DevolucionLinea,
   EstadoPedido,
   PagoLinea,
   Pedido,
@@ -29,6 +28,7 @@ import { TicketDelAviso } from '../../../shared/ticket/ticket-del-aviso';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
+import { vendioOtraPersona } from '../../../shared/vendedor';
 
 /** Una cifra de la franja de arriba del pedido. */
 interface CifraPedido {
@@ -464,13 +464,15 @@ export class PedidoDetalle implements OnDestroy {
     return `${d} de ${MESES_LARGOS[m - 1]}${anio}, ${(hora ?? '').slice(0, 5)}`;
   }
 
-  /** "Punto de venta · Caja Cuautepec · atendió Lupita R." */
+  /** "Punto de venta · Caja Cuautepec · la elaboró Lupita R. · la vendió Rosa M." */
   dondeYQuien(p: Pedido): string {
     const partes = [p.canal === 'punto_venta' ? 'Punto de venta' : 'Tienda en línea'];
     if (p.caja) partes.push(p.caja);
     // De qué almacén salió el hilo (2026-10-16).
     if (p.almacen) partes.push(`salió de ${p.almacen}`);
     if (p.usuario) partes.push(`la elaboró ${p.usuario}`);
+    // Quién la vendió, si no fue quien la registró (2026-10-23): a esa persona va la comisión.
+    if (vendioOtraPersona(p)) partes.push(`la vendió ${p.vendedor}`);
     return partes.join(' · ');
   }
 
@@ -574,21 +576,14 @@ export class PedidoDetalle implements OnDestroy {
     );
     this.cargar(p.id);
   }
-  /** Presentación elegida por línea: detalle_id → variante_id. */
-  retornoPresentacion: Record<number, number> = {};
-  /** Cantidad que de verdad regresa, por línea. */
-  retornoCantidad: Record<number, number> = {};
-
-  /** Prepara el panel con lo que regresa tal como se vendió. */
+  /**
+   * Abre la confirmación. Cancelar regresa TODO tal cual se vendió (2026-10-23,
+   * usuario: "no pregunte cómo lo regresa ni el peso"); lo que el cliente regresa
+   * a medias o en otra presentación va por «Devolución» (saldo a favor).
+   */
   abrirDevolucion(): void {
     const p = this.pedido();
     if (!p?.detalle) return;
-    this.retornoPresentacion = {};
-    this.retornoCantidad = {};
-    for (const d of p.detalle) {
-      this.retornoPresentacion[d.id] = d.variante_id;
-      this.retornoCantidad[d.id] = Number(d.cantidad);
-    }
     this.error.set(null);
     this.confirmando.set(true);
   }
@@ -719,33 +714,6 @@ export class PedidoDetalle implements OnDestroy {
   }
 
   /**
-   * Al cambiar la presentación se propone la cantidad equivalente que calculó el
-   * backend (19 kg de paquete → 12 conos). Sigue siendo editable: puede que el
-   * cliente regrese menos de lo que se llevó.
-   */
-  alCambiarPresentacion(linea: PedidoLinea): void {
-    const elegida = Number(this.retornoPresentacion[linea.id]);
-    if (elegida === linea.variante_id) {
-      this.retornoCantidad[linea.id] = Number(linea.cantidad);
-      return;
-    }
-    const alt = linea.alternativas_devolucion?.find((a) => a.variante_id === elegida);
-    if (alt) this.retornoCantidad[linea.id] = alt.cantidad_equivalente;
-  }
-
-  /** Unidad en que se captura lo que regresa de esta línea. */
-  unidadRetorno(linea: PedidoLinea): string {
-    const elegida = Number(this.retornoPresentacion[linea.id]);
-    if (elegida === linea.variante_id) return '';
-    return linea.alternativas_devolucion?.find((a) => a.variante_id === elegida)?.unidad ?? '';
-  }
-
-  /** True si esta línea va a regresar en otra presentación. */
-  hayCambio(linea: PedidoLinea): boolean {
-    return Number(this.retornoPresentacion[linea.id]) !== linea.variante_id;
-  }
-
-  /**
    * Efectivo que va a salir de la caja, para avisarlo antes de confirmar. Es
    * informativo: el monto real lo calcula el backend con los pagos del pedido.
    */
@@ -761,28 +729,17 @@ export class PedidoDetalle implements OnDestroy {
     const p = this.pedido();
     if (!p?.detalle || !this.nuevoEstado) return;
 
-    // Un apartado nunca salió de la bodega: no hay nada que regrese ni en qué
-    // presentación, solo se libera lo apartado.
-    if (this.esApartadoSinEntregar(p)) {
-      this.aplicarEstado(this.nuevoEstado);
-      return;
-    }
-
-    const devoluciones: DevolucionLinea[] = p.detalle.map((d) => ({
-      detalle_id: d.id,
-      variante_id: Number(this.retornoPresentacion[d.id]),
-      cantidad: Number(this.retornoCantidad[d.id]),
-    }));
-    this.aplicarEstado(this.nuevoEstado, devoluciones);
+    // Regresa todo tal cual se vendió (un apartado nunca salió: solo se libera).
+    this.aplicarEstado(this.nuevoEstado);
   }
 
-  private aplicarEstado(estado: EstadoPedido, devoluciones?: DevolucionLinea[]): void {
+  private aplicarEstado(estado: EstadoPedido): void {
     const p = this.pedido();
     if (!p) return;
     this.aplicando.set(true);
     this.error.set(null);
     this.mensaje.set(null);
-    this.ventas.cambiarEstado(p.id, estado, devoluciones).subscribe({
+    this.ventas.cambiarEstado(p.id, estado).subscribe({
       next: (r) => {
         this.aplicando.set(false);
         this.confirmando.set(false);

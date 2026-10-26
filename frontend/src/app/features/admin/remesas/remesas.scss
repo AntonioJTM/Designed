@@ -29,7 +29,7 @@
 .soltar-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .soltar-texto b { font-size: 0.9375rem; font-weight: 600; overflow-wrap: anywhere; }
 .soltar-texto span { font-size: 0.8125rem; color: var(--tinta-3); }
-.soltar-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.soltar-acciones { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
 .soltar + .aviso { margin: 14px 0 0; }
 
 /* Paso 3: cifras de la lista, en cajas grises. */

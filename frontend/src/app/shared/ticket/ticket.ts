@@ -2,6 +2,7 @@ import { DevolucionHecha, Pedido, PedidoLinea } from '../../core/models/ventas.m
 import { nombreLote, paquetes, porLote } from '../lotes';
 import { fechaVence } from '../plazo-credito';
 import { ClienteTicket, TicketAbonoCuenta, TicketAnticipo, TicketPagoNota } from '../../core/models/tickets.models';
+import { vendioOtraPersona } from '../vendedor';
 
 /**
  * EL TICKET IMPRESO (2026-10-13: "tengo la impresora Kinwodon; que el corte lo
@@ -266,7 +267,10 @@ export function armarTicket(p: Pedido, tienda: DatosTienda, extras: ExtrasTicket
     renglon('Folio', `<span class="mono">${esc(p.numero_pedido)}</span>`),
     renglon('Fecha', esc(fechaTicket(p.creado_en))),
     p.caja ? renglon('Caja', esc(p.caja)) : p.almacen ? renglon('Tienda', esc(p.almacen)) : '',
-    p.usuario ? renglon('Atendió', esc(p.usuario)) : '',
+    // Atendió = quien la vendió (2026-10-23); si la registró otra persona, también se
+    // dice («Elaboró», como en Ventas: en una nota pendiente de pago nadie cobró).
+    (p.vendedor ?? p.usuario) ? renglon('Atendió', esc(p.vendedor ?? p.usuario ?? '')) : '',
+    vendioOtraPersona(p) && p.usuario ? renglon('Elaboró', esc(p.usuario)) : '',
     cliente ? renglon('Cliente', esc(cliente)) : '',
   ].join('');
 

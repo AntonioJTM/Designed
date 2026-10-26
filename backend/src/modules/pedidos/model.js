@@ -18,6 +18,7 @@ const devoluciones = {
 const archivos = require('../../utils/archivos');
 const { hoyLocal } = require('../../utils/fechas');
 const { anotarAlmacen } = require('../tiempo-real/contexto');
+const vendedores = require('./vendedores');
 
 // Ventas/pedidos unificados (online + POS). La confirmación de venta ocurre en
 // UNA transacción: pedidos + pedido_detalle + pagos + descuento de inventario +
@@ -379,6 +380,34 @@ async function _pedidoDeClave(clave) {
   return pedido;
 }
 
+/**
+ * LOS CONOS SE CUENTAN (2026-10-21, usuario: "cuando se realice una venta y sea
+ * de conos, que la cantidad de conos y el peso, ambos, sean obligatorios"). Cada
+ * línea de conos lleva cuántos son (`piezas`, entero desde 1); el peso ya era
+ * obligatorio. Lo usan la venta de mostrador y la modificación de una nota en
+ * espera. `lineas`: [{ variante_id, piezas }].
+ */
+async function _exigirConosContados(ejecutor, lineas) {
+  const ids = [...new Set(lineas.map((l) => Number(l.variante_id)).filter(Boolean))];
+  if (!ids.length) return;
+  const [conos] = await ejecutor.query(
+    `SELECT pv.id, p.nombre, p.grosor_calibre AS calibre
+       FROM producto_variantes pv
+       JOIN productos p ON p.id = pv.producto_id
+      WHERE pv.id IN (:ids) AND pv.tipo_presentacion = 'cono'`,
+    { ids }
+  );
+  const deCono = new Map(conos.map((c) => [Number(c.id), c]));
+  for (const l of lineas) {
+    const c = deCono.get(Number(l.variante_id));
+    if (c && !(Number.isInteger(Number(l.piezas)) && Number(l.piezas) >= 1)) {
+      throw new AppError(422, 'FALTAN_CONOS',
+        `Di cuántos conos son de ${c.nombre}${c.calibre ? ' ' + c.calibre : ''}: ` +
+        'en una venta de conos van el peso y cuántos conos se pesaron.');
+    }
+  }
+}
+
 async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
   // Un apartado desde la tienda en línea se rechaza ANTES de cotizar: si no,
   // la cotización revisaba primero las existencias del almacén en línea y el
@@ -387,6 +416,8 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
     throw new AppError(422, 'APARTADO_SOLO_MOSTRADOR',
       'Los apartados se hacen en el mostrador, no en la tienda en línea.');
   }
+  // En el mostrador, la línea de conos lleva cuántos son, antes de tocar nada.
+  if (datos.canal === 'punto_venta' && !esCliente) await _exigirConosContados(pool, datos.items ?? []);
   return withTransaction(async (conn) => {
     const cot = await _cotizar(conn, datos, { bloquear: true, esCliente });
     const {
@@ -596,17 +627,23 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       }
     }
 
+    // Quién la VENDIÓ (2026-10-23): el que se eligió en la caja, de esa tienda. A
+    // esa persona va la comisión; quien la registra queda en `usuario_id`.
+    const vendedorId = esCliente
+      ? null
+      : await vendedores.resolver(conn, { vendedorId: datos.vendedor_id, usuarioId, almacenId });
+
     // 5. Insertar pedido.
     const numero = generarNumero(datos.canal);
     const [pr] = await conn.query(
       `INSERT INTO pedidos
          (numero_pedido, clave_cobro, canal, encargo, nota_pendiente, metodo_entrega, cliente_id, tipo_cliente_id, usuario_id,
-          sesion_caja_id, almacen_id,
+          vendedor_id, sesion_caja_id, almacen_id,
           direccion_envio_id, entrega_direccion, entrega_para, cupon_id, estado, inventario_descontado,
           subtotal, descuento, impuestos, costo_envio, total, notas)
        VALUES
          (:numero, :clave_cobro, :canal, :encargo, :nota_pendiente, :metodo_entrega, :cliente_id, :tipo_cliente_id, :usuario_id,
-          :sesion_caja_id, :almacen_id,
+          :vendedor_id, :sesion_caja_id, :almacen_id,
           :direccion_envio_id, :entrega_direccion, :entrega_para, :cupon_id, :estado, :inventario_descontado,
           :subtotal, :descuento, :impuestos, :costo_envio, :total, :notas)`,
       {
@@ -619,6 +656,7 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
         cliente_id: datos.cliente_id ?? null,
         tipo_cliente_id: tipoClienteId,
         usuario_id: usuarioId ?? null,
+        vendedor_id: vendedorId,
         sesion_caja_id: sesionCajaId,
         almacen_id: almacenId,
         direccion_envio_id: direccionId,
@@ -878,10 +916,13 @@ async function _obtenerConn(ejecutor, id) {
     `SELECT p.*, c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial,
             -- Su WhatsApp, para mandarle el ticket (2026-10-16).
             c.telefono AS cliente_telefono, c.telefono_alt AS cliente_telefono_alt,
-            u.nombre AS usuario, a.nombre AS almacen, cj.nombre AS caja
+            u.nombre AS usuario, a.nombre AS almacen, cj.nombre AS caja,
+            -- Quién la vendió (2026-10-23); sin elegir, quien la registró.
+            ${vendedores.SQL_VENDEDOR} AS vendedor_id, uv.nombre AS vendedor
        FROM pedidos p
        LEFT JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN usuarios u ON u.id = p.usuario_id
+       LEFT JOIN usuarios uv ON uv.id = ${vendedores.SQL_VENDEDOR}
        LEFT JOIN almacenes a ON a.id = p.almacen_id
        LEFT JOIN sesiones_caja sc ON sc.id = p.sesion_caja_id
        LEFT JOIN cajas cj ON cj.id = sc.caja_id
@@ -1082,6 +1123,7 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
   // caja los necesitan, y sin ellos el total no cuadraría con la lista.
   const joins = `LEFT JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN usuarios u ON u.id = p.usuario_id
+       LEFT JOIN usuarios uv ON uv.id = ${vendedores.SQL_VENDEDOR}
        LEFT JOIN sesiones_caja sc ON sc.id = p.sesion_caja_id
        LEFT JOIN cajas cj ON cj.id = sc.caja_id
        LEFT JOIN almacenes alm ON alm.id = p.almacen_id`;
@@ -1092,7 +1134,8 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
     `SELECT p.id, p.numero_pedido, p.canal, p.encargo, p.nota_pendiente, p.metodo_entrega, p.estado, p.total, p.creado_en,
             p.inventario_descontado, p.cliente_id, p.costo_envio,
             c.nombre AS cliente, c.nombre_comercial AS cliente_nombre_comercial, c.codigo AS cliente_codigo,
-            u.nombre AS usuario, cj.nombre AS caja, alm.nombre AS almacen,
+            p.usuario_id, u.nombre AS usuario, cj.nombre AS caja, alm.nombre AS almacen,
+            ${vendedores.SQL_VENDEDOR} AS vendedor_id, uv.nombre AS vendedor,
             ${SQL_DEVUELTO} AS devuelto_total,
             EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo') AS fiada,
             (SELECT COALESCE(SUM(pg.monto), 0) FROM pagos pg
@@ -1418,6 +1461,11 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null) 
   if (!ESTADOS.includes(estado)) {
     throw new AppError(422, 'ESTADO_INVALIDO', `Estado inválido: ${estado}`);
   }
+  // CANCELAR regresa TODO tal cual se vendió (2026-10-23, usuario: "no pregunte cómo
+  // lo regresa ni el peso"): se devuelve todo el dinero, así que tiene que volver toda
+  // la mercancía como salió. Lo que regresa a medias o en otra presentación va por
+  // «Devolución» (saldo a favor). El estado viejo 'devuelto' (ya no se ofrece) aún lo acepta.
+  if (estado === 'cancelado') devoluciones = null;
 
   return withTransaction(async (conn) => {
     const [prev] = await conn.query(
@@ -2465,7 +2513,7 @@ async function listarNotasPendientes({ q, almacenes } = {}) {
             COALESCE((SELECT SUM(pg.monto) FROM pagos pg WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS pagado
        FROM pedidos p
        LEFT JOIN clientes c  ON c.id = p.cliente_id
-       LEFT JOIN usuarios u  ON u.id = p.usuario_id
+       LEFT JOIN usuarios u  ON u.id = ${vendedores.SQL_VENDEDOR}
        LEFT JOIN almacenes a ON a.id = p.almacen_id
       WHERE ${where.join(' AND ')}
       ORDER BY p.creado_en, p.id`,
@@ -2926,6 +2974,12 @@ async function modificarEncargo(pedidoId, datos) {
         throw new AppError(422, 'LINEA_INVALIDA', 'Cada hilo nuevo necesita su presentación.');
       }
     }
+    // Cada línea de conos lleva cuántos son (2026-10-21): la que ya tenía, con lo
+    // que traiga ahora o lo que ya decía.
+    await _exigirConosContados(conn, entrada.map((l) => {
+      const ya = l.detalle_id != null ? porId.get(Number(l.detalle_id)) : null;
+      return { variante_id: ya ? ya.variante_id : l.variante_id, piezas: l.piezas !== undefined ? l.piezas : ya?.piezas };
+    }));
     // Un paquete es una pieza: no puede ir en dos líneas ni dos veces.
     const vistos = new Set();
     for (const l of entrada) {
@@ -3260,7 +3314,7 @@ async function listarEncargos({ estado, q, almacenes } = {}) {
             COALESCE((SELECT SUM(pg.monto) FROM pagos pg WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS pagado
        FROM pedidos p
        LEFT JOIN clientes c  ON c.id = p.cliente_id
-       LEFT JOIN usuarios u  ON u.id = p.usuario_id
+       LEFT JOIN usuarios u  ON u.id = ${vendedores.SQL_VENDEDOR}
        LEFT JOIN almacenes a ON a.id = p.almacen_id
       WHERE ${where.join(' AND ')}
       ORDER BY (p.entrega_para IS NULL), p.entrega_para, p.creado_en`,

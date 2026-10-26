@@ -19,8 +19,12 @@ interface GrupoFilas {
  * Es una matriz puesto × permiso. La columna del administrador está fija y
  * marcada: lo puede todo siempre, para que nunca se quede nadie sin poder
  * entrar aquí. Los cambios se acumulan en pantalla y se guardan juntos; el
- * servidor los aplica en el acto a lo que valida (`hacer:*`), y el menú de cada
- * persona cambia la próxima vez que entre.
+ * servidor los aplica en el acto, y desde el 2026-10-22 también el menú de quien
+ * tiene el sistema abierto (aviso en vivo 'sesion').
+ *
+ * Las pantallas que suman todas las tiendas van marcadas, y arriba se dice quién
+ * NO las ve aunque su puesto las tenga, por trabajar en una sola tienda (2026-10-22:
+ * Contabilidad tenía Transferencias y su persona no la veía sin saber por qué).
  */
 @Component({
   selector: 'app-permisos',
@@ -35,6 +39,11 @@ interface GrupoFilas {
     table.matriz td.marca input:disabled { cursor: default; }
     table.matriz td.que b { font-weight: 500; display: block; }
     table.matriz td.que span { font-size: 0.8125rem; color: var(--tinta-3); }
+    table.matriz td.que span.solo-todas { display: table; margin: 3px 0 4px; font-size: 0.6875rem; color: var(--neutro-t); }
+    .no-las-ven { display: flex; flex-direction: column; gap: 6px; margin: 0 0 16px; }
+    .no-las-ven ul { margin: 0; padding-left: 20px; }
+    .no-las-ven li { line-height: 1.5; }
+    .no-las-ven a { color: inherit; font-weight: 600; }
     table.matriz tr.cambiada td { background: var(--acento-tenue); }
     .barra-guardar { position: sticky; bottom: 16px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-radius: 10px; background: var(--barra); color: #fff; box-shadow: 0 8px 24px rgba(18, 22, 31, 0.25); }
     .barra-guardar .acciones { display: flex; gap: 10px; }
@@ -105,6 +114,11 @@ export class PermisosPantalla {
   /** Lo que tiene el puesto en pantalla: su borrador si lo tocaron, si no lo guardado. */
   private claves(r: RolPermisos): Set<string> {
     return this.borrador()[r.id] ?? new Set(r.claves);
+  }
+
+  /** "Transferencias, Reportes y Nómina". */
+  lista(xs: string[]): string {
+    return xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`;
   }
 
   marcado(r: RolPermisos, clave: string): boolean {

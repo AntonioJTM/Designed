@@ -229,4 +229,6 @@ async function ventaPorColor(desde, hastaExcl, q) {
   return { filas, periodo };
 }
 
-module.exports = { ventasResumen, ventasPorDia, masVendidos, porReabastecer, cortesCaja, ventaPorColor };
+// KG_NETO, DEVUELTO y VENDIDO también los usa Rotación de inventario (2026-10-22): lo que
+// cuenta como venta es lo mismo en las dos pantallas.
+module.exports = { ventasResumen, ventasPorDia, masVendidos, porReabastecer, cortesCaja, ventaPorColor, KG_NETO, DEVUELTO, VENDIDO };

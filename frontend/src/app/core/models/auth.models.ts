@@ -64,6 +64,10 @@ export interface Rol {
    * correo ni contraseña, sin otros puestos y fuera de Permisos.
    */
   entra_al_sistema?: boolean;
+  /** Las pantallas que suman todas las tiendas que tiene el puesto (Personal lo dice con una sola tienda). */
+  solo_todas?: string[];
+  /** Lo que no podría hacer con una sola tienda ("cambiar los tipos de gasto"). */
+  acciones_todas?: string[];
 }
 
 /** Cliente de la tienda (tabla `clientes`). */

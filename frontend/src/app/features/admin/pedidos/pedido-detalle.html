@@ -452,14 +452,15 @@
             ahí, así que no hay nada que reponer.
           </p>
         } @else {
+          <!-- Al cancelar regresa TODO tal cual se vendió: no se pregunta cómo ni cuánto
+               (2026-10-23, usuario). Lo que el cliente regresa a medias va por «Devolución». -->
           <p>
-            La mercancía regresa al inventario de <b>{{ p.almacen || 'su almacén' }}</b>, que es de donde
-            salió. Si el cliente la devuelve en otra presentación —se llevó el paquete y regresa
-            coneado— cámbiala aquí.
+            La mercancía regresa <b>tal cual se vendió</b> al inventario de <b>{{ p.almacen || 'su almacén' }}</b>,
+            que es de donde salió.
           </p>
           <div class="tabla-scroll">
             <table class="grid">
-              <thead><tr><th>Se vendió</th><th>Regresa como</th><th class="num">Cantidad</th></tr></thead>
+              <thead><tr><th>Se vendió</th></tr></thead>
               <tbody>
                 @for (d of p.detalle; track d.id) {
                   <tr>
@@ -467,31 +468,9 @@
                       <!-- Con el calibre: "ROJO · Paquete" no dice cuál de los dos ROJO
                            regresa a la bodega. -->
                       <div><b>{{ nombreDelHilo(d) }}</b></div>
-                      <div class="muted">{{ d.cantidad | cantidad: 'kg' }}</div>
-                    </td>
-                    <td>
-                      @if (d.alternativas_devolucion?.length) {
-                        <label class="field">
-                          <span class="oculto">Regresa como</span>
-                          <select [(ngModel)]="retornoPresentacion[d.id]" (ngModelChange)="alCambiarPresentacion(d)"
-                                  [name]="'pres-' + d.id">
-                            <option [ngValue]="d.variante_id">Lo mismo ({{ d.sku }})</option>
-                            @for (a of d.alternativas_devolucion; track a.variante_id) {
-                              <option [ngValue]="a.variante_id">{{ a.sku }}{{ a.presentacion ? ' · ' + a.presentacion : '' }}</option>
-                            }
-                          </select>
-                        </label>
-                      } @else {
-                        <span class="muted mono">{{ d.sku }}</span>
-                      }
-                    </td>
-                    <td class="num">
-                      <span class="cant">
-                        <input type="number" step="0.001" min="0.001" [(ngModel)]="retornoCantidad[d.id]"
-                               [name]="'cant-' + d.id" [attr.aria-label]="'Cantidad que regresa de ' + nombreDelHilo(d)" />
-                        <span class="muted">{{ unidadRetorno(d) || 'kg' }}</span>
-                      </span>
-                      @if (hayCambio(d)) { <div class="muted ayuda">cambio de presentación</div> }
+                      <div class="muted">
+                        {{ d.cantidad | cantidad: 'kg' }}@if (d.piezas) { · {{ d.piezas }} {{ d.piezas === 1 ? 'cono' : 'conos' }} }@if (d.bultos?.length) { · {{ d.bultos!.length }} {{ d.bultos!.length === 1 ? 'paquete' : 'paquetes' }} }
+                      </div>
                     </td>
                   </tr>
                 }

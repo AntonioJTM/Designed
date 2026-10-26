@@ -5,5 +5,8 @@
 .bultos-linea { margin-top: 4px; }
 // Por lote (2026-10-20): "Lote 0094853 · 3 paquetes · 57.25 kg" y sus paquetes.
 .lote-grupo { margin-top: 6px; }
+// El total del color, de todos sus lotes (2026-10-21): "4 paquetes en total · 2 lotes".
+.total-paquetes { margin-top: 2px; font-size: 0.8125rem; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.total-paquetes b { color: var(--tinta); font-weight: 600; }
 .lote-cabeza { display: block; font-family: var(--fuente); font-size: 0.8125rem; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
 .lote-cabeza b { color: var(--tinta); font-weight: 600; }

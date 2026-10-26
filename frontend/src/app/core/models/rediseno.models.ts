@@ -100,8 +100,12 @@ export interface Deuda {
   dias_aviso: number;
   por_antiguedad: { clave: string; etiqueta: string; monto: number; clientes: number }[];
   clientes: DeudorCartera[];
-  credito_usado: number;
-  credito_autorizado: number;
+  /**
+   * CRÉDITO POR COBRAR ESTE MES (2026-10-22; reemplaza "Crédito usado"): lo que
+   * falta de sus notas a crédito vencidas y de las que vencen hasta `hasta` (el
+   * último día del mes).
+   */
+  por_cobrar_mes: { monto: number; clientes: number; hasta: string };
   cobrado_mes: { monto: number; abonos: number };
   /** Lo que deben en notas pendientes de pago, aparte del crédito (2026-10-20). */
   notas_pendientes?: NotasPendientesDeuda;
@@ -260,6 +264,20 @@ export interface PermisoCatalogo {
   clave: string;
   nombre: string;
   ayuda: string;
+  /** La ve (o la hace) solo quien tiene «Todas las tiendas»: la etiqueta que lo dice. */
+  nota_tiendas?: string;
+}
+
+/** Quien tiene en su puesto cosas de todas las tiendas pero trabaja en una y no las ve. */
+export interface NoLasVe {
+  usuario_id: number;
+  nombre: string;
+  tiendas: string;
+  puestos: string[];
+  /** Lo que no ve ("Transferencias", "las miradas de Clientes"). */
+  pantallas: string[];
+  /** Lo que no puede hacer ("cambiar los tipos de gasto"). */
+  acciones: string[];
 }
 
 export interface RolPermisos {
@@ -274,5 +292,7 @@ export interface RolPermisos {
 export interface MatrizPermisos {
   catalogo: PermisoCatalogo[];
   roles: RolPermisos[];
+  /** Quien NO ve pantallas de su puesto por trabajar en una sola tienda (2026-10-22). */
+  no_las_ven?: NoLasVe[];
   falta_migracion: boolean;
 }

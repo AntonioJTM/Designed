@@ -5,6 +5,7 @@ const { AppError } = require('../../middlewares/error');
 const { hashPassword, verificarPassword } = require('../../utils/password');
 const { firmarToken } = require('../../utils/jwt');
 const permisosModel = require('../permisos/model');
+const { CLAVES: TODAS_LAS_CLAVES, soloConTodas } = require('../permisos/catalogo');
 
 /** Los DEMÁS puestos sin repetir y sin el principal. */
 function _otros(ids, principal) {
@@ -177,8 +178,17 @@ async function actualizarStaff(id, datos, alcance = null) {
   return sanitizar(usuario);
 }
 
+/**
+ * Los puestos para el formulario de Personal, cada uno con las pantallas que
+ * suman TODAS las tiendas que tiene (`solo_todas`): con una sola tienda no las
+ * vería, y el formulario lo dice (2026-10-22).
+ */
 async function roles() {
-  return model.listarRoles();
+  const [lista, asignados] = await Promise.all([model.listarRoles(), permisosModel.asignados()]);
+  return lista.map((r) => {
+    const { pantallas, acciones } = soloConTodas(r.nombre === 'administrador' ? [...TODAS_LAS_CLAVES] : asignados[r.id] ?? []);
+    return { ...r, solo_todas: pantallas, acciones_todas: acciones };
+  });
 }
 
 /** Autentica a un usuario (staff) por correo y contraseña. */

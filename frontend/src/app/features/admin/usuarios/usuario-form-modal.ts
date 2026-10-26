@@ -234,6 +234,33 @@ export class UsuarioFormModal implements OnInit {
     return this.roles().filter((r) => r.id !== principal && r.entra_al_sistema !== false);
   }
 
+  /**
+   * Las pantallas de sus puestos que suman TODAS las tiendas (Transferencias,
+   * Reportes…): con solo unas tiendas NO las vería, y el formulario lo dice
+   * (2026-10-22: Contabilidad tenía Transferencias y su persona no la veía). Es
+   * un MÉTODO: el principal es un control del formulario, no una señal.
+   */
+  noVeria(): string[] {
+    return this.deSusPuestos((r) => r.solo_todas);
+  }
+
+  /** Lo que su puesto le deja hacer y con una sola tienda NO podría ("cambiar los tipos de gasto"). */
+  noPodria(): string[] {
+    return this.deSusPuestos((r) => r.acciones_todas);
+  }
+
+  private deSusPuestos(que: (r: Rol) => string[] | undefined): string[] {
+    if (this.todas() || this.esAdministrador() || this.sinAcceso()) return [];
+    // El puesto principal primero, luego los demás.
+    const ids = [this.form.controls.rol_id.value, ...this.otros()];
+    return [...new Set(ids.flatMap((id) => que(this.roles().find((r) => r.id === id) ?? ({} as Rol)) ?? []))];
+  }
+
+  /** "Transferencias, Reportes y Nómina". */
+  lista(xs: string[]): string {
+    return xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`;
+  }
+
   /** El puesto principal elegido es el de administrador: ve todas las tiendas siempre. */
   esAdministrador(): boolean {
     return this.rolElegido()?.nombre === 'administrador';

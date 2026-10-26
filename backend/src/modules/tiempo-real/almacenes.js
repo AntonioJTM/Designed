@@ -49,6 +49,8 @@ async function almacenesDelCambio(ruta, cuerpo) {
   // Transferencias suma todas las tiendas (y un abono por transferencia no tiene
   // tienda): lo que se marca ahí le llega solo a quien ve todas (2026-10-20).
   if (/^\/transferencias(\/|$)/.test(String(ruta ?? ''))) return DESCONOCIDO;
+  // Rotación de inventario también suma todas las tiendas (2026-10-22).
+  if (/^\/rotacion(\/|$)/.test(String(ruta ?? ''))) return DESCONOCIDO;
   const p = pistasDelCambio(ruta, cuerpo);
   const ids = new Set(p.almacenes);
   const una = async (sql, params) => {

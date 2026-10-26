@@ -82,3 +82,27 @@ test('la nota que ya se pagó no vence; no debe: null', () => {
   assert.equal(v.proxima.pedidoId, 2);
   assert.equal(vencimientoDe([], '2026-10-20', 15), null);
 });
+
+// CRÉDITO POR COBRAR ESTE MES (2026-10-22): lo vencido + lo que vence hasta el
+// último día del mes. El ejemplo con que lo eligió el usuario, al 22 de octubre.
+test('por cobrar este mes: las vencidas y las que vencen hasta el 31, no las de noviembre', () => {
+  const { porCobrarHasta, finDeMes } = require('./model');
+  const v = vencimientoDe([
+    c(500, '2026-09-05', 1, 15),   // A: venció el 20 de septiembre
+    c(2000, '2026-09-30', 2, 15),  // B: venció el 15 de octubre
+    c(3000, '2026-10-14', 3, 15),  // C: vence el 29 de octubre
+    c(1000, '2026-10-21', 4, 15),  // D: vence el 5 de noviembre
+  ], '2026-10-22', 15);
+  assert.equal(finDeMes('2026-10-22'), '2026-10-31');
+  assert.equal(porCobrarHasta(v, finDeMes('2026-10-22')), 5500);
+  // Con un abono de $700 (paga A y $200 de B) quedan $4,800.
+  const v2 = vencimientoDe([
+    c(500, '2026-09-05', 1, 15), c(2000, '2026-09-30', 2, 15), c(3000, '2026-10-14', 3, 15), c(1000, '2026-10-21', 4, 15),
+    { tipo: 'abono', monto: 700, dia: '2026-10-20', pedido_id: null },
+  ], '2026-10-22', 15);
+  assert.equal(porCobrarHasta(v2, '2026-10-31'), 4800);
+  assert.equal(porCobrarHasta(null, '2026-10-31'), 0);
+  assert.equal(finDeMes('2026-02-10'), '2026-02-28');
+  assert.equal(finDeMes('2028-02-10'), '2028-02-29');
+  assert.equal(finDeMes('2026-12-31'), '2026-12-31');
+});

@@ -41,6 +41,7 @@ const I = {
   materiales: 'M12 3l9 5-9 5-9-5z M3 13l9 5 9-5',
   negocio: 'M4 20V11 M10 20V5 M16 20v-6 M3 20h18',
   reportes: 'M6 3h9l4 4v14H6z M14 3v5h5 M9 13h6 M9 17h6',
+  rotacion: 'M4 12a8 8 0 0 1 14-5.3 M20 4v4h-4 M20 12a8 8 0 0 1-14 5.3 M4 20v-4h4',
   almacenes: 'M3 21V9l9-6 9 6v12 M9 21v-6h6v6',
   listas: 'M3 12V4h8l10 10-8 8z M7.5 8h.01',
   personal: 'M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M5 20c.8-3.5 3.6-5.5 7-5.5s6.2 2 7 5.5',
@@ -96,6 +97,7 @@ export const MENU: GrupoMenu[] = [
     opciones: [
       { clave: 'negocio', nombre: 'Cómo va el negocio', ruta: '/admin/tablero', icono: I.negocio, permiso: 'ver:negocio' },
       { clave: 'reportes', nombre: 'Reportes', ruta: '/admin/reportes', icono: I.reportes, permiso: 'ver:reportes' },
+      { clave: 'rotacion', nombre: 'Rotación de inventario', ruta: '/admin/rotacion', icono: I.rotacion, permiso: 'ver:rotacion' },
     ],
   },
   {

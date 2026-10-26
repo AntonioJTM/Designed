@@ -6,7 +6,7 @@ import { CodigoResuelto, InventarioService } from '../../../core/services/invent
 import { AuthService } from '../../../core/services/auth.service';
 import { CatalogoService } from '../../../core/services/catalogo.service';
 import { TipoCliente } from '../../../core/models/catalogo.models';
-import { Caja, ItemCarrito, MetodoPago, Pedido, SesionCaja } from '../../../core/models/ventas.models';
+import { Caja, ItemCarrito, MetodoPago, Pedido, SesionCaja, Vendedor } from '../../../core/models/ventas.models';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { ClienteParaVenta, ColorComprado } from '../../../core/models/clientes.models';
 import { TiendaService } from '../../../core/services/tienda.service';
@@ -229,6 +229,28 @@ export class Pos {
 
   cajaSel: number | '' = '';
 
+  // ---- Quién la vende (2026-10-23) ----
+  //
+  // "Nota de venta: añadir vendedor" (usuario): el personal de la tienda de esta
+  // caja, con quien cobra ya elegido. A quien se elija le va la comisión; quien
+  // cobra queda como «Elaboró». Después de cada venta vuelve a quien cobra, para
+  // que la comisión de la siguiente no se le vaya a otro por descuido.
+  private readonly personalTienda = signal<Vendedor[]>([]);
+  /**
+   * La lista que se ofrece. Quien cobra siempre está: si la del servidor no lo
+   * trae (no debería), se agrega. Señal calculada: el perfil puede llegar después
+   * que la lista (al recargar directo en el punto de venta).
+   */
+  readonly vendedores = computed(() => {
+    const lista = this.personalTienda();
+    const yo = this.auth.sesion();
+    if (!lista.length || !yo?.id || lista.some((v) => v.id === yo.id)) return lista;
+    return [{ id: yo.id, nombre: yo.nombre, puesto: yo.rol ?? '' }, ...lista];
+  });
+  vendedorSel: number | '' = '';
+  /** De qué almacén es la lista cargada: al cambiar a una caja de otra tienda se vuelve a pedir. */
+  private vendedoresDe: number | null = null;
+
   // Búsqueda de variantes
   qVar = '';
   /** El campo del lector: la pistola escribe el código ahí y manda Enter. */
@@ -329,6 +351,8 @@ export class Pos {
     vivo.cambios(['inventario', 'ventas', 'catalogo']).pipe(takeUntilDestroyed()).subscribe(() => this.refrescarBusqueda());
     vivo.cambios(['caja']).pipe(takeUntilDestroyed()).subscribe(() => this.refrescarTurno());
     vivo.cambios(['clientes', 'ventas']).pipe(takeUntilDestroyed()).subscribe(() => this.refrescarCliente());
+    // Alguien entró o salió del personal de esta tienda: la lista de vendedores se pone al día.
+    vivo.cambios(['sesion']).pipe(takeUntilDestroyed()).subscribe(() => this.cargarVendedores(true));
     // Cada vez que cambia el carrito (o la lista de precios) se pide el total
     // real. Va en un `effect` y no en cada punto donde se toca el carrito:
     // son cinco sitios distintos y era cuestión de tiempo que alguno se
@@ -385,6 +409,13 @@ export class Pos {
     // queda listo para escanear. Solo cuando CAMBIA el turno (2026-10-20,
     // auditoría): la recarga en vivo trae el mismo turno otra vez, y seleccionaba
     // lo que el cajero estaba escribiendo en el lector.
+    // El vendedor elegido se respeta mientras siga en la lista; si no (otra tienda,
+    // o se dio de baja), vuelve a quien cobra.
+    effect(() => {
+      const lista = this.vendedores();
+      if (!lista.some((v) => v.id === Number(this.vendedorSel))) this.vendedorSel = this.vendedorPorOmision();
+    });
+
     let turnoEnfocado: number | null = null;
     effect(() => {
       const id = this.sesion()?.id ?? null;
@@ -462,6 +493,7 @@ export class Pos {
       next: (s) => {
         this.sesion.set(s && s.estado === 'abierta' ? s : null);
         this.cargandoSesion.set(false);
+        this.cargarVendedores();
       },
       error: (e) => {
         this.error.set(this.msg(e));
@@ -481,6 +513,44 @@ export class Pos {
     this.sesion.set(null);
     this.mensaje.set(null);
     this.verificarSesion();
+  }
+
+  /**
+   * El personal de la tienda de esta caja, para elegir quién vende. Sin `forzar`
+   * no se vuelve a pedir si es la misma tienda.
+   */
+  cargarVendedores(forzar = false): void {
+    const almacen = this.cajaActual()?.almacen_id ?? null;
+    if (!almacen || (!forzar && almacen === this.vendedoresDe)) return;
+    this.vendedoresDe = almacen;
+    this.ventas.vendedores(almacen).subscribe({
+      next: (lista) => { if (almacen === this.vendedoresDe) this.personalTienda.set(lista); },
+      // Sin la lista la venta sale igual, a nombre de quien cobra.
+      error: () => { if (almacen === this.vendedoresDe) this.vendedoresDe = null; },
+    });
+  }
+
+  /** Quien cobra, si está en la lista; si no, nadie (el servidor pone a quien cobra). */
+  private vendedorPorOmision(): number | '' {
+    const yo = this.auth.miId();
+    return yo != null && this.vendedores().some((v) => v.id === yo) ? yo : '';
+  }
+
+  /** El vendedor que se manda con la venta (el servidor revisa que sea de esta tienda). */
+  private vendedorElegido(): number | undefined {
+    return this.vendedorSel === '' ? undefined : Number(this.vendedorSel);
+  }
+
+  /** ¿Es quien está cobrando? Para decir "(tú)" en la lista. */
+  esYo(id: number): boolean {
+    return id === this.auth.miId();
+  }
+
+  /** Debajo del vendedor: a quién va la comisión. Método: `vendedorSel` es ngModel. */
+  ayudaVendedor(): string {
+    const v = this.vendedores().find((x) => x.id === Number(this.vendedorSel));
+    if (!v || this.esYo(v.id)) return 'Si atendió otra persona, elígela: la comisión es de quien vende.';
+    return `La comisión es de ${v.nombre}; tú quedas como quien la elaboró.`;
   }
 
   /** La caja elegida. Método: `cajaSel` es una propiedad con ngModel. */
@@ -1542,6 +1612,7 @@ export class Pos {
         canal: 'punto_venta',
         clave_cobro: this.claveCobro,
         sesion_caja_id: s.id,
+        vendedor_id: this.vendedorElegido(),
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         // Si se identificó al cliente, la venta queda en su historial.
         cliente_id: this.clienteSel()?.id,
@@ -1609,6 +1680,8 @@ export class Pos {
     this.operacionTransf = '';
     // Parte y parte es de esa venta: la siguiente arranca en efectivo.
     if (this.metodoSel === 'mixto') this.metodoSel = this.idEfectivo() ?? '';
+    // El vendedor es de esa venta: la siguiente vuelve a quien cobra.
+    this.vendedorSel = this.vendedorPorOmision();
     this.qVar = '';
     this.resultados.set([]);
     this.mensaje.set(null);
@@ -1747,6 +1820,7 @@ export class Pos {
       .crearPedido({
         canal: 'punto_venta',
         sesion_caja_id: s.id,
+        vendedor_id: this.vendedorElegido(),
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         encargo: true,
@@ -1792,6 +1866,7 @@ export class Pos {
       .crearPedido({
         canal: 'punto_venta',
         sesion_caja_id: s.id,
+        vendedor_id: this.vendedorElegido(),
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         pendiente_pago: true,

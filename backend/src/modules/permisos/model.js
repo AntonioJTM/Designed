@@ -119,6 +119,29 @@ async function roles() {
   return rows;
 }
 
+/**
+ * Quien trabaja en UNA o varias tiendas (no en «Todas»), activo y con un puesto que
+ * entra al sistema: sus puestos (el principal y los demás) y sus tiendas.
+ */
+async function personasSinTodas() {
+  const [rows] = await pool.query(
+    `SELECT u.id, u.nombre, u.rol_id,
+            (SELECT GROUP_CONCAT(ur.rol_id) FROM usuario_roles ur WHERE ur.usuario_id = u.id) AS otros,
+            (SELECT GROUP_CONCAT(a.nombre ORDER BY a.nombre SEPARATOR ', ')
+               FROM usuario_almacenes ua JOIN almacenes a ON a.id = ua.almacen_id
+              WHERE ua.usuario_id = u.id AND a.activo = 1) AS tiendas
+       FROM usuarios u JOIN roles r ON r.id = u.rol_id
+      WHERE u.activo = 1 AND u.todas_las_tiendas = 0 AND r.entra_al_sistema = 1
+      ORDER BY u.nombre`
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    nombre: r.nombre,
+    puestos: [Number(r.rol_id), ...String(r.otros ?? '').split(',').filter(Boolean).map(Number)],
+    tiendas: r.tiendas ?? '',
+  }));
+}
+
 async function asignados() {
   const [rows] = await pool.query(
     `SELECT rp.rol_id, p.clave FROM rol_permisos rp JOIN permisos p ON p.id = rp.permiso_id`
@@ -169,4 +192,6 @@ async function clavesRegistradas() {
   return new Set(rows.map((r) => r.clave));
 }
 
-module.exports = { clavesDeRol, puestosDeUsuario, tiendasDeUsuario, almacenDeTurno, invalidar, roles, asignados, guardar, crearRol, obtenerRol, porNombre, clavesRegistradas };
+module.exports = { clavesDeRol, puestosDeUsuario, tiendasDeUsuario, almacenDeTurno, invalidar, roles, asignados, guardar, crearRol, obtenerRol, porNombre, clavesRegistradas,
+  personasSinTodas,
+};

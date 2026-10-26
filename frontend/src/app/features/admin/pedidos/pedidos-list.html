@@ -145,7 +145,11 @@
                   }
                 </td>
                 <td class="tenue">{{ p.almacen || '—' }}</td>
-                <td class="tenue">{{ p.usuario || '—' }}</td>
+                <td class="tenue">
+                  {{ p.usuario || '—' }}
+                  <!-- Quién la vendió, si no fue quien la elaboró (2026-10-23): a esa persona va la comisión. -->
+                  @if (vendioOtra(p)) { <span class="vendio">vendió {{ p.vendedor }}</span> }
+                </td>
                 <td class="num"><b>{{ p.total | dinero }}</b></td>
                 <td class="acciones"><a class="btn btn-ghost btn-sm" [routerLink]="['/admin/ventas', p.id]">Ver</a></td>
               </tr>

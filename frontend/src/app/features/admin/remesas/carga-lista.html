@@ -117,14 +117,17 @@
           </span>
         } @else {
           <b>Arrastra aquí el archivo o elígelo</b>
-          <span>Se leen BOX NO, COLOR, CALIBRE, LOT, NET y CONOS; lo demás se ignora.</span>
+          <span>Se leen BOX NO, COLOR, CALIBRE, LOT, NET y CONOS; lo demás se ignora. ¿No tienes el archivo? Descarga la plantilla y llénala.</span>
         }
       </div>
     </div>
-    <button type="button" class="btn btn-sm" [class.btn-primary]="!archivo" [class.btn-ghost]="archivo"
-            (click)="archivoLista.click()">
-      {{ archivo ? 'Cambiar archivo' : 'Elegir archivo' }}
-    </button>
+    <div class="soltar-acciones">
+      <app-boton-plantilla tipo="lista" />
+      <button type="button" class="btn btn-sm" [class.btn-primary]="!archivo" [class.btn-ghost]="archivo"
+              (click)="archivoLista.click()">
+        {{ archivo ? 'Cambiar archivo' : 'Elegir archivo' }}
+      </button>
+    </div>
   </div>
   <p class="nota">
     El hilo se llama como dice la columna COLOR, tal cual: si quieres otro nombre, cámbialo en el Excel

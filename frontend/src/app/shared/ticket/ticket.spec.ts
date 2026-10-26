@@ -60,6 +60,30 @@ describe('Ticket impreso', () => {
     expect(html).not.toContain('Subtotal');
   });
 
+  // EL VENDEDOR (2026-10-23): "Atendió" es quien la vendió; si la registró otra persona,
+  // también va, como «Elaboró» (en una nota pendiente de pago nadie cobró).
+  it('dice quién la atendió (el vendedor) y, si la registró otra persona, quién la elaboró', () => {
+    let html = armarTicket(venta({ usuario_id: 1, vendedor_id: 7, vendedor: 'Rosa Martínez' }), tienda, { cambio: 0 });
+    expect(html).toContain('Atendió');
+    expect(html).toContain('Rosa Martínez');
+    expect(html).toContain('Elaboró');
+    expect(html).toContain('Juan Perez');
+    expect(html).not.toContain('Cobró');
+
+    html = armarTicket(venta({ usuario_id: 1, vendedor_id: 1, vendedor: 'Juan Perez' }), tienda, { cambio: 0 });
+    expect(html).toContain('Atendió');
+    expect(html).not.toContain('Elaboró');
+
+    // Dos personas con el MISMO nombre: se compara por persona, no por nombre.
+    html = armarTicket(venta({ usuario_id: 1, vendedor_id: 9, vendedor: 'Juan Perez' }), tienda, { cambio: 0 });
+    expect(html).toContain('Elaboró');
+
+    // Las ventas de antes no traen vendedor: atendió quien la registró.
+    html = armarTicket(venta(), tienda, { cambio: 0 });
+    expect(html).toContain('Juan Perez');
+    expect(html).not.toContain('Elaboró');
+  });
+
   /*
    * Pagada con su SALDO A FAVOR (2026-10-15: "que diga que se pagó con saldo a
    * favor y cuánto le queda, si aún tiene"). El caso de la foto: $2,820.25.

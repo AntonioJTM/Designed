@@ -40,6 +40,7 @@ export class PesarModal implements OnInit {
   readonly agregado = output<{ kg: number; piezas?: number }>();
 
   private readonly campoPeso = viewChild<ElementRef<HTMLInputElement>>('peso');
+  private readonly campoConos = viewChild<ElementRef<HTMLInputElement>>('conos');
 
   kg: number | null = null;
   piezas: number | null = null;
@@ -67,14 +68,34 @@ export class PesarModal implements OnInit {
     return hay !== null && (this.kg ?? 0) > hay + 0.0001;
   }
 
+  /**
+   * CONOS: el peso Y cuántos son, los dos obligatorios (2026-10-21, usuario: "que
+   * la cantidad de conos y el peso, ambos, sean obligatorios"). Entero desde 1.
+   */
+  conosListos(): boolean {
+    const n = Number(this.piezas);
+    return !this.esCono || (this.piezas != null && Number.isInteger(n) && n >= 1);
+  }
+
   puedeAgregar(): boolean {
-    return (this.kg ?? 0) > 0;
+    return (this.kg ?? 0) > 0 && this.conosListos();
+  }
+
+  /**
+   * Enter en el peso de unos conos que todavía no dicen cuántos son: el cursor
+   * pasa a "¿Cuántos conos son?" (con el botón apagado el Enter no haría nada).
+   */
+  alEnterPeso(e: Event): void {
+    if (this.esCono && (this.kg ?? 0) > 0 && !this.conosListos()) {
+      e.preventDefault();
+      this.campoConos()?.nativeElement.focus();
+    }
   }
 
   agregar(): void {
     if (!this.puedeAgregar()) return;
     const kg = Math.round(Number(this.kg) * 1000) / 1000;
-    const piezas = this.esCono && this.piezas && this.piezas > 0 ? Math.round(this.piezas) : undefined;
+    const piezas = this.esCono ? Math.round(Number(this.piezas)) : undefined;
     this.agregado.emit({ kg, piezas });
   }
 

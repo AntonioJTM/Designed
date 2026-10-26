@@ -110,7 +110,7 @@ export class Configuracion implements OnInit {
     // El tope del destare por cono (2026-10-20: "este yo lo pongo").
     {
       titulo: 'Bajar conos',
-      sub: 'Lo más que puede pesar el tubo de UN cono. Si al bajar un paquete alguien escribe más, no se deja: así un destare de 0.8 kg por cono ya no entra por error.',
+      sub: 'Lo más que puede pesar el tubo de UN cono. Al bajar un paquete se escribe el destare del paquete completo; si entre sus conos sale más que esto por cono, no se deja (con 50 g y 12 conos, hasta 0.6 kg).',
       prefijos: ['desarme_'],
     },
     // Las cuentas para transferencias ya no son claves: tienen su propia tarjeta (ver arriba).
@@ -124,9 +124,10 @@ export class Configuracion implements OnInit {
    * Prefijos que no se dibujan (ni en su tarjeta ni en "Otros"): el envío
    * mientras la tienda en línea esté apagada, las claves viejas de la cuenta de
    * banco por si la migración de cuentas todavía no corre en esa base, y la
-   * dirección de la tienda, que repetía el domicilio fiscal (2026-10-14).
+   * dirección de la tienda, que repetía el domicilio fiscal (2026-10-14), y los
+   * tiempos de Rotación, que se cambian en su pantalla (2026-10-22).
    */
-  private readonly OCULTAS = ['envio_', 'transferencia_', 'tienda_direccion'];
+  private readonly OCULTAS = ['envio_', 'transferencia_', 'tienda_direccion', 'rotacion_'];
 
   /** Las etiquetas del diseño para las claves conocidas. */
   private readonly CAMPOS: Record<string, Campo> = {

@@ -1,0 +1,36 @@
+// QUÉ REGRESA, dentro de la solicitud de una devolución (2026-10-22). Las fichas
+// del paquete son las de la caja y la Devolución (`.fichas-paquete`, styles.scss).
+:host { display: block; min-width: 0; margin-top: -4px; }
+.dev { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dev > * { margin: 0; }
+
+.quien { display: flex; flex-direction: column; gap: 4px; font-size: 0.875rem; }
+.quien p { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+
+table.grid.devueltos { min-width: 640px; }
+table.grid .sub { font-size: 0.75rem; color: var(--tinta-3); margin-top: 2px; font-weight: 400; }
+table.grid td.num, table.grid th.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+// La fila del hilo y la de sus lotes son UNA: sin raya entre ellas.
+table.grid tr.con-paquetes > td { border-bottom: 0; }
+table.grid tr.fila-lotes > td { padding-top: 0; }
+table.grid tfoot th, table.grid tfoot td {
+  background: var(--superficie-2); border-top: 1px solid var(--borde); border-bottom: 0; font-weight: 600;
+}
+table.grid tfoot th { text-align: left; }
+
+.lote-dev + .lote-dev { margin-top: 8px; }
+.lote-cabeza { display: block; font-size: 0.8125rem; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.lote-cabeza b { color: var(--tinta); font-weight: 600; }
+.fichas-paquete { margin-top: 4px; }
+// El paquete que ya no se puede regresar cerrado, en rojo.
+.ficha-paquete.no-se-puede { background: var(--peligro-f); color: var(--peligro-t); }
+.ya-no { font-size: 0.75rem; }
+
+// El reparto: cada renglón con su monto a la derecha.
+.reparto { display: flex; flex-direction: column; gap: 4px; max-width: 560px; font-size: 0.875rem; }
+.reparto p { margin: 0; display: flex; justify-content: space-between; gap: 16px; font-variant-numeric: tabular-nums; }
+// El texto se parte en el celular; el monto se queda a la derecha.
+.reparto p > span { min-width: 0; }
+.reparto p > b { flex: 0 0 auto; }
+.reparto .nota-caja { font-size: 0.8125rem; }
+.notas { font-size: 0.875rem; }

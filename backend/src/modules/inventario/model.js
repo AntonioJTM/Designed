@@ -716,8 +716,10 @@ async function desarmar(datos, usuarioId) {
     // cono. Lo captura la tienda; el sistema no lo calcula porque depende del
     // tubo que se use. Solo dice cuánto pesó el resultado: del paquete sale
     // `kgConsumidos` y eso es lo que se descuenta del inventario.
-    // Se captura POR CONO (lo que pesa un tubo) y se multiplica por los conos
-    // que salen; el total sigue aceptándose tal cual (2026-10-06).
+    // La pantalla manda el destare DEL PAQUETE completo, `destare_kg` (2026-10-21,
+    // usuario: "es el destare del paquete completo, no por conos"; del 2026-10-06
+    // a esa fecha pedía el de UN cono). `destare_por_cono_kg` se sigue aceptando y
+    // se multiplica por los conos que salen.
     const destareKg =
       datos.destare_por_cono_kg != null
         ? round3(Number(datos.destare_por_cono_kg) * piezasGeneradas)
@@ -726,14 +728,19 @@ async function desarmar(datos, usuarioId) {
       throw new AppError(422, 'DESTARE_INVALIDO', 'El destare no puede ser negativo');
     }
     // EL TOPE QUE PONE LA TIENDA (2026-10-20, auditoría: dos bajadas llevaban 0.8 kg
-    // por cono). Lo fija en Configuración → Bajar conos; sin él, vale el de 1 kg.
+    // por cono). Es POR CONO —lo que puede pesar un tubo— y lo fija en
+    // Configuración → Bajar conos; sin él, vale 1 kg por cono. Se mide igual con el
+    // destare del paquete: entre sus conos (antes el total no tenía tope).
     const tope = await configuracionModel.numero('desarme_destare_max_kg', null, conn);
+    const limite = tope != null && tope > 0 ? tope : 1;
     const porCono = destareKg != null && piezasGeneradas > 0 ? destareKg / piezasGeneradas : 0;
-    if (tope != null && tope > 0 && porCono > tope + 0.0005) {
+    if (porCono > limite + 0.0005) {
       const g = (kg) => `${Math.round(kg * 1000).toLocaleString('es-MX')} g`;
       throw new AppError(422, 'DESTARE_MUY_ALTO',
-        `El destare por cono es de ${g(porCono)} y el tope es de ${g(tope)} (Configuración → Bajar conos). ` +
-        'Pesa el tubo de UN cono vacío y escribe eso, en kilos.', { tope_kg: tope });
+        `El destare del paquete es de ${destareKg} kg: con ${piezasGeneradas} conos son ${g(porCono)} por cono ` +
+        `y el tope es de ${g(limite)} por cono${tope != null && tope > 0 ? ' (Configuración → Bajar conos)' : ''}. ` +
+        `Para este paquete, hasta ${round3(limite * piezasGeneradas)} kg: escribe lo que pesan los tubos de todos sus conos juntos.`,
+        { tope_kg: limite });
     }
     const kgEnconados = round3(kgConsumidos + (destareKg ?? 0));
 

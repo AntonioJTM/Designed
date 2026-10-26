@@ -37,6 +37,8 @@ const CATALOGO = [
   { grupo: 'Catálogo y números', tipo: 'pantalla', clave: 'ver:catalogo', nombre: 'Productos y Materiales', ayuda: 'Dar de alta hilos y materiales' },
   { grupo: 'Catálogo y números', tipo: 'pantalla', clave: 'ver:negocio', nombre: 'Cómo va el negocio', ayuda: 'Ventas, ganancia y dinero parado' },
   { grupo: 'Catálogo y números', tipo: 'pantalla', clave: 'ver:reportes', nombre: 'Reportes', ayuda: 'Ventas por día, cortes y más' },
+  // Rotación de inventario (2026-10-22): solo kilos; junta todas las tiendas.
+  { grupo: 'Catálogo y números', tipo: 'pantalla', clave: 'ver:rotacion', nombre: 'Rotación de inventario', ayuda: 'Cuánto hilo se vende, en qué temporada y cuándo pedirlo' },
   { grupo: 'Administración', tipo: 'pantalla', clave: 'ver:almacenes', nombre: 'Almacenes y Listas de precio', ayuda: 'Bodegas, sucursales, cajas y precios por tipo de cliente' },
   { grupo: 'Administración', tipo: 'pantalla', clave: 'ver:personal', nombre: 'Personal', ayuda: 'Quién trabaja y en qué puesto' },
   { grupo: 'Administración', tipo: 'pantalla', clave: 'ver:nomina', nombre: 'Nómina', ayuda: 'Sueldos y comisiones de la semana' },
@@ -57,6 +59,8 @@ const CATALOGO = [
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:registrar_gasto', nombre: 'Registrar gastos de la caja', ayuda: 'Pagar con el cajón limpieza, papelería, viajes…, hasta el límite de su tipo' },
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:gasto_sobre_limite', nombre: 'Gastos arriba de su límite', ayuda: 'Los que pasan su límite o de un tipo sin límite: registrarlos sin pedir (y autorizar los que se piden)' },
   { grupo: 'Dinero', tipo: 'accion', clave: 'hacer:tipos_gasto', nombre: 'Tipos de gasto y sus límites', ayuda: 'Dar de alta los tipos (viajes, limpieza…) y el tope de cada gasto, y autorizar los que piden' },
+  { grupo: 'Catálogo y números', tipo: 'accion', clave: 'hacer:ajustes_rotacion', nombre: 'Tiempos para pedir al proveedor', ayuda: 'Cuánto tarda el proveedor, el colchón y para cuánto alcanza cada pedido (Rotación de inventario → Qué pedir)' },
+  { grupo: 'Catálogo y números', tipo: 'accion', clave: 'hacer:cargar_ventas_anteriores', nombre: 'Cargar ventas de años anteriores', ayuda: 'Subir en kilos, por hilo y por mes, lo que se vendió antes del sistema (para la temporada)' },
   { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:enviar_traspaso', nombre: 'Enviar desde la bodega', ayuda: 'Mandar lo que pidió una sucursal' },
   { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:recibir_traspaso', nombre: 'Confirmar que llegó un envío', ayuda: 'Firmar de recibido en la sucursal' },
   { grupo: 'Mercancía', tipo: 'accion', clave: 'hacer:ajuste_merma', nombre: 'Ajuste y merma', ayuda: 'Cuadrar con un conteo o dar de baja hilo dañado' },
@@ -85,4 +89,41 @@ const CATALOGO = [
 const CLAVES = new Set(CATALOGO.map((p) => p.clave));
 const NOMBRE = Object.fromEntries(CATALOGO.map((p) => [p.clave, p.nombre]));
 
-module.exports = { CATALOGO, CLAVES, NOMBRE };
+/**
+ * Las pantallas que SUMAN TODAS LAS TIENDAS (2026-10-15): solo las ve quien tiene
+ * «Todas las tiendas» en Personal (o es administrador), aunque su puesto tenga el
+ * permiso; sus rutas llevan `requireTodasLasTiendas`. Gemelo de
+ * `SOLO_TODAS_LAS_TIENDAS` en frontend/core/services/auth.service.ts: si cambia
+ * uno, cambia el otro. Permisos y Personal lo dicen (2026-10-22: Contabilidad tenía
+ * Transferencias y su persona, de una sola tienda, no la veía sin saber por qué).
+ */
+const SOLO_TODAS_LAS_TIENDAS = new Set([
+  'ver:reportes', 'ver:negocio', 'ver:nomina', 'ver:almacenes', 'ver:transferencias', 'ver:rotacion',
+]);
+
+/**
+ * Lo que, sin ser una pantalla entera, TAMBIÉN pide todas las tiendas (revisor de
+ * tiendas, 2026-10-22): las seis miradas de Clientes (la lista y Dónde entrego sí
+ * las ve cualquiera) y cambiar los tipos de gasto. `ve` / `hace` es como se dice en
+ * los avisos ("no ve …", "ni puede …"); `nota`, la etiqueta en Permisos.
+ */
+const PARTE_DE_TODAS = {
+  'ver:clientes': { ve: 'las miradas de Clientes', nota: 'Sus miradas (Frecuencia, Cuánto debe…), solo con todas las tiendas' },
+  'hacer:tipos_gasto': { hace: 'cambiar los tipos de gasto', nota: 'Solo con todas las tiendas' },
+};
+
+/** Lo que una lista de claves NO deja ver / hacer a quien es de una sola tienda. */
+function soloConTodas(claves) {
+  const tiene = new Set(claves);
+  const pantallas = [...SOLO_TODAS_LAS_TIENDAS].filter((c) => tiene.has(c)).map((c) => NOMBRE[c] ?? c);
+  for (const [c, p] of Object.entries(PARTE_DE_TODAS)) if (p.ve && tiene.has(c)) pantallas.push(p.ve);
+  const acciones = Object.entries(PARTE_DE_TODAS).filter(([c, p]) => p.hace && tiene.has(c)).map(([, p]) => p.hace);
+  return { pantallas, acciones };
+}
+
+/** La etiqueta de Permisos para una clave, o null. */
+function notaTiendas(clave) {
+  return SOLO_TODAS_LAS_TIENDAS.has(clave) ? 'Solo con todas las tiendas' : PARTE_DE_TODAS[clave]?.nota ?? null;
+}
+
+module.exports = { CATALOGO, CLAVES, NOMBRE, SOLO_TODAS_LAS_TIENDAS, soloConTodas, notaTiendas };

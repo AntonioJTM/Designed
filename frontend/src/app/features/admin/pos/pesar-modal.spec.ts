@@ -36,9 +36,43 @@ describe('PesarModal', () => {
 
   it('sin peso no agrega nada', async () => {
     const { c, enviado } = await montar(cono);
+    c.piezas = 6;
     c.agregar();
     expect(c.puedeAgregar()).toBe(false);
     expect(enviado()).toBeNull();
+  });
+
+  it('conos: sin decir cuántos son no se agregan, aunque tengan peso (2026-10-21)', async () => {
+    const { c, f, enviado } = await montar(cono);
+    const el = f.nativeElement as HTMLElement;
+    expect(el.textContent).not.toContain('Opcional');
+    c.kg = 9.35;
+    f.detectChanges();
+    expect(c.puedeAgregar()).toBe(false);
+    c.agregar();
+    expect(enviado()).toBeNull();
+    const boton = el.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    expect(boton.disabled).toBe(true);
+    expect(el.textContent).toContain('Escribe lo que pesaron y cuántos conos son');
+    // Ni cero ni con decimales.
+    c.piezas = 0;
+    expect(c.puedeAgregar()).toBe(false);
+    c.piezas = 2.5;
+    expect(c.puedeAgregar()).toBe(false);
+    c.piezas = 6;
+    expect(c.puedeAgregar()).toBe(true);
+  });
+
+  it('Enter en el peso de unos conos lleva el cursor a "¿Cuántos conos son?"', async () => {
+    const { c, f } = await montar(cono);
+    const el = f.nativeElement as HTMLElement;
+    c.kg = 9.35;
+    f.detectChanges();
+    const peso = el.querySelector<HTMLInputElement>('input[name=kg]')!;
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    peso.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(el.querySelector('input[name=piezas]'));
   });
 
   it('por kilo de un paquete no pregunta conos', async () => {

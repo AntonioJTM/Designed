@@ -2,9 +2,10 @@ import { AfterViewInit, Component, ElementRef, Injector, afterNextRender, comput
 import { Title } from '@angular/platform-browser';
 import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificacionesService } from '../../core/services/notificaciones.service';
-import { MENU } from '../../core/navegacion';
+import { MENU, rutaDeInicio } from '../../core/navegacion';
 import { fechaRelativa } from '../../shared/fecha.pipe';
 import { DESTINO_AVISO, urlDe } from '../../core/avisos';
 import { CantidadPipe } from '../../shared/cantidad.pipe';
@@ -159,6 +160,13 @@ export class AdminLayout implements AfterViewInit {
     this.notif.iniciar();
     // La conexión en vivo (2026-10-19): lo que otros guarden se ve sin recargar.
     this.tiempoReal.iniciar();
+    // Si cambian los permisos de un puesto o los puestos y tiendas de alguien
+    // (2026-10-22), la sesión abierta vuelve a pedir su perfil: el menú cambia sin
+    // volver a entrar ("le di Transferencias y no la ve").
+    this.tiempoReal
+      .cambios(['sesion'], 1500)
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.auth.cargarPerfil().subscribe({ next: () => this.alCambiarSesion(), error: () => {} }));
     // En el celular el menú se cierra solo al elegir una pantalla.
     this.router.events.pipe(filter((e) => e instanceof NavigationStart)).subscribe(() => {
       const a = document.activeElement;
@@ -281,6 +289,23 @@ export class AdminLayout implements AfterViewInit {
   abrirMiClave(): void {
     this.abierto.set(false);
     this.miClave.set(true);
+  }
+
+  /**
+   * Su sesión se puso al día (le dieron o quitaron permisos o tiendas): el menú se
+   * redibuja, la campana se vuelve a pedir y, si ya no puede ver la pantalla que
+   * tiene abierta, se va a la suya (la misma regla de la guarda de las rutas).
+   */
+  private alCambiarSesion(): void {
+    setTimeout(() => this.revisarMenu(), 50);
+    this.notif.refrescar();
+    let r = this.router.routerState.snapshot.root;
+    while (r.firstChild) r = r.firstChild;
+    const permiso = (r.data?.['permiso'] ?? null) as string | null;
+    const todas = !!r.data?.['todasLasTiendas'];
+    if (!this.auth.puede(permiso) || (todas && !this.auth.veTodasLasTiendas())) {
+      void this.router.navigateByUrl(rutaDeInicio((p) => this.auth.puede(p)));
+    }
   }
 
   irA(ruta: string): void {

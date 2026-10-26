@@ -1,0 +1,27 @@
+// ROTACIÓN · lo que comparten las cuatro pestañas: la fila de filtros (arriba,
+// sin tarjeta), el enlace «Ver como tabla», las notas debajo de una gráfica.
+:host { display: block; min-width: 0; }
+.filtros-rot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 14px; }
+.filtros-rot .seg { flex: 0 1 auto; }
+.filtros-rot .seg button { flex: 0 1 auto; }
+.filtros-rot label { display: inline-flex; align-items: center; gap: 10px; font-size: 0.875rem; color: var(--tinta-2); }
+.filtros-rot select { min-width: min(220px, 100%); }
+.desde-hoy { margin: 0 0 0 auto; font-size: 0.8125rem; color: var(--tinta-3); }
+.filtros-rot + .aviso, .filtros-rot + .nota-info, .aviso.arriba { margin: 0 0 16px; }
+.btn-enlace {
+  border: 0; background: none; padding: 4px 0; font: inherit; font-size: 0.875rem; color: var(--acento);
+  text-decoration: underline; cursor: pointer; white-space: nowrap;
+}
+.btn-enlace:hover { color: var(--acento-oscuro); }
+.notas-grafica { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 18px; }
+.nota-dato { margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--superficie-2); font-size: 0.875rem; color: var(--tinta-2); line-height: 1.45; }
+.nota-dato.alta { background: var(--info-f); color: var(--info-t); }
+.nota-dato b { color: inherit; }
+.recargando { opacity: 0.6; transition: opacity 0.15s; }
+td.sube { color: var(--ok-t); }
+td.baja { color: var(--alerta-t); }
+// Los selectores de la pantalla, con el mismo aspecto que los campos (.field select).
+.filtros-rot select, .campo-orden select {
+  min-height: 40px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px;
+  font-size: 0.875rem; color: var(--tinta); background: var(--superficie); max-width: 100%;
+}

@@ -21,6 +21,7 @@ import { CargaLista } from './carga-lista';
 import { DatosCargaCampos, datosCargaVacios, datosParaEnviar } from './datos-carga';
 import { DatosCargaModal } from './datos-carga-modal';
 import { DatosCarga } from '../../../core/services/inventario.service';
+import { BotonPlantilla } from '../../../shared/boton-plantilla';
 
 /** Las dos formas de cargar: la lista completa del proveedor o la de un solo hilo. */
 type Modo = 'lista' | 'hilo';
@@ -40,7 +41,7 @@ const BULTOS_A_LA_VISTA = 6;
  */
 @Component({
   selector: 'app-remesas',
-  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, DineroPipe, CargaLista, DatosCargaCampos, DatosCargaModal],
+  imports: [FolioPipe, FormsModule, CantidadPipe, FechaPipe, DineroPipe, CargaLista, DatosCargaCampos, DatosCargaModal, BotonPlantilla],
   templateUrl: './remesas.html',
   styleUrl: './remesas.scss',
 })

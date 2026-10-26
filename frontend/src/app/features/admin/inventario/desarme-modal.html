@@ -10,7 +10,7 @@
       <p class="explica">
         Escanea o escribe el código del paquete que vas a abrir: el sistema dice cuántos conos trae y, al confirmar, lo
         deshace —descuenta sus kilos y da entrada a los conos, en la misma tienda—. El cono se vende
-        por kilo, al mismo precio; el destare de cada cono se suma.
+        por kilo, al mismo precio; el destare del paquete se suma.
         <b>Solo en tiendas:</b> si el paquete está en la bodega, primero mándalo con Surtir sucursal.
       </p>
       @if (tiendas().length === 0) {
@@ -50,11 +50,12 @@
             </span>
             <b class="pos">+{{ pesoEnconado() | cantidad: 'kg' }}</b>
           </div>
-          @if (destareTotal(pb.conos_a_generar) > 0) {
+          @if (destare() > 0) {
             <div class="renglon">
               <span class="muted">
-                {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ pb.conos_a_generar }} conos ×
-                {{ destarePorCono | cantidad: 'kg' }} de destare = {{ destareTotal(pb.conos_a_generar) | cantidad: 'kg' }}
+                {{ pb.bulto.peso_kg | cantidad: 'kg' }} del paquete + {{ destare() | cantidad: 'kg' }} de destare =
+                {{ pesoEnconado() | cantidad: 'kg' }}
+                @if (gramosPorCono()) { (unos {{ gramosPorCono() | cantidad }} g por cono) }
               </span>
               <span class="muted">se venden por kilo</span>
             </div>
@@ -83,20 +84,24 @@
             }
           </label>
           <label class="field">
-            <span>Destare por cono <span class="muted">(opcional)</span></span>
+            <span>Destare del paquete <span class="muted">(opcional)</span></span>
             <span class="cant">
-              <input type="number" step="0.001" min="0" [max]="topeDestare() ?? 1" [(ngModel)]="destarePorCono"
-                     placeholder="Ej. 0.035" [class.invalido]="pasaDelTope()" [attr.aria-invalid]="pasaDelTope()" />
+              <input type="number" step="0.001" min="0" [max]="topeDelPaquete()" [(ngModel)]="destarePaquete"
+                     placeholder="Ej. 0.42" [class.invalido]="pasaDelTope()" [attr.aria-invalid]="pasaDelTope()" />
               <span>kg</span>
             </span>
             <span class="ayuda">
-              Lo que pesa el tubo de UN cono{{ gramos() ? ' (' + gramos() + ' g)' : '' }}. Se multiplica por los
-              conos que salen y se suma a los kilos del mostrador; lo que se descuenta del paquete no cambia.
-              @if (topeDestare() !== null) { Lo más que se acepta: {{ topeDestare()! * 1000 }} g. }
+              Lo que pesan los tubos de TODOS sus conos juntos. Se suma a los kilos del mostrador; lo que se
+              descuenta del paquete no cambia.
+              @if (topeDestare() !== null) {
+                Lo más que se acepta para este paquete: {{ topeDelPaquete() | cantidad: 'kg' }}
+                ({{ topeDestare()! * 1000 }} g por cono × {{ pb.conos_a_generar }} conos).
+              }
             </span>
             @if (pasaDelTope()) {
               <span class="ayuda destare-alto">
-                Es demasiado para un tubo{{ topeDestare() !== null ? ': el tope es de ' + topeDestare()! * 1000 + ' g' : '' }}.
+                Es demasiado: son {{ gramosPorCono() | cantidad }} g por cono{{ topeDestare() !== null ? ' y el tope es de ' + topeDestare()! * 1000 + ' g' : '' }}.
+                Para este paquete, hasta {{ topeDelPaquete() | cantidad: 'kg' }}.
               </span>
             }
           </label>

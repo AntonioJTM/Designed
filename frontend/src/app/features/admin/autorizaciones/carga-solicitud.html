@@ -18,7 +18,7 @@
     </p>
   }
 
-  <p class="pista-paquetes">Toca un color para ver sus lotes y cada paquete: renglón del Excel, código, peso y conos.</p>
+  <p class="pista-paquetes">Toca un color para ver sus lotes y cada paquete: renglón del Excel, código de barras, peso y conos.</p>
   <div class="tabla-scroll con-paquetes">
     <table class="grid hilos">
       <thead>
@@ -108,17 +108,45 @@
                         </span>
                         @if (registradosDe(l); as n) { <span class="pill rojo">{{ n }} ya {{ n === 1 ? 'registrado' : 'registrados' }}</span> }
                       </h4>
-                      <ol class="paquetes-lista">
-                        @for (b of l.bultos; track $index) {
-                          <li [class.con-error]="b.registrado" [title]="b.registrado ? 'Ese código ya está registrado en el sistema' : ''">
-                            <span class="renglon" [attr.aria-label]="b.fila != null ? 'Renglón ' + b.fila : null">{{ b.fila ?? '' }}</span>
-                            <span class="mono codigo">{{ b.codigo }}</span>
-                            <span class="kg">{{ b.peso_kg | cantidad: 'kg' }}</span>
-                            <span class="conos">{{ b.conos != null ? (b.conos + (b.conos === 1 ? ' cono' : ' conos')) : 'sin conos' }}</span>
-                            @if (b.registrado) { <span class="problema">Ya está registrado en el sistema</span> }
-                          </li>
-                        }
-                      </ol>
+                      <!-- Cada paquete en su renglón, con encabezados, y el total del lote abajo
+                           (2026-10-21, usuario: "los códigos de barras de cada paquete, total de
+                           conos por paquete, peso de cada paquete"; eligió la tabla). -->
+                      <div class="tabla-scroll">
+                        <table class="grid paquetes-tabla">
+                          <thead>
+                            <tr>
+                              <th scope="col" class="num">Renglón</th>
+                              <th scope="col">Código de barras</th>
+                              <th scope="col" class="num">Peso</th>
+                              <th scope="col" class="num">Conos</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (b of l.bultos; track $index) {
+                              <tr [class.con-error]="b.registrado">
+                                <td class="num renglon">{{ b.fila ?? '—' }}</td>
+                                <td>
+                                  <span class="mono">{{ b.codigo }}</span>
+                                  @if (b.registrado) { <div class="sub problema">Ya está registrado en el sistema</div> }
+                                </td>
+                                <td class="num">{{ b.peso_kg | cantidad: 'kg' }}</td>
+                                <td class="num">@if (b.conos != null) { {{ b.conos }} } @else { <span class="muted">sin conos</span> }</td>
+                              </tr>
+                            }
+                          </tbody>
+                          <tfoot>
+                            <tr>
+                              <th scope="row">Total del lote</th>
+                              <td>{{ plural(l.paquetes, 'paquete', 'paquetes') }}</td>
+                              <td class="num"><b>{{ l.kg | cantidad: 'kg' }}</b></td>
+                              <td class="num">
+                                <b>{{ l.conos | cantidad }}</b>
+                                @if (l.sin_conos) { <div class="sub">{{ l.sin_conos }} sin conos</div> }
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </section>
                   }
                 </div>

@@ -1,0 +1,168 @@
+@let d = datos();
+@let hilo = h();
+@if (!conCalculos()) {
+  <p class="aviso" role="status">
+    Faltan {{ d.historia.faltan_semanas }} {{ d.historia.faltan_semanas === 1 ? 'semana' : 'semanas' }} de ventas para calcular la
+    rotación y cuándo pedirlo. Por ahora, lo que hay hoy.
+  </p>
+} @else if (banner(); as b) {
+  <div class="banner-pedido" [class]="'banner-pedido ' + b.tono">
+    <div>
+      <p class="titulo">{{ b.titulo }}</p>
+      @if (b.texto) { <p>{{ b.texto }}</p> }
+    </div>
+    @if (b.boton && hilo.pedido?.kg) {
+      <a class="btn btn-primary" routerLink="/admin/rotacion/que-pedir" [queryParams]="{ agregar: hilo.producto_id }">
+        Agregar {{ kilos(hilo.pedido!.kg) }} al pedido
+      </a>
+    }
+  </div>
+}
+
+<div class="kpis" [class.recargando]="cargando()">
+  @for (k of kpis(); track k.etiqueta) {
+    @if (conCalculos() || k.etiqueta === 'Hay hoy') {
+      <div class="kpi">
+        <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
+        <span class="kpi-valor">{{ k.valor }}</span>
+        @if (k.pie) { <span class="kpi-pie">{{ k.pie }}</span> }
+      </div>
+    }
+  }
+</div>
+
+@if (conCalculos()) {
+  <div class="fila">
+    <section class="card ancha">
+      <div class="card-head">
+        <div>
+          <h2>Cuánto se vende cada mes</h2>
+          <p>Kilos de {{ hilo.hilo }}, las dos tiendas{{ hilo.presentaciones.length === 2 ? ', paquete y cono' : '' }}</p>
+        </div>
+        <button type="button" class="btn-enlace" (click)="comoTabla.set(!comoTabla())">{{ comoTabla() ? 'Ver como gráfica' : 'Ver como tabla' }}</button>
+      </div>
+      <app-columnas-comparadas [meses]="meses()" [anioAnterior]="d.meses.anio_anterior" [anioActual]="d.meses.anio_actual"
+                               [textoEnCurso]="textoEnCurso()" [comoTabla]="comoTabla()"
+                               [descripcion]="'Kilos de ' + hilo.hilo + ' cada mes'" />
+    </section>
+
+    <section class="card angosta su-temporada">
+      <div class="card-head"><div><h2>Su temporada</h2></div></div>
+      @if (temporada(); as t) {
+        <dl>
+          <div><dt>Se vende más</dt><dd><b>{{ t.masTexto }}</b><span>{{ t.masPie }}</span></dd></div>
+          <div><dt>Su mejor mes</dt><dd><b>{{ t.mejor }}</b><span>{{ t.mejorPie }}</span></dd></div>
+          <div><dt>Su mes más flojo</dt><dd><b>{{ t.peor }}</b><span>{{ t.peorPie }}</span></dd></div>
+          @if (t.contra) { <div><dt>Contra el año pasado</dt><dd><b>{{ t.contra }}</b><span>{{ t.contraPie }}</span></dd></div> }
+        </dl>
+      } @else {
+        <p class="muted">La temporada se ve con un año completo de ventas. Hay desde {{ f(d.historia.desde) }}.</p>
+      }
+    </section>
+  </div>
+
+  @if (d.proyeccion.semanas.length) {
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Cuánto va a haber, semana por semana</h2>
+          <p>
+            @if (conPedido() && d.pedido_hoy?.kg) { Si se piden hoy {{ kilos(d.pedido_hoy!.kg) }}, con lo que se espera vender cada semana }
+            @else { Con lo que se espera vender cada semana, sin pedir nada }
+          </p>
+        </div>
+        <div class="acciones-proy">
+          <div class="seg" role="radiogroup" aria-label="Escenario">
+            <button type="button" role="radio" [class.on]="conPedido()" [attr.aria-checked]="conPedido()" (click)="conPedido.set(true)">Si se pide hoy</button>
+            <button type="button" role="radio" [class.on]="!conPedido()" [attr.aria-checked]="!conPedido()" (click)="conPedido.set(false)">Si no se pide</button>
+          </div>
+          <button type="button" class="btn-enlace" (click)="comoTablaProy.set(!comoTablaProy())">{{ comoTablaProy() ? 'Ver como gráfica' : 'Ver como tabla' }}</button>
+        </div>
+      </div>
+      <app-proyeccion-semanal [semanas]="d.proyeccion.semanas" [conPedido]="conPedido()" [llega]="d.proyeccion.llega_semana"
+                              [kgPedido]="d.pedido_hoy?.kg ?? 0" [llegaFecha]="d.pedido_hoy?.llega ?? null" [hoy]="d.hoy"
+                              [dondeTexto]="'los ' + (d.almacenes.length || 1) + ' almacenes'" [comoTabla]="comoTablaProy()"
+                              [descripcion]="'Lo que habría de ' + hilo.hilo + ' cada semana'" />
+      @if (siguiente(); as s) { <p class="muted pie-proy">{{ s }}</p> }
+    </section>
+  }
+}
+
+<div class="fila">
+  <section class="card ancha">
+    <div class="card-head">
+      <div>
+        <h2>En cada almacén</h2>
+        @if (sinMostrador().length) { <p>{{ sinMostrador().join(' y ') }} no vende: surte a las tiendas.</p> }
+      </div>
+    </div>
+    <div class="tabla-scroll">
+      <table class="grid almacenes">
+        <thead>
+          <tr><th scope="col">Almacén</th><th scope="col" class="num">Hay</th><th scope="col" class="num">Vende por semana</th><th scope="col" class="num">Le alcanza</th><th scope="col"><span class="oculto">Aviso</span></th></tr>
+        </thead>
+        <tbody>
+          @for (a of d.almacenes; track a.almacen_id) {
+            <tr>
+              <th scope="row">{{ a.nombre }}</th>
+              <td class="num">{{ kilos(a.hay_kg) }}@if (!a.vende && a.paquetes) {<span class="muted"> · {{ paquetesAprox(a.paquetes) }}</span>}</td>
+              <td class="num">{{ a.vende ? (a.vende_semana != null ? kilos(a.vende_semana, 1) : '—') : 'No vende' }}</td>
+              <td class="num">{{ a.vende ? semanas(a.alcanza_semanas) : '—' }}</td>
+              <td>@if (a.surtirle) { <span class="pill ambar">Surtirle pronto</span> }</td>
+            </tr>
+          }
+        </tbody>
+        @if (d.almacenes.length > 1) {
+          <tfoot>
+            <tr>
+              <th scope="row">{{ d.almacenes.length === 2 ? 'Los dos' : 'Los ' + d.almacenes.length }}</th>
+              <td class="num">{{ kilos(totalAlmacenes().hay) }}</td>
+              <td class="num">{{ kilos(totalAlmacenes().vende, 1) }}</td>
+              <td class="num">{{ semanas(totalAlmacenes().alcanza) }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        }
+      </table>
+    </div>
+    @for (a of d.avisos; track a.almacen_id) {
+      <div class="aviso aviso-surtir">
+        <span>{{ a.texto }}</span>
+        @if (puedeSurtir) { <a class="btn btn-ghost" routerLink="/admin/traspasos">Surtir sucursal</a> }
+      </div>
+    }
+  </section>
+
+  <div class="angosta columna-der">
+    <section class="card">
+      <div class="card-head"><div><h2>Cómo se vende</h2></div></div>
+      @if (comoSeVende(); as c) {
+        <div class="partida" role="img" [attr.aria-label]="'Cómo se vende: ' + c[0].texto + ' ' + c[0].pct + '%' + (c[1] ? ', ' + c[1].texto + ' ' + c[1].pct + '%' : '')">
+          @for (x of c; track x.texto) { <span [class]="x.clase" [style.flex-grow]="x.pct"></span> }
+        </div>
+        <ul class="leyenda-partida">
+          @for (x of c; track x.texto) {
+            <li><span><i [class]="x.clase"></i>{{ x.texto }}</span><span>{{ kilos(x.kg) }} · <b>{{ x.pct }}%</b></span></li>
+          }
+        </ul>
+      } @else {
+        <p class="muted">Todavía no se vende.</p>
+      }
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Cargas del proveedor</h2>
+          <p>De Surtir inventario.{{ d.cada_cuanto ? ' ' + d.cada_cuanto : '' }}</p>
+        </div>
+      </div>
+      @if (d.cargas.length) {
+        <ul class="cargas">
+          @for (c of d.cargas; track c.fecha + c.kg) { <li><span>{{ f(c.fecha) }}</span><b>{{ kilos(c.kg) }}</b></li> }
+        </ul>
+      } @else {
+        <p class="muted">No ha llegado ninguna carga de este hilo.</p>
+      }
+    </section>
+  </div>
+</div>

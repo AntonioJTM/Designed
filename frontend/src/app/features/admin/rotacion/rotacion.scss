@@ -1,0 +1,18 @@
+// ROTACIÓN DE INVENTARIO: el encabezado y las pestañas. Lo de cada pestaña va en
+// su vista; lo que comparten, en `vistas/vistas.scss`.
+.volver {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; color: var(--acento);
+  text-decoration: none; margin-bottom: 6px;
+}
+.volver:hover { text-decoration: underline; }
+.otro-hilo { display: inline-flex; align-items: center; gap: 10px; font-size: 0.875rem; color: var(--tinta-2); white-space: nowrap; }
+.otro-hilo select {
+  min-width: 220px; max-width: 70vw; min-height: 40px; padding: 0 10px; border: 1px solid var(--borde-campo);
+  border-radius: 8px; font-size: 0.875rem; color: var(--tinta); background: var(--superficie);
+}
+.tabs { margin-bottom: 20px; }
+.tabs a { display: inline-flex; align-items: center; gap: 8px; }
+.capsula-ya { font-size: 0.75rem; }
+.cargando { margin: 2rem 0; }
+// El selector de «Otro hilo» no se encoge debajo de su ancho (se salía de la página).
+.page-head > .acciones { flex-shrink: 0; }

@@ -86,4 +86,24 @@ describe('PermisosPantalla', () => {
     c.alternar(gerente, 'hacer:fiar', false);
     expect(c.pendientes().length).toBe(0);
   });
+
+  it('marca las pantallas que suman todas las tiendas y dice quién no las ve (2026-10-22)', async () => {
+    const conAviso = () => ({
+      ...matriz(),
+      catalogo: [
+        ...matriz().catalogo,
+        { grupo: 'Inicio y Vender', tipo: 'pantalla' as const, clave: 'ver:transferencias', nombre: 'Transferencias', ayuda: '', nota_tiendas: 'Solo con todas las tiendas' },
+      ],
+      no_las_ven: [{ usuario_id: 3, nombre: 'ADRIAN', tiendas: 'MATRIZ CUAUTEPEC', puestos: ['contabilidad', 'almacenista'],
+        pantallas: ['Transferencias', 'Reportes'], acciones: ['cambiar los tipos de gasto'] }],
+    });
+    apiFalsa.permisos = () => of(conAviso());
+    const el = (await montar()).nativeElement as HTMLElement;
+    expect(el.querySelector('.solo-todas')?.textContent).toContain('Solo con todas las tiendas');
+    const aviso = el.querySelector('.no-las-ven')!.textContent!.replace(/\s+/g, ' ');
+    expect(aviso).toContain('ADRIAN');
+    expect(aviso).toContain('no ve Transferencias y Reportes, ni puede cambiar los tipos de gasto');
+    expect(aviso).toContain('Todas las tiendas');
+    apiFalsa.permisos = () => of(matriz());
+  });
 });

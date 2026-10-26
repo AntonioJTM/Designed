@@ -26,14 +26,6 @@
           }
         </div>
 
-        <!-- Su saldo a favor (anticipos, lo que regresó) paga primero (2026-10-20). -->
-        @if (aFavor() <= 0 && faltaNota() > 0 && saldoFavor() > 0) {
-          <label class="field check">
-            <input type="checkbox" [(ngModel)]="usarFavor" name="usar-favor" />
-            <span>Usar su saldo a favor <span class="muted">(tiene {{ saldoFavor() | dinero }})</span></span>
-          </label>
-        }
-
         @if (aFavor() > 0) {
           <!-- Pesó menos de lo que dejó pagado: la diferencia sale del cajón. -->
           @if (turnos().length > 1) {
@@ -47,7 +39,7 @@
           } @else if (turnos().length === 1) {
             <p class="nota-modal">Se le devuelven en efectivo del turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>.</p>
           }
-        } @else if (falta() > 0) {
+        } @else if (faltaNota() > 0) {
           <!-- Cobrar ahora (y lo que no pague, a crédito) o llevársela como nota pendiente de pago. -->
           <div class="seg" role="radiogroup" aria-label="Cómo se cobra">
             <button type="button" role="radio" [class.on]="!comoNota" [attr.aria-checked]="!comoNota"
@@ -56,29 +48,70 @@
                     (click)="comoNota = true">Pendiente de pago</button>
           </div>
         }
-        @if (aFavor() <= 0 && falta() > 0 && comoNota) {
-          <p class="nota-modal">
-            Se lleva la mercancía y sale su ticket como <b>nota pendiente de pago</b>: los {{ falta() | dinero }} se
-            registran después en Notas pendientes de pago, o se pasan a crédito.
-          </p>
-        } @else if (aFavor() <= 0 && falta() > 0) {
+        @if (aFavor() <= 0 && faltaNota() > 0 && comoNota) {
+          <!-- Como pendiente de pago, su saldo a favor puede pagar una parte primero (2026-10-20). -->
+          @if (saldoFavor() > 0) {
+            <label class="field check">
+              <input type="checkbox" [(ngModel)]="usarFavor" name="usar-favor" />
+              <span>Usar su saldo a favor <span class="muted">(tiene {{ saldoFavor() | dinero }})</span></span>
+            </label>
+          }
+          @if (falta() > 0) {
+            <p class="nota-modal">
+              Se lleva la mercancía y sale su ticket como <b>nota pendiente de pago</b>: los {{ falta() | dinero }} se
+              registran después en Notas pendientes de pago, o se pasan a crédito.
+            </p>
+          } @else {
+            <p class="nota-modal" role="status">{{ resumenSaldo() }}</p>
+          }
+        } @else if (aFavor() <= 0 && faltaNota() > 0) {
+          <!-- Una forma o DOS (2026-10-23, usuario: "que se puedan seleccionar hasta 2 métodos
+               de pago"): con dos se teclea una parte y el resto va en la otra. -->
           <div class="form-grid">
             <label class="field">
-              Cobra ahora
-              <input type="number" min="0" step="0.01" [(ngModel)]="cobra" name="cobra" [placeholder]="falta().toFixed(2)" />
-              <span class="ayuda">Vacío = todo lo que falta.</span>
-            </label>
-            @if (aCobrar() > 0) {
-              <label class="field">
-                Con qué paga
-                <select [(ngModel)]="metodoId" name="metodo">
+              Con qué paga
+              <select [ngModel]="metodoId" (ngModelChange)="cambiarForma($event)" name="metodo">
+                <optgroup label="Una forma">
                   @for (m of metodos(); track m.id) { <option [ngValue]="m.id">{{ m.nombre }}</option> }
-                </select>
+                  @if (puedeFiar()) { <option [ngValue]="'credito'">A crédito</option> }
+                </optgroup>
+                @if (permiteMixto() || puedeFiar()) {
+                  <optgroup label="Dos formas">
+                    <!-- Parte y parte (2026-10-21), como en la caja. -->
+                    @if (permiteMixto()) { <option [ngValue]="'mixto'">Efectivo y transferencia</option> }
+                    @if (puedeFiar() && idDe('efectivo')) { <option [ngValue]="'efectivo_credito'">Efectivo y crédito</option> }
+                    @if (puedeFiar() && idDe('transferencia')) { <option [ngValue]="'transferencia_credito'">Transferencia y crédito</option> }
+                  </optgroup>
+                }
+                <!-- Su SALDO A FAVOR (2026-10-23): todo, si le alcanza; si no, con otra forma para el resto. -->
+                @if (saldoFavor() > 0) {
+                  <optgroup [label]="'Con su saldo a favor · tiene ' + (saldoFavor() | dinero)">
+                    @if (saldoCubreTodo()) {
+                      <option [ngValue]="'saldo'">Todo con su saldo a favor</option>
+                    } @else {
+                      @if (idDe('efectivo')) { <option [ngValue]="'saldo_efectivo'">Saldo a favor y efectivo</option> }
+                      @if (idDe('transferencia')) { <option [ngValue]="'saldo_transferencia'">Saldo a favor y transferencia</option> }
+                      @if (puedeFiar()) { <option [ngValue]="'saldo_credito'">Saldo a favor y crédito</option> }
+                    }
+                  </optgroup>
+                }
+              </select>
+            </label>
+            @if (dosFormas()) {
+              <label class="field">
+                {{ etiquetaParte() }}
+                <input type="number" min="0.01" step="0.01" [(ngModel)]="parte" name="parte"
+                       inputmode="decimal" placeholder="0.00" />
+                <span class="ayuda">{{ ayudaParte() }}</span>
               </label>
             }
           </div>
 
-          @if (aCobrar() > 0 && esTransferencia()) {
+          @if (favor() > 0) {
+            <p class="nota-modal" role="status">{{ resumenSaldo() }}</p>
+          }
+
+          @if (llevaTransferencia()) {
             <!-- A qué cuenta llegó y su folio (Transferencias, 2026-10-20). -->
             <div class="form-grid">
               <app-cuenta-deposito [(cuenta)]="cuentaId" [marcar]="!!error()" />
@@ -89,11 +122,11 @@
             </div>
           }
 
-          @if (aCobrar() > 0 && esEfectivo()) {
+          @if (llevaEfectivo()) {
             <div class="form-grid">
               <label class="field">
                 Recibido en efectivo
-                <input type="number" min="0" step="0.01" [(ngModel)]="recibido" name="recibido" [placeholder]="aCobrar().toFixed(2)" />
+                <input type="number" min="0" step="0.01" [(ngModel)]="recibido" name="recibido" [placeholder]="enEfectivo().toFixed(2)" />
                 <span class="ayuda">Vacío = pagó justo. Cambio: {{ cambio() | dinero }}</span>
               </label>
               @if (turnos().length > 1) {
@@ -111,17 +144,11 @@
             }
           }
 
-          @if (resto() > 0) {
-            @if (puedeFiar()) {
-              <label class="field check">
-                <input type="checkbox" [(ngModel)]="fiarResto" name="fiar" />
-                Los {{ resto() | dinero }} que no paga hoy van a crédito
-              </label>
-              @if (fiarResto) {
-                <!-- A cuántos días (2026-10-20): pasados, la campana avisa. -->
-                <app-plazo-credito [(dias)]="diasCredito" nombre="dias-credito-entrega" />
-              }
-            }
+          @if (aCredito() > 0) {
+            <!-- Con su saldo a favor, el reparto ya lo dice arriba. -->
+            @if (!conSaldo()) { <p class="nota-modal" role="status">{{ resumenCredito() }}</p> }
+            <!-- A cuántos días (2026-10-20): pasados, la campana avisa. -->
+            <app-plazo-credito [(dias)]="diasCredito" nombre="dias-credito-entrega" />
           }
         } @else if (aFavor() <= 0) {
           <p class="ok-msg" role="status">Ya está pagada: solo se entrega.</p>
@@ -135,10 +162,11 @@
         <button type="submit" class="btn btn-primary" [disabled]="guardando() || cargando() || !!motivo()">
           @if (guardando()) { Entregando… }
           @else if (aFavor() > 0) { Devolver {{ aFavor() | dinero }} y entregar }
-          @else if (falta() <= 0) { Entregar }
-          @else if (comoNota) { Entregar como pendiente de pago }
+          @else if (faltaNota() <= 0) { Entregar }
+          @else if (comoNota && falta() > 0) { Entregar como pendiente de pago }
           @else if (aCobrar() > 0) { Cobrar {{ aCobrar() | dinero }} y entregar }
-          @else { Entregar a crédito }
+          @else if (aCredito() > 0) { Entregar a crédito }
+          @else { Pagar con su saldo a favor y entregar }
         </button>
       </div>
     </form>

@@ -20,6 +20,9 @@ const POR_PREFIJO = [
   // vive en la venta, el abono o el anticipo). Solo a quien ve todas (almacenes.js).
   ['/transferencias', ['transferencias', 'ventas', 'clientes']],
   ['/remesas', ['inventario', 'catalogo', 'avisos']],
+  // Los tiempos para pedir y las ventas de años anteriores (2026-10-22). Solo a
+  // quien ve todas (almacenes.js).
+  ['/rotacion', ['rotacion']],
   ['/variantes', ['inventario', 'catalogo']],
   ['/productos', ['catalogo', 'avisos']],
   ['/categorias', ['catalogo']],
@@ -27,8 +30,16 @@ const POR_PREFIJO = [
   ['/proveedores', ['catalogo']],
   ['/autorizaciones', ['autorizaciones', 'avisos']],
   ['/almacenes', ['almacenes', 'inventario', 'caja']],
-  // Nómina, personal, permisos y configuración: ninguna pantalla los escucha
-  // todavía, así que no se avisan (revisión de tiendas, 2026-10-19).
+  // Permisos de un puesto, o los puestos y tiendas de una persona (2026-10-22): la
+  // sesión abierta vuelve a pedir su perfil y su menú cambia sin volver a entrar
+  // (antes: "le di Transferencias y no la ve" hasta cerrar sesión). Va a todos: el
+  // aviso no lleva datos y cada quien pide solo el suyo.
+  ['/permisos', ['sesion']],
+  // «Mi clave para autorizar» no cambia el menú de nadie (revisor de tiendas).
+  ['/usuarios/perfil', []],
+  ['/usuarios', ['sesion']],
+  // Nómina y configuración: ninguna pantalla los escucha todavía, así que no se
+  // avisan (revisión de tiendas, 2026-10-19).
 ];
 
 // Peticiones que se mandan con POST pero NO cambian nada: cotizar, la vista

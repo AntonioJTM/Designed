@@ -133,16 +133,75 @@ describe('EntregarPedidoModal', () => {
 
   afterEach(() => TestBed.resetTestingModule());
 
-  it('con su saldo a favor: paga primero con él y se cobra solo el resto (2026-10-20)', async () => {
+  // SU SALDO A FAVOR ES UNA FORMA MÁS (2026-10-23, usuario: "que igual se pueda pagar con
+  // saldo a favor si es que tiene el cliente"). Faltan $1,500.00.
+  it('saldo a favor y efectivo: usa todo su saldo y el resto se cobra en efectivo', async () => {
     const c = await montar({ ...porPreparar, saldo_favor: 300 });
-    const falta = c.faltaNota();
-    expect(c.saldoFavor()).toBe(300);
-    c.usarFavor = true;
-    expect(c.favor()).toBe(Math.min(300, falta));
-    expect(c.falta()).toBe(Math.round((falta - c.favor()) * 100) / 100);
+    expect(c.saldoCubreTodo()).toBe(false);
+    expect(c.favor()).toBe(0);
+    c.cambiarForma('saldo_efectivo');
+    expect(c.favor()).toBe(300);
+    expect(c.falta()).toBe(1200);
+    expect(c.enEfectivo()).toBe(1200);
+    expect(c.resumenSaldo()).toBe('Usa $300.00 de su saldo a favor (le quedan $0.00); el resto, $1,200.00, en efectivo.');
     c.entregar();
-    expect(enviado!['saldo_favor']).toBe(c.favor());
-    expect((enviado!['pagos'] as { monto: number }[])[0].monto).toBe(c.falta());
+    expect(enviado).toEqual({ pagos: [{ metodo_pago_id: 1, monto: 1200 }], sesion_caja_id: 70, a_credito: undefined, saldo_favor: 300 });
+  });
+
+  it('saldo a favor y crédito: lo que no cubre su saldo va a crédito con sus días', async () => {
+    const c = await montar({ ...porPreparar, saldo_favor: 300 });
+    c.cambiarForma('saldo_credito');
+    expect(c.aCredito()).toBe(1200);
+    expect(c.aCobrar()).toBe(0);
+    expect(c.resumenSaldo()).toContain('el resto, $1,200.00, va a su cuenta de crédito.');
+    c.entregar();
+    expect(enviado).toEqual({ pagos: undefined, sesion_caja_id: undefined, a_credito: 1200, dias_credito: 15, saldo_favor: 300 });
+  });
+
+  it('si su saldo alcanza, se paga todo con él; si no, "Todo con su saldo" no deja entregar', async () => {
+    const c = await montar({ ...porPreparar, saldo_favor: 2000 });
+    expect(c.saldoCubreTodo()).toBe(true);
+    c.cambiarForma('saldo');
+    expect(c.favor()).toBe(1500);
+    expect(c.falta()).toBe(0);
+    expect(c.motivo()).toBeNull();
+    expect(c.resumenSaldo()).toBe('Usa $1,500.00 de su saldo a favor (le quedan $500.00) y con eso queda pagada.');
+    c.entregar();
+    expect(enviado).toEqual({ pagos: undefined, sesion_caja_id: undefined, a_credito: undefined, saldo_favor: 1500 });
+
+    TestBed.resetTestingModule();
+    const poco = await montar({ ...porPreparar, saldo_favor: 300 });
+    poco.cambiarForma('saldo');
+    expect(poco.motivo()).toContain('Su saldo a favor no alcanza');
+  });
+
+  it('la lista ofrece su saldo a favor solo si tiene, con lo que le alcanza', async () => {
+    const opciones = async (saldo: number) => {
+      TestBed.resetTestingModule();
+      await montar({ ...porPreparar, saldo_favor: saldo });
+      const f = TestBed.createComponent(EntregarPedidoModal);
+      f.componentRef.setInput('pedido', { ...porPreparar, saldo_favor: saldo });
+      f.detectChanges();
+      await f.whenStable();
+      f.detectChanges();
+      const grupo = (f.nativeElement as HTMLElement).querySelector('optgroup[label^="Con su saldo"]');
+      return grupo ? [grupo.getAttribute('label'), ...[...grupo.querySelectorAll('option')].map((o) => o.textContent?.trim())] : null;
+    };
+    expect(await opciones(0)).toBeNull();
+    expect(await opciones(300)).toEqual([
+      'Con su saldo a favor · tiene $300.00', 'Saldo a favor y efectivo', 'Saldo a favor y transferencia', 'Saldo a favor y crédito',
+    ]);
+    expect(await opciones(2000)).toEqual(['Con su saldo a favor · tiene $2,000.00', 'Todo con su saldo a favor']);
+  });
+
+  it('como pendiente de pago, su saldo a favor sigue siendo la casilla (2026-10-20)', async () => {
+    const c = await montar({ ...porPreparar, saldo_favor: 300 });
+    c.comoNota = true;
+    expect(c.favor()).toBe(0);
+    c.usarFavor = true;
+    expect(c.favor()).toBe(300);
+    c.entregar();
+    expect(enviado).toEqual({ pendiente_pago: true, saldo_favor: 300 });
   });
 
   it('cobra lo que falta en efectivo, con cambio, al turno abierto', async () => {
@@ -155,13 +214,21 @@ describe('EntregarPedidoModal', () => {
     expect(enviado).toEqual({ pagos: [{ metodo_pago_id: 1, monto: 2000 }], sesion_caja_id: 70, a_credito: undefined });
   });
 
-  it('si cobra menos, el resto se fía solo si se marca', async () => {
+  // HASTA DOS FORMAS DE PAGO (2026-10-23, usuario: "que se puedan seleccionar hasta 2
+  // métodos de pago"): efectivo, transferencia o a crédito, solos o de dos en dos.
+  it('transferencia y crédito: paga una parte hoy y el resto va a crédito con sus días', async () => {
     const c = await montar(porPreparar);
-    c.cobra = 500;
-    expect(c.motivo()).toContain('Faltan');
-    c.fiarResto = true;
+    // Faltan $1,500.00.
+    c.cambiarForma('transferencia_credito');
+    expect(c.motivo()).toBe('Pon cuánto paga hoy por transferencia.');
+    c.parte = 500;
+    expect(c.aCredito()).toBe(1000);
+    expect(c.aCobrar()).toBe(500);
+    expect(c.llevaTransferencia()).toBe(true);
+    expect(c.llevaEfectivo()).toBe(false);
+    expect(c.ayudaParte()).toBe('El resto, $1,000.00, va a crédito.');
+    expect(c.resumenCredito()).toBe('Hoy paga $500.00 por transferencia y $1,000.00 van a su cuenta de crédito.');
     expect(c.motivo()).toBeNull();
-    c.metodoId = 2;
     c.entregar();
     // Lo que se fía va con sus días: se proponen 15 (2026-10-20).
     expect(enviado).toEqual({ pagos: [{ metodo_pago_id: 2, monto: 500 }], sesion_caja_id: undefined, a_credito: 1000, dias_credito: 15 });
@@ -169,11 +236,112 @@ describe('EntregarPedidoModal', () => {
     expect(c.motivo()).toContain('a cuántos días');
   });
 
-  it('sin permiso de vender a crédito no lo ofrece', async () => {
+  it('efectivo y crédito: el efectivo con su cambio entra al turno y el resto va a crédito', async () => {
+    const c = await montar(porPreparar);
+    c.cambiarForma('efectivo_credito');
+    expect(c.motivo()).toBe('Pon cuánto paga hoy en efectivo.');
+    c.parte = 1500;
+    expect(c.motivo()).toContain('elige solo Efectivo');
+    c.parte = 600;
+    expect(c.enEfectivo()).toBe(600);
+    expect(c.aCredito()).toBe(900);
+    c.recibido = 500;
+    expect(c.motivo()).toBe('Recibió menos de lo que va en efectivo ($600.00).');
+    c.recibido = 1000;
+    expect(c.cambio()).toBe(400);
+    c.diasCredito = 30;
+    expect(c.motivo()).toBeNull();
+    c.entregar();
+    expect(enviado).toEqual({
+      pagos: [{ metodo_pago_id: 1, monto: 1000 }], sesion_caja_id: 70, a_credito: 900, dias_credito: 30,
+    });
+  });
+
+  it('todo a crédito: no se cobra nada hoy', async () => {
+    const c = await montar(porPreparar);
+    c.cambiarForma('credito');
+    expect(c.aCredito()).toBe(1500);
+    expect(c.aCobrar()).toBe(0);
+    expect(c.resumenCredito()).toBe('Los $1,500.00 van a su cuenta de crédito.');
+    c.entregar();
+    expect(enviado).toEqual({ pagos: undefined, sesion_caja_id: undefined, a_credito: 1500, dias_credito: 15 });
+  });
+
+  it('cambiar de forma borra la parte que se tecleó para la otra', async () => {
+    const c = await montar(porPreparar);
+    c.cambiarForma('mixto');
+    c.parte = 700;
+    c.cambiarForma('efectivo_credito');
+    expect(c.parte).toBeNull();
+  });
+
+  it('cobra parte y parte: transferencia y el resto en efectivo, con cambio (2026-10-21)', async () => {
+    const c = await montar(porPreparar);
+    // Faltan $1,500.00.
+    expect(c.permiteMixto()).toBe(true);
+    c.cambiarForma('mixto');
+    expect(c.motivo()).toBe('Pon cuánto paga por transferencia.');
+    c.parte = 2000;
+    expect(c.motivo()).toContain('a lo más $1,500.00');
+    c.parte = 600;
+    expect(c.enEfectivo()).toBe(900);
+    expect(c.llevaTransferencia()).toBe(true);
+    expect(c.llevaEfectivo()).toBe(true);
+    c.recibido = 500;
+    expect(c.motivo()).toBe('Recibió menos de lo que va en efectivo ($900.00).');
+    c.recibido = 1000;
+    expect(c.cambio()).toBe(100);
+    expect(c.motivo()).toBeNull();
+    c.entregar();
+    expect(enviado).toEqual({
+      pagos: [{ metodo_pago_id: 2, monto: 600 }, { metodo_pago_id: 1, monto: 1000 }],
+      sesion_caja_id: 70, a_credito: undefined,
+    });
+  });
+
+  it('a cuántos días: solo se escribe el número, sin botones (2026-10-21)', async () => {
+    const c = await montar(porPreparar);
+    // Para mirar la ventana hace falta su fixture: se crea otra igual.
+    const f = TestBed.createComponent(EntregarPedidoModal);
+    f.componentRef.setInput('pedido', porPreparar);
+    f.detectChanges();
+    await f.whenStable();
+    f.componentInstance.cambiarForma('credito');
+    f.detectChanges();
+    const plazo = (f.nativeElement as HTMLElement).querySelector('app-plazo-credito')!;
+    expect(plazo.querySelectorAll('button').length).toBe(0);
+    expect(plazo.textContent).not.toContain('30 días');
+    const campo = plazo.querySelector<HTMLInputElement>('input[type=number]')!;
+    expect(campo).not.toBeNull();
+    expect(plazo.querySelector('label')!.getAttribute('for')).toBe(campo.id);
+    expect(c.diasCredito).toBe(15);
+  });
+
+  it('la lista ofrece una forma o dos, y sin permiso de vender a crédito no ofrece el crédito', async () => {
+    const opciones = (f: { nativeElement: HTMLElement }) =>
+      [...f.nativeElement.querySelectorAll('select[name="metodo"] option')].map((o) => o.textContent?.trim());
+    await montar(porPreparar);
+    let f = TestBed.createComponent(EntregarPedidoModal);
+    f.componentRef.setInput('pedido', porPreparar);
+    f.detectChanges();
+    await f.whenStable();
+    f.detectChanges();
+    expect(opciones(f)).toEqual([
+      'Efectivo', 'Transferencia', 'A crédito', 'Efectivo y transferencia', 'Efectivo y crédito', 'Transferencia y crédito',
+    ]);
+    TestBed.resetTestingModule();
+
     const c = await montar(porPreparar, []);
-    c.cobra = 500;
     expect(c.puedeFiar()).toBe(false);
-    expect(c.motivo()).toBe('Faltan $1,000.00: cóbralos o entrégala como pendiente de pago.');
+    f = TestBed.createComponent(EntregarPedidoModal);
+    f.componentRef.setInput('pedido', porPreparar);
+    f.detectChanges();
+    await f.whenStable();
+    f.detectChanges();
+    expect(opciones(f)).toEqual(['Efectivo', 'Transferencia', 'Efectivo y transferencia']);
+    // Aunque llegara a elegirse, no deja entregar.
+    c.cambiarForma('credito');
+    expect(c.motivo()).toContain('Vender a crédito');
   });
 
   it('se entrega como nota pendiente de pago: no cobra nada ahora (2026-10-13)', async () => {

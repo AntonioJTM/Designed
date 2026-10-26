@@ -13,6 +13,7 @@ import { FolioPipe } from '../../../shared/folio.pipe';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 import { forkJoin } from 'rxjs';
+import { vendioOtraPersona } from '../../../shared/vendedor';
 
 /** Una cifra de arriba de la pantalla. */
 interface Kpi {
@@ -56,11 +57,14 @@ function haceDias(dias: number): string {
     td .porque .vencida { color: var(--alerta-t); font-weight: 600; }
     .periodos { flex: 0 0 auto; }
     td.tenue { color: var(--tinta-2); }
+    td .vendio { display: block; font-size: 0.75rem; color: var(--tinta-3); }
     td .falta { color: var(--alerta-t); }
     .mas { display: flex; justify-content: center; padding-top: 14px; }
   `,
 })
 export class PedidosList {
+  /** Bajo «Elaboró», "vendió X" si la vendió otra persona (2026-10-23). */
+  protected readonly vendioOtra = vendioOtraPersona;
   private readonly ventas = inject(VentasService);
   private readonly rediseno = inject(RedisenoService);
 

@@ -7,8 +7,8 @@
  *
  * Recorre el flujo real con un hilo de prueba:
  *   · un paquete se baja a conos (Inventario → Bajar conos a mostrador), SOLO
- *     en una tienda y donde está el paquete, con el destare POR CONO (12 conos ×
- *     0.035 kg = 0.42 kg más);
+ *     en una tienda y donde está el paquete, con el destare DEL PAQUETE (0.42 kg
+ *     más, tal cual; desde el 2026-10-21, antes por cono) y su tope por cono;
  *   · la búsqueda de la caja, con su almacén, dice cuántos kilos enconados hay
  *     AHÍ y que ya no queda el paquete cerrado;
  *   · se venden 6 conos que pesaron 9.35 kg: se cobra 9.35 × el precio por kilo,
@@ -105,11 +105,18 @@ const ck = (n, ok, d) => {
     }
     r = await api('GET', `/inventario/desarmes/previa/${codigo}`);
     ck('ya en la tienda, la vista previa lo dice', r.data?.bulto?.almacen_id === almacen && r.data?.bulto?.en_tienda === true, r.data?.bulto);
+    // El destare es el del PAQUETE completo (2026-10-21): la pantalla manda `destare_kg`.
+    // Sin tope de la tienda vale 1 kg por cono: 12.5 kg entre 12 conos se pasa.
     r = await api('POST', '/inventario/desarmes', {
-      codigo_bulto: codigo, almacen_origen_id: almacen, almacen_destino_id: almacen, destare_por_cono_kg: 0.035,
+      codigo_bulto: codigo, almacen_origen_id: almacen, almacen_destino_id: almacen, destare_kg: 12.5,
+    });
+    ck('un destare del paquete de más de 1 kg por cono: 422 DESTARE_MUY_ALTO, en palabras del paquete',
+      r.status === 422 && r.error?.code === 'DESTARE_MUY_ALTO' && /hasta 12 kg/.test(r.error?.message ?? ''), r.error?.message);
+    r = await api('POST', '/inventario/desarmes', {
+      codigo_bulto: codigo, almacen_origen_id: almacen, almacen_destino_id: almacen, destare_kg: 0.42,
     });
     ck('se baja a conos en la tienda', r.status === 201 || r.status === 200, r.error);
-    ck('destare: 12 conos × 0.035 kg = 0.42 kg, entran 19.62 kg', r3(r.data?.destare_kg) === 0.42 && r3(r.data?.kg_enconados) === 19.62,
+    ck('destare del paquete: 0.42 kg tal cual (no × 12), entran 19.62 kg', r3(r.data?.destare_kg) === 0.42 && r3(r.data?.kg_enconados) === 19.62,
       { destare: r.data?.destare_kg, enconados: r.data?.kg_enconados });
     ck('del paquete se descuenta lo que pesaba (19.2 kg)', r3(r.data?.kg_consumidos) === 19.2, r.data?.kg_consumidos);
 
@@ -139,6 +146,16 @@ const ck = (n, ok, d) => {
     ck('quedan 10.27 kg enconados', r3(r.data?.items?.find((v) => v.id === cono.id)?.aqui?.cantidad) === 10.27);
 
     console.log('\n=== 4. Lo que no debe pasar ===');
+    // Conos: el peso Y cuántos son, los dos obligatorios (2026-10-21).
+    r = await api('POST', '/pedidos', {
+      canal: 'punto_venta', sesion_caja_id: sesion.id,
+      items: [{ variante_id: cono.id, cantidad: 3 }],
+      pagos: [{ metodo_pago_id: efectivo.id, monto: 1000 }],
+    });
+    ck('conos sin decir cuántos son: 422 FALTAN_CONOS y no se vende', r.status === 422 && r.error?.code === 'FALTAN_CONOS'
+      && /Di cuántos conos son/.test(r.error?.message ?? ''), r.error?.message);
+    r = await api('GET', `/variantes?q=${encodeURIComponent('TMPVC ROJO ' + SUF)}&almacen_id=${almacen}`);
+    ck('siguen los 10.27 kg enconados', r3(r.data?.items?.find((v) => v.id === cono.id)?.aqui?.cantidad) === 10.27);
     r = await api('POST', '/pedidos', {
       canal: 'punto_venta', sesion_caja_id: sesion.id,
       items: [{ variante_id: cono.id, cantidad: 12.5, piezas: 8 }],

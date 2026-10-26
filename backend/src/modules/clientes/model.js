@@ -304,7 +304,26 @@ function vencimientoDe(movs, hoy = hoyLocal(), plazoSinDecir = plazoPorOmision()
     vencida: vencidas[0] ?? null,
     vencidas,
     proxima,
+    // Todas las que se deben, con su vencimiento (para `porCobrarHasta`).
+    notas,
   };
+}
+
+/**
+ * Lo que hay que cobrarle A MÁS TARDAR ese día ('YYYY-MM-DD'): lo que falta de
+ * sus notas ya vencidas y de las que vencen hasta ese día (2026-10-22, "Crédito
+ * por cobrar este mes" en Cuánto debe; el usuario eligió "vencidas + las que
+ * vencen este mes"). `atraso`: lo de `vencimientoDe`.
+ */
+function porCobrarHasta(atraso, dia) {
+  const total = (atraso?.notas ?? []).filter((n) => n.venceEl <= dia).reduce((s, n) => s + n.porPagar, 0);
+  return Math.round(total * 100) / 100;
+}
+
+/** El último día del mes de `hoy` ('YYYY-MM-DD'). */
+function finDeMes(hoy = hoyLocal()) {
+  const [a, m] = String(hoy).split('-').map(Number);
+  return new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10);
 }
 
 /** Les pone su folio a las notas de `vencida`, `vencidas` y `proxima` (una consulta). */
@@ -545,11 +564,11 @@ async function pedidos(id, { limit = 20, offset = 0, almacenes = null } = {}) {
   const [rows] = await pool.query(
     `SELECT p.id, p.numero_pedido, p.canal, p.metodo_entrega, p.estado,
             p.subtotal, p.descuento, p.impuestos, p.costo_envio, p.total,
-            p.creado_en, u.nombre AS atendio,
+            p.creado_en, u.nombre AS atendio,  -- quien la vendió (2026-10-23)
             (SELECT COUNT(*) FROM pedido_detalle d WHERE d.pedido_id = p.id) AS num_lineas,
             (SELECT COALESCE(SUM(d.cantidad), 0) FROM pedido_detalle d WHERE d.pedido_id = p.id) AS kilos
        FROM pedidos p
-       LEFT JOIN usuarios u ON u.id = p.usuario_id
+       LEFT JOIN usuarios u ON u.id = COALESCE(p.vendedor_id, p.usuario_id)
       WHERE p.cliente_id = :id${fp.sql}
       ORDER BY p.creado_en DESC, p.id DESC
       LIMIT :limit OFFSET :offset`,
@@ -1288,7 +1307,7 @@ module.exports = {
   listar,
   obtener,
   buscarParaVenta, diasSinAbonar, atrasoDe, deudaMasVieja, diasDeLaMasVieja, diasSinAbonarDeTodos,
-  vencimientoDe, notaVencimiento, sumarDias, plazoPorOmision,
+  vencimientoDe, notaVencimiento, sumarDias, plazoPorOmision, porCobrarHasta, finDeMes,
   crearDesdeStaff,
   actualizar,
   fijarLimiteCredito,

@@ -357,6 +357,13 @@ export interface ResultadoAbono {
   liquidado: boolean;
 }
 
+/** Alguien del personal que puede quedar como vendedor de una venta de esa tienda. */
+export interface Vendedor {
+  id: number;
+  nombre: string;
+  puesto: string;
+}
+
 export interface Pedido {
   id: number;
   numero_pedido: string;
@@ -385,7 +392,12 @@ export interface Pedido {
   /** Sus teléfonos, para mandarle el ticket por WhatsApp (2026-10-16; solo en el detalle). */
   cliente_telefono?: string | null;
   cliente_telefono_alt?: string | null;
+  /** Quien la registró («Elaboró»). */
+  usuario_id?: number | null;
   usuario?: string | null;
+  /** Quien la vendió (2026-10-23): a esa persona va la comisión. Sin elegir, quien la registró. */
+  vendedor_id?: number | null;
+  vendedor?: string | null;
   almacen?: string | null;
   sesion_caja_id?: number | null;
   /** La caja donde se vendió (por el turno). */

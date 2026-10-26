@@ -18,6 +18,7 @@ const cajaRoutes = require('./modules/caja/routes');
 const pedidosRoutes = require('./modules/pedidos/routes');
 const nominaRoutes = require('./modules/nomina/routes');
 const reportesRoutes = require('./modules/reportes/routes');
+const rotacionRoutes = require('./modules/rotacion/routes');
 const analisisRoutes = require('./modules/analisis/routes');
 const notificacionesRoutes = require('./modules/notificaciones/routes');
 const configuracionRoutes = require('./modules/configuracion/routes');
@@ -79,6 +80,8 @@ router.use('/nomina', nominaRoutes);
 
 // Reportes
 router.use('/reportes', reportesRoutes);
+// Rotación de inventario: cuánto se vende, en qué temporada y cuándo pedirlo (2026-10-22).
+router.use('/rotacion', rotacionRoutes);
 // El tablero del negocio: cobranza, clientes que no vuelven, hilo parado y margen.
 router.use('/analisis', analisisRoutes);
 

@@ -113,7 +113,11 @@ function _filas(xml, compartidas) {
     const celdas = {};
     const numericas = new Set();
 
-    for (const cXml of rowXml.match(/<c[^>]*(?:\/>|>[\s\S]*?<\/c>)/g) || []) {
+    // `[^>]*?` PEREZOSO: una celda vacía con formato (`<c r="D2" s="2"/>`, como la
+    // escribe Excel) se cierra ahí. Con `[^>]*` se comía la "/" y la celda se
+    // tragaba a las de su derecha hasta el siguiente </c> (2026-10-22: la columna
+    // CONO de una plantilla salía vacía).
+    for (const cXml of rowXml.match(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g) || []) {
       const ref = /\sr="([A-Z]+)\d+"/.exec(cXml)?.[1];
       if (!ref) continue;
       const tipo = /\st="([^"]+)"/.exec(cXml)?.[1];

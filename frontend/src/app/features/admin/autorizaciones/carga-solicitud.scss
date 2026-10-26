@@ -13,8 +13,30 @@ table.grid .sub { font-size: 0.75rem; color: var(--tinta-3); margin-top: 2px; fo
 table.grid td .pill { margin-left: 6px; }
 .lote-uno { white-space: nowrap; }
 table.grid td.num, table.grid th.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-table.grid tfoot th, table.grid tfoot td { background: var(--superficie-2); border-top: 1px solid var(--borde); font-weight: 600; }
+table.grid tfoot th, table.grid tfoot td { background: var(--superficie-2); border-top: 1px solid var(--borde); border-bottom: 0; font-weight: 600; }
 table.grid tfoot th { text-align: left; }
+
+// Los paquetes de un lote: una tabla con encabezados y su total (2026-10-21).
+// Los lotes van uno junto al otro si caben; en el celular, uno bajo el otro.
+.paquetes-hilo { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px 32px; }
+.paquetes-hilo .lote-paquetes { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.paquetes-hilo .lote-paquetes + .lote-paquetes { margin-top: 0; }
+table.grid.paquetes-tabla { width: auto; background: var(--superficie); border-radius: 8px; }
+table.grid.paquetes-tabla th, table.grid.paquetes-tabla td { padding: 6px 12px; font-size: 0.8125rem; }
+table.grid.paquetes-tabla .renglon { color: var(--tinta-3); }
+// El renglón del paquete ya registrado, en rojo. Con la pantalla escalada (125 %,
+// 150 %) Chrome dejaba un hilo blanco entre celda y celda: la sombra de 1 px lo tapa.
+table.grid.paquetes-tabla tr.con-error > td {
+  background: var(--peligro-f); color: var(--peligro-t); box-shadow: 1px 0 0 var(--peligro-f);
+}
+table.grid.paquetes-tabla .problema { color: inherit; }
+// En el celular, más juntas: así caben las cuatro columnas sin deslizar de lado
+// (con 12 px los conos quedaban fuera, a 390 px de ancho).
+@container (max-width: 520px) {
+  table.grid.paquetes-tabla th, table.grid.paquetes-tabla td { padding: 6px 5px; }
+  table.grid.paquetes-tabla th:first-child, table.grid.paquetes-tabla td:first-child { padding-left: 8px; }
+  table.grid.paquetes-tabla th:last-child, table.grid.paquetes-tabla td:last-child { padding-right: 8px; }
+}
 // Lo que falta para venderlo: la pareja de aviso, sin pintar el renglón entero.
 .falta { color: var(--aviso-t); }
 

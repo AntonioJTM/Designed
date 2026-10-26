@@ -47,7 +47,7 @@ async function _hilosDeLista(cuerpo) {
 /** La carga de UN hilo: la presentación que se eligió, o la del producto (se crea si le falta). */
 async function _hiloSolo(cuerpo) {
   const sql = `SELECT p.id, p.nombre, p.grosor_calibre AS calibre, p.activo, cat.nombre AS material, l.nombre AS linea,
-                      pv.id AS variante_id, pv.precio
+                      p.precio_kg, pv.id AS variante_id, pv.precio
                  FROM productos p
                  JOIN categorias cat ON cat.id = p.categoria_id
                  LEFT JOIN lineas l ON l.id = p.linea_id`;
@@ -155,7 +155,8 @@ async function detalleDeCarga(cuerpo, { veCostos = false, veExistencias = false 
       material: p ? p.material : h.estado === 'nuevo' ? materialNuevo : null,
       linea: p ? p.linea : h.estado === 'nuevo' ? lineaNueva : null,
       // Lo que cobra la caja es el precio de la presentación: en $0 no se vende.
-      sin_precio: p ? !(Number(p.precio) > 0) : h.estado === 'nuevo',
+      // Sin presentación, la carga le crea una con su precio por kilo.
+      sin_precio: p ? !lista.tienePrecio(p) : h.estado === 'nuevo',
       desactivado: p ? !Number(p.activo) : false,
       // Ya existe pero no tiene presentación en kilos: la carga se la crea.
       crea_presentacion: p ? !p.variante_id : false,

@@ -240,8 +240,24 @@ describe('PedidoDetalle', () => {
     c.cambiarEstado();
     c.confirmarDevolucion();
 
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined]);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado']);
     expect(c.mensaje()).toContain('Se liberó lo apartado');
+  });
+
+  // 2026-10-23: "se regresa todo; no pregunte cómo lo regresa ni el peso".
+  it('cancelar una venta regresa todo tal cual: sin «Regresa como» ni cantidad', async () => {
+    actual = { ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1 };
+    const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
+    const f = await montar();
+    const c = f.componentInstance;
+    c.abrirCancelar();
+    f.detectChanges();
+    const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
+    expect(modal.textContent).toContain('tal cual se vendió');
+    expect(modal.textContent).not.toContain('Regresa como');
+    expect(modal.querySelector('select, input[type=number]')).toBeNull();
+    c.confirmarDevolucion();
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado']);
   });
 
   // Subir la captura donde no hay pago al cual pegarla creaba otro por el total.

@@ -53,7 +53,7 @@ export class VistaDeuda {
 
   readonly kpis = computed(() => {
     const d = this.datos();
-    const usado = d.credito_autorizado > 0 ? Math.round((100 * d.credito_usado) / d.credito_autorizado) : null;
+    const mes = d.por_cobrar_mes ?? { monto: 0, clientes: 0, hasta: '' };
     return [
       {
         etiqueta: 'Por cobrar',
@@ -69,10 +69,14 @@ export class VistaDeuda {
           : 'ninguna nota pasó sus días',
         punto: COLOR.alerta,
       },
+      // "Crédito usado" se quitó el 2026-10-22 ("no sirve", usuario): en su lugar,
+      // lo vencido y lo que vence hasta el último día del mes.
       {
-        etiqueta: 'Crédito usado',
-        valor: usado === null ? '—' : `${usado}%`,
-        pie: d.credito_autorizado > 0 ? `de ${pesos(d.credito_autorizado)} que tienen autorizado` : 'nadie tiene crédito autorizado',
+        etiqueta: 'Crédito por cobrar este mes',
+        valor: pesos(mes.monto),
+        pie: mes.clientes
+          ? `${plural(mes.clientes, 'cliente', 'clientes')} · lo vencido y lo que vence al ${fechaCorta(mes.hasta)}`
+          : 'nada vence este mes',
         punto: COLOR.serie1,
       },
       {

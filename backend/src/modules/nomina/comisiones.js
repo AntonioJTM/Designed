@@ -35,6 +35,9 @@
 
 const { pool } = require('../../config/db');
 const { repartirAbonos } = require('../clientes/model');
+// La comisión es de quien VENDIÓ (2026-10-23): el vendedor elegido en la caja o,
+// si no se eligió, quien registró la venta.
+const VENDEDOR = require('../pedidos/vendedores').SQL_VENDEDOR;
 
 /** Domingo desde el que rige la regla (la migración anotó lo que ya se había pagado). */
 const DESDE = '2026-10-04';
@@ -95,7 +98,7 @@ async function devolucionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 0
       WHERE np.estado <> 'cancelado' AND np.id <> :periodo
         AND nc.pedido_id IN (
               SELECT dv.pedido_id FROM devoluciones dv JOIN pedidos p ON p.id = dv.pedido_id
-               WHERE p.usuario_id IN (:ids) AND p.creado_en >= :desde AND dv.creado_en < :hasta)
+               WHERE ${VENDEDOR} IN (:ids) AND p.creado_en >= :desde AND dv.creado_en < :hasta)
       GROUP BY nc.pedido_id
      HAVING MAX(nc.tipo <> 'devolucion') = 1`,
     { ids: usuarioIds, desde: `${DESDE} 00:00:00`, hasta, periodo: periodoId ?? 0 }
@@ -103,7 +106,7 @@ async function devolucionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 0
   if (!ya.length) return [];
   const devuelto = await devueltoNeto(conn, ya.map((x) => Number(x.pedido_id)), hasta);
   const [ventas] = await conn.query(
-    `SELECT p.id, p.numero_pedido, p.usuario_id, COALESCE(c.nombre_comercial, c.nombre) AS cliente,
+    `SELECT p.id, p.numero_pedido, ${VENDEDOR} AS usuario_id, COALESCE(c.nombre_comercial, c.nombre) AS cliente,
             DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS vendida_en
        FROM pedidos p LEFT JOIN clientes c ON c.id = p.cliente_id
       WHERE p.id IN (:ids)`,
@@ -145,13 +148,13 @@ async function devolucionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 0
 async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }) {
   if (!usuarioIds.length) return [];
   const [ventas] = await conn.query(
-    `SELECT p.id, p.numero_pedido, p.usuario_id, p.cliente_id, p.estado, p.encargo, p.nota_pendiente, p.entregado_en,
+    `SELECT p.id, p.numero_pedido, ${VENDEDOR} AS usuario_id, p.cliente_id, p.estado, p.encargo, p.nota_pendiente, p.entregado_en,
             p.total, (p.subtotal - p.descuento) AS venta_neta,
             DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS vendida_en,
             COALESCE(c.nombre_comercial, c.nombre) AS cliente
        FROM pedidos p
        LEFT JOIN clientes c ON c.id = p.cliente_id
-      WHERE p.usuario_id IN (:ids) AND p.creado_en >= :desde AND p.creado_en < :hasta
+      WHERE ${VENDEDOR} IN (:ids) AND p.creado_en >= :desde AND p.creado_en < :hasta
         AND p.estado NOT IN ('cancelado', 'devuelto')
         AND NOT EXISTS (
               SELECT 1 FROM nomina_comisiones nc
@@ -353,12 +356,12 @@ async function reporte(periodo, { usuarioId = null } = {}) {
     anotadas = [];
   } else if (reglaAnterior) {
     const [rows] = await pool.query(
-      `SELECT p.id AS pedido_id, p.numero_pedido, p.usuario_id, COALESCE(c.nombre_comercial, c.nombre) AS cliente,
+      `SELECT p.id AS pedido_id, p.numero_pedido, ${VENDEDOR} AS usuario_id, COALESCE(c.nombre_comercial, c.nombre) AS cliente,
               p.estado, p.encargo, p.nota_pendiente, p.entregado_en,
               EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo') AS fiada,
               DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS vendida_en, p.total, (p.subtotal - p.descuento) AS venta_neta
          FROM pedidos p LEFT JOIN clientes c ON c.id = p.cliente_id
-        WHERE p.usuario_id IN (:ids) AND p.creado_en >= :desde AND p.creado_en < :hasta
+        WHERE ${VENDEDOR} IN (:ids) AND p.creado_en >= :desde AND p.creado_en < :hasta
           AND p.estado NOT IN ('cancelado', 'devuelto')
         ORDER BY p.creado_en, p.id`,
       { ids, desde: `${periodo.fecha_inicio} 00:00:00`, hasta: `${siguienteDia(periodo.fecha_fin)} 00:00:00` }

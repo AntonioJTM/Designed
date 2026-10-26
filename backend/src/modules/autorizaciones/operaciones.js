@@ -345,10 +345,24 @@ const OPERACIONES = {
       const elegido = !v?.cliente_id && req.body?.cliente_id;
       const quien = elegido ? await nombreCliente(req.body.cliente_id) : (p?.cliente ?? 'el cliente');
       const valor = await valorDevolucion(req.params.id, lineas);
+      // Si ESA venta todavía se debe, lo que regresa se descuenta primero de ella
+      // (2026-10-22: el resumen decía "quedan a favor" de una nota a crédito sin pagar).
+      const debeEsta = Number((await require('../clientes/saldo-favor').debeDeVenta(pool, Number(req.params.id)))?.debe ?? 0);
+      const deEsta = Math.round(Math.min(valor, debeEsta) * 100) / 100;
+      const sobra = Math.round((valor - deEsta) * 100) / 100;
+      const resto = req.body?.destino === 'deuda' ? `se descuentan de lo que debe ${quien}` : `quedan a favor de ${quien}`;
+      const destino = deEsta > 0.004
+        ? `${pesos(deEsta)} se descuentan de esta nota${sobra > 0.004 ? ` y ${pesos(sobra)} ${resto}` : ` de ${quien}`}`
+        : `${pesos(valor)} ${resto}`;
       return `Devolución de ${p?.numero_pedido ?? 'la venta'}${elegido ? ' (venta de mostrador)' : ''}` +
-        `${que ? ` · regresan ${que}` : ''} · ${pesos(valor)} ` +
-        `${req.body?.destino === 'deuda' ? `se descuentan de lo que debe ${quien}` : `quedan a favor de ${quien}`}` +
+        `${que ? ` · regresan ${que}` : ''} · ${destino}` +
         (elegido ? ' (lo eligió quien lo pide)' : '');
+    },
+    // Qué regresa, para revisarlo antes de aceptarla (2026-10-22, usuario: "qué
+    // cliente es, cuántos paquetes regresa, color y lote, pesos e importe").
+    async detalle(cuerpo, { ruta }) {
+      const { detalleDeDevolucion, ventaDeRuta } = require('../pedidos/devolucion-solicitud');
+      return { devolucion: await detalleDeDevolucion(ventaDeRuta(ruta), cuerpo) };
     },
   },
 

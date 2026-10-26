@@ -12,7 +12,7 @@ import { Rol, Usuario } from '../../../core/models/auth.models';
  */
 describe('UsuarioFormModal (varios puestos)', () => {
   const roles: Rol[] = [
-    { id: 2, nombre: 'gerente' },
+    { id: 2, nombre: 'gerente', solo_todas: ['Reportes'] },
     { id: 3, nombre: 'cajero' },
     { id: 4, nombre: 'almacenista' },
   ];
@@ -71,6 +71,22 @@ describe('UsuarioFormModal (varios puestos)', () => {
     c.form.patchValue({ rol_id: 4 });
     c.guardar();
     expect(enviado).toEqual(jasmine.objectContaining({ rol_id: 4, otros_roles: [2] }));
+  });
+
+  it('con una sola tienda dice qué pantallas de sus puestos no verá (2026-10-22)', async () => {
+    const f = await montar(null);
+    f.componentRef.setInput('roles', [...roles, { id: 5, nombre: 'contabilidad', solo_todas: ['Transferencias', 'Reportes'] }]);
+    const c = f.componentInstance;
+    c.form.controls.rol_id.setValue(5);
+    c.alternarOtro(2, true);
+    c.todas.set(false);
+    f.detectChanges();
+    expect(c.noVeria()).toEqual(['Transferencias', 'Reportes']);
+    expect((f.nativeElement as HTMLElement).querySelector('.no-veria')?.textContent).toContain('no verá Transferencias y Reportes');
+    c.todas.set(true);
+    f.detectChanges();
+    expect(c.noVeria()).toEqual([]);
+    expect((f.nativeElement as HTMLElement).querySelector('.no-veria')).toBeNull();
   });
 
   it('un alta arranca de cajero y sin otros puestos', async () => {

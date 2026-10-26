@@ -74,9 +74,11 @@
                     @if (l.tipo === 'paquete') { <span class="ayuda">O escanea sus paquetes arriba.</span> }
                   </label>
                   @if (l.tipo === 'cono') {
+                    <!-- Obligatorio, igual que los kilos (2026-10-21). -->
                     <label class="field">
                       Cuántos conos
-                      <input type="number" min="0" step="1" [(ngModel)]="l.conos" [name]="'conos-' + $index" />
+                      <input type="number" min="1" step="1" required [(ngModel)]="l.conos" [name]="'conos-' + $index"
+                             inputmode="numeric" [class.invalido]="!conosListos(l)" [attr.aria-invalid]="!conosListos(l)" />
                     </label>
                   }
                 </div>

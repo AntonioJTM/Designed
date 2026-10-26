@@ -166,6 +166,12 @@ export class ModificarPedidoModal implements OnInit {
     return l.tipo === 'cono' ? 'conos' : l.tipo === 'paquete' ? 'paquete' : 'por kilo';
   }
 
+  /** ¿La línea de conos dice cuántos son? (entero desde 1). */
+  conosListos(l: LineaEdit): boolean {
+    const n = Number(l.conos);
+    return l.conos != null && (l.conos as unknown) !== '' && Number.isInteger(n) && n >= 1;
+  }
+
   /** Por qué todavía no se puede guardar, o null. */
   motivo(): string | null {
     if (!this.lineas().length) return 'El pedido se quedaría sin nada: si ya no lo quiere, cancélalo.';
@@ -175,6 +181,9 @@ export class ModificarPedidoModal implements OnInit {
         ? `Escanea los paquetes de ${sinKg.hilo} o escribe sus kilos.`
         : `Escribe cuántos kilos van de ${sinKg.hilo}.`;
     }
+    // Conos: el peso Y cuántos son, los dos obligatorios (2026-10-21).
+    const sinConos = this.lineas().find((l) => l.tipo === 'cono' && !this.conosListos(l));
+    if (sinConos) return `Escribe cuántos conos son de ${sinConos.hilo}.`;
     if (this.entrega === 'envio' && !this.direccion.trim()) return 'Si lo lleva el chofer, di a dónde.';
     return null;
   }

@@ -32,6 +32,7 @@ import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
 import { DatosCargaCampos, datosCargaVacios, datosParaEnviar } from '../remesas/datos-carga';
 import { DatosCarga } from '../../../core/services/inventario.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
+import { BotonPlantilla } from '../../../shared/boton-plantilla';
 
 /** Qué modal está abierto. Uno a la vez; se crea al abrirlo y se destruye al cerrarlo. */
 type ModalPresentaciones = 'producto' | 'precio' | 'bulto' | 'imagen' | 'manual' | 'entradas' | null;
@@ -62,7 +63,7 @@ const BULTOS_A_LA_VISTA = 30;
  */
 @Component({
   selector: 'app-producto-presentaciones',
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe, DineroPipe, ProductoFormModal, EntradasModal, DatosCargaCampos],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, CantidadPipe, DineroPipe, ProductoFormModal, EntradasModal, DatosCargaCampos, BotonPlantilla],
   templateUrl: './producto-presentaciones.html',
   styleUrls: ['./producto-presentaciones.scss', './bultos-filtros.scss'],
   host: { '(document:keydown.escape)': 'cerrarModal()' },

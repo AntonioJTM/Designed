@@ -2,7 +2,7 @@
   <header class="page-head">
     <div>
       <h1>Permisos</h1>
-      <p class="sub">Qué ve y qué puede hacer cada puesto. Los cambios aplican la próxima vez que la persona entre.</p>
+      <p class="sub">Qué ve y qué puede hacer cada puesto. Al guardar, el menú de quien tiene el sistema abierto se pone al día solo.</p>
     </div>
     <div class="acciones">
       <a class="btn btn-ghost" routerLink="/admin/usuarios">Ver personal</a>
@@ -35,11 +35,30 @@
   @if (!matriz()) {
     <p class="muted">Cargando…</p>
   } @else {
+    <!-- Quien tiene en su puesto pantallas de todas las tiendas pero trabaja en una (2026-10-22). -->
+    @if (matriz()!.no_las_ven?.length) {
+      <section class="aviso no-las-ven" role="status">
+        <b>{{ matriz()!.no_las_ven!.length === 1 ? 'Esta persona no ve' : 'Estas personas no ven' }} cosas que su puesto sí tiene,
+          porque trabaja{{ matriz()!.no_las_ven!.length === 1 ? '' : 'n' }} en una sola tienda:</b>
+        <ul>
+          @for (n of matriz()!.no_las_ven!; track n.usuario_id) {
+            <li>
+              <b>{{ n.nombre }}</b> ({{ n.puestos.join(' y ') }}; trabaja en {{ n.tiendas || 'ninguna tienda' }}):
+              @if (n.pantallas.length) { no ve {{ lista(n.pantallas) }}@if (n.acciones.length) {, ni puede {{ lista(n.acciones) }}}. }
+              @else { no puede {{ lista(n.acciones) }}. }
+            </li>
+          }
+        </ul>
+        <span>Eso suma todas las tiendas. Para que lo vea, en
+          <a routerLink="/admin/usuarios">Personal</a> → Editar → «Trabaja en», márcale «Todas las tiendas».</span>
+      </section>
+    }
     <section class="card">
       <div class="card-head">
         <div>
           <h2>Qué ve en el menú</h2>
-          <p>Lo que no se ve tampoco se puede abrir escribiendo la dirección.</p>
+          <p>Lo que no se ve tampoco se puede abrir escribiendo la dirección. Las marcadas «Solo con todas las tiendas»
+            las ve únicamente quien tiene «Todas las tiendas» en Personal.</p>
         </div>
       </div>
       <ng-container *ngTemplateOutlet="tabla; context: { $implicit: pantallas() }" />
@@ -106,7 +125,11 @@
           <tr class="titulo-grupo"><td [attr.colspan]="roles().length + 1">{{ g.titulo }}</td></tr>
           @for (p of g.filas; track p.clave) {
             <tr [class.cambiada]="filaCambiada(p.clave)">
-              <td class="que"><b>{{ p.nombre }}</b><span>{{ p.ayuda }}</span></td>
+              <td class="que">
+                <b>{{ p.nombre }}</b>
+                @if (p.nota_tiendas) { <span class="pill gris solo-todas">{{ p.nota_tiendas }}</span> }
+                <span>{{ p.ayuda }}</span>
+              </td>
               @for (r of roles(); track r.id) {
                 <td class="marca">
                   <input type="checkbox" [checked]="marcado(r, p.clave)" [disabled]="r.es_admin || guardando()"

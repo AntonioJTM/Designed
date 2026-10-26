@@ -831,6 +831,11 @@ export class InventarioService {
   }
 
   /** El PDF de UNA carga: el hilo, el almacén y cada bulto con su peso real. */
+  /** La plantilla vacía para llenar: la lista con varios colores o la de un solo hilo. */
+  plantillaCarga(tipo: 'lista' | 'hilo'): Observable<Blob> {
+    return this.http.get(`${this.base}/remesas/plantilla/${tipo}`, { responseType: 'blob' });
+  }
+
   pdfCarga(remesaId: number): Observable<Blob> {
     return this.http.get(`${this.base}/remesas/${remesaId}/pdf`, { responseType: 'blob' });
   }

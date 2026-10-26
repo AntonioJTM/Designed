@@ -58,7 +58,7 @@ describe('CargaSolicitud', () => {
     expect(texto).toContain('21/10/2026');
     expect(texto).toContain('1 paquete ya está registrado');
     // Los paquetes se ven hasta tocar el color.
-    expect(el.querySelector('.paquetes-lista')).toBeNull();
+    expect(el.querySelector('.paquetes-tabla')).toBeNull();
   });
 
   it('tocar el color abre sus lotes y cada paquete, con el ya registrado en rojo', () => {
@@ -73,12 +73,33 @@ describe('CargaSolicitud', () => {
     expect(lotes[0].textContent).toContain('0094878');
     expect(lotes[0].textContent).toContain('2 paquetes');
     expect(lotes[1].textContent).toContain('Sin lote');
-    const paquetes = el.querySelectorAll('.paquetes-lista li');
+    const paquetes = el.querySelectorAll('.paquetes-tabla > tbody > tr');
     expect(paquetes.length).toBe(3);
     expect(paquetes[1].classList).toContain('con-error');
     expect(paquetes[1].textContent).toContain('00539469');
     expect(paquetes[1].textContent).toContain('19.85 kg');
+    expect(paquetes[1].textContent).toContain('Ya está registrado');
     expect(paquetes[2].textContent).toContain('sin conos');
+  });
+
+  it('cada lote es una tabla con encabezados (código de barras, peso, conos) y su total', () => {
+    const f = montar(CARGA);
+    const el = f.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('.hilo-abrir')!.click();
+    f.detectChanges();
+    const tabla = el.querySelector('.lote-paquetes .paquetes-tabla')!;
+    expect([...tabla.querySelectorAll('thead th')].map((t) => t.textContent?.trim()))
+      .toEqual(['Renglón', 'Código de barras', 'Peso', 'Conos']);
+    const celdas = [...tabla.querySelectorAll(':scope > tbody > tr')[0].querySelectorAll('td')].map((t) => t.textContent?.trim());
+    expect(celdas).toEqual(['3', '00539468', '18.55 kg', '12']);
+    const total = tabla.querySelector('tfoot')!.textContent!.replace(/\s+/g, ' ');
+    expect(total).toContain('Total del lote');
+    expect(total).toContain('2 paquetes');
+    expect(total).toContain('38.4 kg');
+    expect(total).toContain('24');
+    // El lote sin lote: su paquete sin conos y el total lo dice.
+    const otro = el.querySelectorAll('.lote-paquetes')[1];
+    expect(otro.querySelector('tfoot')!.textContent).toContain('1 sin conos');
   });
 
   it('el costo por kilo solo sale si el servidor lo manda (quien tiene «Ver costos»)', () => {

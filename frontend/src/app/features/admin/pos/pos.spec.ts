@@ -61,8 +61,11 @@ describe('Pos', () => {
     costo_envio?: number;
     entrega_para?: string;
     cliente_id?: number;
+    vendedor_id?: number;
   } | null = null;
   let cajaPedida: number | null = null;
+  /** De qué almacén se pidió el personal para elegir vendedor. */
+  let vendedoresDe: number | null = null;
   let permisos: Set<string>;
   let invFalso: Record<string, unknown> = {};
   /** Lo que siempre lleva el cliente elegido (2026-10-16). */
@@ -88,6 +91,14 @@ describe('Pos', () => {
         { id: 3, nombre: 'Transferencia' },
       ]),
     apartados: () => of({ items: [], num_apartados: 0, total_apartado: 0, total_abonado: 0 }),
+    /** El personal de la tienda de la caja (2026-10-23): quién puede quedar como vendedor. */
+    vendedores: (almacenId: number) => {
+      vendedoresDe = almacenId;
+      return of([
+        { id: 3, nombre: 'Cajero', puesto: 'cajero' },
+        { id: 7, nombre: 'Rosa M.', puesto: 'cajero' },
+      ]);
+    },
     crearPedido: (body: { pagos?: { metodo_pago_id: number; monto: number }[] }) => {
       pedidoEnviado = body as typeof pedidoEnviado;
       return of({ id: 1, numero_pedido: 'POS-1', estado: 'pagado', total: '432.00', cambio: 68 });
@@ -107,7 +118,8 @@ describe('Pos', () => {
         {
           provide: AuthService,
           useValue: {
-            sesion: signal({ rol: 'cajero' }),
+            sesion: signal({ rol: 'cajero', id: 3, nombre: 'Cajero' }),
+            miId: () => 3,
             cargarPerfil: () => of(null),
             puede: (k: string) => permisos.has(k),
             puedeOPide: (k: string) => permisos.has(k) || permisos.has(k.replace(/^hacer:/, 'pedir:')),
@@ -147,6 +159,7 @@ describe('Pos', () => {
     cuentasFalsas = [];
     pedidoEnviado = null;
     cajaPedida = null;
+    vendedoresDe = null;
     permisos = new Set(['ver:caja', 'hacer:fiar', 'pedir:fiar_atrasado']);
     invFalso = {};
     hilosCliente = [];
@@ -529,6 +542,50 @@ describe('Pos', () => {
     ]);
   });
 
+  it('VENDEDOR (2026-10-23): propone a quien cobra, manda al elegido y la siguiente vuelve a quien cobra', async () => {
+    const { c, fixture } = await montar();
+    expect(vendedoresDe).toBe(1);
+    expect(c.vendedores().map((v) => v.id)).toEqual([3, 7]);
+    expect(c.vendedorSel).toBe(3);
+    llenarCarrito(c);
+    fixture.detectChanges();
+    const opciones = [...fixture.nativeElement.querySelectorAll('select[name="vendedor"] option')].map((o: HTMLOptionElement) => o.textContent?.trim());
+    expect(opciones).toEqual(['Cajero (tú)', 'Rosa M.']);
+    expect(c.ayudaVendedor()).toContain('Si atendió otra persona');
+
+    c.vendedorSel = 7;
+    expect(c.ayudaVendedor()).toBe('La comisión es de Rosa M.; tú quedas como quien la elaboró.');
+    c.metodoSel = 1;
+    c.montoPago = 500;
+    await c.cobrar();
+    expect(pedidoEnviado!.vendedor_id).toBe(7);
+    expect(c.vendedorSel).toBe(3);
+
+    llenarCarrito(c);
+    c.metodoSel = 1;
+    await c.cobrar();
+    expect(pedidoEnviado!.vendedor_id).toBe(3);
+  });
+
+  it('VENDEDOR: la nota en espera y la pendiente de pago también lo mandan', async () => {
+    const { c } = await montar();
+    c.elegirCliente(mayoreo);
+    llenarCarrito(c);
+    c.vendedorSel = 7;
+    c.elegirModo('pendiente');
+    await c.cobrar();
+    expect(pedidoEnviado!.pendiente_pago).toBeTrue();
+    expect(pedidoEnviado!.vendedor_id).toBe(7);
+
+    c.elegirCliente(mayoreo);
+    llenarCarrito(c);
+    c.vendedorSel = 7;
+    c.elegirModo('espera');
+    await c.cobrar();
+    expect(pedidoEnviado!.encargo).toBeTrue();
+    expect(pedidoEnviado!.vendedor_id).toBe(7);
+  });
+
   it('dos clics en Cobrar mandan UNA venta, con su llave de un solo uso (2026-10-19)', async () => {
     const { c } = await montar();
     llenarCarrito(c);
@@ -612,6 +669,28 @@ describe('Pos', () => {
     c.quitarBulto(c.carrito()[0], 'B1');
     c.quitarBulto(c.carrito()[0], 'B2');
     expect(c.carrito().length).toBe(0);
+  });
+
+  it('cada color dice cuántos paquetes lleva en total, de todos sus lotes (2026-10-21)', async () => {
+    // "Dos blancos 1/30 de un lote y otros dos de otro: en total son 4".
+    const { c, fixture } = await montar();
+    c.carrito.set([
+      { variante_id: 5, sku: 'BLANCO', producto: 'BLANCO 1/30', presentacion: 'Paquete', precio: 155, unidad: 'kg', cantidad: 77.25,
+        bultos: [
+          { codigo: '00496515', peso_kg: 19.25, lote: '0094217' },
+          { codigo: '00496516', peso_kg: 19.4, lote: '0094217' },
+          { codigo: '00529860', peso_kg: 19.35, lote: '0094810' },
+          { codigo: '00529861', peso_kg: 19.25, lote: '0094810' },
+        ] },
+      { variante_id: 6, sku: 'NEGRO', producto: 'NEGRO 1/30', presentacion: 'Paquete', precio: 155, unidad: 'kg', cantidad: 18.95,
+        bultos: [{ codigo: '00539467', peso_kg: 18.95, lote: '0094878' }] },
+      { variante_id: 7, sku: 'ROJO-CONO', producto: 'ROJO 2/30', presentacion: 'Cono', tipo: 'cono', precio: 200, unidad: 'kg', cantidad: 9.35, piezas: 6 },
+    ]);
+    fixture.detectChanges();
+    const totales = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.carrito .total-paquetes')]
+      .map((e) => e.textContent!.replace(/\s+/g, ' ').trim());
+    // El de un solo lote no repite "1 lote"; los conos (sin paquetes) no llevan total.
+    expect(totales).toEqual(['4 paquetes en total · 2 lotes', '1 paquete en total']);
   });
 
   it('un código que no existe se avisa junto al lector y el campo queda vacío; un texto se busca', async () => {

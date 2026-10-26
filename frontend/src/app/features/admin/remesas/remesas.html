@@ -154,7 +154,7 @@
             </span>
           } @else {
             <b>Arrastra aquí el archivo o elígelo</b>
-            <span>Se leen el código del bulto, el peso en kilos, el lote y los conos.</span>
+            <span>Se leen el código del bulto, el peso en kilos, el lote y los conos. ¿No tienes el archivo? Descarga la plantilla y llénala.</span>
           }
         </div>
       </div>
@@ -169,6 +169,7 @@
         } @else if (cotejo() === 'no') {
           <span class="pill naranja">El nombre del archivo no coincide con el hilo</span>
         }
+        <app-boton-plantilla tipo="hilo" />
         <button type="button" class="btn btn-sm" [class.btn-primary]="!archivo" [class.btn-ghost]="archivo"
                 (click)="archivoInput.click()">
           {{ archivo ? 'Cambiar archivo' : 'Elegir archivo' }}

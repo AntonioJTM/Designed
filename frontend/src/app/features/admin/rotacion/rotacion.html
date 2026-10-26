@@ -1,0 +1,89 @@
+<div class="pagina rotacion">
+  <header class="page-head">
+    <div>
+      @if (vista() === 'hilo' && hilo(); as h) {
+        <a class="volver" routerLink="/admin/rotacion/resumen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+          Rotación de inventario
+        </a>
+        <h1>{{ h.hilo.hilo }}</h1>
+        @if (subHilo()) { <p class="sub">{{ subHilo() }}</p> }
+      } @else {
+        <h1>Rotación de inventario</h1>
+        <p class="sub">Cuánto hilo se vende, en qué meses y cuándo conviene pedirlo. Todo en kilos.</p>
+      }
+    </div>
+    <div class="acciones">
+      @if (vista() === 'hilo' && hilo(); as h) {
+        <label class="otro-hilo">
+          Otro hilo
+          <select [ngModel]="h.hilo.producto_id" (ngModelChange)="otroHilo($event)" name="otro-hilo">
+            @for (o of h.hilos; track o.producto_id) { <option [ngValue]="o.producto_id">{{ o.hilo }}</option> }
+          </select>
+        </label>
+      } @else {
+        <button type="button" class="btn btn-ghost" (click)="comoSeCalcula.set(true)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6 M12 17h.01"></path></svg>
+          ¿Cómo se calcula?
+        </button>
+        @if (vista() !== 'que-pedir') {
+          <button type="button" class="btn btn-ghost" (click)="descargar()" title="Descarga en CSV (se abre en Excel) lo que está en la pestaña">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12 M8 11l4 4 4-4 M4 19h16"></path></svg>
+            Descargar en Excel
+          </button>
+        }
+      }
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Rotación de inventario">
+    @for (t of PESTANAS; track t.vista) {
+      <a [routerLink]="t.ruta" [class.on]="vista() === t.vista" [attr.aria-current]="vista() === t.vista ? 'page' : null">
+        {{ t.etiqueta }}
+        @if (t.vista === 'que-pedir' && numYa() > 0) {
+          <span class="pill naranja capsula-ya">{{ numYa() }} ya<span class="oculto"> para pedir</span></span>
+        }
+      </a>
+    }
+  </nav>
+
+  @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+
+  @switch (vista()) {
+    @case ('resumen') {
+      @if (resumen(); as r) {
+        <app-vista-resumen [datos]="r" [cargando]="cargando()" (filtro)="filtrar($event)" />
+      } @else if (cargando()) { <p class="muted cargando">Calculando…</p> }
+    }
+    @case ('temporadas') {
+      @if (temporadas(); as t) {
+        <app-vista-temporadas [datos]="t" [cargando]="cargando()" (filtro)="filtrar($event)" />
+      } @else if (cargando()) { <p class="muted cargando">Calculando…</p> }
+    }
+    @case ('hilo') {
+      @if (hilo(); as h) {
+        <app-vista-hilo [datos]="h" [cargando]="cargando()" />
+      } @else if (cargando()) { <p class="muted cargando">Calculando…</p> }
+    }
+    @case ('que-pedir') {
+      @if (quePedir(); as q) {
+        <app-vista-que-pedir [datos]="q" [cargando]="cargando()" [puedeCambiar]="puedeCambiarTiempos()" (cambiar)="ajustes.set(true)" />
+      } @else if (cargando()) { <p class="muted cargando">Calculando…</p> }
+    }
+  }
+</div>
+
+@if (comoSeCalcula()) {
+  <app-como-se-calcula-modal [puedeCargar]="puedeCargarAnteriores()"
+                             (cerrado)="comoSeCalcula.set(false)"
+                             (cargarAnteriores)="comoSeCalcula.set(false); anteriores.set(true)" />
+}
+@if (ajustes() && quePedir(); as q) {
+  <app-ajustes-rotacion-modal [ajustes]="q.ajustes" (cerrado)="ajustes.set(false)" (guardado)="ajustesGuardados()" />
+}
+@if (anteriores()) {
+  <app-ventas-anteriores-modal (cerrado)="anteriores.set(false)" (cargado)="cargar(true)" />
+}

@@ -1,0 +1,134 @@
+@let d = dev();
+<section class="dev" [attr.aria-label]="'Qué regresa de ' + d.venta.folio">
+  @if (d.venta_inactiva) {
+    <p class="aviso">La venta ya está cancelada o devuelta: al aceptarla no pasaría. Recházala.</p>
+  }
+  @if (d.sin_cliente) {
+    <p class="aviso">No hay a quién ponerle lo que regresa (la venta no tenía cliente y no se eligió uno): al aceptarla no pasaría. Recházala y que se vuelva a pedir eligiendo al cliente.</p>
+  }
+  @if (d.no_se_puede) {
+    <!-- Lo regresaron mientras o se abrió: la devolución entra completa o no entra. -->
+    <p class="aviso">
+      {{ paquetes(d.no_se_puede) }} ya no se {{ d.no_se_puede === 1 ? 'puede' : 'pueden' }} regresar cerrado{{ d.no_se_puede === 1 ? '' : 's' }}:
+      al aceptarla no pasaría. Recházala y que se vuelva a pedir (van en rojo abajo).
+    </p>
+  }
+
+  <!-- Quién y de qué venta. -->
+  <div class="quien">
+    <p>
+      <span class="muted">Cliente</span>
+      @if (d.cliente; as c) {
+        <b>{{ c.nombre }}</b>
+        @if (c.codigo) { <span class="mono">{{ c.codigo }}</span> }
+        @if (c.telefono) { <span class="muted">· {{ c.telefono }}</span> }
+        @if (c.elegido) { <span class="pill ambar">Venta de mostrador: lo eligió quien la pide</span> }
+      } @else {
+        <span class="muted">Sin cliente</span>
+      }
+    </p>
+    <p>
+      <span class="muted">Venta</span>
+      @if (veVentas()) {
+        <a class="mono" [routerLink]="['/admin/ventas', d.venta.id]">{{ d.venta.folio }}</a>
+      } @else {
+        <span class="mono">{{ d.venta.folio }}</span>
+      }
+      @if (d.venta.fecha) { <span class="muted">del {{ d.venta.fecha | fecha: true }}</span> }
+      <span class="muted">· total {{ d.venta.total | dinero }}</span>
+      @if (d.venta.almacen) { <span class="muted">· regresa a {{ d.venta.almacen }}</span> }
+    </p>
+  </div>
+
+  <div class="tabla-scroll">
+    <table class="grid devueltos">
+      <thead>
+        <tr>
+          <th scope="col">Hilo</th>
+          <th scope="col">Regresa</th>
+          <th scope="col" class="num">Kilos</th>
+          <th scope="col" class="num">Precio por kg</th>
+          <th scope="col" class="num">Importe</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (l of d.lineas; track l.detalle_id) {
+          <tr [class.con-paquetes]="l.paquetes > 0">
+            <td>
+              <b>{{ l.hilo }}</b>
+              <div class="sub">
+                {{ presentacion(l) }} · se llevó {{ l.vendido_kg | cantidad: 'kg' }}
+                @if (l.ya_regreso_kg > 0) { · ya había regresado {{ l.ya_regreso_kg | cantidad: 'kg' }} }
+              </div>
+            </td>
+            <td>
+              @if (l.paquetes > 0) {
+                <b>{{ paquetes(l.paquetes) }}</b><span class="muted"> · {{ l.kg_paquetes | cantidad: 'kg' }}</span>
+              }
+              @if (l.kg_sueltos > 0) { <div [class.sub]="l.paquetes > 0">{{ textoSueltos(l) }}</div> }
+            </td>
+            <td class="num"><b>{{ l.kg | cantidad: 'kg' }}</b></td>
+            <td class="num">{{ l.precio_kg | dinero }}</td>
+            <td class="num"><b>{{ l.importe | dinero }}</b></td>
+          </tr>
+          @if (l.paquetes > 0) {
+            <!-- Sus paquetes por lote: código de barras y peso. -->
+            <tr class="fila-lotes">
+              <td colspan="5">
+                @for (g of l.lotes; track $index) {
+                  <div class="lote-dev">
+                    <span class="lote-cabeza">
+                      <b>{{ nombreLote(g.lote) }}</b> · {{ paquetes(g.paquetes) }} · {{ g.kg | cantidad: 'kg' }}
+                    </span>
+                    <span class="fichas-paquete">
+                      @for (b of g.bultos; track b.codigo) {
+                        <span class="ficha-paquete" [class.no-se-puede]="b.no_se_puede"
+                              [title]="b.no_se_puede ? 'Ese paquete ya no se puede regresar cerrado' : ''">
+                          <span class="ficha-texto">
+                            <span class="mono">{{ b.codigo }}</span><b>{{ b.peso_kg | cantidad: 'kg' }}</b>
+                            @if (b.no_se_puede) { <span class="ya-no">ya no se puede</span> }
+                          </span>
+                        </span>
+                      }
+                    </span>
+                  </div>
+                }
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row">Total</th>
+          <td>
+            @if (d.paquetes) { {{ paquetes(d.paquetes) }}{{ d.lotes > 1 ? ' de ' + d.lotes + ' lotes' : '' }} }
+            @else { Sueltos }
+          </td>
+          <td class="num">{{ d.kg | cantidad: 'kg' }}</td>
+          <td></td>
+          <td class="num">{{ d.importe | dinero }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- A dónde va el importe al aceptarla, con lo que debe y tiene hoy. -->
+  <div class="reparto">
+    @if (d.reparto.de_esta > 0) {
+      <p><span>Se descuenta de esta {{ queDebe() }} <span class="muted">(debe {{ d.reparto.debe_esta | dinero }})</span></span>
+        <b>{{ d.reparto.de_esta | dinero }}</b></p>
+    }
+    @if (d.reparto.de_otras > 0) {
+      <p><span>Se descuenta de lo demás que debe <span class="muted">(debe {{ d.reparto.debe_otras | dinero }})</span></span>
+        <b>{{ d.reparto.de_otras | dinero }}</b></p>
+    }
+    @if (d.reparto.a_favor > 0) {
+      <p><span>Le queda a favor <span class="muted">(su saldo a favor: {{ d.reparto.favor_hoy | dinero }} → {{ d.reparto.favor_despues | dinero }})</span></span>
+        <b>{{ d.reparto.a_favor | dinero }}</b></p>
+    }
+    <p class="muted nota-caja">No sale dinero de la caja.</p>
+  </div>
+
+  @if (d.notas) { <p class="notas"><span class="muted">Notas</span> {{ d.notas }}</p> }
+</section>

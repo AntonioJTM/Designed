@@ -79,9 +79,17 @@ tienda-hilos/
   · **Lo que suma todas las tiendas lo ve solo quien las ve todas** (`requireTodasLasTiendas`, 403
     `SOLO_TODAS_LAS_TIENDAS`; en la pantalla `SOLO_TODAS_LAS_TIENDAS` de `auth.service.ts` y
     `data.todasLasTiendas` en la ruta): Reportes (que además ahora pide `ver:reportes`), Cómo va el
-    negocio, Nómina, Almacenes y las seis MIRADAS de Clientes (Frecuencia, Dejaron de venir, Cuánto
+    negocio, Nómina, Almacenes (y cambiar las LISTAS DE PRECIO, desde el 2026-10-22),
+    Transferencias, Rotación y las seis MIRADAS de Clientes (Frecuencia, Dejaron de venir, Cuánto
     debe, Qué compra, Cuándo compra, Cuánto gasta). La campana no le avisa cobranza ni "dejaron
     de venir" (llevan a esas miradas).
+    **Y SE DICE** (2026-10-22: "Contabilidad tiene Transferencias y no la ve"; su persona era de
+    una sola tienda): el gemelo del servidor es `permisos/catalogo.js → SOLO_TODAS_LAS_TIENDAS` (+
+    `PARTE_DE_TODAS`: las miradas de Clientes y cambiar Tipos de gasto; `soloConTodas`,
+    `notaTiendas`). Permisos etiqueta esas filas y avisa quién no las ve (`no_las_ven`); Personal →
+    Editar lo dice al marcar una sola tienda (`/usuarios/roles` trae `solo_todas`/
+    `acciones_todas`); "Todavía no tienes pantallas" explica la razón. Una pantalla nueva que sume
+    todas las tiendas va en LOS DOS conjuntos.
   · **El CLIENTE es compartido** (decisión del usuario): cualquier tienda lo encuentra, le vende y
     ve cuánto debe EN TOTAL y su saldo a favor; su expediente (compras, estadísticas, colores,
     costumbre) y la lista ("ha comprado", "última compra") cuentan solo las ventas de SUS tiendas.
@@ -175,6 +183,14 @@ tienda-hilos/
     conforme llegan (`partialText`).
   · **Los bultos se insertan de 100 en 100** (`TANDA_BULTOS` en `remesas/model.js`, para las dos
     cargas): uno por uno, la lista real de 718 bultos tardó un minuto contra la base del servidor.
+  · **«Descargar plantilla»** (2026-10-22, usuario: "que me dé el Excel en limpio para que nosotros
+    lo llenemos"): junto a «Elegir archivo» en los tres cargadores (`shared/boton-plantilla.ts`),
+    `GET /remesas/plantilla/lista|hilo` (`remesas/plantillas.js`, escrita con
+    `utils/xlsx-escritor.js`, sin dependencias). Trae EXACTAMENTE los encabezados que leen
+    `lista.js` y `service.js → analizar`, una hoja INSTRUCCIONES, y las columnas de código,
+    calibre, lote y fechas en formato TEXTO (ceros y "1/30" intactos). Si cambian los encabezados
+    que se leen, cambia la plantilla: `plantillas.test.js` lo exige. El lector (`utils/xlsx.js`)
+    entiende la celda vacía con formato `<c …/>` (antes se tragaba a las de su derecha).
   · Impiden cargar, sin omitir el renglón en silencio (en cientos de bultos uno saltado no se
     nota): código repetido o ya registrado, sin color o calibre, neto vacío, y un código guardado
     como NÚMERO más corto que los demás (perdió los ceros de la izquierda). Las NOTA del proveedor
@@ -225,7 +241,12 @@ tienda-hilos/
   BÁSCULA (`pos/pesar-modal.ts`): se teclea lo que pesaron y, si son conos, cuántos eran; NUNCA
   se agrega 1 kg a ciegas. Se cobra y descuenta en KILOS; los conos van en `items[].piezas` y se
   guardan en `pedido_detalle.piezas` (informativo, como `piezas_generadas`; migración
-  `2026-10_piezas_en_venta.sql`), y el detalle del pedido dice "· 6 conos". El paquete COMPLETO
+  `2026-10_piezas_en_venta.sql`), y el detalle del pedido dice "· 6 conos". **En el mostrador los
+  conos llevan PESO Y CUÁNTOS SON, los dos obligatorios** (2026-10-21, usuario): la báscula no
+  agrega sin los dos (Enter en el peso pasa a "¿Cuántos conos son?"), "Modificar" una nota en espera
+  tampoco guarda sin ellos, y el servidor rechaza la línea de conos sin `piezas` (entero desde 1) en
+  una venta de mostrador o al modificar una nota (422 `FALTAN_CONOS`, `pedidos/model.js →
+  _exigirConosContados`). El paquete COMPLETO
   se sigue vendiendo escaneando su código. Teclear el color ("rojo") resuelve al código de la
   presentación (el código es el nombre): eso ahora BUSCA en vez de agregar.
   `e2e-venta-conos.js` recorre bajar a conos → buscar → vender 6 conos.
@@ -233,7 +254,9 @@ tienda-hilos/
   tiene que tener el lote y cuántos paquetes van de cada lote en una venta"): `shared/lotes.ts →
   porLote` los agrupa (en el orden en que se escaneó el primero de cada lote) en la caja ("Lote
   0096952 · 3 paquetes · 58.45 kg" y sus paquetes con su ✕), el ticket ("Lote X: 2 paquetes (…)")
-  y el detalle de la venta (un renglón por lote en la tabla). Los tres usan la misma función.
+  y el detalle de la venta (un renglón por lote en la tabla). Los tres usan la misma función. En la
+  caja, bajo el nombre del color va además su TOTAL: "4 paquetes en total · 2 lotes" (2026-10-21,
+  usuario: "dos blancos 1/30 de un lote y dos de otro: en total son 4"; `.total-paquetes`).
 - **El pedido guarda de qué bultos salió.** `pedido_detalle_bultos` liga cada línea con los bultos
   que se entregaron. El código, el peso y el lote se **congelan** ahí, igual que
   `pedido_detalle.precio_unitario`: `variante_codigo_id` es la referencia viva y queda en `NULL`
@@ -501,7 +524,12 @@ tienda-hilos/
   (`ver:transferencias` y todas las tiendas; marcar con `hacer:revisar_transferencias`, varias de
   una vez con `POST /transferencias/marcar`). Una cuenta con transferencias no se borra (409
   `CUENTA_CON_TRANSFERENCIAS`). Un cobro NUEVO por transferencia lleva su `anotar`.
-- **La mercancía puede regresar en OTRA presentación.** Se entrega el paquete y el cliente devuelve
+- **CANCELAR regresa TODO tal cual se vendió** (2026-10-23, usuario: "no pregunte cómo lo regresa ni
+  el peso"): la ventana solo enseña lo que se vendió y `cambiarEstado` IGNORA `devoluciones` al pasar
+  a `cancelado` (se devuelve todo el dinero: vuelve toda la mercancía como salió). Lo que el cliente
+  regresa a medias o en otra presentación va por «Devolución» (saldo a favor). Lo de abajo queda solo
+  para el estado viejo `devuelto`, que la pantalla ya no ofrece.
+- **La mercancía puede regresar en OTRA presentación** (solo `devuelto`, ver arriba). Se entrega el paquete y el cliente devuelve
   los conos: `PATCH /pedidos/:id/estado` acepta `devoluciones: [{detalle_id, variante_id, cantidad}]`
   y repone en la presentación indicada, no en la vendida. La equivalencia la calcula el backend
   (`paquete→conos: kg / peso_kg × piezas_por_origen`, y al revés) y el GET del pedido la expone en
@@ -528,8 +556,15 @@ tienda-hilos/
   propone la tienda donde ESTÁ el paquete escaneado; si no está ahí, no se abre (ver la excepción
   en "Un bulto se consume UNA vez"). (`e2e-bajar-a-mostrador.js`, que no corre
   sin las listas de `muestras/`, todavía baja de bodega a mostrador: al recuperarla, ajustarla.)
-- **El DESTARE lo captura la tienda, POR CONO.** Al enconar, el hilo pesa más porque cada cono lleva
-  su tubo. **Su TOPE lo pone la tienda** (2026-10-20, auditoría: dos bajadas de A-ALECRICO en hitex
+- **El DESTARE lo captura la tienda, DEL PAQUETE COMPLETO** (2026-10-21, usuario: "es el destare del
+  paquete completo, no por conos"; del 2026-10-06 a esa fecha se pedía por cono). Al enconar, el hilo
+  pesa más porque cada cono lleva su tubo. El modal pide "Destare del paquete" (lo que pesan los tubos
+  de TODOS sus conos juntos, en kg; dice a cuántos g por cono sale) y manda `destare_kg`, que se suma
+  tal cual; ya NO se recuerda entre sesiones (lo guardado en `localStorage['destare_por_cono']` era
+  por cono y se borra). `destare_por_cono_kg` se sigue aceptando. El TOPE sigue siendo POR CONO (lo
+  que puede pesar un tubo) y vale igual para el total (entre sus conos): sin tope, 1 kg por cono
+  (antes el total no tenía tope); la ventana y el 422 lo traducen al paquete ("hasta 0.6 kg"). Lo de
+  abajo es la historia. **Su TOPE lo pone la tienda** (2026-10-20, auditoría: dos bajadas de A-ALECRICO en hitex
   llevan 0.8 kg por cono; "este yo lo pongo", usuario): `configuracion.desarme_destare_max_kg`
   (pública; Configuración → "Bajar conos"; de más de 0 a 1 kg, 422 `DESTARE_TOPE_INVALIDO`;
   migración `2026-10_destare_tope.sql`, nace VACÍA = sin tope propio, sigue el de 1 kg). Pasarlo
@@ -891,8 +926,9 @@ tienda-hilos/
   sus días; `clientes/model.js → vencimientoDe` (sobre `repartirAbonos`, que lleva el `plazo`) da la
   más vencida, las vencidas y la próxima. ATRASADO = alguna nota vencida: caja (`nota_vencida`, sin
   folio), candado `CREDITO_ATRASADO`, campana (`cobranza.notas`, solo quien ve todas) y `cartera`
-  (tramos por días de vencida). En pantalla `shared/plazo-credito.ts` (8 / 15 / 30 u otro, "Vence el
-  …"); el ticket, el detalle y Ventas dicen a cuántos días y si venció.
+  (tramos por días de vencida). En pantalla `shared/plazo-credito.ts`: SOLO el número de días (propone
+  15 y queda seleccionado al entrar; los botones 8 / 15 / 30 se quitaron el 2026-10-21, "que solo me
+  deje anotar cuántos días"), "Vence el …"; el ticket, el detalle y Ventas dicen a cuántos días y si venció.
 - **Vender a crédito: `POST /pedidos` acepta `a_credito`** (cuánto se lleva a deber). Admite venta
   MIXTA —paga algo hoy y el resto queda a deber, que es como ocurre en el mostrador— y exige
   `cliente_id`: no se le fía a un desconocido (422 `FALTA_CLIENTE`).
@@ -1130,12 +1166,20 @@ tienda-hilos/
   · Al entregarla se puede **usar su saldo a favor** (2026-10-20): `saldo_favor` en
     `POST /pedidos/:id/entregar` paga primero eso (`pagarConSaldo`; no más de lo que falta, 422
     `SALDO_FAVOR_EXCEDE`; solo notas en espera, 422 `SALDO_FAVOR_SOLO_NOTAS`) y lo demás se cobra,
-    se da a crédito o queda pendiente como siempre. Casilla "Usar su saldo a favor (tiene $X)" en
-    la ventana; `GET /pedidos/encargos` trae `saldo_favor`.
+    se da a crédito o queda pendiente como siempre. En la ventana es una forma de «Con qué paga»
+    (2026-10-23; como pendiente de pago, la casilla "Usar su saldo a favor (tiene $X)");
+    `GET /pedidos/encargos` trae `saldo_favor`.
   · Se ENTREGA cuando sea con `POST /pedidos/:id/entregar` (`entregar-modal.ts`), que cobra lo
-    que falte (`pagos`, solo el efectivo da cambio, entra al turno `sesion_caja_id` como
+    que falte (`pagos`; solo el efectivo da cambio, entra al turno `sesion_caja_id` como
     'ingreso') y/o lo fía (`a_credito`, pide `hacer:fiar`; queda 'pendiente' como cualquier
-    fiada); ahí descuenta del inventario. Sin cubrir lo que falta, 409 `PAGO_INSUFICIENTE`. Se
+    fiada); ahí descuenta del inventario. **«Con qué paga» ofrece UNA forma (Efectivo,
+    Transferencia, A crédito) o DOS** (2026-10-23, usuario: "hasta 2 métodos de pago"): Efectivo y
+    transferencia (2026-10-21), Efectivo y crédito, Transferencia y crédito (`FormaPago`); con dos
+    se teclea una parte y el resto va en la otra, con el reparto y a cuántos días a la vista. Antes
+    el crédito se escondía detrás de «Cobra ahora». No se mezclan tres. **Su SALDO A FAVOR es otra
+    forma** (2026-10-23): «Todo con su saldo a favor» si le alcanza, o «Saldo a favor y efectivo /
+    transferencia / crédito» (usa todo lo que alcance; `base()` es la forma del resto). La casilla
+    "Usar su saldo a favor" quedó solo en «Pendiente de pago». Sin cubrir lo que falta, 409 `PAGO_INSUFICIENTE`. Se
     puede abonar antes (`POST /:id/abonos`, p.ej. transferencia).
   · Cancelado libera lo apartado y devuelve el efectivo; se reactiva SOLO en espera (409
     `REACTIVAR_COMO_PEDIDO`). Entregado ya no vuelve a estar en espera (409 `PEDIDO_YA_ENTREGADO`).
@@ -1366,7 +1410,8 @@ tienda-hilos/
 - Los estados válidos están en los `CHECK` del esquema; respétalos como enums en el código.
 - **Nómina semanal.** La semana va de **domingo a sábado** y se paga ese mismo sábado. La comisión
   se calcula sobre la **venta neta** (`pedidos.subtotal - pedidos.descuento`, sin IVA ni envío) de
-  los pedidos donde el empleado es el vendedor (`pedidos.usuario_id`), excluyendo cancelados y
+  los pedidos donde el empleado es el vendedor (`COALESCE(pedidos.vendedor_id, pedidos.usuario_id)`, ver
+  "EL VENDEDOR DE LA NOTA"), excluyendo cancelados y
   devueltos, y se paga la semana en que cada venta queda LIQUIDADA (ver abajo). Al calcular un recibo, `ventas_netas` y `porcentaje_comision` se **congelan** en
   `nomina_recibos` para que el histórico no cambie si después se edita la configuración del
   empleado. Un periodo `pagado` es inmutable: no se recalcula ni se reabre. Uno `cancelado` no se
@@ -1505,6 +1550,22 @@ tienda-hilos/
     DESIGN.md (verde se cobra, ámbar por pagar, azul neblina se aparta, rojo cuenta atrasada); a
     crédito dice cuánto crédito libre le quedará. No es región viva (cambia al teclear). Lo que ya
     dice no se repite abajo. Los estilos nuevos de la caja van en `pos-cliente.scss`.
+- **EL VENDEDOR DE LA NOTA (2026-10-23)**: "Nota de venta: añadir vendedor" (usuario). En la caja,
+  debajo del Cambio y arriba de «Cobrar», el selector «Vendedor» (`pos.ts → cargarVendedores`) con el
+  PERSONAL DE ESA TIENDA (decisión del usuario): `GET /pedidos/vendedores?almacen_id=` (`ver:pos`, de
+  SUS tiendas; `pedidos/vendedores.js → deTienda`: activos con esa tienda en «Trabaja en», «Todas las
+  tiendas» o administrador), con quien cobra ya elegido ("(tú)") y de vuelta a él después de cada
+  venta. `POST /pedidos` acepta `vendedor_id` en los cuatro modos; otra tienda o dado de baja, 422
+  `VENDEDOR_INVALIDO`. Se guarda en `pedidos.vendedor_id` (migración `2026-10_vendedor_en_venta.sql`);
+  `usuario_id` sigue siendo quien la registró («Elaboró»). NULL = la vendió quien la registró: léelo
+  SIEMPRE con `SQL_VENDEDOR` (`COALESCE(p.vendedor_id, p.usuario_id)`). **La COMISIÓN es del vendedor**
+  (decisión del usuario; `nomina/comisiones.js`). El ticket dice "Atendió" (el vendedor) y "Elaboró"
+  si la registró otra persona (no "Cobró": en una nota pendiente nadie cobró); el detalle "la vendió
+  X"; Ventas, bajo «Elaboró», "vendió X" (sin columna nueva). Se compara por PERSONA, no por nombre
+  (`shared/vendedor.ts → vendioOtraPersona`). DESPLEGADO 20261023-124144. **Decidido por el usuario
+  ("así está perfecto por ahora"):** la lista lleva a TODO el personal de la tienda (también
+  Contabilidad, administradores y cargador), el vendedor se elige solo al cobrar (no se corrige
+  después) y no pide permiso. No lo "arregles" sin que lo pida.
 - **Un cliente registrado desde la caja nace SIN crédito.** El alta rápida del POS pide
   nombre y teléfono y nada más (sin apodo desde el 2026-10-14; el número lo da el sistema),
   con `limite_credito: 0`, así que el cobro sale
@@ -1572,8 +1633,23 @@ tienda-hilos/
   de peso, sus lotes y CADA paquete (renglón del Excel, código, peso, conos), los papeles, y en rojo el
   código que mientras tanto se registró en otra carga (al aceptarla no entraría). El costo por kilo solo
   con «Ver costos» (`conDetalle` pasa `veCostos`). En la pantalla, `autorizaciones/carga-solicitud.ts`, a
-  todo lo ancho bajo los botones; tocar el color abre lotes y paquetes con la hoja de Surtir inventario
-  (`remesas/carga-lista-paquetes.scss`, compartida).
+  todo lo ancho bajo los botones; tocar el color (decidido: se abre al tocarlo, no de entrada) abre sus
+  lotes, cada uno en una TABLA con encabezados Renglón · Código de barras · Peso · Conos y su "Total del
+  lote" (2026-10-21, a petición del usuario; Surtir inventario sigue con sus fichas de
+  `remesas/carga-lista-paquetes.scss`, la hoja compartida del color y los lotes). "Sin precio" lo dicen esta y la vista previa de
+  la lista con `lista.js → tienePrecio`: el precio de su presentación o, si todavía no tiene, su precio
+  por kilo (la carga le crea la presentación con él). DESPLEGADO 20261021-215359 y la tabla, 20261021-222041.
+  **Qué REGRESA en una devolución (2026-10-22**, usuario: "qué cliente es, cuántos paquetes regresa,
+  color y lote, pesos e importe"): `devolucion` tiene `detalle` (`pedidos/devolucion-solicitud.js →
+  detalleDeDevolucion`, sobre `devoluciones.previa`, con el importe calculado IGUAL que `registrar`;
+  la venta sale de la ruta guardada): el cliente (nombre, C-0001, teléfono; si lo eligió quien pide),
+  la venta (folio con enlace si ve Ventas, fecha, total, almacén), cada hilo con sus paquetes POR LOTE
+  (código y peso) y lo suelto (kg, conos, "entran como conos"), kilos, precio por kg e importe, y el
+  REPARTO con lo de hoy (se descuenta de esta nota si se debe, de lo demás que debe, le queda a favor:
+  su saldo antes → después). Avisa si la venta ya se canceló, si no hay cliente o si un paquete ya no
+  se puede regresar cerrado. Pantalla `autorizaciones/devolucion-solicitud.ts`, abierta (pocos
+  paquetes). Y el RESUMEN ya no dice "quedan a favor" cuando esa nota todavía se debe: dice "se
+  descuentan de esta nota".
 - **Permisos por PUESTO (2026-10).** Los asigna el administrador en Admin → Permisos ("los
   permisos los asigna el administrador"). Viven en `permisos` + `rol_permisos` (migración
   `2026-10_permisos_por_puesto.sql`, solo datos) y el catálogo con nombre y ayuda está en
@@ -1589,7 +1665,15 @@ tienda-hilos/
     tuviera podría darse el puesto que lo puede todo. Vale también como puesto EXTRA: no se da
     como "también trabaja como", y a quien lo tiene de extra solo lo edita un administrador.
   · Los permisos de cada puesto se cachean en memoria y se invalidan al guardar: lo que valida el
-    servidor cambia en el acto; el menú, cuando la persona vuelve a entrar.
+    servidor cambia en el acto, y el MENÚ ABIERTO también (2026-10-22): guardar en Permisos o en
+    Personal avisa en vivo `'sesion'` (sin datos, a todos; «Mi clave» no) y `admin-layout.ts →
+    alCambiarSesion` vuelve a pedir el perfil, redibuja el menú, refresca la campana y, si ya no
+    puede ver la pantalla abierta, lo manda a la suya. (Un puesto creado directo en la base no
+    entra al caché hasta reiniciar el servidor: las pruebas lo crean ANTES de la primera petición.)
+  · **Cada pantalla pide solo lo de su permiso** (recorrido en Chrome del 2026-10-22: un puesto por
+    cada `ver:*` y los puestos reales, con todas las tiendas y con una): «Cómo va el negocio» pedía
+    `/reportes/ventas` y daba 403 sin Reportes; esa ruta acepta `ver:reportes` o `ver:negocio`. Una
+    pantalla nueva que use datos de otra revisa que su permiso los abra.
   · **Una persona puede tener VARIOS puestos (2026-10-06**: "que una persona pueda tener más de 2
     puestos; ese cambio va en Personal"). `usuarios.rol_id` es el PRINCIPAL (el de nómina y el que
     sale junto a su nombre) y `usuario_roles` guarda los DEMÁS, sin repetir el principal (migración
@@ -1638,7 +1722,59 @@ tienda-hilos/
   desde siempre, lo que queda (todos los almacenes, sin restar apartados) y el % ya vendido =
   vendido / (vendido + lo que queda). "Vendido" es lo que salió del inventario: sin cancelados,
   devueltos ni apartados sin entregar (`inventario_descontado = 1`) — por eso puede salir un
-  poco abajo de "Más vendidos", que sí cuenta los apartados.
+  poco abajo de "Más vendidos", que sí cuenta los apartados. La TABLA va solo en kilos: sin la
+  columna Importe desde el 2026-10-21 ("no me sirve de nada ahí", usuario); el importe sigue en la
+  cifra de arriba y en lo que se descarga.
+- **ROTACIÓN DE INVENTARIO** (2026-10-22, `Documentos/rotacion-inventario/INSTRUCCIONES.md` y sus
+  maquetas; "que me haga predicciones de qué hilo tengo que comprar, para qué meses y cuándo tengo
+  que pedirlo", usuario). Números → "Rotación de inventario" (`/admin/rotacion/{resumen|temporadas|
+  hilo/:id|que-pedir}`, `ver:rotacion`, SOLO quien ve todas las tiendas: `requireTodasLasTiendas` y
+  `SOLO_TODAS_LAS_TIENDAS`). SOLO KILOS, nada de dinero ni costo. Módulo `rotacion/`: `cuentas.js`
+  (las cuentas puras, con su `cuentas.test.js`), `model.js` (todo de una consulta por tabla, por
+  día), `service.js` (el resto en JS) y `anteriores.js`.
+  · **Venta** = la misma de Reportes → Venta por color (`reportes/model.js → KG_NETO / DEVUELTO /
+    VENDIDO`), con fecha `COALESCE(entregado_en, creado_en)`; el hilo es `producto_id` (paquete y
+    cono sumados). `e2e-rotacion.js` comprueba que lo de 12 meses sea IGUAL a Venta por color y lo
+    que hay, igual al inventario (más lo que viene en camino).
+  · **Rotación** = kg vendidos ÷ existencia promedio diaria (del kardex), en los últimos ≤365 días;
+    con menos, anualizada. ≥2 rápido, ≥1 normal, si no lento.
+  · **Temporada**: índice = kg del mes ÷ (kg del año ÷ 12); son los meses SEGUIDOS (dando la vuelta
+    al año) con índice ≥ 1.3 (`UMBRAL_TEMPORADA`).
+  · **Pronóstico**: con temporada, lo del mismo mes del año pasado × la tendencia (este año contra
+    el pasado, de enero al último mes completo, topada entre 0.5 y 2; × 1 con menos de 3 meses);
+    sin ella, el promedio diario de las últimas 8 semanas (desde 4).
+  · **Qué pedir**: se acaba = se descuenta el pronóstico día por día; pedir a más tardar = se acaba
+    − (proveedor + colchón) semanas; cuánto = lo que se venderá desde que llega hasta `meses_cubre`
+    meses + colchón, menos lo que quede al llegar, de 10 en 10. Estados: ya (pasó o ≤7 días),
+    pronto «En <mes>» (≤90), calma, sobra (>52 semanas). **Lo que no hay no se vende**: en la
+    proyección y en el siguiente pedido la existencia NUNCA baja de 0 (2026-10-22: el hueco antes
+    de que llegara se comía el pedido). Por hilo dice las dos cantidades cuando difieren (pedido en
+    su fecha límite y si se pide hoy) y cuántas semanas faltaría hilo si llega tarde.
+  · **Los tiempos** viven en `configuracion` (`rotacion_semanas_proveedor` 10, `_colchon` 3,
+    `_meses_cubre` 4, `_kg_contenedor`, `_ajustes_confirmados`; NO públicas): ventana «Cambiar» en
+    Qué pedir, con su permiso `hacer:ajustes_rotacion` («Tiempos para pedir al proveedor»; de
+    fábrica solo el administrador); mientras no se guarden, «Por confirmar». Configuración NO los
+    dibuja (`OCULTAS`) ni los escribe (422 `CLAVE_DE_ROTACION`): ahí se saltaban sus reglas.
+  · Ver Rotación (`ver:rotacion`) lo dio la migración a quien tenía Reportes (Gerente y
+    Contabilidad); cargar ventas anteriores y cambiar los tiempos, a nadie más que el
+    administrador. El aviso en vivo de `/rotacion` (tipo 'rotacion') solo le llega a quien ve
+    todas (`tiempo-real/almacenes.js`). El CSV le pone `'` a un texto que empieza con = + - @.
+  · **Historia** (`historia.nivel`): `poca` (<28 días: solo «Hay hoy»), `sin_temporada` (<12 meses
+    completos: sin colores ni calendario), `completa` (<24, con aviso azul), `confiable`.
+  · **VENTAS DE AÑOS ANTERIORES** (para no esperar un año a la temporada): tabla
+    `ventas_anteriores` (hilo, almacén o NULL = las dos, año, mes, kg; única por los cuatro) que se
+    sube en .xlsx (Hilo, Calibre, Año, Mes —número o nombre—, Kilos, Tienda opcional) desde
+    «¿Cómo se calcula?» → «Cargar ventas de años anteriores» (`hacer:cargar_ventas_anteriores`).
+    Vista previa primero; con un renglón que no se entiende no carga nada (422
+    `ARCHIVO_CON_ERRORES`); el mismo mes otra vez REEMPLAZA; en un mes donde el sistema ya tiene
+    ventas de ese hilo, mandan las del sistema. El hilo se reconoce con la regla de la carga del
+    proveedor (`remesas/lista.js → catalogo/empatar`).
+  · **Un almacén sin mostrador** (`es_punto_venta = 0`) no vende: su "venta" es lo que SURTE
+    (traspasos que salen). En `hitex` la MATRIZ sí vende (tiene mostrador).
+  · Los hilos sin ventas no van uno por uno en ceros: Resumen, Temporadas y Qué pedir los nombran en
+    un renglón aparte. «Hacer pedido al proveedor» va apagado ("Todavía no existe en el sistema")
+    y «Ya viene en camino», "No se sabe todavía": el pedido al proveedor es otro trabajo.
+  · **Nunca saques temporadas de `desarrollo`**: sus ventas son inventadas.
 - **Clientes → TODOS LOS CLIENTES** (2026-10-14: "no sé cuántos clientes tengo y qué clientes
   tengo, como una lista"). Es la PRIMERA pestaña y Clientes abre ahí (`/admin/clientes` →
   `clientes/todos`; `vistas/vista-todos.ts`, sin periodo). Arriba: activos, con lugar de entrega
@@ -1667,6 +1803,13 @@ tienda-hilos/
   tarjeta con "Cobrar ›" a Notas pendientes `?q=<número de cliente>`. No es crédito: no cuenta
   para el atraso ni para su límite. (Notas pendientes y Notas en espera leen `?q=` del enlace y
   buscan también por el número C-0001; el detalle de la venta lleva ahí con su folio.)
+  **"Crédito por cobrar este mes" en lugar de "Crédito usado"** (2026-10-22, usuario: "el crédito
+  usado no sirve"; eligió "vencidas + las que vencen este mes"): lo que falta de sus notas a crédito
+  ya vencidas y de las que vencen hasta el último día del mes (`analisis/model.js → cartera`,
+  `por_cobrar_mes` total y por cliente, con `clientes/model.js → porCobrarHasta / finDeMes` sobre
+  `vencimientoDe`, que ahora devuelve también `notas`). Las notas pendientes de pago no cuentan (no
+  son crédito). `credito_usado`/`credito_autorizado` ya no salen; la tarjeta "Cuánto de su crédito
+  han usado" se QUEDA (decisión del usuario).
   El cajero las ve todas, incluida "Cuánto debe" (decisión del usuario) — SI tiene «Todas las
   tiendas» en Personal: desde el 2026-10-15 las seis miradas son solo de quien ve todas (ver
   "CADA QUIEN, SUS TIENDAS").

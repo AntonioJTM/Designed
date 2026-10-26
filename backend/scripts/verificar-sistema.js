@@ -649,7 +649,7 @@ function verificarModulosEnCodigo() {
   const movModalHtml = leer('frontend/src/app/features/admin/inventario/movimiento-modal.html');
   const desarmeModalHtml = leer('frontend/src/app/features/admin/inventario/desarme-modal.html');
   revisar('modulos', invRoutes.includes('sinCostosEnRespuesta'), 'El router de inventario debe filtrar costos con sinCostosEnRespuesta.', 'GRAVE', M06);
-  revisar('modulos', invModel.includes('COND_ALERTA') && invModel.includes('SOLO_EN_TIENDA') && invModel.includes('destare_por_cono_kg'), 'Inventario debe exigir stock_minimo > 0 para alertas (COND_ALERTA), permitir bajar conos solo en tiendas (SOLO_EN_TIENDA) y soportar destare por cono.', 'GRAVE', M06);
+  revisar('modulos', invModel.includes('COND_ALERTA') && invModel.includes('SOLO_EN_TIENDA') && invModel.includes('destare_por_cono_kg'), 'Inventario debe exigir stock_minimo > 0 para alertas (COND_ALERTA), permitir bajar conos solo en tiendas (SOLO_EN_TIENDA) y aceptar el destare (el del paquete o por cono).', 'GRAVE', M06);
   revisar('modulos', hiloJs.includes('detalleHilo') && hiloJs.includes('bultosDeLote'), 'El detalle de un hilo en Inventario debe exponer saldos por almacén, lotes y paquetes uno por uno.', 'IMPORTANTE', M06);
   // Coherencia entre COND_ALERTA (<=) y texto de las ventanas de mínimo ("o menos", no "menos de")
   revisar('modulos', !/menos de\b/i.test(minModalHtml) && !/menos de\b/i.test(minModalTs) && !/menos de\b/i.test(minsModalTs), 'El stock mínimo avisa al llegar al número o menos (<=); las ventanas de mínimo deben decir "N paquetes o menos", nunca "menos de N".', 'IMPORTANTE', M06);

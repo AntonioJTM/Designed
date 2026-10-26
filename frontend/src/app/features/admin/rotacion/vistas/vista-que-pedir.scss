@@ -1,0 +1,30 @@
+// ROTACIÓN · QUÉ PEDIR.
+.ajustes-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; }
+.ajuste { display: flex; flex-direction: column; gap: 2px; }
+.ajuste-label { font-size: 0.8125rem; color: var(--tinta-3); }
+.ajuste-valor { display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ajuste-valor .pill { font-size: 0.75rem; }
+.ajuste-valor.tenue { color: var(--tinta-2); font-weight: 500; }
+.cambiar { margin-left: auto; }
+table.grid.que-pedir { min-width: 940px; }
+.col-check { width: 44px; }
+.check-celda { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; cursor: pointer; }
+.check-celda input { width: 18px; height: 18px; margin: 0; cursor: inherit; }
+.check-celda input:disabled { cursor: not-allowed; }
+tr.elegido th, tr.elegido td { background: var(--acento-tenue); }
+.nota-fila { display: block; margin-top: 2px; font-size: 0.8125rem; color: var(--tinta-3); }
+.cuando { color: var(--tinta-3); white-space: nowrap; }
+.cuando.ya-paso { color: var(--alerta-t); font-weight: 600; }
+.el-pedido { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; }
+.pedido-texto { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 22rem; }
+.pedido-texto h2 { margin: 0; }
+.pedido-texto p { margin: 0; line-height: 1.45; }
+.pedido-total { font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.pedido-botones { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.falta { display: flex; flex-direction: column; gap: 4px; }
+.falta .muted { font-size: 0.75rem; }
+@media (max-width: 899px) {
+  .cambiar { margin-left: 0; }
+}
+tr.quietos td { white-space: normal; font-size: 0.875rem; color: var(--tinta-2); line-height: 1.6; background: var(--superficie-2); }
+tr.quietos a { color: var(--tinta-2); }

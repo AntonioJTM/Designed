@@ -31,6 +31,14 @@ async function guardar(cambios) {
       `Estas opciones no existen: ${desconocidas.join(', ')}`);
   }
 
+  // Los tiempos de Rotación se cambian en su pantalla, con sus reglas y su permiso
+  // (revisor de tiendas, 2026-10-22): aquí se saltaban las dos.
+  const deRotacion = Object.keys(cambios).filter((c) => c.startsWith('rotacion_'));
+  if (deRotacion.length) {
+    throw new AppError(422, 'CLAVE_DE_ROTACION',
+      'Los tiempos para pedir se cambian en Rotación de inventario → Qué pedir.');
+  }
+
   // El costo de envío alimenta el total del pedido: no puede ser texto ni negativo.
   if (cambios.envio_costo_fijo !== undefined && cambios.envio_costo_fijo !== null) {
     const n = Number(cambios.envio_costo_fijo);

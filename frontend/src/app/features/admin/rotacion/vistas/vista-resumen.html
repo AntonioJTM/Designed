@@ -1,0 +1,205 @@
+@let d = datos();
+<!-- Los filtros, arriba de todo (no van en una tarjeta). -->
+<div class="filtros-rot">
+  <div class="seg" role="radiogroup" aria-label="Almacén">
+    <button type="button" role="radio" [class.on]="d.alcance.almacen_id == null" [attr.aria-checked]="d.alcance.almacen_id == null"
+            (click)="elegirAlmacen(null)">Todos los almacenes</button>
+    @for (a of d.almacenes; track a.id) {
+      <button type="button" role="radio" [class.on]="d.alcance.almacen_id === a.id" [attr.aria-checked]="d.alcance.almacen_id === a.id"
+              (click)="elegirAlmacen(a.id)">{{ a.nombre }}</button>
+    }
+  </div>
+  <label class="campo-hilo">
+    Hilo
+    <select [ngModel]="d.alcance.producto_id" (ngModelChange)="elegirHilo($event)" name="hilo">
+      <option [ngValue]="null">{{ d.hilos.length === 1 ? 'El hilo' : 'Los ' + d.hilos.length + ' hilos' }}</option>
+      @for (o of d.hilos; track o.producto_id) { <option [ngValue]="o.producto_id">{{ o.hilo }}</option> }
+    </select>
+  </label>
+  <p class="desde-hoy">{{ desdeTexto() }}</p>
+</div>
+
+@if (surte()) {
+  <p class="nota-info">Este almacén no vende: aquí «vendido» es lo que SURTIÓ a las tiendas.</p>
+}
+
+@if (!conCalculos()) {
+  <!-- Con menos de 4 semanas de ventas solo se ve lo que hay hoy. -->
+  <p class="aviso" role="status">
+    Faltan {{ d.historia.faltan_semanas }} {{ d.historia.faltan_semanas === 1 ? 'semana' : 'semanas' }} de ventas para calcular la
+    rotación y qué pedir. Si tienes las ventas de años anteriores, cárgalas en «¿Cómo se calcula?» y se calcula desde ese día.
+  </p>
+  <div class="kpis">
+    <div class="kpi">
+      <span class="kpi-label"><span class="punto tono-tinta"></span>Hay hoy</span>
+      <span class="kpi-valor">{{ toneladas(d.cifras.hay_kg) }}</span>
+      <span class="kpi-pie">{{ kilos(d.cifras.hay_kg) }}{{ d.cifras.hay_paquetes ? ' · unos ' + d.cifras.hay_paquetes.toLocaleString('es-MX') + ' paquetes' : '' }}</span>
+    </div>
+    @for (a of d.por_almacen; track a.almacen_id) {
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto tono-suave"></span>{{ a.nombre }}</span>
+        <span class="kpi-valor">{{ toneladas(a.kg) }}</span>
+        <span class="kpi-pie">{{ kilos(a.kg) }}{{ a.paquetes ? ' · unos ' + a.paquetes.toLocaleString('es-MX') + ' paquetes' : '' }}</span>
+      </div>
+    }
+  </div>
+} @else {
+  <div class="kpis" [class.recargando]="cargando()">
+    @for (k of kpis(); track k.etiqueta) {
+      <div class="kpi">
+        <span class="kpi-label"><span class="punto" [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
+        <span class="kpi-valor">{{ k.valor }}</span>
+        @if (k.pie) { <span class="kpi-pie">{{ k.pie }}</span> }
+      </div>
+    }
+  </div>
+
+  <div class="fila">
+    <!-- ============================================ Cuándo se vende más -->
+    <section class="card ancha">
+      <div class="card-head">
+        <div>
+          <h2>Cuándo se vende más</h2>
+          <p>Kilos {{ surte() ? 'surtidos' : 'vendidos' }} cada mes{{ d.alcance.almacen_id == null ? ' en las dos tiendas' : '' }}</p>
+        </div>
+        <button type="button" class="btn-enlace" (click)="comoTabla.set(!comoTabla())">{{ comoTabla() ? 'Ver como gráfica' : 'Ver como tabla' }}</button>
+      </div>
+      <app-columnas-comparadas [meses]="meses()" [anioAnterior]="d.meses.anio_anterior" [anioActual]="d.meses.anio_actual"
+                               [textoEnCurso]="textoEnCurso()" [marcas]="marcas()" [comoTabla]="comoTabla()"
+                               descripcion="Kilos vendidos cada mes, los dos años" />
+      <div class="notas-grafica">
+        @if (d.temporadas?.alta; as a) {
+          <p class="nota-dato alta"><b>{{ a.texto }}</b> se vende {{ a.pct }}% más que en un mes normal:
+            {{ toneladas(a.kg_mes) }} al mes contra {{ toneladas(d.temporadas!.kg_mes_normal) }}.</p>
+        }
+        @if (d.temporadas?.baja; as b) {
+          <p class="nota-dato"><b>{{ b.texto }}</b> se vende {{ -b.pct }}% menos: {{ toneladas(b.kg_mes) }} al mes.</p>
+        }
+        @if (tendenciaTexto(); as t) { <p class="nota-dato"><b>{{ t.fuerte }}</b>{{ t.resto }}</p> }
+        @if (!conTemporada()) {
+          <p class="nota-dato">Hay ventas desde {{ fechaLarga(d.historia.desde, d.hoy) }} ({{ historiaTexto() }}): la temporada se ve con un año completo.
+            Lo punteado es lo que se espera vender al ritmo de las últimas semanas.</p>
+        }
+      </div>
+    </section>
+
+    <!-- ============================================ Hay que pedir pronto -->
+    <section class="card angosta pedir-pronto">
+      <div class="card-head">
+        <div>
+          <h2>Hay que pedir pronto</h2>
+          <p>Con lo que hay hoy y lo que se espera vender. El proveedor tarda {{ d.ajustes.semanas_proveedor }} semanas.</p>
+        </div>
+      </div>
+      @if (d.pedir_pronto.lista.length) {
+        <ul class="lista-pedir">
+          @for (h of d.pedir_pronto.lista; track h.producto_id) {
+            <li>
+              <div>
+                <b>{{ h.hilo }}</b>
+                <span class="pill" [class]="'pill ' + estadoTexto(h.estado, h.pedir).pill">{{ estadoTexto(h.estado, h.pedir).texto }}</span>
+                <p>{{ h.texto }}</p>
+              </div>
+              <div class="cuanto">
+                <b>{{ kilos(h.pedido?.kg) }}</b>
+                @if (h.pedido?.paquetes) { <span>{{ paquetesAprox(h.pedido!.paquetes) }}</span> }
+              </div>
+            </li>
+          }
+        </ul>
+        <div class="pie-pedir">
+          @if (juntos(); as j) { <span>{{ j }} <b>{{ toneladas(d.pedir_pronto.total.kg) }}</b></span> } @else { <span></span> }
+          <a class="btn btn-primary" routerLink="/admin/rotacion/que-pedir">Ver qué pedir</a>
+        </div>
+      } @else {
+        <p class="muted">Nada urgente: ningún hilo hay que pedirlo en los próximos 3 meses.</p>
+        <a class="btn btn-ghost" routerLink="/admin/rotacion/que-pedir">Ver qué pedir</a>
+      }
+    </section>
+  </div>
+
+  <!-- ============================================ Qué hilos se mueven más -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Qué hilos se mueven más</h2>
+        <p>Últimos 12 meses, {{ rangoRanking() }} · toca un hilo para ver su detalle</p>
+      </div>
+      <label class="campo-orden">
+        Ordenar
+        <select [ngModel]="orden()" (ngModelChange)="orden.set($event)" name="orden">
+          <option value="kg">Más kilos vendidos</option>
+          <option value="rapido">Rota más rápido</option>
+          <option value="lento">Rota más lento</option>
+          <option value="crece">Crece más</option>
+        </select>
+      </label>
+    </div>
+    <div class="tabla-scroll">
+      <table class="grid ranking">
+        <thead>
+          <tr>
+            <th scope="col">Hilo</th>
+            <th scope="col">Kilos {{ surte() ? 'surtidos' : 'vendidos' }}</th>
+            <th scope="col" class="num">Del total</th>
+            <th scope="col">Rotación</th>
+            <th scope="col">Se mueve</th>
+            <th scope="col">Contra el año pasado</th>
+            <th scope="col">Su temporada</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of ranking(); track r.h.producto_id) {
+            <tr>
+              <td><a class="hilo" [routerLink]="['/admin/rotacion/hilo', r.h.producto_id]">{{ r.h.hilo }}</a></td>
+              <td>
+                <div class="kg-barra">
+                  <span class="carril-rank" aria-hidden="true"><span [style.width.%]="r.ancho"></span></span>
+                  <span class="num">{{ kilos(r.h.vendido_12m) }}</span>
+                </div>
+              </td>
+              <td class="num">{{ (r.h.pct_del_total ?? 0).toLocaleString('es-MX') }}%</td>
+              <td>
+                @if (r.h.rotacion; as rot) {
+                  {{ rot.veces.toLocaleString('es-MX') }} veces al año@if (rot.cada_dias) {<span class="muted"> · cada {{ rot.cada_dias }} días</span>}
+                } @else { <span class="muted">—</span> }
+              </td>
+              <td>@if (seMueveTexto(r.h.rotacion?.se_mueve); as s) { <span class="pill" [class]="'pill ' + s.pill">{{ s.texto }}</span> }</td>
+              <td [class.sube]="contraAnio(r.h.contra_anio_pasado).sube === true" [class.baja]="contraAnio(r.h.contra_anio_pasado).sube === false">
+                {{ contraAnio(r.h.contra_anio_pasado).texto }}
+              </td>
+              <td>{{ r.h.temporada ?? (conTemporada() ? 'Parejo todo el año' : '—') }}</td>
+            </tr>
+          }
+        </tbody>
+        @if (ranking().length > 1) {
+          <tfoot>
+            <tr>
+              <th scope="row">Los {{ ranking().length }} hilos</th>
+              <td class="num">{{ kilos(totalRanking()) }}{{ totalRanking() >= 1000 ? ' · ' + toneladas(totalRanking()) : '' }}</td>
+              <td class="num">100%</td>
+              <td>{{ d.cifras.rotacion ? d.cifras.rotacion.veces.toLocaleString('es-MX') + ' veces al año' : '—' }}</td>
+              <td colspan="3" class="muted">{{ contraTexto() }}</td>
+            </tr>
+          </tfoot>
+        }
+      </table>
+    </div>
+    @if (quietos().length) {
+      <p class="quietos">
+        <b>Sin {{ surte() ? 'surtirse' : 'venderse' }} en estos 12 meses ({{ quietos().length }}):</b>{{ ' ' }}
+        @for (q of quietos(); track q.producto_id; let ultimo = $last) {
+          <a [routerLink]="['/admin/rotacion/hilo', q.producto_id]">{{ q.hilo }}</a>{{ ultimo ? '.' : ', ' }}
+        }
+        @if (kgQuietos() > 0) { Hay {{ kilos(kgQuietos()) }} entre todos. }
+        Lo que no se ha vendido en meses también sale en Hilo parado, en «Cómo va el negocio».
+      </p>
+    }
+    @for (s of d.sobran; track s.producto_id) {
+      <p class="aviso sobra">
+        <b>{{ s.hilo }} sobra:</b> hay {{ kilos(s.hay_kg) }} y se venden unos {{ kilos(s.se_vende_semana) }} por semana. Al ritmo de hoy
+        alcanza para {{ s.alcanza }}; no hace falta pedir. Lo que no se ha vendido en meses también sale en Hilo parado, en «Cómo va el negocio».
+      </p>
+    }
+  </section>
+}

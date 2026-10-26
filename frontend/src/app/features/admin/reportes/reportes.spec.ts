@@ -130,6 +130,15 @@ describe('Reportes · Venta por color', () => {
     const barra = (f.nativeElement as HTMLElement).querySelector('.tabla-color tbody tr .pct-celda .carril > span') as HTMLElement;
     expect(barra.style.width).toBe('75%');
 
+    // La tabla va en kilos, sin "Importe" (2026-10-21, lo pidió el usuario); cada
+    // renglón y el total tienen las mismas seis columnas que el encabezado.
+    const tabla = (f.nativeElement as HTMLElement).querySelector('.tabla-color')!;
+    const encabezados = [...tabla.querySelectorAll('thead th')].map((th) => th.textContent?.trim());
+    expect(encabezados).toEqual(['Hilo', 'Kg vendidos', '% del periodo', 'Vendido desde siempre', 'Queda en inventario', '% ya vendido']);
+    expect(tabla.querySelector('tbody tr')!.children.length).toBe(6);
+    expect(tabla.querySelector('tfoot tr')!.children.length).toBe(6);
+    expect(tabla.textContent).not.toContain('$');
+
     const kpis = f.componentInstance.kpisColor();
     expect(kpis.map((k) => k.etiqueta)).toEqual(['Kilos vendidos', 'Importe', 'Queda en inventario', 'Hilos']);
     expect(kpis[0].pie).toBe('en 2 hilos');

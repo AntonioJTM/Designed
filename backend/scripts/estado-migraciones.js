@@ -119,6 +119,10 @@ const MIGRACIONES = [
   ['2026-10_transferencias', 'transferencias'],
   ['2026-10_transferencias (permisos)', 'permisos#clave=ver:transferencias'],
   ['2026-10_dias_credito', 'pedidos.dias_credito'],
+  ['2026-10_rotacion_inventario', 'ventas_anteriores'],
+  ['2026-10_rotacion_inventario (permisos)', 'permisos#clave=ver:rotacion'],
+  ['2026-10_rotacion_inventario (tiempos)', 'permisos#clave=hacer:ajustes_rotacion'],
+  ['2026-10_vendedor_en_venta', 'pedidos.vendedor_id'],
 ];
 
 (async () => {

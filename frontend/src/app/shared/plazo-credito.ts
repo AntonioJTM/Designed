@@ -2,8 +2,6 @@ import { Component, input, model } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { hoyLocal } from './fecha.pipe';
 
-/** Los días que se ofrecen de un toque; cualquier otro se escribe. */
-export const PLAZOS_CREDITO = [8, 15, 30];
 /** Los que se proponen al fiar (2026-10-20: "la caja propone 15"). */
 export const PLAZO_CREDITO_POR_OMISION = 15;
 
@@ -35,47 +33,46 @@ export function plazoValido(dias: unknown): boolean {
 /**
  * A CUÁNTOS DÍAS ES LA NOTA (2026-10-20, usuario: "cuando se realiza una venta a
  * crédito, que diga a cuántos días es la nota"; eligió que se escriban en CADA
- * venta). Botones 8 / 15 / 30 y "otro" con el número; abajo, cuándo vence. Lo
- * usan la caja (A crédito), entregar una nota en espera a crédito y pasar una
- * nota pendiente de pago a crédito.
+ * venta). Solo el número de días (2026-10-21, usuario: "que solo me deje anotar
+ * cuántos días y no de las opciones": se quitaron los botones 8 / 15 / 30); abajo,
+ * cuándo vence. Propone 15 y al entrar al campo lo deja seleccionado, así lo que
+ * se teclea lo reemplaza. Lo usan la caja (A crédito), entregar una nota en espera
+ * a crédito y pasar una nota pendiente de pago a crédito.
  */
 @Component({
   selector: 'app-plazo-credito',
   imports: [FormsModule],
   template: `
     <div class="field plazo">
-      <span [id]="idTitulo">A cuántos días</span>
-      <div class="plazo-fila">
-        <div class="seg" role="radiogroup" [attr.aria-labelledby]="idTitulo">
-          @for (d of PLAZOS; track d) {
-            <button type="button" role="radio" [class.on]="dias() === d" [attr.aria-checked]="dias() === d"
-                    (click)="dias.set(d)">{{ d }} días</button>
-          }
-        </div>
-        <label class="otro">
-          <span class="oculto">Otro número de días</span>
-          <input type="number" min="1" max="365" step="1" [ngModel]="dias()" (ngModelChange)="dias.set($event)"
-                 [name]="nombre()" [class.invalido]="!valido()" [attr.aria-invalid]="!valido()" />
-          <span>días</span>
-        </label>
-      </div>
-      <span class="ayuda" [class.mal]="!valido()">
+      <label [for]="idCampo">A cuántos días</label>
+      <span class="plazo-fila">
+        <input [id]="idCampo" type="number" min="1" max="365" step="1" inputmode="numeric"
+               [ngModel]="dias()" (ngModelChange)="dias.set($event)" (focus)="seleccionar($event)"
+               [name]="nombre()" [class.invalido]="!valido()" [attr.aria-invalid]="!valido()"
+               [attr.aria-describedby]="idAyuda" />
+        <span>días</span>
+      </span>
+      <span class="ayuda" [id]="idAyuda" [class.mal]="!valido()">
         @if (valido()) { Vence el <b>{{ vence() }}</b>. Si no la paga para entonces, la campana lo avisa. }
         @else { Pon de 1 a 365 días. }
       </span>
     </div>
   `,
   styles: `
-    .plazo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .plazo-fila .seg { flex: 1 1 auto; }
-    .otro { display: inline-flex; align-items: center; gap: 6px; font-size: 0.875rem; color: var(--tinta-2); }
-    .otro input { width: 5.5rem; }
+    .plazo-fila { display: inline-flex; align-items: center; gap: 6px; font-size: 0.875rem; color: var(--tinta-2); }
+    .plazo-fila input { width: 6rem; }
     .ayuda.mal { color: var(--peligro-t); }
   `,
 })
 export class PlazoCredito {
-  readonly PLAZOS = PLAZOS_CREDITO;
-  readonly idTitulo = `plazo-titulo-${++siguiente}`;
+  private readonly n = ++siguiente;
+  readonly idCampo = `plazo-dias-${this.n}`;
+  readonly idAyuda = `plazo-ayuda-${this.n}`;
+
+  /** Al entrar al campo queda seleccionado: lo que se teclee reemplaza los 15 propuestos. */
+  seleccionar(e: Event): void {
+    (e.target as HTMLInputElement).select();
+  }
   /** Los días de la nota. */
   readonly dias = model<number | null>(PLAZO_CREDITO_POR_OMISION);
   /** Desde qué día cuenta ('YYYY-MM-DD'); hoy, si no se dice. */

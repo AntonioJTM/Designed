@@ -26,14 +26,17 @@
             ¿Cuánto {{ esCono ? 'pesaron' : 'pesó' }}?
             <span class="con-unidad">
               <input #peso type="number" step="0.001" min="0.001" name="kg" [(ngModel)]="kg"
-                     placeholder="0.000" inputmode="decimal" />
+                     placeholder="0.000" inputmode="decimal" (keydown.enter)="alEnterPeso($event)" />
               <span class="muted">kg</span>
             </span>
           </label>
           @if (esCono) {
+            <!-- Obligatorio, igual que el peso (2026-10-21). -->
             <label class="field">
               ¿Cuántos conos son?
-              <input type="number" step="1" min="1" name="piezas" [(ngModel)]="piezas" placeholder="Opcional · ej. 6" />
+              <input #conos type="number" step="1" min="1" name="piezas" [(ngModel)]="piezas" placeholder="Ej. 6"
+                     inputmode="numeric" required
+                     [class.invalido]="(kg ?? 0) > 0 && !conosListos()" [attr.aria-invalid]="(kg ?? 0) > 0 && !conosListos()" />
             </label>
           }
         </div>
@@ -53,6 +56,9 @@
       </div>
 
       <div class="modal-foot">
+        @if (esCono && !puedeAgregar()) {
+          <span class="nota">Escribe lo que pesaron y cuántos conos son.</span>
+        }
         <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
         <button type="submit" class="btn btn-primary" [disabled]="!puedeAgregar()">Agregar al carrito</button>
       </div>

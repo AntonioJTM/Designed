@@ -215,12 +215,22 @@ const ck = (n, ok, d) => {
     r = await api('POST', `/pedidos/${p1.id}/entregar`, { pagos: [{ metodo_pago_id: efectivo.id, monto: 1000 }], sesion_caja_id: sesion.id });
     ck('con menos de lo que falta no se entrega: 409 PAGO_INSUFICIENTE', r.status === 409 && r.error?.code === 'PAGO_INSUFICIENTE', r.error?.code);
     ck('…y nada se movió', JSON.stringify(await inv(paquete.id, almacen)) === JSON.stringify({ cantidad: 100, reservada: 38.7 }));
-    r = await api('POST', `/pedidos/${p1.id}/entregar`, { pagos: [{ metodo_pago_id: efectivo.id, monto: 3400 }], sesion_caja_id: sesion.id });
-    ck('paga con $3,400: se entrega y lleva $30 de cambio', r.status === 200 && r.data?.estado === 'entregado' && r.data?.cambio === 30, r.error ?? [r.data?.estado, r.data?.cambio]);
+    // PARTE Y PARTE (2026-10-21, "Efectivo y transferencia" al entregar): $1,000 por
+    // transferencia y entrega $2,400 en efectivo de los $2,370 que quedan.
+    r = await api('POST', `/pedidos/${p1.id}/entregar`, {
+      pagos: [{ metodo_pago_id: transferencia.id, monto: 1000, referencia_transaccion: 'SPEI-TMPPE-2' }, { metodo_pago_id: efectivo.id, monto: 2400 }],
+      sesion_caja_id: sesion.id,
+    });
+    ck('paga $1,000 por transferencia y $2,400 en efectivo: se entrega y lleva $30 de cambio', r.status === 200 && r.data?.estado === 'entregado' && r.data?.cambio === 30, r.error ?? [r.data?.estado, r.data?.cambio]);
+    const [pagosP1] = await db.query(
+      'SELECT metodo_pago_id m, monto, recibido FROM pagos WHERE pedido_id = ? ORDER BY id', [p1.id]);
+    ck('quedan los dos pagos: la transferencia justa y el efectivo por lo cobrado (recibió $2,400)',
+      JSON.stringify(pagosP1.slice(-2).map((x) => [x.m, Number(x.monto), x.recibido == null ? null : Number(x.recibido)]))
+        === JSON.stringify([[transferencia.id, 1000, null], [efectivo.id, 2370, 2400]]), pagosP1);
     ck('sale del inventario el peso real (61.3 kg, nada apartado)', JSON.stringify(await inv(paquete.id, almacen)) === JSON.stringify({ cantidad: 61.3, reservada: 0 }),
       await inv(paquete.id, almacen));
     ck('sus paquetes quedan VENDIDOS', (await estadoBulto(cod[1])) === 'vendido' && (await estadoBulto(cod[2])) === 'vendido');
-    ck('al cajón entran $3,370 como ingreso', JSON.stringify(await caja(sesion.id)) === JSON.stringify(['ingreso:3370']), await caja(sesion.id));
+    ck('al cajón entra SOLO el efectivo, $2,370, como ingreso', JSON.stringify(await caja(sesion.id)) === JSON.stringify(['ingreso:2370']), await caja(sesion.id));
     r = await api('PATCH', `/pedidos/${p1.id}/estado`, { estado: 'en_preparacion' });
     ck('entregado ya no regresa a estar en espera (409)', r.status === 409 && r.error?.code === 'PEDIDO_YA_ENTREGADO', r.error?.code);
     r = await api('PUT', `/pedidos/${p1.id}/encargo`, { lineas: [{ detalle_id: linea1 }] });

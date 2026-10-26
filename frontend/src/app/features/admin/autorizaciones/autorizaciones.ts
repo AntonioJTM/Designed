@@ -10,6 +10,7 @@ import { fechaRelativa } from '../../../shared/fecha.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { folioCorto } from '../../../shared/folio.pipe';
 import { CargaSolicitud } from './carga-solicitud';
+import { DevolucionSolicitud } from './devolucion-solicitud';
 
 /**
  * De qué tipo es cada operación, para leer la lista de un vistazo (2026-10-20,
@@ -85,7 +86,7 @@ const ESTADOS: Record<EstadoAutorizacion, { texto: string; tono: string }> = {
  */
 @Component({
   selector: 'app-autorizaciones',
-  imports: [FormsModule, DineroPipe, CargaSolicitud],
+  imports: [FormsModule, DineroPipe, CargaSolicitud, DevolucionSolicitud],
   templateUrl: './autorizaciones.html',
   styleUrl: './autorizaciones.scss',
   // Escape cierra la ventana abierta, como en los demás modales (2026-10-20).

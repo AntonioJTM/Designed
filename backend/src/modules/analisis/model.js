@@ -31,8 +31,9 @@ const ESTADOS_MUERTOS = "('cancelado', 'devuelto')";
  * `diasAviso`: las que vencieron hace MÁS de esos días (0 = todas las vencidas).
  */
 async function cartera({ diasAviso } = {}) {
-  const { diasSinAbonarDeTodos } = require('../clientes/model');
+  const { diasSinAbonarDeTodos, porCobrarHasta, finDeMes } = require('../clientes/model');
   if (diasAviso == null) diasAviso = 0;
+  const finMes = finDeMes();
   const [rows] = await pool.query(
     `SELECT c.id AS cliente_id, c.codigo, c.nombre, c.nombre_comercial,
             c.telefono, c.limite_credito,
@@ -60,6 +61,8 @@ async function cartera({ diasAviso } = {}) {
     r.vence_el = v?.venceEl ?? a?.proxima?.venceEl ?? null;
     r.notas_vencidas = a?.vencidas?.length ?? 0;
     r.vencido_por_pagar = Math.round((a?.vencidas ?? []).reduce((s, n) => s + n.porPagar, 0) * 100) / 100;
+    // Lo que hay que cobrarle a más tardar el último día del mes (2026-10-22).
+    r.por_cobrar_mes = porCobrarHasta(a, finMes);
   }
   // De la nota más vencida a la que va al corriente; con los mismos días, el que debe más.
   rows.sort((a, b) => b.dias_vencida - a.dias_vencida || Number(b.saldo) - Number(a.saldo));
@@ -95,6 +98,13 @@ async function cartera({ diasAviso } = {}) {
     vencido: Math.round(porAvisar.reduce((s, r) => s + Number(r.saldo), 0) * 100) / 100,
     num_vencidos: porAvisar.length,
     dias_aviso: diasAviso,
+    // CRÉDITO POR COBRAR ESTE MES (2026-10-22): lo vencido y lo que vence hasta
+    // el último día del mes, de sus notas a crédito.
+    por_cobrar_mes: {
+      monto: Math.round(rows.reduce((s, r) => s + r.por_cobrar_mes, 0) * 100) / 100,
+      clientes: rows.filter((r) => r.por_cobrar_mes > 0.004).length,
+      hasta: finMes,
+    },
     por_antiguedad: porTramo,
     clientes: rows,
   };

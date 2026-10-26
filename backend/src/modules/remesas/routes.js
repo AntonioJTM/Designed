@@ -131,6 +131,9 @@ router.get('/producto/:productoId/pdf', ...soloStaff, veReportes, controller.pdf
 router.get('/:id/pdf', ...soloStaff, veReportes, controller.pdfCarga);
 // Varias cargas en un solo PDF (?ids=1,2,3): las de una lista completa.
 router.get('/pdf', ...soloStaff, veReportes, controller.pdfCargas);
+// La PLANTILLA vacía para llenar (2026-10-22): la lista con varios colores o la de
+// un hilo. La pide quien carga (Surtir inventario o las presentaciones del hilo).
+router.get('/plantilla/:tipo', ...soloStaff, requirePermisoAlguno('ver:remesa', 'ver:catalogo'), controller.plantilla);
 router.post('/previa', ...soloStaff, requirePermiso('ver:remesa'), cuerpoBinario, controller.previa);
 // Cargar es un INGRESO de inventario: directo la gerente y el administrador; los
 // demás lo piden (autorizaciones, fase 2, 2026-10-19).

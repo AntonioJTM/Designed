@@ -1,7 +1,7 @@
 'use strict';
 
 const model = require('./model');
-const { CATALOGO, CLAVES } = require('./catalogo');
+const { CATALOGO, CLAVES, soloConTodas, notaTiendas } = require('./catalogo');
 const { AppError } = require('../../middlewares/error');
 
 const ADMIN = 'administrador';
@@ -122,13 +122,16 @@ async function puede(auth, clave) {
 
 /** Lo que dibuja la pantalla de Permisos. */
 async function matriz() {
-  const [roles, asignados, registradas] = await Promise.all([
-    model.roles(), model.asignados(), model.clavesRegistradas(),
+  const [roles, asignados, registradas, sinTodas] = await Promise.all([
+    model.roles(), model.asignados(), model.clavesRegistradas(), model.personasSinTodas(),
   ]);
   // Sin costo, «Ver costos» no hace nada: no se ofrece en la pantalla.
   const visible = (c) => SE_LLEVA_COSTO || c !== VER_COSTOS;
   return {
-    catalogo: CATALOGO.filter((p) => visible(p.clave)),
+    // `nota_tiendas`: la ve (o la hace) solo quien tiene «Todas las tiendas» (2026-10-22).
+    catalogo: CATALOGO.filter((p) => visible(p.clave))
+      .map((p) => (notaTiendas(p.clave) ? { ...p, nota_tiendas: notaTiendas(p.clave) } : p)),
+    no_las_ven: noLasVen(roles, asignados, sinTodas),
     // El puesto que no entra al sistema (el cargador) no tiene nada que decidir aquí.
     roles: roles.filter((r) => Number(r.entra_al_sistema)).map(({ entra_al_sistema, ...r }) => ({
       ...r,
@@ -139,6 +142,29 @@ async function matriz() {
     // Si la migración no se aplicó, la pantalla lo dice en vez de guardar en el aire.
     falta_migracion: registradas.size === 0,
   };
+}
+
+/**
+ * Quien tiene en su puesto pantallas que suman TODAS las tiendas pero trabaja en
+ * una (o varias) y por eso NO las ve (2026-10-22: Contabilidad tenía
+ * Transferencias y su persona, de la Matriz, no la veía sin saber por qué). El
+ * administrador las ve siempre.
+ */
+function noLasVen(roles, asignados, personas) {
+  const admin = new Set(roles.filter((r) => r.nombre === ADMIN).map((r) => Number(r.id)));
+  const nombreRol = Object.fromEntries(roles.map((r) => [Number(r.id), r.nombre]));
+  const out = [];
+  for (const p of personas) {
+    if (p.puestos.some((id) => admin.has(id))) continue;
+    const { pantallas, acciones } = soloConTodas(p.puestos.flatMap((id) => asignados[id] ?? []));
+    if (!pantallas.length && !acciones.length) continue;
+    out.push({
+      usuario_id: p.id, nombre: p.nombre, tiendas: p.tiendas,
+      puestos: p.puestos.map((id) => nombreRol[id]).filter(Boolean),
+      pantallas, acciones,
+    });
+  }
+  return out;
 }
 
 async function guardar(rolId, claves) {

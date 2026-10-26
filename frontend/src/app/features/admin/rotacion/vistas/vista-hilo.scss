@@ -1,0 +1,35 @@
+// ROTACIÓN · POR HILO.
+.banner-pedido { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 14px 18px; border-radius: 10px; margin-bottom: 18px; }
+.banner-pedido p { margin: 0; font-size: 0.875rem; line-height: 1.45; }
+.banner-pedido .titulo { font-weight: 600; font-size: 1rem; margin-bottom: 2px; }
+.banner-pedido.ya { background: var(--alerta-f); color: var(--alerta-t); }
+.banner-pedido.pronto { background: var(--aviso-f); color: var(--aviso-t); }
+.banner-pedido.calma { background: var(--neutro-f); color: var(--neutro-t); }
+.banner-pedido.sobra { background: var(--info-f); color: var(--info-t); }
+.su-temporada dl { margin: 0; }
+.su-temporada dl > div { padding: 12px 0; border-top: 1px solid var(--borde-suave); }
+.su-temporada dt { font-size: 0.8125rem; color: var(--tinta-3); }
+.su-temporada dd { margin: 2px 0 0; display: flex; flex-direction: column; gap: 2px; }
+.su-temporada dd b { font-size: 1rem; }
+.su-temporada dd span { font-size: 0.875rem; color: var(--tinta-2); line-height: 1.4; }
+.acciones-proy { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pie-proy { margin: 14px 0 0; font-size: 0.875rem; }
+table.grid.almacenes { min-width: 520px; }
+table.grid tfoot th, table.grid tfoot td { background: var(--superficie-2); border-top: 1px solid var(--borde); border-bottom: 0; font-weight: 600; }
+.aviso-surtir { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.columna-der { display: flex; flex-direction: column; gap: 16px; }
+.columna-der .card { margin: 0; }
+.partida { display: flex; gap: 2px; height: 16px; margin-bottom: 12px; }
+.partida span { display: block; min-width: 2px; }
+.partida span:first-child { border-radius: 4px 0 0 4px; }
+.partida span:last-child { border-radius: 0 4px 4px 0; }
+.partida span:only-child { border-radius: 4px; }
+.serie1 { background: var(--viz-series-1); }
+.serie2 { background: var(--viz-series-2); }
+.otros { background: var(--viz-otros); }
+.leyenda-partida, .cargas { list-style: none; margin: 0; padding: 0; }
+.leyenda-partida li, .cargas li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.leyenda-partida i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; }
+.cargas li { border-top: 1px solid var(--borde-suave); padding: 10px 0; }
+.cargas li:first-child { border-top: 0; }

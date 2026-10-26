@@ -27,9 +27,16 @@ test('la vista previa de "Mínimo para varios" no avisa; guardarlo, sí', () => 
   assert.deepEqual(tiposDeRuta('POST', '/inventario/configuracion/minimos', { paquetes: 5, guardar: true }), ['inventario', 'avisos']);
 });
 
-test('nómina y personal no avisan: nadie los escucha', () => {
+test('nómina no avisa: nadie la escucha', () => {
   assert.deepEqual(tiposDeRuta('POST', '/nomina/periodos'), []);
-  assert.deepEqual(tiposDeRuta('PUT', '/usuarios/3'), []);
+});
+
+test('personal y permisos avisan "sesion": el menú abierto se pone al día (2026-10-22)', () => {
+  assert.deepEqual(tiposDeRuta('PUT', '/usuarios/3'), ['sesion']);
+  assert.deepEqual(tiposDeRuta('PUT', '/permisos/roles/5'), ['sesion']);
+  assert.deepEqual(tiposDeRuta('POST', '/usuarios/login'), []);
+  // Poner «Mi clave para autorizar» no recarga el menú de todos.
+  assert.deepEqual(tiposDeRuta('PUT', '/usuarios/perfil/clave-autorizacion'), []);
 });
 
 test('un prefijo parecido no se confunde, y una ruta desconocida no avisa', () => {

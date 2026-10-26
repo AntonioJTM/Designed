@@ -26,6 +26,7 @@ import {
   Gasto,
   ListaGastos,
   TipoGasto,
+  Vendedor,
 } from '../models/ventas.models';
 
 function data<T>(r: ApiResponse<T>): T {
@@ -107,6 +108,11 @@ export interface CrearPedidoInput {
   /** Fiarle aunque traiga la cuenta atrasada: la caja lo preguntó antes (2026-10-16). */
   fiar_con_atraso?: boolean;
   sesion_caja_id?: number;
+  /**
+   * Quién la VENDIÓ, si no es quien cobra (2026-10-23): personal de esa tienda. A
+   * esa persona va la comisión; quien cobra queda como «Elaboró».
+   */
+  vendedor_id?: number;
   /** Lista de precios a aplicar. Sin esto se cobra el precio público. */
   tipo_cliente_id?: number;
   almacen_id?: number;
@@ -223,6 +229,11 @@ export class VentasService {
   // ---- Pedidos ----
   metodosPago(): Observable<MetodoPago[]> {
     return this.http.get<ApiResponse<MetodoPago[]>>(`${this.base}/opciones/metodos-pago`).pipe(map(data));
+  }
+  /** Quién puede quedar como vendedor de una venta de esa tienda (2026-10-23). */
+  vendedores(almacenId: number): Observable<Vendedor[]> {
+    const params = new HttpParams().set('almacen_id', almacenId);
+    return this.http.get<ApiResponse<Vendedor[]>>(`${this.base}/pedidos/vendedores`, { params }).pipe(map(data));
   }
   crearPedido(body: CrearPedidoInput): Observable<Pedido> {
     return this.http.post<ApiResponse<Pedido>>(`${this.base}/pedidos`, body).pipe(map(data));

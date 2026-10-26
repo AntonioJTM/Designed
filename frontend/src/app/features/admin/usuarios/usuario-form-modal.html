@@ -122,6 +122,16 @@
                   {{ todas() ? 'Ve las ventas, la caja y el inventario de todas las tiendas, y los reportes.'
                              : 'Solo ve las ventas, la caja y el inventario de las tiendas marcadas. No ve reportes ni lo de las otras tiendas.' }}
                 </span>
+                <!-- Lo que su puesto tiene y aun así no vería (2026-10-22). -->
+                @if (noVeria().length || noPodria().length) {
+                  <p class="aviso no-veria" role="status">
+                    Con {{ tiendasSel().length === 1 ? 'una sola tienda' : 'esas tiendas' }}
+                    <b>@if (noVeria().length) {no verá {{ lista(noVeria()) }}}@if (noVeria().length && noPodria().length) {, ni podrá }@else if (noPodria().length) {no podrá }{{ lista(noPodria()) }}</b>,
+                    aunque su puesto lo tiene: eso suma todas las tiendas.
+                    @if (puedeDarTodas()) { Para que lo vea, marca «Todas las tiendas». }
+                    @else { Para eso, pídele al administrador que le marque «Todas las tiendas». }
+                  </p>
+                }
               }
             </fieldset>
             @if (esEdicion()) {

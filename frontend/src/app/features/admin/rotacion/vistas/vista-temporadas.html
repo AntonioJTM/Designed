@@ -1,0 +1,157 @@
+@let d = datos();
+<div class="filtros-rot">
+  <div class="seg" role="radiogroup" aria-label="Tienda">
+    <button type="button" role="radio" [class.on]="d.alcance.almacen_id == null" [attr.aria-checked]="d.alcance.almacen_id == null"
+            (click)="elegirTienda(null)">{{ d.almacenes.length === 2 ? 'Las dos tiendas' : 'Todas las tiendas' }}</button>
+    @for (a of d.almacenes; track a.id) {
+      <button type="button" role="radio" [class.on]="d.alcance.almacen_id === a.id" [attr.aria-checked]="d.alcance.almacen_id === a.id"
+              (click)="elegirTienda(a.id)">{{ a.nombre }}</button>
+    }
+  </div>
+  @if (conCalculos()) {
+    <div class="seg" role="radiogroup" aria-label="Año">
+      @for (a of d.anios; track a.anio) {
+        <button type="button" role="radio" [class.on]="d.elegido === a.anio" [attr.aria-checked]="d.elegido === a.anio"
+                (click)="elegirAnio(a.anio)">{{ etiquetaAnio(a) }}</button>
+      }
+      @if (d.hay_promedio) {
+        <button type="button" role="radio" [class.on]="d.elegido === 'promedio'" [attr.aria-checked]="d.elegido === 'promedio'"
+                (click)="elegirAnio('promedio')">Promedio de los dos</button>
+      }
+    </div>
+  }
+</div>
+
+@if (!conCalculos()) {
+  <p class="aviso" role="status">
+    Faltan {{ d.historia.faltan_semanas }} {{ d.historia.faltan_semanas === 1 ? 'semana' : 'semanas' }} de ventas para ver los meses.
+    La temporada necesita un año completo; si tienes las ventas de años anteriores, cárgalas en «¿Cómo se calcula?».
+  </p>
+} @else {
+  @if (aviso(); as a) { <p class="nota-info aviso-historia" role="status">{{ a }}</p> }
+
+  <!-- ============================================ Qué hilo se vende en qué mes -->
+  <section class="card" [class.recargando]="cargando()">
+    <div class="card-head">
+      <div>
+        <h2>Qué hilo se vende en qué mes</h2>
+        <p>{{ subtitulo() }}</p>
+      </div>
+      <button type="button" class="btn-enlace" (click)="comoTabla.set(!comoTabla())">{{ comoTabla() ? 'Ver como mapa' : 'Ver como tabla' }}</button>
+    </div>
+    @if (comoTabla()) {
+      <div class="tabla-scroll">
+        <table class="grid tabla-meses">
+          <thead>
+            <tr>
+              <th scope="col">Hilo</th>
+              @for (m of MESES_CORTOS; track $index) { <th scope="col" class="num">{{ m }}</th> }
+              <th scope="col" class="num">Al año</th>
+              <th scope="col">Su temporada</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (h of conVenta(); track h.producto_id) {
+              <tr>
+                <th scope="row">{{ h.hilo }}</th>
+                @for (m of h.meses; track $index) {
+                  <td class="num" [title]="m.indice != null ? (m.indice * 100 - 100 >= 0 ? '+' : '') + (m.indice * 100 - 100).toFixed(0) + '% contra un mes normal' : ''">
+                    {{ m.kg == null ? '—' : m.kg.toLocaleString('es-MX') }}
+                  </td>
+                }
+                <td class="num"><b>{{ kilos(h.total) }}</b></td>
+                <td>{{ h.temporada ?? '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <app-mapa-calor-meses [filas]="filas()" [total]="total()" [conColores]="conTemporada()"
+                            [nombreTotal]="conVenta().length === 1 ? 'El hilo' : 'Los ' + conVenta().length + ' hilos'" rutaHilo="/admin/rotacion/hilo/"
+                            descripcion="Kilos vendidos por hilo y mes" />
+    }
+    @if (sinVenta().length) {
+      <p class="sin-venta">
+        <b>Sin ventas en {{ d.elegido === 'promedio' ? 'esos años' : d.elegido }} ({{ sinVenta().length }}):</b>{{ ' ' }}
+        @for (s of sinVenta(); track s.producto_id; let ultimo = $last) {
+          <a [routerLink]="['/admin/rotacion/hilo', s.producto_id]">{{ s.hilo }}</a>{{ ultimo ? '.' : ', ' }}
+        }
+      </p>
+    }
+  </section>
+
+  @if (conTemporada()) {
+    <!-- ============================================ Calendario de compras -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Calendario de compras de cada año</h2>
+          <p>Para que el hilo llegue 3 semanas antes de que empiece su temporada. El proveedor tarda {{ d.ajustes.semanas_proveedor }} semanas.</p>
+        </div>
+        <a class="btn-enlace" routerLink="/admin/rotacion/que-pedir">Cambiar los tiempos en «Qué pedir»</a>
+      </div>
+      <div class="leyenda cal-leyenda">
+        <span><span class="pill ambar">Pedir</span>a más tardar ese mes</span>
+        <span><span class="pill verde">Llega</span>al almacén</span>
+        <span><i class="cal-temp"></i>Su temporada</span>
+      </div>
+      <div class="tabla-scroll">
+        <div class="cal" role="table" aria-label="Calendario de compras">
+          <div class="cal-fila cal-cabeza" role="row">
+            <span role="columnheader">Hilo</span>
+            @for (m of MESES_CORTOS; track $index) { <span role="columnheader" class="cal-mes">{{ m }}</span> }
+            <span role="columnheader">Pedir a más tardar</span>
+          </div>
+          @for (c of calendario(); track c.texto + c.nombre) {
+            <div class="cal-fila" role="row">
+              <span role="rowheader" class="cal-hilo">{{ c.nombre }}</span>
+              @for (x of c.celdas; track $index) {
+                <span role="cell" class="cal-celda" [class.temp]="x.temporada" [attr.aria-label]="MESES[$index] + (x.pedir ? ': pedir' : '') + (x.llega ? ': llega' : '') + (x.temporada ? ': su temporada' : '')">
+                  @if (x.pedir) { <span class="pill ambar">Pedir</span> }
+                  @if (x.llega) { <span class="pill verde">Llega</span> }
+                </span>
+              }
+              <span role="cell" class="cal-texto">{{ c.texto }}</span>
+            </div>
+          }
+          @for (s of d.sin_temporada; track s.hilo) {
+            <div class="cal-fila" role="row">
+              <span role="rowheader" class="cal-hilo">{{ s.hilo }}</span>
+              <span role="cell" class="cal-sin">Sin temporada: se pide cuando le queden {{ d.ajustes.meses_cubre }} meses de venta. {{ s.hoy }}</span>
+              <span role="cell" class="cal-texto">{{ s.derecha }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================ Las temporadas -->
+    @if (d.tarjetas.length || d.parejos.length) {
+      <div class="tarjetas-temp">
+        @for (t of d.tarjetas; track t.meses) {
+          <section class="card tarjeta-temp">
+            <p class="sobre">{{ t.nombre }} · {{ t.meses }}</p>
+            <h3>{{ titulo(t) }}</h3>
+            <ul>
+              @for (h of t.hilos; track h.hilo) { <li><span>{{ h.hilo }}</span><b>{{ kilos(h.kg) }}</b></li> }
+            </ul>
+            @if (t.pct != null) {
+              <p class="pie">En esos {{ t.num_meses }} meses se va el {{ t.pct }}% de lo que {{ t.hilos.length === 1 ? 'vende' : 'venden' }} en el año.@if (t.mejor_mes) { Su mejor mes es {{ MESES[t.mejor_mes - 1] }}.}</p>
+            }
+          </section>
+        }
+        @if (d.parejos.length) {
+          <section class="card tarjeta-temp">
+            <p class="sobre">Todo el año</p>
+            <h3>Parejo</h3>
+            <ul>
+              @for (p of d.parejos; track p.hilo) { <li><span>{{ p.hilo }}</span><b>{{ kilos(p.kg_mes) }} al mes</b></li> }
+            </ul>
+            <p class="pie">No {{ d.parejos.length === 1 ? 'tiene' : 'tienen' }} temporada: ningún mes se aleja más de {{ d.parejos[0].se_aleja }}% de lo normal.</p>
+          </section>
+        }
+      </div>
+    }
+  }
+}

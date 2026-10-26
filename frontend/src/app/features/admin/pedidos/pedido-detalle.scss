@@ -62,11 +62,3 @@
 .cambiar-estado { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; border-top: 1px solid var(--borde-suave); padding-top: 14px; }
 .cambiar-estado .field { flex: 1 1 200px; }
 
-/* ---- Modal de cancelación ---- */
-.cant { display: inline-flex; align-items: center; gap: 6px; }
-.cant input {
-  width: 100px; height: 36px; padding: 0 8px; border: 1px solid var(--borde-campo); border-radius: 6px;
-  font: inherit; font-size: 0.875rem; text-align: right; font-variant-numeric: tabular-nums; background: #fff; color: var(--tinta);
-}
-.cant input:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }
-

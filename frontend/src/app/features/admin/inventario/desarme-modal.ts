@@ -63,11 +63,13 @@ export class DesarmeModal implements OnInit {
    */
   tienda: number | '' = '';
   /**
-   * DESTARE POR CONO: lo que pesa el tubo de UN cono. Se multiplica por los conos
-   * que salen y se suma a los kilos del mostrador ("eso se le suma a cada cono").
-   * Lo captura la tienda porque depende del tubo; se recuerda para la próxima.
+   * DESTARE DEL PAQUETE: lo que pesan los tubos de TODOS sus conos juntos, en kg
+   * (2026-10-21, usuario: "es el destare del paquete completo, no por conos";
+   * antes se pedía el de UN cono y se multiplicaba, y un 0.8 escrito para el
+   * paquete entró como 0.8 × 12 = 9.6 kg). Se suma a los kilos del mostrador.
+   * Se queda entre un paquete y otro mientras la ventana siga abierta.
    */
-  destarePorCono: number | null = null;
+  destarePaquete: number | null = null;
   motivo = '';
 
   /** Solo las tiendas (almacenes con mostrador): en la bodega no se bajan conos. */
@@ -76,53 +78,53 @@ export class DesarmeModal implements OnInit {
   /** Solo las últimas: el histórico completo está en el Kardex. */
   readonly ultimas = computed(() => this.conversiones().slice(0, 5));
 
-  /** Destare de todos los conos: lo que pesa un tubo × cuántos conos salen. */
-  destareTotal(conos: number | null | undefined): number {
-    const d = Number(this.destarePorCono ?? 0);
-    if (!d || !conos) return 0;
-    return Math.round(d * Number(conos) * 1000) / 1000;
+  /** El destare escrito, en kg (0 si no se escribió). */
+  destare(): number {
+    const d = Number(this.destarePaquete ?? 0);
+    return d > 0 ? Math.round(d * 1000) / 1000 : 0;
   }
 
-  /** El destare de un cono en gramos, que es como se pesa un tubo. */
-  gramos(): number {
-    return Math.round(Number(this.destarePorCono ?? 0) * 1000);
+  /** Los conos que salen del paquete escaneado. */
+  private conosDelPaquete(): number {
+    return Number(this.previaBulto()?.conos_a_generar ?? 0);
+  }
+
+  /** A cuántos gramos por cono sale el destare escrito: para notar un error de dedo. */
+  gramosPorCono(): number {
+    const conos = this.conosDelPaquete();
+    return conos > 0 ? Math.round((this.destare() / conos) * 1000) : 0;
+  }
+
+  /**
+   * El tope del destare es POR CONO (lo que puede pesar un tubo, Configuración →
+   * Bajar conos; sin él, 1 kg): para ESTE paquete es eso × sus conos.
+   */
+  topeDelPaquete(): number {
+    return Math.round((this.topeDestare() ?? 1) * this.conosDelPaquete() * 1000) / 1000;
   }
 
   /** Los inputs se leen aquí, no en el constructor: ahí todavía no están puestos. */
   ngOnInit(): void {
-    // El tubo casi siempre es el mismo: se propone el último destare usado, si no
-    // pasa del tope (2026-10-20: se recordaba 0.8 kg por cono y se volvía a usar).
+    // Lo que se recordaba era el destare de UN cono (hasta el 2026-10-21): como
+    // destare del paquete sería otro número, ya no se propone y se olvida.
     try {
-      const d = Number(localStorage.getItem('destare_por_cono'));
-      if (d > 0 && d <= 1) this.destarePorCono = d;
+      localStorage.removeItem('destare_por_cono');
     } catch {
-      /* sin almacenamiento: se captura cada vez */
+      /* sin almacenamiento */
     }
     this.tiendaSvc.configuracion().subscribe({
       next: (c) => {
         const t = Number(c.desarme_destare_max_kg);
         this.topeDestare.set(c.desarme_destare_max_kg && t > 0 ? t : null);
-        if (this.pasaDelTope()) this.destarePorCono = null;
       },
       error: () => {},
     });
   }
 
-  /** ¿El destare escrito pasa del tope? (el servidor también lo rechaza). */
+  /** ¿El destare escrito pasa del tope para este paquete? (el servidor también lo rechaza). */
   pasaDelTope(): boolean {
-    const t = this.topeDestare();
-    const d = Number(this.destarePorCono ?? 0);
-    return d > 1 || (t != null && d > t + 0.0005);
-  }
-
-  private recordarDestare(): void {
-    try {
-      if (this.destarePorCono && this.destarePorCono > 0 && !this.pasaDelTope()) {
-        localStorage.setItem('destare_por_cono', String(this.destarePorCono));
-      }
-    } catch {
-      /* sin almacenamiento */
-    }
+    const conos = this.conosDelPaquete();
+    return conos > 0 && this.destare() > this.topeDelPaquete() + 0.0005;
   }
 
   /**
@@ -183,12 +185,12 @@ export class DesarmeModal implements OnInit {
     });
   }
 
-  /** Peso que va a quedar enconado: el del bulto más el destare de sus conos. */
+  /** Peso que va a quedar enconado: el del bulto más el destare del paquete. */
   pesoEnconado(): number | null {
     const p = this.previaBulto();
     if (!p) return null;
     const kg = Number(p.bulto.peso_kg);
-    return Math.round((kg + this.destareTotal(p.conos_a_generar)) * 1000) / 1000;
+    return Math.round((kg + this.destare()) * 1000) / 1000;
   }
 
   olvidarBulto(): void {
@@ -215,10 +217,14 @@ export class DesarmeModal implements OnInit {
     }
     if (this.pasaDelTope()) {
       const t = this.topeDestare();
+      const conos = this.conosDelPaquete();
       this.error.set(
-        `El destare por cono es de ${this.gramos().toLocaleString('es-MX')} g` +
-          (t != null ? ` y el tope es de ${Math.round(t * 1000).toLocaleString('es-MX')} g (Configuración → Bajar conos)` : ' y no puede pasar de 1 kg') +
-          '. Pesa el tubo de UN cono vacío y escribe eso, en kilos.'
+        `El destare del paquete es de ${this.destare().toLocaleString('es-MX')} kg: con ${conos} conos son ` +
+          `${this.gramosPorCono().toLocaleString('es-MX')} g por cono` +
+          (t != null
+            ? ` y el tope es de ${Math.round(t * 1000).toLocaleString('es-MX')} g por cono (Configuración → Bajar conos)`
+            : ' y no puede pasar de 1 kg por cono') +
+          `. Para este paquete, hasta ${this.topeDelPaquete().toLocaleString('es-MX')} kg: escribe lo que pesan los tubos de todos sus conos juntos.`
       );
       return;
     }
@@ -230,7 +236,8 @@ export class DesarmeModal implements OnInit {
         // Se abre donde está: la misma tienda de un lado y del otro.
         almacen_origen_id: Number(this.tienda),
         almacen_destino_id: Number(this.tienda),
-        destare_por_cono_kg: this.destarePorCono && this.destarePorCono > 0 ? Number(this.destarePorCono) : undefined,
+        // El destare del PAQUETE completo (2026-10-21); el servidor lo suma tal cual.
+        destare_kg: this.destare() > 0 ? this.destare() : undefined,
         motivo: this.motivo.trim() || undefined,
       })
       .subscribe({
@@ -241,7 +248,6 @@ export class DesarmeModal implements OnInit {
               `(${r.piezas_generadas} conos)` +
               (r.destare_kg ? ` · incluye ${r.destare_kg} kg de destare.` : '.')
           );
-          this.recordarDestare();
           this.previaBulto.set(null);
           this.motivo = '';
           this.bajando.set(false);

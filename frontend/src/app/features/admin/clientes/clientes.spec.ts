@@ -41,7 +41,7 @@ describe('ClientesPantalla', () => {
     total_por_cobrar: 500, num_clientes: 1, vencido: 0, num_vencidos: 0, dias_aviso: 15,
     por_antiguedad: [{ clave: 'al_dia', etiqueta: 'Al día', monto: 500, clientes: 1 }],
     clientes: [{ cliente_id: 2, nombre: 'Taller Martínez', limite_credito: '1000.00', saldo: '500.00', dias_sin_abonar: 3, tramo: 'al_dia' }],
-    credito_usado: 500, credito_autorizado: 1000, cobrado_mes: { monto: 0, abonos: 0 },
+    por_cobrar_mes: { monto: 500, clientes: 1, hasta: '2026-10-31' }, cobrado_mes: { monto: 0, abonos: 0 },
   };
   const frecuencia: Frecuencia = {
     dias: 90, total_clientes: 2, mediana_ritmo: 8, mediana_kg_visita: 24.5, mediana_dinero_visita: 3500,
@@ -204,6 +204,15 @@ describe('ClientesPantalla', () => {
     f.detectChanges();
     expect(f.componentInstance.abonando()?.cliente_id).toBe(2);
     expect(f.nativeElement.querySelector('app-abono-modal')).not.toBeNull();
+  });
+
+  it('Cuánto debe dice el crédito por cobrar este mes, no el crédito usado (2026-10-22)', async () => {
+    const f = await montar('deuda');
+    const texto = textoDe(f.nativeElement.querySelector('.kpis') as HTMLElement);
+    expect(texto).not.toContain('Crédito usado');
+    expect(texto).toContain('Crédito por cobrar este mes');
+    expect(texto).toContain('$500');
+    expect(texto).toContain('1 cliente · lo vencido y lo que vence al 31 oct');
   });
 
   it('la frecuencia dice también cuánto se llevan, en kilos y en dinero', async () => {

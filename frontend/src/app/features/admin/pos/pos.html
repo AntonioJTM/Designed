@@ -399,6 +399,14 @@
                     <tr>
                       <td>
                         <div class="hilo">{{ i.producto }}{{ i.presentacion ? ' · ' + i.presentacion : '' }}</div>
+                        @if (i.bultos?.length) {
+                          <!-- El total de paquetes del color, de todos sus lotes (2026-10-21, usuario:
+                               "dos blancos 1/30 de un lote y dos de otro: en total son 4"). -->
+                          @let lotes = lotesDe(i);
+                          <div class="total-paquetes">
+                            <b>{{ paquetes(i.bultos!.length) }}</b> en total{{ lotes.length > 1 ? ' · ' + lotes.length + ' lotes' : '' }}
+                          </div>
+                        }
                         <div class="muted mono">
                           @if (i.bultos?.length) {
                             <!-- POR LOTE (2026-10-20): cada lote con cuántos paquetes y kilos van, y
@@ -629,6 +637,20 @@
           } @else {
             <p class="ayuda">Se cobran {{ aPagarHoy() | dinero }} justos.</p>
           }
+        }
+
+        <!-- Quién la vende (2026-10-23, "Nota de venta: añadir vendedor"): el personal de
+             esta tienda, con quien cobra ya elegido. A quien se elija le va la comisión. -->
+        @if (vendedores().length) {
+          <label class="field">
+            Vendedor
+            <select [(ngModel)]="vendedorSel" name="vendedor">
+              @for (v of vendedores(); track v.id) {
+                <option [ngValue]="v.id">{{ v.nombre }}{{ esYo(v.id) ? ' (tú)' : '' }}</option>
+              }
+            </select>
+            <span class="ayuda">{{ ayudaVendedor() }}</span>
+          </label>
         }
 
         <!-- Se apaga desde el primer clic hasta que el servidor contesta: una venta, una vez (2026-10-19). -->

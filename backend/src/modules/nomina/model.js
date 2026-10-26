@@ -8,7 +8,8 @@ const comisiones = require('./comisiones');
 // Nómina semanal del personal (domingo → sábado, pagada ese mismo sábado).
 //
 // REGLA DE COMISIÓN: la base comisionable es la VENTA NETA de los pedidos en
-// los que el empleado figura como vendedor (pedidos.usuario_id), es decir
+// los que el empleado figura como vendedor (`pedidos.vendedor_id`, o quien la
+// registró si no se eligió; 2026-10-23), es decir
 // `subtotal - descuento`: sin IVA y sin costo de envío. Los pedidos cancelados
 // o devueltos no cuentan, igual que en el módulo de reportes.
 // Desde la semana del 4 de octubre de 2026 la comisión de cada venta se paga en
@@ -494,13 +495,13 @@ async function _calcular(conn, periodoId) {
 
   // Venta neta de la semana por vendedor (regla anterior).
   const [ventas] = alLiquidar ? [[]] : await conn.query(
-    `SELECT usuario_id, COUNT(*) AS num_pedidos,
+    `SELECT COALESCE(vendedor_id, usuario_id) AS usuario_id, COUNT(*) AS num_pedidos,
             COALESCE(SUM(subtotal - descuento), 0) AS ventas_netas
        FROM pedidos
-      WHERE usuario_id IS NOT NULL
+      WHERE COALESCE(vendedor_id, usuario_id) IS NOT NULL
         AND creado_en >= :desde AND creado_en < :hasta
         AND ${VENTA_VALIDA}
-      GROUP BY usuario_id`,
+      GROUP BY COALESCE(vendedor_id, usuario_id)`,
     { desde, hasta: hastaExcl }
   );
   const ventaPorUsuario = new Map(ventas.map((v) => [Number(v.usuario_id), v]));

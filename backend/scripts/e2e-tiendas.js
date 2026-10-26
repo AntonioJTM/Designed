@@ -171,10 +171,17 @@ const ck = (n, ok, d) => {
     for (const [ruta, que] of [
       ['/reportes/ventas', 'Reportes'], ['/analisis/tablero', 'Cómo va el negocio'],
       ['/clientes/analisis/frecuencia', 'las miradas de Clientes'],
+      ['/rotacion/resumen', 'Rotación de inventario'], ['/rotacion/que-pedir.csv?hilos=1', 'el archivo para el proveedor'],
     ]) {
       r = await yo('GET', ruta);
       ck(`${que}: 403 SOLO_TODAS_LAS_TIENDAS`, r.status === 403 && codigo(r) === 'SOLO_TODAS_LAS_TIENDAS', r.error);
     }
+    // Las listas de precio cobran en todas las tiendas: cambiarlas, solo quien las ve todas
+    // (2026-10-22, revisor de tiendas). Con un id que no existe: si pasara, sería 404, no se mueve nada.
+    r = await yo('PUT', '/tipos-cliente/999999', { nombre: 'TMP' });
+    ck('cambiar una lista de precio: 403', r.status === 403, `${r.status} ${codigo(r)}`);
+    r = await yo('GET', '/tipos-cliente');
+    ck('…verlas para cobrar, sí', r.status === 200, r.status);
     r = await yo('GET', '/hoy');
     ck('Hoy: los turnos son de su tienda', (r.data?.cajas ?? []).every((c) => c.almacen === mia.nombre), r.data?.cajas?.map((c) => c.almacen));
     r = await yo('GET', '/notificaciones');

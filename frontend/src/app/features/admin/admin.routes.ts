@@ -25,6 +25,22 @@ const VISTAS_CLIENTES: [string, string][] = [
   ['lugares', 'Dónde entrego'],
 ];
 
+/** Las pestañas de Rotación de inventario (2026-10-22), con su nombre en pantalla. */
+const VISTAS_ROTACION: [string, string][] = [
+  ['resumen', 'Resumen'],
+  ['temporadas', 'Temporadas'],
+  ['hilo', 'Por hilo'],
+  ['que-pedir', 'Qué pedir'],
+];
+const rotacion = (vista: string, nombre: string, path = 'rotacion/' + vista) => ({
+  path,
+  title: `${nombre} · ${nombreDe('rotacion')}`,
+  canActivate: [permisoGuard],
+  // Junta todas las tiendas: solo para quien las ve todas.
+  data: { permiso: 'ver:rotacion', vista, todasLasTiendas: true },
+  loadComponent: () => import('./rotacion/rotacion').then((m) => m.Rotacion),
+});
+
 export const ADMIN_ROUTES: Routes = [
   {
     path: '',
@@ -96,6 +112,10 @@ export const ADMIN_ROUTES: Routes = [
       // ---- Números
       { path: 'tablero', ...p('ver:negocio'), title: nombreDe('negocio'), loadComponent: () => import('./tablero/tablero').then((m) => m.Tablero) },
       { path: 'reportes', ...p('ver:reportes'), title: nombreDe('reportes'), loadComponent: () => import('./reportes/reportes').then((m) => m.Reportes) },
+      { path: 'rotacion', pathMatch: 'full', redirectTo: 'rotacion/resumen' },
+      ...VISTAS_ROTACION.map(([vista, nombre]) => rotacion(vista, nombre)),
+      // El hilo, por su id (sin id abre el que más se vende).
+      rotacion('hilo', 'Por hilo', 'rotacion/hilo/:productoId'),
 
       // ---- Administración
       { path: 'almacenes', ...p('ver:almacenes'), title: nombreDe('almacenes'), loadComponent: () => import('./almacenes/almacenes').then((m) => m.Almacenes) },

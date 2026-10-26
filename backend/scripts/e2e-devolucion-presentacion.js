@@ -52,9 +52,10 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
 
     // Paga con holgura: el POS calcula el cambio. Los conos de precio calculado
     // dan importes con centavos (316.67 × 12 = 3,800.04).
-    const vender = (variante, cantidad) => api('POST', '/pedidos', {
+    // Los conos se venden con cuántos son (2026-10-21: obligatorio en el mostrador).
+    const vender = (variante, cantidad, piezas) => api('POST', '/pedidos', {
       canal: 'punto_venta', sesion_caja_id: s.id,
-      items: [{ variante_id: variante, cantidad }],
+      items: [{ variante_id: variante, cantidad, ...(piezas ? { piezas } : {}) }],
       pagos: [{ metodo_pago_id: efe.id, monto: 10000 }],
     });
 
@@ -110,7 +111,7 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
 
     console.log('\n=== 8. Al revés: vendo cono y devuelven el PAQUETE ===');
     await api('POST', '/inventario/movimientos', { variante_id: cono, almacen_id: alm, tipo: 'entrada', cantidad: 24, motivo: 'TMPD conos' });
-    r = await vender(cono, 19);
+    r = await vender(cono, 19, 12);
     const ped4 = r.data.id;
     const l4 = (await api('GET', '/pedidos/' + ped4)).data.detalle[0];
     ck('ofrece el paquete', l4.alternativas_devolucion?.[0]?.variante_id === paq,
@@ -118,6 +119,19 @@ const ck = (n, ok, d) => { console.log((ok ? '  ok  ' : ' FALLA') + ' · ' + n +
     const paqAntes8 = await st(paq, alm);
     await api('PATCH', '/pedidos/' + ped4 + '/estado', { estado: 'devuelto', devoluciones: [{ detalle_id: l4.id, variante_id: paq, cantidad: 19 }] });
     ck('19 kg de cono regresan como 19 kg de paquete', (await st(paq, alm)) === paqAntes8 + 19, (await st(paq, alm)) + ' kg');
+
+    // 2026-10-23: CANCELAR regresa todo tal cual se vendió ("no pregunte cómo lo regresa
+    // ni el peso"); lo que una pantalla vieja mande como otra presentación se ignora.
+    console.log('\n=== 9. Cancelar regresa TODO tal cual, aunque pidan otra presentación ===');
+    r = await vender(paq, 19);
+    const ped5 = r.data.id;
+    const l5 = (await api('GET', '/pedidos/' + ped5)).data.detalle[0];
+    const paqAntes9 = await st(paq, alm);
+    const conoAntes9 = await st(cono, alm);
+    r = await api('PATCH', '/pedidos/' + ped5 + '/estado', { estado: 'cancelado', devoluciones: [{ detalle_id: l5.id, variante_id: cono, cantidad: 5 }] });
+    ck('se cancela', r.status === 200, r.status);
+    ck('el paquete vuelve entero (19 kg)', (await st(paq, alm)) === paqAntes9 + 19, (await st(paq, alm)) + ' kg');
+    ck('no entra nada como cono', (await st(cono, alm)) === conoAntes9, (await st(cono, alm)) + ' kg');
   } finally {
     console.log('\n=== Limpieza ===');
     await db.query('SET FOREIGN_KEY_CHECKS=0');

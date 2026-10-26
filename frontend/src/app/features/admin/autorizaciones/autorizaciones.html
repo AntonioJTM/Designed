@@ -107,6 +107,10 @@
                    A todo lo ancho de la tarjeta, debajo de los botones: la tabla no cabe al lado. -->
               <app-carga-solicitud class="detalle-ancho" [carga]="carga" [solicitud]="a.id" />
             }
+            @if (a.detalle?.devolucion; as dev) {
+              <!-- Devolución: el cliente, qué regresa por lote, pesos e importe (2026-10-22). -->
+              <app-devolucion-solicitud class="detalle-ancho" [dev]="dev" />
+            }
           </li>
         }
       </ul>

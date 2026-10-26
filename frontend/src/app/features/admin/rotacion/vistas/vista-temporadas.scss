@@ -1,0 +1,24 @@
+// ROTACIÓN · TEMPORADAS: el calendario de compras y las tarjetas por temporada.
+.aviso-historia { margin: 0 0 16px; }
+table.grid.tabla-meses { min-width: 900px; }
+.cal-leyenda { margin-bottom: 12px; align-items: center; }
+.cal-leyenda .pill { margin-right: 6px; }
+.cal-temp, .cal-celda.temp { background: var(--viz-calor-2); }
+.cal { display: grid; min-width: 880px; gap: 2px; font-size: 0.875rem; }
+.cal-fila { display: grid; grid-template-columns: 190px repeat(12, minmax(42px, 1fr)) 230px; gap: 2px; align-items: stretch; }
+.cal-cabeza { color: var(--tinta-3); font-weight: 600; font-size: 0.8125rem; }
+.cal-mes { text-align: center; }
+.cal-hilo { display: flex; align-items: center; font-weight: 600; padding-right: 8px; overflow-wrap: anywhere; }
+.cal-celda { display: flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 4px; background: var(--superficie-2); }
+.cal-celda .pill { font-size: 0.75rem; }
+.cal-sin { grid-column: 2 / span 12; display: flex; align-items: center; padding: 8px 12px; border-radius: 4px; background: var(--superficie-2); color: var(--tinta-2); }
+.cal-texto { display: flex; align-items: center; padding-left: 12px; color: var(--tinta-2); }
+.tarjetas-temp { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.tarjeta-temp { margin: 0; }
+.tarjeta-temp .sobre { margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--tinta-3); }
+.tarjeta-temp h3 { margin: 4px 0 12px; font-size: 1.0625rem; }
+.tarjeta-temp ul { list-style: none; margin: 0; padding: 10px 0 0; border-top: 1px solid var(--borde-suave); }
+.tarjeta-temp li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-variant-numeric: tabular-nums; }
+.tarjeta-temp .pie { margin: 10px 0 0; font-size: 0.8125rem; color: var(--tinta-3); line-height: 1.45; }
+.sin-venta { margin: 14px 0 0; font-size: 0.875rem; color: var(--tinta-2); line-height: 1.6; }
+.sin-venta a { color: var(--tinta-2); }

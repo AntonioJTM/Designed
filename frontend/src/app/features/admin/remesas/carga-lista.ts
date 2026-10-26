@@ -21,6 +21,7 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 import { FolioPipe } from '../../../shared/folio.pipe';
 import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
+import { BotonPlantilla } from '../../../shared/boton-plantilla';
 
 /** Cuántos renglones con problema se ven de entrada; el resto, con "Ver todos". */
 const RENGLONES_A_LA_VISTA = 8;
@@ -46,7 +47,7 @@ interface Avance {
  */
 @Component({
   selector: 'app-carga-lista',
-  imports: [FormsModule, RouterLink, CantidadPipe, DineroPipe, FolioPipe, DatosCargaCampos],
+  imports: [FormsModule, RouterLink, CantidadPipe, DineroPipe, FolioPipe, DatosCargaCampos, BotonPlantilla],
   templateUrl: './carga-lista.html',
   // Los paquetes de cada color, aparte: la hoja pasaba del límite de 4 kB (ver CLAUDE.md).
   styleUrls: ['./carga-lista.scss', './carga-lista-paquetes.scss'],

@@ -2,6 +2,7 @@
 
 const service = require('./service');
 const tickets = require('./tickets');
+const vendedoresModel = require('./vendedores');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisos = require('../permisos/service');
@@ -87,6 +88,19 @@ async function crear(req, res, next) {
     const esCliente = req.auth?.tipo === 'cliente';
     const data = await service.crear(req.body, usuarioId, { esCliente });
     res.status(201).json({ data, error: null });
+  } catch (err) { next(err); }
+}
+
+/**
+ * El personal que puede quedar como vendedor de una venta de esa tienda
+ * (`?almacen_id=`, el de la caja), de SUS tiendas: de otra, 404 como si no existiera.
+ */
+async function vendedores(req, res, next) {
+  try {
+    const almacenId = Number(req.query.almacen_id);
+    if (!(almacenId > 0)) throw new AppError(422, 'FALTA_ALMACEN', 'Di de qué tienda son los vendedores.');
+    permisos.exigirAlmacen(await permisos.almacenesDe(req.auth), almacenId, 'Ese almacén');
+    res.json({ data: await vendedoresModel.deTienda(almacenId), error: null });
   } catch (err) { next(err); }
 }
 
@@ -273,7 +287,7 @@ async function resumen(req, res, next) {
 module.exports = {
   deSusTiendas,
   resumen,
-  crear, obtener, listar, misPedidos, cambiarEstado, cotizar,
+  crear, obtener, listar, misPedidos, cambiarEstado, cotizar, vendedores,
   subirComprobante, verComprobante, eliminarComprobante,
   apartados, abonarApartado, entregarApartado, modificarEncargo, encargos, ticketPago,
   notasPendientes, pasarACredito, previaDevolucion, devolver,

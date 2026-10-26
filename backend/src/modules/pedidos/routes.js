@@ -57,6 +57,9 @@ const crearSchema = z
     // Lista de precios a aplicar. Sin esto se cobra el precio público.
     tipo_cliente_id: z.coerce.number().int().positive().optional(),
     sesion_caja_id: z.coerce.number().int().positive().optional(),
+    // Quién la VENDIÓ, si no es quien cobra (2026-10-23): personal de esa tienda.
+    // A esa persona va la comisión; quien la registra queda como «Elaboró».
+    vendedor_id: z.coerce.number().int().positive().optional(),
     almacen_id: z.coerce.number().int().positive().optional(),
     direccion_envio_id: z.coerce.number().int().positive().optional(),
     cupon_codigo: z.string().trim().max(40).optional(),
@@ -105,7 +108,7 @@ const crearSchema = z
 const cotizarSchema = crearSchema.omit({
   clave_cobro: true,
   pagos: true, metodo_pago_id: true, a_credito: true, apartado: true, pendiente_pago: true, saldo_favor: true,
-  fiar_con_atraso: true,
+  fiar_con_atraso: true, vendedor_id: true,
 });
 
 // En qué presentación regresa cada línea al cancelar o devolver. Sin esto vuelve
@@ -170,6 +173,9 @@ router.get('/apartados', ...soloStaff, controller.apartados);
 router.get('/encargos', ...soloStaff, requirePermiso('ver:encargos'), controller.encargos);
 // Las NOTAS PENDIENTES DE PAGO por cobrar (2026-10-13).
 router.get('/notas-pendientes', ...soloStaff, requirePermiso('ver:notas_pendientes'), controller.notasPendientes);
+// Quién puede quedar como VENDEDOR de una venta de esa tienda (2026-10-23): la caja
+// los ofrece debajo del cambio. Solo de SUS tiendas.
+router.get('/vendedores', ...soloStaff, requirePermiso('ver:pos'), controller.vendedores);
 // Las cifras de arriba de Pedidos: hoy, la semana, lo fiado por cobrar y lo cancelado.
 router.get('/resumen', ...soloStaff, controller.resumen);
 

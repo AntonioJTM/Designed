@@ -1,0 +1,23 @@
+// ROTACIÓN · RESUMEN: «Hay que pedir pronto» y el ranking.
+.lista-pedir { list-style: none; margin: 0; padding: 0; }
+.lista-pedir li { display: flex; justify-content: space-between; gap: 14px; padding: 14px 0; border-top: 1px solid var(--borde-suave); }
+.lista-pedir li:first-child { border-top: 0; padding-top: 4px; }
+.lista-pedir b { font-weight: 600; }
+.lista-pedir .pill { margin-left: 8px; }
+.lista-pedir p { margin: 4px 0 0; font-size: 0.875rem; color: var(--tinta-3); line-height: 1.4; }
+.lista-pedir .cuanto { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.lista-pedir .cuanto span { font-size: 0.8125rem; color: var(--tinta-3); white-space: nowrap; }
+.pie-pedir { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px;
+  border-top: 1px solid var(--borde-suave); font-size: 0.875rem; color: var(--tinta-2); }
+.campo-orden { display: inline-flex; align-items: center; gap: 10px; font-size: 0.875rem; color: var(--tinta-2); }
+table.grid.ranking { min-width: 900px; }
+.ranking a.hilo { font-weight: 600; color: var(--tinta); }
+.kg-barra { display: grid; grid-template-columns: minmax(80px, 1fr) auto; align-items: center; gap: 12px; }
+.carril-rank { display: block; height: 10px; }
+.carril-rank > span { display: block; height: 100%; background: var(--viz-series-1); border-radius: 0 4px 4px 0; }
+.ranking td .num, .ranking td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.grid tfoot th, table.grid tfoot td { background: var(--superficie-2); border-top: 1px solid var(--borde); border-bottom: 0; font-weight: 600; }
+table.grid tfoot td.muted { font-weight: 400; }
+.aviso.sobra { margin: 16px 0 0; }
+.quietos { margin: 16px 0 0; font-size: 0.875rem; color: var(--tinta-2); line-height: 1.6; }
+.quietos a { color: var(--tinta-2); }

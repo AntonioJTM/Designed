@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<title>Rotación de inventario · Hitex</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.sin-barra{scrollbar-width:none}
+.sin-barra::-webkit-scrollbar{display:none}
+a{color:#2457C5}a:hover{color:#1D4596}
+.solo-cel{display:none !important}
+@media (max-width: 899px){.menu-grupos,.pie-menu{display:none !important}.solo-cel{display:inline-flex !important}}
+</style>
+</helmet>
+<div style="min-height: 1580px; background: #F4F5F7; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #161A23; display: flex; flex-wrap: wrap; align-items: stretch">
+
+  <aside style="flex: 1 1 248px; max-width: 100%; background: #12161F; display: flex; flex-direction: column; gap: 18px; padding: 18px 14px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 4px">
+      <span style="width: 40px; height: 40px; border-radius: 8px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; flex: none"><img src="/_blob/658e921d9ec57ee62fbcbad830b61b26" alt="" style="height: 30px; width: auto; display: block"></span>
+      <b style="flex: 1; font-size: 18px; font-weight: 600; color: #FFFFFF">Hitex</b>
+      <button type="button" class="solo-cel" style="height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #333A48; background: transparent; color: #E2E6EE; font-family: inherit; font-size: 14px; font-weight: 500; align-items: center">Menú</button>
+    </div>
+    <nav class="menu-grupos sin-barra" aria-label="Menú" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 14px; -webkit-mask-image: linear-gradient(#000 85%, transparent); mask-image: linear-gradient(#000 85%, transparent)">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8C93A1; padding: 0 10px 4px">Inicio</span>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4"></path></svg>Hoy</a>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M8.5 12l2.5 2.5 4.5-5"></path></svg>Autorizaciones</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8C93A1; padding: 0 10px 4px">Vender</span>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5h3 M17 5h3v3 M20 16v3h-3 M7 19H4v-3 M8 9v6 M11 9v6 M14 9v6 M17 9v6"></path></svg>Punto de venta</a>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z M9 8h6 M9 12h6"></path></svg>Ventas</a>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2"></path></svg>Notas en espera</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8C93A1; padding: 0 10px 4px">Clientes</span>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5 M16 4.5a3.5 3.5 0 0 1 0 6.5 M18.5 14.5c1.7.8 2.8 2.8 3 5.5"></path></svg>Clientes</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8C93A1; padding: 0 10px 4px">Mercancía</span>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9-5 9 5v8l-9 5-9-5z M3 8l9 5 9-5 M12 13v8"></path></svg>Inventario</a>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12 M7 10l5 5 5-5 M4 21h16"></path></svg>Surtir inventario</a>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h12v10H2z M14 10h4l3 3v3h-7 M6 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M17 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path></svg>Surtir sucursal</a>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13 M8 12h13 M8 18h13 M3.5 6h.01 M3.5 12h.01 M3.5 18h.01"></path></svg>Kardex</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8C93A1; padding: 0 10px 4px">Números</span>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V11 M10 20V5 M16 20v-6 M3 20h18"></path></svg>Cómo va el negocio</a>
+        <a href="#" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; color: #C9CED8; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z M14 3v5h5"></path></svg>Reportes</a>
+        <a href="Main.dc.html" aria-current="page" style="height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 8px; background: #2457C5; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3 M20 4v4h-4 M20 12a8 8 0 0 1-14 5.3 M4 20v-4h4"></path></svg>Rotación de inventario</a>
+      </div>
+    </nav>
+    <div class="pie-menu" style="border-top: 1px solid #262C38; padding-top: 12px; display: flex; align-items: center; gap: 10px">
+      <span style="width: 34px; height: 34px; border-radius: 999px; background: #262C38; color: #E2E6EE; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">DU</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><b style="font-size: 13.5px; font-weight: 600; color: #E2E6EE">Dueño</b><span style="font-size: 12px; color: #A9B0BD">Administrador · Todas las tiendas</span></span>
+      <button type="button" aria-label="Avisos, 3 sin ver" style="width: 40px; height: 40px; flex: none; position: relative; background: transparent; border: 0; border-radius: 8px; color: #C9CED8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20.5a2 2 0 0 0 4 0"></path></svg><span style="position: absolute; top: 4px; right: 3px; min-width: 16px; height: 16px; border-radius: 999px; background: #C2410C; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 4px">3</span></button>
+    </div>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px">
+      <div>
+        <h1 style="margin: 0; font-size: 30px; line-height: 1.15; font-weight: 600; letter-spacing: -0.01em">Rotación de inventario</h1>
+        <p style="margin: 6px 0 0; font-size: 14px; color: #5B6270">Cuánto hilo se vende, en qué meses y cuándo conviene pedirlo. Todo en kilos.</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <a href="Ventana-Calculo.dc.html" style="height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #D5D9E0; background: #FFFFFF; color: #161A23; text-decoration: none; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6 M12 17h.01"></path></svg>¿Cómo se calcula?</a>
+        <button type="button" style="height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #D5D9E0; background: #FFFFFF; color: #161A23; font-family: inherit; font-size: 14px; font-weight: 500">Descargar en Excel</button>
+      </div>
+    </div>
+
+    <nav aria-label="Rotación de inventario" style="display: flex; flex-wrap: wrap; gap: 0 24px; border-bottom: 1px solid #E3E6EB">
+      <a href="Main.dc.html" aria-current="page" style="height: 44px; display: inline-flex; align-items: center; font-size: 15px; font-weight: 600; color: #1D4596; text-decoration: none; border-bottom: 2px solid #2457C5; margin-bottom: -1px">Resumen</a>
+      <a href="Temporadas.dc.html" style="height: 44px; display: inline-flex; align-items: center; font-size: 15px; color: #3F4552; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px">Temporadas</a>
+      <a href="Por-Hilo.dc.html" style="height: 44px; display: inline-flex; align-items: center; font-size: 15px; color: #3F4552; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px">Por hilo</a>
+      <a href="Que-Pedir.dc.html" style="height: 44px; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: #3F4552; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px">Qué pedir<span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #FCE9E1; color: #9A3412">2 ya</span></a>
+    </nav>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px">
+      <div role="group" aria-label="Almacén" style="display: flex; flex-wrap: wrap; gap: 6px">
+        <button type="button" aria-pressed="true" style="height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #2457C5; background: #E8EEFB; color: #1D4596; font-family: inherit; font-size: 14px; font-weight: 600">Todos los almacenes</button>
+        <button type="button" aria-pressed="false" style="height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #D5D9E0; background: #FFFFFF; color: #3F4552; font-family: inherit; font-size: 14px; font-weight: 500">Tienda Principal</button>
+        <button type="button" aria-pressed="false" style="height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #D5D9E0; background: #FFFFFF; color: #3F4552; font-family: inherit; font-size: 14px; font-weight: 500">Tienda Moroleón</button>
+        <button type="button" aria-pressed="false" style="height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #D5D9E0; background: #FFFFFF; color: #3F4552; font-family: inherit; font-size: 14px; font-weight: 500">Almacén General</button>
+      </div>
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #3F4552">Hilo
+        <select style="height: 44px; min-width: 180px; border: 1px solid #D5D9E0; border-radius: 8px; padding: 0 10px; font-family: inherit; font-size: 14px; color: #161A23; background: #FFFFFF"><option>Los 8 hilos</option><option>MARINO 2/30</option><option>ROJO 2/30</option></select>
+      </label>
+      <span style="margin-left: auto; font-size: 13px; color: #5B6270">Ventas desde enero de 2025 · al día de hoy, 21 de octubre</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+      <div style="background: #FFFFFF; border: 1px solid #E3E6EB; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; font-weight: 500; color: #3F4552; display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #2457C5; flex: none"></span>Vendido en 12 meses</span>
+        <span style="font-size: 28px; font-weight: 600; letter-spacing: -0.01em">31.3 t</span>
+        <span style="font-size: 13px; color: #5B6270"><span style="font-variant-numeric: tabular-nums">31,298 kg</span> · 5% más que el año anterior</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E3E6EB; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; font-weight: 500; color: #3F4552; display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #161A23; flex: none"></span>Hay hoy</span>
+        <span style="font-size: 28px; font-weight: 600; letter-spacing: -0.01em">20.3 t</span>
+        <span style="font-size: 13px; color: #5B6270"><span style="font-variant-numeric: tabular-nums">20,270 kg</span> · unos 1,236 paquetes en 3 almacenes</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E3E6EB; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; font-weight: 500; color: #3F4552; display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #2a78d6; flex: none"></span>Rotación</span>
+        <span style="font-size: 28px; font-weight: 600; letter-spacing: -0.01em">1.5 veces al año</span>
+        <span style="font-size: 13px; color: #5B6270">El hilo dura en bodega unos 8 meses</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E3E6EB; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; font-weight: 500; color: #3F4552; display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #E9A23B; flex: none"></span>Alcanza para</span>
+        <span style="font-size: 28px; font-weight: 600; letter-spacing: -0.01em">27 semanas</span>
+        <span style="font-size: 13px; color: #5B6270">Al ritmo de las próximas 4 semanas: 744 kg por semana</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch">
+      <section style="flex: 3 1 640px; min-width: 0; background: #FFFFFF; border: 1px solid #E3E6EB; border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px">
+          <div>
+            <h2 style="margin: 0; font-size: 17px; font-weight: 600">Cuándo se vende más</h2>
+            <p style="margin: 2px 0 0; font-size: 13.5px; color: #5B6270">Kilos vendidos cada mes en las dos tiendas</p>
+          </div>
+          <a href="#" style="min-height: 32px; display: inline-flex; align-items: center; font-size: 13.5px; font-weight: 500">Ver como tabla</a>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: #3F4552">
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #a3a2a0"></span>2025</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #2a78d6"></span>2026</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #eb6834"></span>Octubre 2026, va en curso (hasta el 21)</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; border: 1.5px dashed #2a78d6; box-sizing: border-box"></span>Lo que se espera vender</span>
+        </div>
+
+        <figure role="img" aria-label="Kilos vendidos por mes. 2025: enero 1,967; febrero 1,880; marzo 2,054; abril 2,041; mayo 2,284; junio 2,242; julio 2,633; agosto 3,016; septiembre 3,396; octubre 3,380; noviembre 2,826; diciembre 2,369. 2026: enero 2,013; febrero 2,013; marzo 2,104; abril 2,150; mayo 2,297; junio 2,433; julio 2,743; agosto 3,260; septiembre 3,540; octubre hasta el 21, 2,460. Se espera noviembre 2,998 y diciembre 2,496." style="margin: 0; display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-rows: 22px 160px 24px; column-gap: 8px">
+          <span></span>
+          <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: end; font-size: 12px; font-weight: 600">
+            <span style="grid-column: 2 / span 3; text-align: center; color: #5B6270; border-bottom: 1px solid #D5D9E0; padding-bottom: 3px">Temporada baja</span>
+            <span style="grid-column: 8 / span 3; text-align: center; color: #1D4596; border-bottom: 2px solid #2457C5; padding-bottom: 3px">Temporada alta</span>
+          </div>
+          <div style="position: relative; font-size: 12px; color: #5B6270; font-variant-numeric: tabular-nums">
+            <span style="position: absolute; right: 0; bottom: 133px; transform: translateY(50%)">3 t</span>
+            <span style="position: absolute; right: 0; bottom: 89px; transform: translateY(50%)">2 t</span>
+            <span style="position: absolute; right: 0; bottom: 44px; transform: translateY(50%)">1 t</span>
+            <span style="position: absolute; right: 0; bottom: 0; transform: translateY(50%)">0</span>
+          </div>
+          <div style="position: relative; border-bottom: 1px solid #D5D9E0">
+            <div style="position: absolute; top: 0; bottom: 0; left: 58.333%; width: 25%; background: #F7F9FE"></div>
+            <div style="position: absolute; left: 0; right: 0; bottom: 44px; height: 1px; background: #EEF0F3"></div>
+            <div style="position: absolute; left: 0; right: 0; bottom: 89px; height: 1px; background: #EEF0F3"></div>
+            <div style="position: absolute; left: 0; right: 0; bottom: 133px; height: 1px; background: #EEF0F3"></div>
+            <div style="position: absolute; inset: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: end">
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Enero 2025: 1,967 kg" style="width: 34%; max-width: 20px; height: 87px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Enero 2026: 2,013 kg" style="width: 34%; max-width: 20px; height: 89px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Febrero 2025: 1,880 kg" style="width: 34%; max-width: 20px; height: 84px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Febrero 2026: 2,013 kg" style="width: 34%; max-width: 20px; height: 89px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Marzo 2025: 2,054 kg" style="width: 34%; max-width: 20px; height: 91px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Marzo 2026: 2,104 kg" style="width: 34%; max-width: 20px; height: 94px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Abril 2025: 2,041 kg" style="width: 34%; max-width: 20px; height: 91px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Abril 2026: 2,150 kg" style="width: 34%; max-width: 20px; height: 96px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Mayo 2025: 2,284 kg" style="width: 34%; max-width: 20px; height: 102px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Mayo 2026: 2,297 kg" style="width: 34%; max-width: 20px; height: 102px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Junio 2025: 2,242 kg" style="width: 34%; max-width: 20px; height: 100px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Junio 2026: 2,433 kg" style="width: 34%; max-width: 20px; height: 108px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Julio 2025: 2,633 kg" style="width: 34%; max-width: 20px; height: 117px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Julio 2026: 2,743 kg" style="width: 34%; max-width: 20px; height: 122px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Agosto 2025: 3,016 kg" style="width: 34%; max-width: 20px; height: 134px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Agosto 2026: 3,260 kg" style="width: 34%; max-width: 20px; height: 145px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Septiembre 2025: 3,396 kg" style="width: 34%; max-width: 20px; height: 151px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Septiembre 2026: 3,540 kg" style="width: 34%; max-width: 20px; height: 157px; background: #2a78d6; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Octubre 2025: 3,380 kg" style="width: 34%; max-width: 20px; height: 150px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Octubre 2026, hasta el 21: 2,460 kg" style="width: 34%; max-width: 20px; height: 109px; background: #eb6834; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Noviembre 2025: 2,826 kg" style="width: 34%; max-width: 20px; height: 126px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Noviembre 2026, se espera: 2,998 kg" style="width: 34%; max-width: 20px; height: 133px; box-sizing: border-box; border: 1.5px dashed #2a78d6; border-bottom: 0; border-radius: 4px 4px 0 0"></div></div>
+              <div style="height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px"><div title="Diciembre 2025: 2,369 kg" style="width: 34%; max-width: 20px; height: 105px; background: #a3a2a0; border-radius: 4px 4px 0 0"></div><div title="Diciembre 2026, se espera: 2,496 kg" style="width: 34%; max-width: 20px; height: 111px; box-sizing: border-box; border: 1.5px dashed #2a78d6; border-bottom: 0; border-radius: 4px 4px 0 0"></div></div>
+            </div>
+          </div>
+          <span></span>
+          <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: center; text-align: center; font-size: 12px; color: #5B6270">
+            <span>ene</span><span>feb</span><span>mar</span><span>abr</span><span>may</span><span>jun</span><span>jul</span><span>ago</span><span>sep</span><span>oct</span><span>nov</span><span>dic</span>
+          </div>
+        </figure>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px">
+          <div style="padding: 10px 12px; border-radius: 8px; background: #E8EEFB; color: #1D4596; font-size: 13.5px; line-height: 1.45"><b style="font-weight: 600">Agosto a octubre</b> se vende 30% más que en un mes normal: 3.26 t al mes contra 2.51 t.</div>
+          <div style="padding: 10px 12px; border-radius: 8px; background: #EEF0F3; color: #3F4552; font-size: 13.5px; line-height: 1.45"><b style="font-weight: 600">Febrero a abril</b> se vende 21% menos: 1.99 t al mes.</div>
+          <div style="padding: 10px 12px; border-radius: 8px; background: #EEF0F3; color: #3F4552; font-size: 13.5px; line-height: 1.45"><b style="font-weight: 600">2026 va 5% arriba</b> de 2025, de enero a septiembre.</div>
+        </div>
+      </section>
+
+      <section style="flex: 2 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E3E6EB; border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 4px">
+        <div style="padding-bottom: 8px">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">Hay que pedir pronto</h2>
+          <p style="margin: 2px 0 0; font-size: 13.5px; color: #5B6270">Con lo que hay hoy y lo que se espera vender. El proveedor tarda 10 semanas.</p>
+        </div>
+
+        <a href="Por-Hilo.dc.html" style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3; text-decoration: none; color: #161A23">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+            <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><b style="font-size: 15px; font-weight: 600">MARINO 2/30</b><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #FCE9E1; color: #9A3412">Pedir ya</span></span>
+            <span style="font-size: 13px; color: #5B6270; line-height: 1.4">Había que pedirlo el 15 de octubre. Se acaba hacia el 14 de enero.</span>
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none"><b style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">1,580 kg</b><span style="font-size: 12.5px; color: #5B6270">≈ 96 paquetes</span></span>
+        </a>
+        <a href="#" style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3; text-decoration: none; color: #161A23">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+            <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><b style="font-size: 15px; font-weight: 600">OXFORD JASPE 2/30</b><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #FCE9E1; color: #9A3412">Pedir ya</span></span>
+            <span style="font-size: 13px; color: #5B6270; line-height: 1.4">Pedir antes del 28 de octubre. Se acaba hacia el 27 de enero.</span>
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none"><b style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">1,000 kg</b><span style="font-size: 12.5px; color: #5B6270">≈ 61 paquetes</span></span>
+        </a>
+        <a href="#" style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3; text-decoration: none; color: #161A23">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+            <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><b style="font-size: 15px; font-weight: 600">HUESO 2/30</b><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #FDF1DC; color: #7A4A00">En diciembre</span></span>
+            <span style="font-size: 13px; color: #5B6270; line-height: 1.4">Pedir antes del 26 de diciembre: en marzo empieza su temporada.</span>
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none"><b style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">1,470 kg</b><span style="font-size: 12.5px; color: #5B6270">≈ 89 paquetes</span></span>
+        </a>
+        <a href="#" style="display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid #EEF0F3; text-decoration: none; color: #161A23">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+            <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><b style="font-size: 15px; font-weight: 600">PERLA JASPE 2/30</b><span style="font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #FDF1DC; color: #7A4A00">En enero</span></span>
+            <span style="font-size: 13px; color: #5B6270; line-height: 1.4">Pedir antes del 18 de enero, también para la primavera.</span>
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none"><b style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">1,190 kg</b><span style="font-size: 12.5px; color: #5B6270">≈ 73 paquetes</span></span>
+        </a>
+
+        <div style="margin-top: auto; padding-top: 12px; border-top: 1px solid #EEF0F3; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+          <span style="font-size: 14px; color: #3F4552">Los cuatro juntos: <b style="font-weight: 600; color: #161A23">5.24 t</b></span>
+          <a href="Que-Pedir.dc.html" style="height: 44px; padding: 0 16px; border-radius: 8px; background: #2457C5; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center">Ver qué pedir</a>
+        </div>
+      </section>
+    </div>
+
+    <section style="background: #FFFFFF; border: 1px solid #E3E6EB; border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px">
+        <div>
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">Qué hilos se mueven más</h2>
+          <p style="margin: 2px 0 0; font-size: 13.5px; color: #5B6270">Últimos 12 meses, del 22 de octubre de 2025 al 21 de octubre de 2026 · toca un hilo para ver su detalle</p>
+        </div>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #3F4552">Ordenar
+          <select style="height: 44px; border: 1px solid #D5D9E0; border-radius: 8px; padding: 0 10px; font-family: inherit; font-size: 14px; color: #161A23; background: #FFFFFF"><option>Más kilos vendidos</option><option>Rota más rápido</option><option>Rota más lento</option><option>Crece más</option></select>
+        </label>
+      </div>
+      <div style="overflow-x: auto">
+        <table style="width: 100%; min-width: 900px; border-collapse: collapse; font-size: 14px">
+          <thead>
+            <tr style="text-align: left; font-size: 13px; font-weight: 500; color: #3F4552">
+              <th scope="col" style="padding: 8px 10px 8px 0; font-weight: 500; border-bottom: 1px solid #E3E6EB">Hilo</th>
+              <th scope="col" style="padding: 8px 10px; font-weight: 500; border-bottom: 1px solid #E3E6EB; width: 30%">Kilos vendidos</th>
+              <th scope="col" style="padding: 8px 10px; font-weight: 500; border-bottom: 1px solid #E3E6EB; text-align: right">Del total</th>
+              <th scope="col" style="padding: 8px 10px; font-weight: 500; border-bottom: 1px solid #E3E6EB">Rotación</th>
+              <th scope="col" style="padding: 8px 10px; font-weight: 500; border-bottom: 1px solid #E3E6EB">Se mueve</th>
+              <th scope="col" style="padding: 8px 10px; font-weight: 500; border-bottom: 1px solid #E3E6EB">Contra el año pasado</th>
+              <th scope="col" style="padding: 8px 0 8px 10px; font-weight: 500; border-bottom: 1px solid #E3E6EB">Su temporada</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="Por-Hilo.dc.html" style="color: #161A23">MARINO 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="MARINO 2/30: 6,799 kg" style="width: 100%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">6,799 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">21.7%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">2.6</span> veces al año <span style="color: #5B6270">· cada 140 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #E8EEFB; color: #1D4596">Rápido</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↑ 12% más</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Agosto a octubre</td>
+            </tr>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="#" style="color: #161A23">ROJO 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="ROJO 2/30: 5,490 kg" style="width: 80.7%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">5,490 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">17.5%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">1.8</span> veces al año <span style="color: #5B6270">· cada 203 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #EEF0F3; color: #3F4552">Normal</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↑ 5% más</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Septiembre a diciembre</td>
+            </tr>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="#" style="color: #161A23">OXFORD JASPE 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="OXFORD JASPE 2/30: 4,593 kg" style="width: 67.6%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">4,593 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">14.7%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">2.3</span> veces al año <span style="color: #5B6270">· cada 159 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #E8EEFB; color: #1D4596">Rápido</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↑ 15% más</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Agosto a octubre</td>
+            </tr>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="#" style="color: #161A23">CAMEL 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="CAMEL 2/30: 4,001 kg" style="width: 58.8%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">4,001 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">12.8%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">2.0</span> veces al año <span style="color: #5B6270">· cada 182 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #E8EEFB; color: #1D4596">Rápido</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↑ 3% más</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Agosto a octubre</td>
+            </tr>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="#" style="color: #161A23">HUESO 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="HUESO 2/30: 3,358 kg" style="width: 49.4%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">3,358 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">10.7%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">1.3</span> veces al año <span style="color: #5B6270">· cada 281 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #EEF0F3; color: #3F4552">Normal</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↓ 2% menos</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Marzo a mayo</td>
+            </tr>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="#" style="color: #161A23">PERLA JASPE 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="PERLA JASPE 2/30: 2,965 kg" style="width: 43.6%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">2,965 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">9.5%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">1.2</span> veces al año <span style="color: #5B6270">· cada 304 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #EEF0F3; color: #3F4552">Normal</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↑ 6% más</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Marzo a mayo</td>
+            </tr>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="#" style="color: #161A23">CAFE JASPE 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="CAFE JASPE 2/30: 2,475 kg" style="width: 36.4%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">2,475 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">7.9%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">1.1</span> veces al año <span style="color: #5B6270">· cada 332 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #EEF0F3; color: #3F4552">Normal</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↑ 1% más</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Agosto a octubre</td>
+            </tr>
+            <tr>
+              <th scope="row" style="padding: 10px 10px 10px 0; text-align: left; font-weight: 600; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><a href="#" style="color: #161A23">OPTIK 2/30</a></th>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; align-items: center; gap: 10px"><div style="flex: 1; height: 12px"><div title="OPTIK 2/30: 1,617 kg" style="width: 23.8%; height: 12px; background: #2a78d6; border-radius: 0 4px 4px 0"></div></div><span style="width: 76px; text-align: right; font-variant-numeric: tabular-nums">1,617 kg</span></div></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; text-align: right; font-variant-numeric: tabular-nums">5.2%</td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">0.4</span> veces al año <span style="color: #5B6270">· cada 912 días</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #FDF1DC; color: #7A4A00">Lento</span></td>
+              <td style="padding: 10px; border-bottom: 1px solid #EEF0F3; white-space: nowrap; font-variant-numeric: tabular-nums">↓ 18% menos</td>
+              <td style="padding: 10px 0 10px 10px; border-bottom: 1px solid #EEF0F3; color: #3F4552">Parejo todo el año</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr style="font-weight: 600">
+              <th scope="row" style="padding: 12px 10px 4px 0; text-align: left">Los 8 hilos</th>
+              <td style="padding: 12px 10px 4px; text-align: right; font-variant-numeric: tabular-nums">31,298 kg · 31.3 t</td>
+              <td style="padding: 12px 10px 4px; text-align: right; font-variant-numeric: tabular-nums">100%</td>
+              <td style="padding: 12px 10px 4px; white-space: nowrap"><span style="font-variant-numeric: tabular-nums">1.5</span> veces al año</td>
+              <td colspan="3" style="padding: 12px 0 4px 10px; font-weight: 400; color: #5B6270">Contra el año pasado: de enero a septiembre de cada año</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #FDF1DC; color: #7A4A00; font-size: 13.5px; line-height: 1.45"><b style="font-weight: 600">OPTIK 2/30 sobra:</b> hay 5,100 kg y se venden unos 25 kg por semana. Al ritmo de hoy alcanza para más de 3 años; no hace falta pedir. Lo que no se ha vendido en meses también sale en Hilo parado, en «Cómo va el negocio».</p>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1580}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

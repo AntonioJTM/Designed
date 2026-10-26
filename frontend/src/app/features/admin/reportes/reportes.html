@@ -257,7 +257,8 @@
                     <th>Hilo</th>
                     <th class="num" [attr.aria-sort]="ordenColor() === 'kg' ? 'descending' : null">Kg vendidos</th>
                     <th class="num" title="Sus kilos contra todo lo vendido en el periodo">% del periodo</th>
-                    <th class="num">Importe</th>
+                    <!-- Sin "Importe" (2026-10-21, usuario: "no me sirve de nada ahí"): la tabla va en
+                         kilos. El importe del periodo sigue en la cifra de arriba y en lo que se descarga. -->
                     <th class="num">Vendido desde siempre</th>
                     <th class="num" [attr.aria-sort]="ordenColor() === 'existencia' ? 'descending' : null">Queda en inventario</th>
                     <th class="num" title="Lo vendido desde siempre contra eso más lo que queda"
@@ -278,7 +279,6 @@
                           <span class="pct-num">{{ pctTexto(h.pct_del_periodo) }}</span>
                         </div>
                       </td>
-                      <td class="num">{{ h.importe | dinero }}</td>
                       <td class="num">
                         {{ h.vendido_total | cantidad: 'kg' }}
                         <div class="muted chico">
@@ -301,7 +301,6 @@
                       <td>Total · {{ vc.totales.num_hilos }} hilos</td>
                       <td class="num">{{ vc.totales.kg_vendidos | cantidad: 'kg' }}</td>
                       <td class="num">{{ pctTexto(vc.totales.pct_del_periodo) }}</td>
-                      <td class="num">{{ vc.totales.importe | dinero }}</td>
                       <td class="num">{{ vc.totales.vendido_total | cantidad: 'kg' }}</td>
                       <td class="num">{{ vc.totales.existencia | cantidad: 'kg' }}</td>
                       <td class="num">{{ pctTexto(vc.totales.pct_vendido) }}</td>

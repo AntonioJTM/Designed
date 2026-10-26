@@ -1,0 +1,128 @@
+@let d = datos();
+<section class="card ajustes-barra">
+  <div class="ajuste">
+    <span class="ajuste-label">El proveedor tarda</span>
+    <span class="ajuste-valor">{{ semanas(d.ajustes.semanas_proveedor) }}@if (!d.ajustes.confirmados) { <span class="pill ambar">Por confirmar</span> }</span>
+  </div>
+  <div class="ajuste"><span class="ajuste-label">Colchón</span><span class="ajuste-valor">{{ semanas(d.ajustes.semanas_colchon) }} de venta</span></div>
+  <div class="ajuste"><span class="ajuste-label">Cada pedido alcanza para</span><span class="ajuste-valor">{{ d.ajustes.meses_cubre }} {{ d.ajustes.meses_cubre === 1 ? 'mes' : 'meses' }}</span></div>
+  @if (d.ajustes.kg_contenedor) {
+    <div class="ajuste"><span class="ajuste-label">Un contenedor</span><span class="ajuste-valor">{{ kilos(d.ajustes.kg_contenedor) }}</span></div>
+  }
+  <div class="ajuste"><span class="ajuste-label">Ya viene en camino</span><span class="ajuste-valor tenue">No se sabe todavía</span></div>
+  @if (puedeCambiar()) { <button type="button" class="btn btn-ghost cambiar" (click)="cambiar.emit()">Cambiar</button> }
+</section>
+
+@if (!conCalculos()) {
+  <p class="aviso" role="status">
+    Faltan {{ d.historia.faltan_semanas }} {{ d.historia.faltan_semanas === 1 ? 'semana' : 'semanas' }} de ventas para calcular la
+    rotación y qué pedir. Si tienes las ventas de años anteriores, cárgalas en «¿Cómo se calcula?».
+  </p>
+} @else {
+  <div class="kpis" [class.recargando]="cargando()">
+    @for (k of kpis(); track k.etiqueta) {
+      <div class="kpi">
+        <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
+        <span class="kpi-valor">{{ k.valor }}</span>
+        <span class="kpi-pie">{{ k.pie }}</span>
+      </div>
+    }
+  </div>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Cuándo pedir cada hilo</h2>
+        <p>Del más urgente al que puede esperar. «Le alcanza hasta» ya cuenta su temporada: no es lo mismo vender en marzo que en noviembre.</p>
+      </div>
+    </div>
+    @if (d.hilos.length) {
+      <div class="tabla-scroll">
+        <table class="grid que-pedir">
+          <thead>
+            <tr>
+              <th scope="col" class="col-check"><span class="oculto">Agregar al pedido</span></th>
+              <th scope="col">Hilo</th>
+              <th scope="col" class="num">Hay hoy</th>
+              <th scope="col" class="num">Se vende ahora</th>
+              <th scope="col">Le alcanza hasta</th>
+              <th scope="col">Pedir a más tardar</th>
+              <th scope="col" class="num">Cuánto pedir</th>
+              <th scope="col"><span class="oculto">Estado</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (h of filas(); track h.producto_id) {
+              @let urgente = h.estado === 'ya' || h.estado === 'pronto';
+              @let est = estadoTexto(h.estado, h.pedir);
+              <tr [class.elegido]="elegidos().has(h.producto_id)">
+                <td class="col-check">
+                  <label class="check-celda">
+                    <input type="checkbox" [checked]="elegidos().has(h.producto_id)" [disabled]="!sePide(h)"
+                           (change)="alternar(h, $any($event.target).checked)"
+                           [attr.aria-label]="sePide(h) ? 'Agregar ' + h.hilo + ' al pedido' : h.hilo + ': no hace falta pedir'" />
+                  </label>
+                </td>
+                <th scope="row"><a [routerLink]="['/admin/rotacion/hilo', h.producto_id]">{{ h.hilo }}</a></th>
+                <td class="num">{{ kilos(h.hay.kg) }}</td>
+                <td class="num">{{ h.se_vende_semana != null ? kilos(h.se_vende_semana) + ' / semana' : '—' }}</td>
+                <td>
+                  {{ h.estado === 'sin_datos' ? '—' : alcanza(h) }}
+                  @if (h.nota) { <span class="nota-fila">{{ h.nota }}</span> }
+                </td>
+                <td>
+                  @if (h.estado === 'sobra') { No hace falta }
+                  @else if (h.pedir) {
+                    @if (urgente) { <b>{{ f(h.pedir) }}</b> } @else { {{ f(h.pedir) }} }
+                    @if (cuando(h); as c) { <span [class.ya-paso]="c === 'ya pasó'" class="cuando"> · {{ c }}</span> }
+                  } @else { — }
+                </td>
+                <td class="num">
+                  @if (sePide(h)) {
+                    @if (urgente) { <b>{{ kilos(h.pedido!.kg) }}</b> } @else { {{ kilos(h.pedido!.kg) }} }
+                    @if (h.pedido!.paquetes) { <span class="muted"> ≈ {{ h.pedido!.paquetes!.toLocaleString('es-MX') }} paq.</span> }
+                  } @else { — }
+                </td>
+                <td><span [class]="'pill ' + est.pill">{{ est.texto }}</span></td>
+              </tr>
+            }
+            @if (quietos().length) {
+              <tr class="quietos">
+                <td class="col-check"></td>
+                <td colspan="7">
+                  <b>{{ quietos().length }} {{ quietos().length === 1 ? 'hilo no se vende' : 'hilos no se venden' }} ahora</b>
+                  ({{ kilos(kgQuietos()) }} entre todos): no hace falta pedir{{ quietos().length === 1 ? 'lo' : 'los' }}.
+                  @for (q of quietos(); track q.producto_id; let ultimo = $last) {
+                    <a [routerLink]="['/admin/rotacion/hilo', q.producto_id]">{{ q.hilo }}</a>{{ ultimo ? '.' : ', ' }}
+                  }
+                  También salen en Hilo parado, en «Cómo va el negocio».
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <p class="muted">Todavía no se vende ningún hilo.</p>
+    }
+  </section>
+
+  <section class="card el-pedido">
+    <div class="pedido-texto">
+      <h2>El pedido</h2>
+      <p class="pedido-total"><b>{{ titulo() }}</b></p>
+      @if (pedido().texto) { <p class="muted">{{ pedido().texto }}</p> }
+      @if (pedido().contenedor) { <p class="muted">{{ pedido().contenedor }}</p> }
+      @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
+    </div>
+    <div class="pedido-botones">
+      <button type="button" class="btn btn-primary" [disabled]="!pedido().n || bajando()" (click)="bajar()">
+        {{ bajando() ? 'Armando el archivo…' : 'Descargar para el proveedor (Excel)' }}
+      </button>
+      <span class="falta">
+        <button type="button" class="btn btn-ghost" disabled aria-describedby="pedido-falta">Hacer pedido al proveedor</button>
+        <span id="pedido-falta" class="muted">Todavía no existe en el sistema</span>
+      </span>
+    </div>
+  </section>
+}

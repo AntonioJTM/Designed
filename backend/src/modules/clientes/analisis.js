@@ -154,12 +154,9 @@ async function frecuencia({ dias }) {
 
 async function deuda() {
   // El plazo de la caja y la campana (2026-10-17; antes 30 aquí).
+  // "Crédito usado" (lo debido contra lo autorizado) se quitó el 2026-10-22 ("no
+  // sirve", usuario): en su lugar va `cartera.por_cobrar_mes`.
   const cartera = await analisisModel.cartera();
-  const [[credito]] = await pool.query(
-    `SELECT COALESCE(SUM(GREATEST(s.saldo, 0)), 0) AS usado, COALESCE(SUM(c.limite_credito), 0) AS autorizado
-       FROM v_clientes_saldo s JOIN clientes c ON c.id = s.cliente_id
-      WHERE c.limite_credito > 0 AND c.activo = 1`
-  );
   // Lo COBRADO: sin lo que se pagó con su saldo a favor (método interno: no es
   // dinero que entró este mes) y un abono repartido en varias notas cuenta UNO
   // (las partes llevan la misma hora) (2026-10-20, auditoría).
@@ -209,8 +206,6 @@ async function deuda() {
     },
     // Lo que la tienda les guarda: anticipos y lo que regresaron (2026-10-19).
     a_favor: await require('./saldo-favor').aFavorDeClientes(),
-    credito_usado: r2(credito.usado),
-    credito_autorizado: r2(credito.autorizado),
     cobrado_mes: { monto: r2(cobrado.monto), abonos: Number(cobrado.abonos) },
   };
 }

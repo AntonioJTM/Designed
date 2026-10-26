@@ -395,6 +395,15 @@ function _empatar(catalogo, nombre, calibre) {
   return { producto: null, ambiguos: activos.length ? activos : todos };
 }
 
+/**
+ * Si la caja lo podrá cobrar después de la carga: con el precio de su
+ * presentación o, si todavía no la tiene, con el de la que le crea la carga
+ * (su precio por kilo). Un hilo sin presentación y con $150/kg sí se vende.
+ */
+function tienePrecio(producto) {
+  return Number(producto.variante_id ? producto.precio : producto.precio_kg) > 0;
+}
+
 /** Hilos del catálogo con el mismo nombre en otro calibre: para que no se pase un error de dedo. */
 function _parecidos(catalogo, nombre, calibre) {
   const nom = normalizar(nombre);
@@ -433,8 +442,9 @@ async function previaLista(buffer, nombreArchivo) {
           activo: !!producto.activo,
           precio_kg: producto.precio_kg != null ? Number(producto.precio_kg) : null,
           sku: producto.sku,
-          // Lo que de verdad cobra la caja es el precio de la presentación.
-          tiene_precio: producto.precio != null && Number(producto.precio) > 0,
+          // Lo que de verdad cobra la caja es el precio de la presentación (o el
+          // de la que le crea la carga, si todavía no tiene).
+          tiene_precio: tienePrecio(producto),
         }
       : null;
     h.parecidos = producto ? [] : _parecidos(catalogo, h.nombre, h.calibre);
@@ -562,6 +572,7 @@ module.exports = {
   empatar: _empatar,
   textoDocumento: _textoDocumento,
   limpiarNombre,
+  tienePrecio,
   // Para las pruebas.
   normalizar,
   normalizarCalibre,

@@ -3,6 +3,8 @@
 const service = require('./service');
 const lista = require('./lista');
 const reportes = require('./reportes');
+const { PLANTILLAS } = require('./plantillas');
+const { enviarXlsx } = require('../../utils/xlsx-escritor');
 const pdf = require('../../utils/pdf');
 const permisos = require('../permisos/service');
 const { parsePagination } = require('../../utils/query');
@@ -235,4 +237,15 @@ async function pdfProducto(req, res, next) {
   }
 }
 
-module.exports = { previa, confirmar, previaLista, confirmarLista, listar, editarDatos, pdfCarga, pdfCargas, pdfProducto };
+/** La plantilla vacía para llenar: `lista` (varios colores) o `hilo` (un solo hilo). */
+function plantilla(req, res, next) {
+  try {
+    const p = PLANTILLAS[req.params.tipo];
+    if (!p) throw new AppError(404, 'NO_ENCONTRADO', 'Esa plantilla no existe (lista o hilo)');
+    enviarXlsx(res, p.armar(), p.nombre);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { previa, confirmar, previaLista, confirmarLista, listar, editarDatos, pdfCarga, pdfCargas, pdfProducto, plantilla };

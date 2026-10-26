@@ -15,8 +15,8 @@ import { TiendaService } from '../../../core/services/tienda.service';
  * terminar —bajar varios paquetes seguidos es lo normal—.
  *
  * Desde el 2026-10-06 los conos solo se bajan en TIENDAS (la bodega ni se
- * ofrece) y el paquete se abre donde está; el destare se captura POR CONO y se
- * multiplica por los conos que salen.
+ * ofrece) y el paquete se abre donde está. Desde el 2026-10-21 el destare es el
+ * del PAQUETE completo (lo que pesan los tubos de todos sus conos), no por cono.
  */
 describe('DesarmeModal', () => {
   const almacenes = [
@@ -143,7 +143,7 @@ describe('DesarmeModal', () => {
     expect(c.problemaUbicacion()).toContain('viene en camino (TRA-9)');
   });
 
-  it('el destare es por cono: se multiplica por los conos y se suma a lo que entra', async () => {
+  it('el destare es del paquete completo: se suma tal cual, sin multiplicar por los conos (2026-10-21)', async () => {
     const fixture = await montar();
     const c = fixture.componentInstance;
 
@@ -151,14 +151,21 @@ describe('DesarmeModal', () => {
     c.escanear();
     expect(c.pesoEnconado()).toBe(10.75);
 
-    // 7 conos × 0.05 kg = 0.35 kg más.
-    c.destarePorCono = 0.05;
-    expect(c.destareTotal(7)).toBe(0.35);
+    // 0.35 kg de destare del paquete: entran 10.75 + 0.35 = 11.1 kg (no 0.35 × 7).
+    c.destarePaquete = 0.35;
+    expect(c.destare()).toBe(0.35);
     expect(c.pesoEnconado()).toBe(11.1);
-    expect(c.gramos()).toBe(50);
+    // Entre sus 7 conos son 50 g por cono: se enseña para notar un error de dedo.
+    expect(c.gramosPorCono()).toBe(50);
+    fixture.detectChanges();
+    const texto = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(texto).toContain('Destare del paquete');
+    expect(texto).not.toContain('Destare por cono');
+    expect(texto).toContain('10.75 kg del paquete + 0.35 kg de destare');
+    expect(texto).toContain('50 g por cono');
   });
 
-  it('al bajar manda el código y la tienda, avisa, recuerda el destare y NO se cierra', async () => {
+  it('al bajar manda el código, la tienda y el destare del paquete, avisa y NO se cierra', async () => {
     const fixture = await montar();
     const c = fixture.componentInstance;
 
@@ -169,15 +176,16 @@ describe('DesarmeModal', () => {
 
     c.codigo = 'B-001';
     c.escanear();
-    c.destarePorCono = 0.05;
+    c.destarePaquete = 0.35;
     c.bajar();
 
-    // Se abre donde está: la misma tienda de un lado y del otro.
+    // Se abre donde está: la misma tienda de un lado y del otro; el destare va
+    // como el TOTAL del paquete.
     expect(enviado).toEqual({
       codigo_bulto: 'B-001',
       almacen_origen_id: 2,
       almacen_destino_id: 2,
-      destare_por_cono_kg: 0.05,
+      destare_kg: 0.35,
       motivo: undefined,
     });
     expect(hechos).toBe(1);
@@ -185,35 +193,54 @@ describe('DesarmeModal', () => {
     expect(cerrados).toBe(0);
     expect(c.previaBulto()).toBeNull();
     expect(c.mensaje()).toContain('B-001');
-    // El tubo es el mismo para el siguiente paquete: el destare se queda.
-    expect(c.destarePorCono).toBe(0.05);
-    expect(localStorage.getItem('destare_por_cono')).toBe('0.05');
+    // Mientras la ventana siga abierta, el destare se queda para el siguiente.
+    expect(c.destarePaquete).toBe(0.35);
   });
 
-  it('con el tope de la tienda, un destare de 0.8 kg por cono no se manda ni se recuerda (2026-10-20)', async () => {
+  it('lo recordado de antes era por cono: ya no se propone y se olvida', async () => {
+    localStorage.setItem('destare_por_cono', '0.035');
+    const fixture = await montar();
+    expect(fixture.componentInstance.destarePaquete).toBeNull();
+    expect(localStorage.getItem('destare_por_cono')).toBeNull();
+  });
+
+  it('el tope de la tienda es por cono: para el paquete es eso × sus conos', async () => {
     tope = '0.05';
-    localStorage.setItem('destare_por_cono', '0.8');
     enviado = null;
     const fixture = await montar();
     const c = fixture.componentInstance;
-    // Lo recordado pasaba del tope: no se propone.
     expect(c.topeDestare()).toBe(0.05);
-    expect(c.destarePorCono).toBeNull();
 
     c.codigo = 'B-001';
     c.escanear();
-    c.destarePorCono = 0.8;
+    // 7 conos × 50 g = hasta 0.35 kg para este paquete.
+    expect(c.topeDelPaquete()).toBe(0.35);
+    // El error de antes: 0.8 escrito como si fuera de un cono.
+    c.destarePaquete = 0.8;
     expect(c.pasaDelTope()).toBeTrue();
     c.bajar();
     expect(enviado).toBeNull();
-    expect(c.error()).toContain('el tope es de 50 g');
+    expect(c.error()).toContain('114 g por cono');
+    expect(c.error()).toContain('el tope es de 50 g por cono');
+    expect(c.error()).toContain('hasta 0.35 kg');
 
-    c.destarePorCono = 0.035;
+    c.destarePaquete = 0.245;
     expect(c.pasaDelTope()).toBeFalse();
     c.bajar();
-    expect(enviado!.destare_por_cono_kg).toBe(0.035);
+    expect(enviado!.destare_kg).toBe(0.245);
     tope = null;
-    localStorage.removeItem('destare_por_cono');
+  });
+
+  it('sin tope de la tienda vale 1 kg por cono', async () => {
+    const fixture = await montar();
+    const c = fixture.componentInstance;
+    c.codigo = 'B-001';
+    c.escanear();
+    expect(c.topeDelPaquete()).toBe(7);
+    c.destarePaquete = 7.5;
+    expect(c.pasaDelTope()).toBeTrue();
+    c.destarePaquete = 0.8;
+    expect(c.pasaDelTope()).toBeFalse();
   });
 
   it('solo se baja con el codigo del paquete: ya no hay captura a mano (2026-10-18)', async () => {

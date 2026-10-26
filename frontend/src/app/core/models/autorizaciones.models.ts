@@ -43,7 +43,75 @@ export interface DetalleAjuste {
   tipo_gasto?: { nombre: string; limite: number | null };
   /** Una carga de mercancía (2026-10-21): qué hilos, sus lotes y cada paquete, solo para mirar. */
   carga?: DetalleCarga;
+  /** Una devolución (2026-10-22): el cliente, qué regresa por lote, pesos e importe, solo para mirar. */
+  devolucion?: DetalleDevolucion | null;
   total?: number;
+}
+
+/** Un paquete que regresa cerrado. */
+export interface PaqueteDevuelto {
+  codigo: string;
+  peso_kg: number;
+  lote: string | null;
+  /** Ya no se puede regresar cerrado (lo regresaron mientras, o se abrió): al aceptarla no pasaría. */
+  no_se_puede: boolean;
+}
+
+export interface LoteDevuelto {
+  lote: string | null;
+  paquetes: number;
+  kg: number;
+  bultos: PaqueteDevuelto[];
+}
+
+export interface LineaDevuelta {
+  detalle_id: number;
+  /** Color y calibre ("BLANCO 1/30"). */
+  hilo: string;
+  tipo_presentacion: string;
+  vendido_kg: number;
+  ya_regreso_kg: number;
+  /** Al precio con que se vendió (con su IVA y descuento). */
+  precio_kg: number;
+  paquetes: number;
+  kg_paquetes: number;
+  lotes: LoteDevuelto[];
+  kg_sueltos: number;
+  conos: number | null;
+  /** Lo suelto entra como 'conos' o 'kilos'. */
+  sueltos_como: string;
+  kg: number;
+  importe: number;
+  no_se_puede: number;
+}
+
+export interface DetalleDevolucion {
+  venta: { id: number; folio: string; fecha: string | null; total: number; almacen: string | null };
+  cliente: { id: number; nombre: string; codigo: string | null; telefono: string | null; elegido: boolean } | null;
+  /** La venta se canceló o se devolvió mientras esperaba: al aceptarla no pasaría. */
+  venta_inactiva: boolean;
+  /** No hay a quién ponerle el saldo a favor: al aceptarla no pasaría. */
+  sin_cliente: boolean;
+  /** 'favor' = se queda a favor; 'deuda' = lo que sobre se descuenta de lo demás que debe. */
+  destino: 'favor' | 'deuda';
+  notas: string | null;
+  lineas: LineaDevuelta[];
+  paquetes: number;
+  lotes: number;
+  kg: number;
+  importe: number;
+  no_se_puede: number;
+  /** Cómo se reparte al aceptarla, con lo que debe y tiene hoy. */
+  reparto: {
+    debe_esta: number;
+    debe_esta_tipo: string | null;
+    de_esta: number;
+    debe_otras: number;
+    de_otras: number;
+    a_favor: number;
+    favor_hoy: number;
+    favor_despues: number;
+  };
 }
 
 /** Un paquete de la carga, como venía en el Excel. */

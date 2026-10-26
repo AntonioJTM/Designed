@@ -28,7 +28,7 @@ export interface DatosRegistroCliente {
  * quien es de una sola tienda no se le ofrecen aunque su puesto tenga el
  * permiso; el servidor también lo detiene (`requireTodasLasTiendas`).
  */
-export const SOLO_TODAS_LAS_TIENDAS = new Set(['ver:reportes', 'ver:negocio', 'ver:nomina', 'ver:almacenes', 'ver:transferencias']);
+export const SOLO_TODAS_LAS_TIENDAS = new Set(['ver:reportes', 'ver:negocio', 'ver:nomina', 'ver:almacenes', 'ver:transferencias', 'ver:rotacion']);
 
 function esAdminSesion(s: SesionActual | null): boolean {
   if (!s || s.tipo !== 'usuario') return false;
