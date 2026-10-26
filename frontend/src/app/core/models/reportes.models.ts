@@ -76,6 +76,8 @@ export interface CorteCaja {
   fecha_apertura: string;
   fecha_cierre?: string | null;
   ventas_efectivo: string;
+  /** De eso, ventas canceladas cuyo efectivo quedó en el cajón como saldo a favor (2026-10-26). */
+  canceladas_a_favor?: string | number;
 }
 
 export interface ReporteCortes {

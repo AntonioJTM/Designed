@@ -23,6 +23,10 @@
           @if (c.importe_cancelado > 0) {
             · sin contar {{ c.importe_cancelado | dinero }} de {{ plural(c.canceladas, 'venta cancelada', 'ventas canceladas') }}
           }
+          <!-- Lo que se le regresó por el banco ya va restado (2026-10-26). -->
+          @if ((c.importe_regresado ?? 0) > 0) {
+            · menos {{ c.importe_regresado | dinero }} que se le regresaron por el banco
+          }
         </span>
       </div>
       <div class="kpi">
@@ -41,6 +45,16 @@
         <span class="kpi-pie">{{ c.importe_sin_facturar | dinero }}</span>
       </div>
     </div>
+  }
+
+  @if (cifras(); as c) {
+    <!-- La transferencia de una venta que se canceló y YA estaba facturada (2026-10-26). -->
+    @if ((c.facturadas_canceladas ?? 0) > 0) {
+      <p class="aviso">
+        {{ plural(c.facturadas_canceladas ?? 0, 'venta cancelada ya estaba facturada', 'ventas canceladas ya estaban facturadas') }}
+        ({{ c.importe_facturadas_canceladas | dinero }}): cancela su factura. Salen marcadas «Cancela su factura».
+      </p>
+    }
   }
 
   @if (cuentas()?.length === 0) {
@@ -95,6 +109,7 @@
         <option value="espera">Notas en espera</option>
         <option value="abono">Abonos</option>
         <option value="anticipo">Anticipos</option>
+        <option value="regreso">Se le regresó por el banco</option>
       </select>
     </label>
     <div class="field periodos">
@@ -127,7 +142,7 @@
           <div class="barra-fila">
             <span class="barra-etiqueta">
               <span [class.sin-cuenta]="k.id === null">{{ nombreCuentaFila(k) }}</span>
-              <span class="muted">{{ plural(k.cuantas, 'transferencia', 'transferencias') }}</span>
+              <span class="muted">{{ plural(k.cuantas, 'transferencia', 'transferencias') }}@if ((k.regresado ?? 0) > 0) { · se regresaron {{ k.regresado | dinero }} }</span>
             </span>
             <span class="barra-valor">
               <span class="relleno" [class.relleno-sin]="k.id === null" [style.width.%]="anchoCuenta(k.importe)"></span>
@@ -145,7 +160,9 @@
         <h2>{{ tituloLista() }}</h2>
         <p>
           @if (cargando()) { Cargando… }
-          @else { {{ plural(total(), 'transferencia', 'transferencias') }} · las más recientes primero }
+          @else {
+            {{ plural(total(), 'renglón', 'renglones') }}@if ((cifras()?.canceladas ?? 0) > 0) { · {{ cifras()?.canceladas }} no {{ cifras()?.canceladas === 1 ? 'suma' : 'suman' }} (venta cancelada) } · las más recientes primero
+          }
         </p>
       </div>
     </div>
@@ -196,12 +213,14 @@
                       <a [routerLink]="['/admin/ventas', v.id]" [title]="v.folio">{{ v.folio | folio }}</a>@if (!ultimo) {, }
                     }
                   } @else {
-                    <span class="sin-folio">{{ t.de === 'anticipo' ? 'Anticipo' : 'A su cuenta' }}</span>
+                    <span class="sin-folio">{{ t.de === 'anticipo' ? 'Anticipo' : t.de === 'regreso' ? 'Se le regresó' : 'A su cuenta' }}</span>
                   }
                   <span class="de">{{ de_(t) }}</span>
                   @if (t.cancelada) { <span class="pill rojo">Venta cancelada</span> }
                   <!-- Se canceló y el dinero quedó a su saldo a favor: sigue en el banco (2026-10-26). -->
                   @if (t.a_favor) { <span class="pill aviso">Cancelada · quedó a su saldo a favor</span> }
+                  <!-- Salió del banco: lo que abonó a una venta a crédito que se canceló (2026-10-26). -->
+                  @if (t.de === 'regreso') { <span class="pill rojo">Se le regresó por el banco</span> }
                 </td>
                 <td class="cliente">
                   @if (t.cliente_id) {
@@ -231,7 +250,12 @@
                   }
                 </td>
                 <td>
-                  @if (t.facturada) {
+                  @if (t.de === 'regreso') {
+                    <span class="muted" title="Lo que se le regresó no lleva factura">—</span>
+                  } @else if (t.facturada && t.cancelada) {
+                    <!-- Se facturó y la venta se canceló: hay que cancelar su factura (2026-10-26). -->
+                    <span class="pill rojo" [title]="'Se facturó' + (t.facturada_en ? ' el ' + (t.facturada_en | fecha) : '') + ' y la venta se canceló'">Cancela su factura</span>
+                  } @else if (t.facturada) {
                     <span class="pill verde" [title]="(t.facturada_por ? 'La marcó ' + t.facturada_por : '') + (t.facturada_en ? ' el ' + (t.facturada_en | fecha) : '')">Sí</span>
                   } @else { <span class="muted">No</span> }
                 </td>

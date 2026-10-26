@@ -157,7 +157,13 @@ async function obtenerSesion(id) {
   // dice cuál fue.
   const [movs] = await pool.query(
     `SELECT m.id, m.tipo, m.monto, m.referencia_id, m.motivo, m.creado_en,
-            p.numero_pedido, COALESCE(NULLIF(cl.nombre_comercial, ''), cl.nombre) AS cliente
+            p.numero_pedido, COALESCE(NULLIF(cl.nombre_comercial, ''), cl.nombre) AS cliente,
+            -- Una venta que se canceló y su efectivo se quedó en el cajón como saldo a
+            -- favor del cliente (2026-10-26): ese dinero ya es del cliente.
+            (m.tipo = 'venta' AND p.estado IN ('cancelado', 'devuelto') AND EXISTS (
+              SELECT 1 FROM saldo_favor_movimientos sf JOIN metodos_pago mp ON mp.id = sf.metodo_pago_id
+               WHERE sf.pedido_id = p.id AND sf.tipo = 'reintegro' AND LOWER(mp.nombre) LIKE '%efectivo%'
+            )) AS cancelada_a_favor
        FROM movimientos_caja m
        LEFT JOIN pedidos p ON m.tipo IN ('venta', 'devolucion') AND p.id = m.referencia_id
        LEFT JOIN clientes cl ON cl.id = p.cliente_id
@@ -266,7 +272,26 @@ async function cerrarSesion(id, monto_final) {
   return obtenerSesion(id);
 }
 
+/**
+ * De qué tienda es una caja y un turno, para "cada quien, sus tiendas" (la usa el
+ * controlador; 2026-10-26, auditoría: el SQL no va en el controlador).
+ */
+async function almacenDeCaja(cajaId) {
+  const [[c]] = await pool.query('SELECT almacen_id FROM cajas WHERE id = :id', { id: Number(cajaId) });
+  return c ?? null;
+}
+
+async function almacenDeTurno(sesionId) {
+  const [[s]] = await pool.query(
+    'SELECT c.almacen_id FROM sesiones_caja s JOIN cajas c ON c.id = s.caja_id WHERE s.id = :id',
+    { id: Number(sesionId) }
+  );
+  return s ?? null;
+}
+
 module.exports = {
+  almacenDeCaja,
+  almacenDeTurno,
   totalesSesion,
   efectivoEnCajon,
   listarCajas,

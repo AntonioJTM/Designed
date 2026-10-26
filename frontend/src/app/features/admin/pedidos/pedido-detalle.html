@@ -438,7 +438,8 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmar-titulo">
       <div class="modal-head">
         <h2 id="confirmar-titulo">
-          @if (esApartadoSinEntregar(p)) { Cancelar el apartado {{ p.numero_pedido }} }
+          @if (esEncargo(p) && esApartadoSinEntregar(p)) { Cancelar la nota en espera {{ p.numero_pedido }} }
+          @else if (esApartadoSinEntregar(p)) { Cancelar el apartado {{ p.numero_pedido }} }
           @else if (nuevoEstado === 'devuelto') { Devolver la mercancía de {{ p.numero_pedido }} }
           @else { Cancelar la venta {{ p.numero_pedido }} }
         </h2>
@@ -507,9 +508,10 @@
               </div>
             }
             @if (abonadoDeLaVenta(p) > 0) {
-              <!-- Venta a crédito ya abonada (2026-10-26): lo abonado también se puede regresar. -->
+              <!-- Venta a crédito ya abonada (2026-10-26): el DINERO que abonó también se
+                   puede regresar (lo de su saldo a favor y lo condonado, no: abajo). -->
               <div class="pregunta-dinero">
-                <span class="que" id="que-abonado">{{ abonadoDeLaVenta(p) | dinero }} que ya abonó a esta nota</span>
+                <span class="que" id="que-abonado">{{ abonadoDeLaVenta(p) | dinero }} que abonó a esta nota</span>
                 <div class="seg" role="radiogroup" aria-labelledby="que-abonado">
                   <button type="button" role="radio" [class.on]="abonado === 'favor'" [attr.aria-checked]="abonado === 'favor'"
                           (click)="abonado = 'favor'">Quedan a su saldo a favor</button>
@@ -518,8 +520,24 @@
                   <button type="button" role="radio" [class.on]="abonado === 'banco'" [attr.aria-checked]="abonado === 'banco'"
                           (click)="abonado = 'banco'">Se le regresan por el banco</button>
                 </div>
-                <span class="muted">Si debe otras notas a crédito, lo abonado primero las paga; esto es para lo que sobre.</span>
+                @if (abonado === 'banco') {
+                  <app-cuenta-deposito [(cuenta)]="cuentaRegreso" pregunta="¿De qué cuenta se le regresan?"
+                                       nombre="cuenta-regreso" [marcar]="marcarCuenta()" />
+                }
               </div>
+            }
+            @if (abonadoConSaldo(p) > 0 || abonadoCondonado(p) > 0 || abonadoAOtrasNotas(p) > 0) {
+              <ul class="abonado-otros">
+                @if (abonadoConSaldo(p) > 0) {
+                  <li><b>{{ abonadoConSaldo(p) | dinero }}</b> que pagó con su saldo a favor regresan a su saldo a favor.</li>
+                }
+                @if (abonadoCondonado(p) > 0) {
+                  <li><b>{{ abonadoCondonado(p) | dinero }}</b> de un ajuste a mano («Corregir deuda») no se regresan: se quitan con la venta.</li>
+                }
+                @if (abonadoAOtrasNotas(p) > 0) {
+                  <li><b>{{ abonadoAOtrasNotas(p) | dinero }}</b> de lo que abonó pagan sus otras notas a crédito.</li>
+                }
+              </ul>
             }
             <p class="muted">Lo que queda a su saldo a favor lo usa en su siguiente compra.</p>
           </fieldset>

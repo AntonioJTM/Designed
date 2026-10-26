@@ -9,7 +9,10 @@ import { catchError } from 'rxjs/operators';
 import { VentasService } from '../../../core/services/ventas.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
-import { Encargo, MetodoPago, Pedido, SesionCaja } from '../../../core/models/ventas.models';
+import { Encargo, MetodoPago, Pedido } from '../../../core/models/ventas.models';
+import {
+  TurnoAbierto, avisoOtraTienda, buscarTurnos, nombreTurno, turnoPropuesto, turnoUnicoAqui,
+} from '../../../shared/turnos-de-la-nota';
 import { ApiError } from '../../../core/models/auth.models';
 import { DineroPipe } from '../../../shared/dinero.pipe';
 
@@ -60,7 +63,7 @@ export class EntregarPedidoModal implements OnInit {
   readonly entregado = output<Pedido>();
 
   readonly metodos = signal<MetodoPago[]>([]);
-  readonly turnos = signal<SesionCaja[]>([]);
+  readonly turnos = signal<TurnoAbierto[]>([]);
   readonly cargando = signal(true);
   readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
@@ -98,12 +101,12 @@ export class EntregarPedidoModal implements OnInit {
   ngOnInit(): void {
     forkJoin({
       metodos: this.ventas.metodosPago().pipe(catchError(() => of([] as MetodoPago[]))),
-      turnos: this.buscarTurnos(),
+      turnos: buscarTurnos(this.ventas),
     }).subscribe(({ metodos, turnos }) => {
       this.metodos.set(metodos);
       this.metodoId = metodos.find((m) => m.nombre.toLowerCase().includes('efectivo'))?.id ?? metodos[0]?.id ?? null;
       this.turnos.set(turnos);
-      this.turnoId = this.turnoPropuesto(turnos);
+      this.turnoId = turnoPropuesto(turnos, this.pedido().almacen_id);
       this.cargando.set(false);
     });
   }
@@ -418,33 +421,19 @@ export class EntregarPedidoModal implements OnInit {
     this.cerrado.emit();
   }
 
-  /** El turno donde cae el efectivo: el único abierto, o el de la caja con que se trabaja. */
-  private turnoPropuesto(turnos: SesionCaja[]): number | null {
-    if (turnos.length === 1) return turnos[0].id;
-    let elegida: number | null = null;
-    try {
-      const v = Number(localStorage.getItem('caja_sel'));
-      elegida = Number.isFinite(v) && v > 0 ? v : null;
-    } catch {
-      elegida = null;
-    }
-    return turnos.find((t) => Number(t.caja_id) === elegida)?.id ?? null;
+  // ---- EL TURNO DE LA TIENDA DE LA NOTA (2026-10-26): `shared/turnos-de-la-nota.ts`.
+  /** Hay un solo turno abierto y es de la tienda de la nota: no hay qué preguntar. */
+  turnoUnicoAqui(): boolean {
+    return turnoUnicoAqui(this.turnos(), this.pedido().almacen_id);
   }
 
-  /** Los turnos abiertos de las cajas activas (una caja que falla no tumba la búsqueda). */
-  private buscarTurnos() {
-    return new Promise<SesionCaja[]>((resolver) => {
-      this.ventas.cajas().subscribe({
-        next: (cajas) => {
-          const activas = cajas.filter((c) => c.activo);
-          if (activas.length === 0) return resolver([]);
-          forkJoin(activas.map((c) => this.ventas.sesionAbierta(c.id).pipe(catchError(() => of(null))))).subscribe(
-            (ss) => resolver(ss.filter((s): s is SesionCaja => !!s))
-          );
-        },
-        error: () => resolver([]),
-      });
-    });
+  nombreTurno(t: TurnoAbierto): string {
+    return nombreTurno(t, this.pedido().almacen_id);
+  }
+
+  /** El elegido es de otra tienda: en qué corte cae el efectivo. */
+  avisoOtraTienda(): string | null {
+    return avisoOtraTienda(this.turnos(), this.turnoId, this.pedido().almacen_id, this.pedido().almacen);
   }
 
   private dinero(n: number): string {

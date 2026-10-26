@@ -152,6 +152,9 @@ export class CajaPantalla {
     const movs = s?.movimientos ?? [];
     const suma = (lista: MovimientoCaja[]) => lista.reduce((t, m) => t + Number(m.monto), 0);
     const ventas = movs.filter((m) => m.tipo === 'venta');
+    // Canceladas con su efectivo en el cajón como saldo a favor del cliente (2026-10-26):
+    // el dinero sigue aquí (el corte lo espera) pero ya es del cliente.
+    const aFavor = ventas.filter((m) => Number(m.cancelada_a_favor));
     const ingresos = movs.filter((m) => m.tipo === 'ingreso');
     const retiros = movs.filter((m) => m.tipo === 'retiro');
     const devoluciones = movs.filter((m) => m.tipo === 'devolucion');
@@ -179,7 +182,9 @@ export class CajaPantalla {
       {
         etiqueta: 'Ventas en efectivo',
         valor: this.pesos(suma(ventas)),
-        pie: `${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'}`,
+        pie: `${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'}` + (aFavor.length
+          ? ` · ${this.pesos(suma(aFavor))} de ${aFavor.length === 1 ? 'una cancelada quedaron' : `${aFavor.length} canceladas quedaron`} a su saldo a favor`
+          : ''),
         punto: 'var(--viz-series-3)',
       },
       {
@@ -472,6 +477,10 @@ export class CajaPantalla {
     const base = { id: m.id, hora: this.hora(m.creado_en), monto: Number(m.monto) };
     switch (m.tipo) {
       case 'venta':
+        // Se canceló y su efectivo se quedó en el cajón como saldo a favor (2026-10-26).
+        if (Number(m.cancelada_a_favor)) {
+          return { ...base, tipo: 'Venta cancelada', tono: 'gris', detalle: `${folio || m.motivo || ''} · quedó a su saldo a favor`, entra: true };
+        }
         return { ...base, tipo: 'Venta', tono: 'azul', detalle: folio || m.motivo || '', entra: true };
       case 'devolucion':
         return { ...base, tipo: 'Devolución', tono: 'rojo', detalle: m.motivo || folio, entra: false };

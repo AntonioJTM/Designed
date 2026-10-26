@@ -6,7 +6,7 @@ const { parseBool } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisosModel = require('../permisos/model');
 const usuariosModel = require('./model');
-const { pool } = require('../../config/db');
+const almacenesModel = require('../almacenes/model');
 
 /**
  * El puesto de ADMINISTRADOR solo lo da —o lo toca— otro administrador.
@@ -41,8 +41,7 @@ async function tiendasDeSesion(usuarioId) {
   const ids = await permisos.almacenesDe({ tipo: 'usuario', sub: usuarioId });
   if (ids === null) return { todas: true, almacenes: [] };
   if (!ids.length) return { todas: false, almacenes: [] };
-  const [rows] = await pool.query('SELECT id, nombre FROM almacenes WHERE id IN (:ids) ORDER BY nombre', { ids });
-  return { todas: false, almacenes: rows.map((r) => ({ id: Number(r.id), nombre: r.nombre })) };
+  return { todas: false, almacenes: await almacenesModel.nombresDe(ids) };
 }
 
 /** Quien NO ve todas las tiendas solo ve y edita al personal de las suyas. */

@@ -126,7 +126,16 @@ async function cortesCaja(desde, hastaExcl) {
             s.monto_inicial, s.monto_esperado, s.monto_final, s.diferencia,
             s.fecha_apertura, s.fecha_cierre,
             (SELECT COALESCE(SUM(mc.monto),0) FROM movimientos_caja mc
-              WHERE mc.sesion_caja_id = s.id AND mc.tipo = 'venta') AS ventas_efectivo
+              WHERE mc.sesion_caja_id = s.id AND mc.tipo = 'venta') AS ventas_efectivo,
+            -- De eso, lo de ventas que se cancelaron y su efectivo se quedó en el cajón
+            -- como saldo a favor del cliente (2026-10-26): el corte lo espera, pero ya
+            -- no es venta.
+            (SELECT COALESCE(SUM(mc.monto),0) FROM movimientos_caja mc
+               JOIN pedidos p ON p.id = mc.referencia_id
+              WHERE mc.sesion_caja_id = s.id AND mc.tipo = 'venta' AND p.estado IN ('cancelado', 'devuelto')
+                AND EXISTS (SELECT 1 FROM saldo_favor_movimientos sf JOIN metodos_pago mp ON mp.id = sf.metodo_pago_id
+                             WHERE sf.pedido_id = p.id AND sf.tipo = 'reintegro' AND LOWER(mp.nombre) LIKE '%efectivo%')
+            ) AS canceladas_a_favor
        FROM sesiones_caja s
        JOIN cajas c    ON c.id = s.caja_id
        JOIN usuarios u ON u.id = s.usuario_id

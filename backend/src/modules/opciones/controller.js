@@ -1,52 +1,22 @@
 'use strict';
 
-const { pool } = require('../../config/db');
+const model = require('./model');
 
 // Endpoints de solo lectura para poblar selects del panel admin.
 // Son tablas de referencia (catálogos auxiliares) del esquema.
 
+const responder = (consulta) => async (req, res, next) => {
+  try {
+    res.json({ data: await consulta(), error: null });
+  } catch (err) {
+    next(err);
+  }
+};
+
 /** Líneas de procedencia del hilo: turco, nacional, chino. */
-async function lineas(req, res, next) {
-  try {
-    const [rows] = await pool.query('SELECT id, nombre FROM lineas WHERE activo = 1 ORDER BY nombre');
-    res.json({ data: rows, error: null });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function unidades(req, res, next) {
-  try {
-    const [rows] = await pool.query(
-      'SELECT id, nombre, abreviatura FROM unidades_medida ORDER BY nombre'
-    );
-    res.json({ data: rows, error: null });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function impuestos(req, res, next) {
-  try {
-    const [rows] = await pool.query(
-      'SELECT id, nombre, porcentaje FROM impuestos WHERE activo = 1 ORDER BY nombre'
-    );
-    res.json({ data: rows, error: null });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function metodosPago(req, res, next) {
-  try {
-    const [rows] = await pool.query(
-      // "Saldo a favor" es interno: lo asienta el sistema, no se elige al cobrar.
-      'SELECT id, nombre FROM metodos_pago WHERE activo = 1 AND interno = 0 ORDER BY nombre'
-    );
-    res.json({ data: rows, error: null });
-  } catch (err) {
-    next(err);
-  }
-}
+const lineas = responder(model.lineas);
+const unidades = responder(model.unidades);
+const impuestos = responder(model.impuestos);
+const metodosPago = responder(model.metodosPago);
 
 module.exports = { lineas, unidades, impuestos, metodosPago };

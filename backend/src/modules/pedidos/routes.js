@@ -135,6 +135,8 @@ const estadoSchema = z
     // Una venta A CRÉDITO ya abonada: lo abonado que queda libre se le REGRESA
     // (en efectivo de la caja o por el banco) en vez de quedarle a favor (2026-10-26).
     abonado_se_regresa: z.enum(['efectivo', 'banco']).optional(),
+    // Por el banco: de qué cuenta salió (Transferencias lo resta de esa cuenta).
+    cuenta_regreso: z.number().int().positive().nullable().optional(),
   })
   .strict();
 

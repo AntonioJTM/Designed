@@ -471,4 +471,13 @@ async function recalcularCosto(conn, varianteId) {
   return costo;
 }
 
-module.exports = { codigosExistentes, crearRemesa, crearLista, listar, obtener, editarDatos, recalcularCosto };
+/** A qué almacenes entraron unas cargas (para "cada quien, sus tiendas"). */
+async function almacenesDeCargas(ids) {
+  if (!ids?.length) return [];
+  const [rows] = await pool.query('SELECT almacen_id FROM remesas WHERE id IN (:ids)', { ids });
+  return rows;
+}
+
+module.exports = {
+  codigosExistentes, crearRemesa, crearLista, listar, obtener, editarDatos, recalcularCosto, almacenesDeCargas,
+};

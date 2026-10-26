@@ -85,17 +85,18 @@
               </label>
             }
 
-            @if (esEfectivo() && turnos().length > 1) {
-              <!-- Dos tiendas con turno abierto: el efectivo entra al cajón que lo recibió. -->
+            @if (esEfectivo() && turnos().length > 0 && !turnoUnicoAqui()) {
+              <!-- Varias cajas abiertas, o la única es de OTRA tienda (2026-10-26): se elige a mano. -->
               <label class="field">
                 A qué caja entra
                 <select [(ngModel)]="turnoId" name="turno">
                   <option [ngValue]="null" disabled>Elige la caja que lo recibe</option>
                   @for (t of turnos(); track t.id) {
-                    <option [ngValue]="t.id">{{ t.caja || 'Caja ' + t.caja_id }}{{ t.usuario ? ' · ' + t.usuario : '' }}</option>
+                    <option [ngValue]="t.id">{{ nombreTurno(t) }}{{ t.usuario ? ' · ' + t.usuario : '' }}</option>
                   }
                 </select>
               </label>
+              @if (avisoOtraTienda(); as a) { <p class="aviso">{{ a }}</p> }
             }
 
             @if (esTransferencia()) {
@@ -120,7 +121,7 @@
           }
 
           @if (esEfectivo()) {
-            @if (turnos().length === 1) {
+            @if (turnoUnicoAqui()) {
               <p class="nota-info">
                 El efectivo entra al turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>: cuenta en el corte de hoy.
               </p>

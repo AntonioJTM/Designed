@@ -63,10 +63,13 @@ import { FechaPipe } from '../../../shared/fecha.pipe';
                 <span class="ayuda">La marcó {{ t().revisada_por }} el {{ t().revisada_en | fecha }}.</span>
               }
             </div>
-            <label class="field check">
-              <input type="checkbox" [(ngModel)]="facturada" name="facturada" />
-              <span>Facturada</span>
-            </label>
+            <!-- Lo que se le regresó por el banco no lleva factura (2026-10-26). -->
+            @if (t().de !== 'regreso') {
+              <label class="field check">
+                <input type="checkbox" [(ngModel)]="facturada" name="facturada" />
+                <span>Facturada</span>
+              </label>
+            }
             @if (t().facturada && t().facturada_por) {
               <span class="ayuda">La marcó {{ t().facturada_por }} el {{ t().facturada_en | fecha }}.</span>
             }

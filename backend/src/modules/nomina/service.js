@@ -333,6 +333,8 @@ async function cambiarEstado(id, estado) {
       throw new AppError(422, 'SIN_RECIBOS',
         'Calcula la nómina antes de marcarla como pagada');
     }
+    // Con ventas o personal que cambiaron desde que se calculó, no se paga (2026-10-26).
+    await exigirAlDia(id);
   }
   let cambiado = await model.cambiarEstadoPeriodo(id, estado);
   // De cancelada a borrador se RECALCULA: sus ventas se vuelven a repartir sin
@@ -499,10 +501,36 @@ async function _conRecibos(periodo) {
       /* si no se puede revisar, se enseña como estaba */
     }
   }
-  return { ...periodo, recibos, total_nomina, pago_pedido };
+  // Ventas que cambiaron desde que se calculó: la pantalla pide recalcularla (2026-10-26).
+  const por_recalcular = periodo.estado === 'borrador' ? await model.porRecalcular(periodo.id).catch(() => null) : null;
+  return { ...periodo, recibos, total_nomina, pago_pedido, por_recalcular };
+}
+
+/**
+ * NO SE PAGA UNA NÓMINA QUE YA NO CUADRA (2026-10-26, decisión del usuario: "no dejar
+ * pagarla hasta recalcular"): si desde que se calculó entraron o salieron ventas de su
+ * comisión, o cambió su personal, 409 `NOMINA_POR_RECALCULAR`. Lo usan el pago y la
+ * solicitud de pago (así se autoriza lo que de verdad se va a pagar).
+ */
+async function exigirAlDia(periodoId) {
+  const r = await model.porRecalcular(periodoId);
+  if (!r) return;
+  const partes = [];
+  if (r.nuevas.length) {
+    partes.push(`${r.nuevas.length} ${r.nuevas.length === 1 ? 'venta entra' : 'ventas entran'} ` +
+      `(${r.nuevas.slice(0, 3).map((v) => v.numero_pedido).join(', ')}${r.nuevas.length > 3 ? '…' : ''})`);
+  }
+  if (r.quitadas.length) {
+    partes.push(`${r.quitadas.length} ${r.quitadas.length === 1 ? 'venta sale' : 'ventas salen'} ` +
+      `(${r.quitadas.slice(0, 3).map((v) => v.numero_pedido).join(', ')}${r.quitadas.length > 3 ? '…' : ''})`);
+  }
+  if (r.personal) partes.push('cambió el personal de la nómina');
+  throw new AppError(409, 'NOMINA_POR_RECALCULAR',
+    `Desde que se calculó, ${partes.join(' y ')}. Vuelve a calcularla («Calcular») antes de pagarla.`, r);
 }
 
 module.exports = {
+  exigirAlDia,
   semanaDe,
   listarEmpleados,
   guardarEmpleado,

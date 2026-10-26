@@ -97,7 +97,22 @@ async function idTiendaLinea(ejecutor = pool) {
   return fallback[0]?.id ?? null;
 }
 
+/** ¿Es la MATRIZ (la que surte a las demás)? */
+async function esMatriz(id) {
+  const [[a]] = await pool.query('SELECT es_matriz FROM almacenes WHERE id = :id', { id: Number(id) });
+  return Number(a?.es_matriz) === 1;
+}
+
+/** Id y nombre de unos almacenes, por nombre. */
+async function nombresDe(ids) {
+  if (!ids?.length) return [];
+  const [rows] = await pool.query('SELECT id, nombre FROM almacenes WHERE id IN (:ids) ORDER BY nombre', { ids });
+  return rows.map((r) => ({ id: Number(r.id), nombre: r.nombre }));
+}
+
 module.exports = {
+  esMatriz,
+  nombresDe,
   listar,
   obtener,
   crear,

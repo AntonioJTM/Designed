@@ -33,6 +33,8 @@ export interface MovimientoCaja {
   /** Venta y devolución: el folio y el cliente del pedido. */
   numero_pedido?: string | null;
   cliente?: string | null;
+  /** Una venta que se canceló y su efectivo quedó en el cajón como saldo a favor del cliente (2026-10-26). */
+  cancelada_a_favor?: number | boolean | null;
 }
 
 /** Un tipo de gasto (Viajes, Limpieza…) con su TOPE POR GASTO; null = sin tope (2026-10-20). */
@@ -429,6 +431,14 @@ export interface Pedido {
    */
   credito_pagado?: number | null;
   credito_por_pagar?: number | null;
+  /**
+   * Detalle de una venta a crédito ya abonada: lo que quedaría LIBRE si se cancela,
+   * por origen (2026-10-26). Solo el dinero (efectivo y transferencia) se puede
+   * regresar; lo pagado con su saldo a favor regresa a su saldo y lo condonado con
+   * un ajuste a mano se va con la venta. Lo que falte contra `credito_pagado` paga
+   * sus otras notas a crédito.
+   */
+  abonado_libre?: { efectivo: number; transferencia: number; saldo: number; ajuste: number; total: number } | null;
   /** A cuántos días se fió (2026-10-20); las de antes cuentan 15. */
   dias_credito?: number | null;
   /** Detalle: cuándo vence lo fiado (el día en que se fió más sus días). */
@@ -476,6 +486,8 @@ export interface Pedido {
   transferencia_a_favor?: number;
   /** Una venta a crédito ya abonada: lo abonado que se le regresó (2026-10-26). */
   abonado_regresado?: number;
+  /** ...y lo que se había cubierto con un ajuste a mano y se fue con la venta (2026-10-26). */
+  abonado_condonado?: number;
   /** Al modificarlo: el total de antes, lo que falta o lo que tiene a favor, y qué cambió. */
   total_antes?: number;
   a_favor?: number;

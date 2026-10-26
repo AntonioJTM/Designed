@@ -9,7 +9,7 @@ const pdf = require('../../utils/pdf');
 const permisos = require('../permisos/service');
 const { parsePagination } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
-const { pool } = require('../../config/db');
+const remesasModel = require('./model');
 
 /**
  * CADA QUIEN, SUS TIENDAS (2026-10-15): se carga mercancía solo a un almacén
@@ -20,8 +20,7 @@ async function _deSusTiendas(req, { almacenId, cargas } = {}) {
   if (almacenes === null) return almacenes;
   if (almacenId != null) permisos.exigirAlmacen(almacenes, almacenId, 'Ese almacén');
   if (cargas?.length) {
-    const [rows] = await pool.query('SELECT almacen_id FROM remesas WHERE id IN (:ids)', { ids: cargas });
-    for (const r of rows) permisos.exigirAlmacen(almacenes, r.almacen_id, 'Esa carga');
+    for (const r of await remesasModel.almacenesDeCargas(cargas)) permisos.exigirAlmacen(almacenes, r.almacen_id, 'Esa carga');
   }
   return almacenes;
 }

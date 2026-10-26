@@ -42,7 +42,7 @@
             <button
               type="button"
               class="btn btn-primary"
-              [disabled]="ocupado() || periodo()!.recibos.length === 0"
+              [disabled]="ocupado() || periodo()!.recibos.length === 0 || !!periodo()!.por_recalcular"
               (click)="marcarPagada()"
             >
               Marcar como pagada
@@ -52,7 +52,7 @@
             <button
               type="button"
               class="btn btn-primary"
-              [disabled]="ocupado() || periodo()!.recibos.length === 0 || !!periodo()!.pago_pedido"
+              [disabled]="ocupado() || periodo()!.recibos.length === 0 || !!periodo()!.pago_pedido || !!periodo()!.por_recalcular"
               (click)="pedirPago()"
             >
               {{ periodo()!.pago_pedido ? 'Ya se pidió que se pague' : 'Pedir que se pague' }}
@@ -65,6 +65,29 @@
 
   @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
   @if (mensaje()) { <p class="ok-msg" role="status">{{ mensaje() }}</p> }
+
+  @if (periodo()?.por_recalcular; as r) {
+    <!-- Cambió desde que se calculó: no se paga hasta recalcularla (2026-10-26). -->
+    <div class="aviso recalcular" role="status">
+      <span>
+        Desde que se calculó
+        @if (r.nuevas.length) {
+          {{ r.nuevas.length === 1 ? 'entra 1 venta' : 'entran ' + r.nuevas.length + ' ventas' }}
+          ({{ foliosCortos(r.nuevas) }})
+        }
+        @if (r.nuevas.length && r.quitadas.length) { y }
+        @if (r.quitadas.length) {
+          {{ r.quitadas.length === 1 ? 'sale 1 venta' : 'salen ' + r.quitadas.length + ' ventas' }}
+          ({{ foliosCortos(r.quitadas) }})
+        }
+        @if (r.personal) { {{ r.nuevas.length || r.quitadas.length ? 'y' : '' }} cambió el personal de la nómina }.
+        Vuelve a calcularla antes de pagarla.
+      </span>
+      @if (editable()) {
+        <button type="button" class="btn btn-ghost btn-sm" [disabled]="ocupado()" (click)="calcular()">Volver a calcular</button>
+      }
+    </div>
+  }
 
   @if (periodo(); as p) {
     @if (p.recibos.length > 0) {

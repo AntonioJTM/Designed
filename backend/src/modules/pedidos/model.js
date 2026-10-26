@@ -1029,6 +1029,11 @@ async function _obtenerConn(ejecutor, id) {
       .find((d) => d.pedidoId === Number(id));
     pedido.credito_pagado = deuda ? deuda.pagado : 0;
     pedido.credito_por_pagar = deuda ? deuda.porPagar : 0;
+    // Lo que quedaría LIBRE si se cancela (2026-10-26): por origen, para que la
+    // ventana de cancelar ofrezca regresar solo el dinero que entró.
+    if (!['cancelado', 'devuelto'].includes(pedido.estado) && pedido.credito_pagado > 0.004) {
+      pedido.abonado_libre = await clientesModel.libreSiSeCancela(ejecutor, pedido.cliente_id, id);
+    }
     // A cuántos días es y cuándo vence (2026-10-20): desde el día en que se fió.
     const fiada = credito.find((m) => m.tipo === 'cargo');
     if (fiada) {
@@ -1506,13 +1511,30 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null, 
       // (2026-10-20): ese dinero ya es suyo, reactivarla no lo vuelve a tomar.
       const [[usado]] = await conn.query(
         `SELECT MAX(tipo IN ('uso', 'aplicado')) AS uso, MAX(tipo = 'reintegro') AS regreso,
-                MAX(tipo = 'reintegro' AND notas LIKE 'Lo abonado%') AS abonado
+                MAX(tipo = 'reintegro' AND notas LIKE 'Lo abonado%') AS abonado,
+                MAX(tipo = 'reintegro' AND metodo_pago_id IS NOT NULL) AS eligio
            FROM saldo_favor_movimientos WHERE pedido_id = :id AND tipo IN ('uso', 'aplicado', 'reintegro')`,
         { id }
       );
-      if (Number(usado?.abonado)) {
+      // Lo abonado que se acomodó al cancelarla (pasó a su saldo, se le regresó o
+      // se quitó lo condonado, 2026-10-26): ese ajuste de su cuenta no lleva venta
+      // y sale junto a la cancelación.
+      const [[acomodo]] = await conn.query(
+        `SELECT COUNT(*) AS n FROM credito_movimientos c
+           JOIN credito_movimientos z ON z.cliente_id = c.cliente_id
+          WHERE c.pedido_id = :id AND c.tipo = 'ajuste' AND c.monto < 0
+            AND z.pedido_id IS NULL AND z.tipo = 'ajuste' AND z.notas LIKE 'Lo abonado a una venta cancelada%'
+            AND z.creado_en BETWEEN c.creado_en AND DATE_ADD(c.creado_en, INTERVAL 5 SECOND)`,
+        { id }
+      );
+      if (Number(usado?.abonado) || Number(acomodo?.n)) {
         throw new AppError(409, 'VENTA_CON_SALDO_FAVOR',
-          `Al cancelar ${numero}, lo que había abonado le quedó a favor al cliente. No se reactiva: vuelve a hacer la venta.`);
+          `Al cancelar ${numero}, lo que había abonado ya se acomodó en su cuenta (pasó a su saldo a favor, se le ` +
+          'regresó o se quitó lo condonado). No se reactiva: vuelve a hacer la venta.');
+      }
+      if (Number(usado?.eligio)) {
+        throw new AppError(409, 'VENTA_CON_SALDO_FAVOR',
+          `Al cancelar ${numero}, lo que pagó le quedó a su saldo a favor. No se reactiva: vuelve a hacer la venta.`);
       }
       if (Number(usado?.uso)) {
         throw new AppError(409, 'VENTA_CON_SALDO_FAVOR',
@@ -1913,32 +1935,40 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null, 
     // abonado y eso paga la siguiente; si no hay siguiente, queda a su favor.
     let sobranteAFavor = 0;
     let abonadoRegresado = 0;
+    let abonadoCondonado = 0;
     if (clienteFiado && eraInactivo !== esInactivo) {
       await clientesModel.liquidarVentasACredito(conn, clienteFiado);
       // UN SOLO "A FAVOR" (2026-10-20): lo abonado que ya no paga nada pasa a su
-      // saldo a favor, en vez de dejar su cuenta en negativo.
+      // saldo a favor, en vez de dejar su cuenta en negativo. Lo condonado con un
+      // ajuste a mano se va con la venta (2026-10-26).
+      let libre = { monto: 0, dinero: 0, saldo: 0, condonado: 0 };
       if (esInactivo) {
-        sobranteAFavor = await saldoFavor.pasarSobranteAFavor(conn, {
+        libre = await saldoFavor.pasarSobranteAFavor(conn, {
           clienteId: clienteFiado, pedidoId: id, numeroPedido: numero, usuarioId,
         });
       }
+      sobranteAFavor = libre.monto;
+      abonadoCondonado = libre.condonado;
       // ...O SE LE REGRESA (2026-10-26, usuario: "en la cancelación, opción de regresar
       // dinero o que se vaya como saldo a favor si la nota ya está pagada"): en efectivo
       // sale de la caja (hasta lo que haya en el cajón; lo demás le queda a favor) o
-      // se le regresa por el banco. En su libro de saldo a favor queda el reintegro y
-      // un ajuste por lo que se le regresó.
-      const como = esInactivo && sobranteAFavor > 0.004 ? opciones.abonadoSeRegresa : null;
+      // se le regresa por el banco. Solo el DINERO que entró (efectivo o banco): lo
+      // que pagó con su saldo a favor se queda en su saldo a favor (auditoría
+      // 2026-10-26). En su libro de saldo a favor queda el reintegro y un ajuste por
+      // lo que se le regresó; por el banco, ese ajuste lleva el método y sale en
+      // Transferencias como «Se le regresó» (en negativo).
+      const como = esInactivo && libre.dinero > 0.004 ? opciones.abonadoSeRegresa : null;
       if (como === 'efectivo' || como === 'banco') {
-        let regresa = sobranteAFavor;
+        let regresa = libre.dinero;
         if (como === 'efectivo') {
           const sesionId = await _sesionParaDevolucion(conn, pedido);
           if (!sesionId) {
             throw new AppError(409, 'CAJA_CERRADA',
-              `Para regresarle en efectivo lo que abonó a ${numero} ($${sobranteAFavor.toFixed(2)}) hay que tener ` +
+              `Para regresarle en efectivo lo que abonó a ${numero} ($${libre.dinero.toFixed(2)}) hay que tener ` +
               'un turno de caja abierto. Ábrelo en Caja, o déjaselo a su saldo a favor.');
           }
           const hay = Math.max(0, await cajaModel.efectivoEnCajon(conn, sesionId));
-          regresa = round2(Math.min(sobranteAFavor, hay));
+          regresa = round2(Math.min(libre.dinero, hay));
           if (regresa > 0.004) {
             await conn.query(
               `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
@@ -1948,10 +1978,18 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null, 
           }
         }
         if (regresa > 0.004) {
-          await saldoFavor.agregar(conn, {
+          const metodoBanco = como === 'banco' ? (await transferencias.metodosTransferencia(conn))[0] ?? null : null;
+          const ajusteId = await saldoFavor.agregar(conn, {
             clienteId: clienteFiado, tipo: 'ajuste', monto: -regresa, pedidoId: id, usuarioId,
+            metodoPagoId: metodoBanco,
             notas: `Se le regresó ${como === 'efectivo' ? 'en efectivo' : 'por el banco'} lo abonado a ${numero} (se canceló)`,
           });
+          if (metodoBanco) {
+            await transferencias.anotar(conn, {
+              fuente: 'regreso', fuenteId: ajusteId, metodoPagoId: metodoBanco,
+              cuentaId: opciones.cuentaRegreso ?? null, usuarioId,
+            });
+          }
           abonadoRegresado = regresa;
           sobranteAFavor = round2(sobranteAFavor - regresa);
         }
@@ -1961,6 +1999,8 @@ async function cambiarEstado(id, estado, usuarioId = null, devoluciones = null, 
     const resultado = await _obtenerConn(conn, id);
     if (sobranteAFavor > 0.004) resultado.abonado_a_favor = sobranteAFavor;
     if (abonadoRegresado > 0.004) resultado.abonado_regresado = abonadoRegresado;
+    // Lo que se había cubierto con un ajuste a mano y se fue con la venta (2026-10-26).
+    if (abonadoCondonado > 0.004) resultado.abonado_condonado = abonadoCondonado;
     // Lo que no hubo en el cajón y le quedó a favor (la pantalla lo dice).
     if (aFavorSinEfectivo > 0.004) resultado.a_favor_sin_efectivo = aFavorSinEfectivo;
     // Lo que se eligió dejarle a su saldo a favor al cancelar (2026-10-26).
@@ -2783,6 +2823,16 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
         `${pedido.numero_pedido} no es un apartado vigente (está ${pedido.estado}).`);
     }
 
+    // UNA OPERACIÓN, UNA HORA (2026-10-26, auditoría): el saldo a favor, el efectivo,
+    // la transferencia y el crédito de esta entrega llevan la misma hora, así su
+    // ticket los junta (`tickets.js` agrupa por la hora) y no sale partido.
+    const [[{ ahora, pagoAntes, creditoAntes }]] = await conn.query(
+      `SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS ahora,
+              (SELECT COALESCE(MAX(id), 0) FROM pagos WHERE pedido_id = :id) AS pagoAntes,
+              (SELECT COALESCE(MAX(id), 0) FROM credito_movimientos WHERE pedido_id = :id) AS creditoAntes`,
+      { id: pedidoId }
+    );
+
     // CON SU SALDO A FAVOR (2026-10-20, auditoría: "el anticipo no paga la nota
     // en espera para la que se dejó"): se usa ANTES de cobrar o fiar lo demás.
     const usaFavor = round2(Number(datos.saldo_favor ?? 0));
@@ -2833,6 +2883,12 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
       cambio = r.cambio;
       aCredito = r.aCredito;
     }
+    await conn.query('UPDATE pagos SET creado_en = :ahora WHERE pedido_id = :id AND id > :antes',
+      { ahora, id: pedidoId, antes: pagoAntes });
+    await conn.query(
+      "UPDATE credito_movimientos SET creado_en = :ahora WHERE pedido_id = :id AND tipo = 'cargo' AND id > :antes",
+      { ahora, id: pedidoId, antes: creditoAntes }
+    );
 
     const [det] = await conn.query(
       'SELECT variante_id, cantidad, descripcion FROM pedido_detalle WHERE pedido_id = :id',
@@ -3682,7 +3738,14 @@ async function resumen(almacenes = null) {
   return { hoy: n(hoy), semana: n(semana), por_cobrar: n(fiado), canceladas_mes: n(canceladas) };
 }
 
+/** De qué tienda es una venta (para "cada quien, sus tiendas"). */
+async function almacenDePedido(id) {
+  const [[p]] = await pool.query('SELECT almacen_id FROM pedidos WHERE id = :id', { id: Number(id) });
+  return p ?? null;
+}
+
 module.exports = {
+  almacenDePedido,
   pasarACredito,
   listarNotasPendientes,
   resumen,

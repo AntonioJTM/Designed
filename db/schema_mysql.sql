@@ -1275,6 +1275,7 @@ CREATE TABLE `nomina_comisiones` (
   `total` decimal(12,2) NOT NULL,
   `venta_neta` decimal(12,2) NOT NULL,
   `devuelto` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `condonado` decimal(12,2) NOT NULL DEFAULT 0.00,
   `porcentaje` decimal(5,2) NOT NULL DEFAULT 0.00,
   `comision` decimal(12,2) NOT NULL DEFAULT 0.00,
   PRIMARY KEY (`id`),
@@ -1372,7 +1373,7 @@ CREATE TABLE `transferencias` (
   CONSTRAINT `fk_transferencias_revisada` FOREIGN KEY (`revisada_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_transferencias_facturada` FOREIGN KEY (`facturada_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_transferencias_creado` FOREIGN KEY (`creado_por`) REFERENCES `usuarios` (`id`),
-  CONSTRAINT `chk_transferencias_fuente` CHECK (`fuente` in ('pago','abono','anticipo')),
+  CONSTRAINT `chk_transferencias_fuente` CHECK (`fuente` in ('pago','abono','anticipo','regreso')),
   CONSTRAINT `chk_transferencias_estado` CHECK (`estado` in ('por_revisar','procesada'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

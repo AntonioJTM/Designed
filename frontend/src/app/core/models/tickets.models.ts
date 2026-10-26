@@ -71,4 +71,6 @@ export interface TicketPagoNota {
   pagado: number;
   falta: number;
   falta_hoy: number;
+  /** De lo que falta hoy, lo que debe en su cuenta de crédito (2026-10-26). */
+  falta_hoy_credito?: number;
 }

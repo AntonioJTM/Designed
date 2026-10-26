@@ -938,6 +938,115 @@ function repartirAbonos(movs) {
   }));
 }
 
+/** Lo que PAGA un movimiento de la cuenta: dinero (efectivo o banco), su saldo a favor o un ajuste a mano. */
+function origenDe(m) {
+  if (m.origen) return m.origen;
+  if (m.tipo === 'ajuste') return 'ajuste';
+  if (Number(m.interno)) return 'saldo';
+  return /efectivo/i.test(String(m.metodo ?? '')) ? 'efectivo' : 'transferencia';
+}
+
+/**
+ * DE DÓNDE SALIÓ LO PAGADO (2026-10-26, auditoría: "lo que ya abonó" contaba
+ * una condonación como dinero y al cancelar se podía regresar en efectivo). El
+ * mismo reparto que `repartirAbonos` —lo abonado a una nota la paga a ella y lo
+ * demás va de lo más viejo a lo más nuevo— pero sabiendo de dónde salió cada
+ * peso: EFECTIVO o TRANSFERENCIA (dinero que entró), su SALDO A FAVOR
+ * («Descontar de lo que debe») o un AJUSTE a mano («Corregir deuda»: una
+ * condonación). Devuelve cada deuda con lo pagado por origen y lo que SOBRA (lo
+ * pagado que ya no paga nada), que es lo último que llegó.
+ *
+ * Cada movimiento trae `tipo`, `monto`, `pedido_id` y, para saber su origen,
+ * `interno` y `metodo` (el nombre del método), o su `origen` ya resuelto.
+ */
+function rastrearPagos(movs) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const vacio = () => ({ efectivo: 0, transferencia: 0, saldo: 0, ajuste: 0 });
+  const porPedido = new Map();
+  const deudas = [];
+  // Primera vuelta: lo que debe cada venta y cada ajuste que subió la cuenta.
+  for (const m of movs) {
+    const firmado = SIGNO_CREDITO[m.tipo] * Number(m.monto);
+    if (m.pedido_id != null) {
+      let d = porPedido.get(Number(m.pedido_id));
+      if (!d) {
+        d = { pedidoId: Number(m.pedido_id), monto: 0 };
+        porPedido.set(Number(m.pedido_id), d);
+        deudas.push(d);
+      }
+      if (m.tipo !== 'abono') d.monto += firmado;
+    } else if (firmado > 0) {
+      deudas.push({ pedidoId: null, monto: firmado });
+    }
+  }
+  for (const d of deudas) {
+    d.monto = Math.max(0, r2(d.monto));
+    d.libre = d.monto;
+    d.porOrigen = vacio();
+  }
+  // Segunda vuelta, en orden: el abono a una nota la paga a ella (lo que le sobre
+  // va al fondo); el abono a la cuenta y la condonación van al fondo.
+  const fondo = [];
+  for (const m of movs) {
+    const firmado = SIGNO_CREDITO[m.tipo] * Number(m.monto);
+    const origen = origenDe(m);
+    if (m.pedido_id != null && m.tipo === 'abono') {
+      const d = porPedido.get(Number(m.pedido_id));
+      const aplica = Math.min(d.libre, Number(m.monto));
+      d.libre = r2(d.libre - aplica);
+      d.porOrigen[origen] = r2(d.porOrigen[origen] + aplica);
+      const sobra = r2(Number(m.monto) - aplica);
+      if (sobra > 0) fondo.push({ monto: sobra, origen });
+    } else if (m.pedido_id == null && firmado < 0) {
+      fondo.push({ monto: r2(-firmado), origen });
+    }
+  }
+  // El fondo paga las deudas de la más vieja a la más nueva.
+  let i = 0;
+  for (const d of deudas) {
+    while (d.libre > 0.004 && i < fondo.length) {
+      const f = fondo[i];
+      const toma = r2(Math.min(d.libre, f.monto));
+      d.libre = r2(d.libre - toma);
+      f.monto = r2(f.monto - toma);
+      d.porOrigen[f.origen] = r2(d.porOrigen[f.origen] + toma);
+      if (f.monto <= 0.004) i++;
+    }
+  }
+  const sobrante = vacio();
+  for (; i < fondo.length; i++) sobrante[fondo[i].origen] = r2(sobrante[fondo[i].origen] + fondo[i].monto);
+  return {
+    deudas: deudas.map((d) => ({
+      pedidoId: d.pedidoId, monto: d.monto, pagado: r2(d.monto - d.libre), porPagar: d.libre, porOrigen: d.porOrigen,
+    })),
+    sobrante: { ...sobrante, total: r2(sobrante.efectivo + sobrante.transferencia + sobrante.saldo + sobrante.ajuste) },
+  };
+}
+
+/** Los movimientos de su cuenta, en orden, con lo que hace falta para saber su origen. */
+async function movimientosConOrigen(ejecutor, clienteId) {
+  const [movs] = await ejecutor.query(
+    `SELECT m.id, m.tipo, m.monto, m.pedido_id, m.creado_en, mp.interno, mp.nombre AS metodo
+       FROM credito_movimientos m LEFT JOIN metodos_pago mp ON mp.id = m.metodo_pago_id
+      WHERE m.cliente_id = :id
+      ORDER BY m.creado_en, m.id`,
+    { id: clienteId }
+  );
+  return movs;
+}
+
+/**
+ * Lo que quedaría LIBRE si se cancela esta venta a crédito (2026-10-26): lo que
+ * se le abonó y ya no pagaría nada, por origen. Simula la cancelación: lo que
+ * debía esa nota (su cargo y sus ajustes) se va y lo abonado a ella pasa al
+ * fondo, que primero paga sus otras notas.
+ */
+async function libreSiSeCancela(ejecutor, clienteId, pedidoId) {
+  const movs = (await movimientosConOrigen(ejecutor, clienteId))
+    .filter((m) => !(Number(m.pedido_id) === Number(pedidoId) && m.tipo !== 'abono'));
+  return rastrearPagos(movs).sobrante;
+}
+
 /**
  * LAS NOTAS A CRÉDITO QUE SE PUEDEN PAGAR (2026-10-19: "quiero hacer el abono a
  * las notas, no en general; y también así como está, abono a cuenta"). Las que
@@ -1297,7 +1406,34 @@ async function habitos(clienteId, almacenes = null) {
   };
 }
 
+/**
+ * De qué tiendas es un abono a su cuenta: la de la nota a la que se abonó y la de
+ * la caja donde se cobró (para "cada quien, sus tiendas"; 2026-10-26, auditoría).
+ */
+async function tiendasDelAbono(movId) {
+  const [[m]] = await pool.query(
+    `SELECT p.almacen_id AS de_nota, cj.almacen_id AS de_caja
+       FROM credito_movimientos m
+       LEFT JOIN pedidos p       ON p.id = m.pedido_id
+       LEFT JOIN sesiones_caja s ON s.id = m.sesion_caja_id
+       LEFT JOIN cajas cj        ON cj.id = s.caja_id
+      WHERE m.id = :id`,
+    { id: Number(movId) }
+  );
+  return m ?? null;
+}
+
+/** El turno de caja de un movimiento de su cuenta o de su saldo a favor (o null). */
+async function turnoDelMovimiento(tabla, movId) {
+  if (!['credito_movimientos', 'saldo_favor_movimientos'].includes(tabla)) {
+    throw new Error(`turnoDelMovimiento: tabla no permitida (${tabla})`);
+  }
+  const [[m]] = await pool.query(`SELECT sesion_caja_id FROM ${tabla} WHERE id = :id`, { id: Number(movId) });
+  return m?.sesion_caja_id ?? null;
+}
+
 module.exports = {
+  tiendasDelAbono, turnoDelMovimiento,
   habitos,
   // Cuenta de la tienda en línea
   buscarPorCorreoConHash,
@@ -1328,6 +1464,7 @@ module.exports = {
   foliosVisibles,
   liquidarVentasACredito,
   aplicarAbonos,
+  rastrearPagos, movimientosConOrigen, libreSiSeCancela,
   repartirAbonos,
   SIGNO_CREDITO,
 };

@@ -614,6 +614,61 @@ async function _calcular(conn, periodoId) {
 }
 
 /**
+ * ¿HAY QUE VOLVER A CALCULARLA? (2026-10-26, auditoría: la semana del 18 al 24 se
+ * calculó antes de las ventas del 21 y 22, y pagarla no la recalculaba). Compara lo
+ * que pagaría comisión si se calculara HOY (las mismas cuentas de `_calcular`) con
+ * lo que tiene anotado, y el personal de la nómina con el de sus recibos. Solo una
+ * semana en borrador, ya calculada y con la regla de comisión al liquidarse; si no,
+ * null. Devuelve las ventas que entrarían, las que saldrían y si cambió el personal.
+ */
+async function porRecalcular(periodoId) {
+  const [[periodo]] = await pool.query(
+    `SELECT id, estado, DATE_FORMAT(fecha_inicio, '%Y-%m-%d') AS fecha_inicio,
+            DATE_FORMAT(fecha_fin, '%Y-%m-%d') AS fecha_fin
+       FROM nomina_periodos WHERE id = :id`,
+    { id: periodoId }
+  );
+  if (!periodo || periodo.estado !== 'borrador' || periodo.fecha_inicio < comisiones.DESDE) return null;
+  const [recibos] = await pool.query('SELECT usuario_id FROM nomina_recibos WHERE periodo_id = :id', { id: periodoId });
+  if (!recibos.length) return null;
+  const [empleados] = await pool.query(
+    'SELECT ne.usuario_id FROM nomina_empleados ne JOIN usuarios u ON u.id = ne.usuario_id WHERE ne.activo = 1'
+  );
+  const ids = empleados.map((e) => Number(e.usuario_id));
+  const deRecibos = new Set(recibos.map((r) => Number(r.usuario_id)));
+  const personal = ids.length !== deRecibos.size || ids.some((id) => !deRecibos.has(id));
+
+  const hoy = ids.length
+    ? await comisiones.liquidadasEnSemana(pool, { periodoId, hastaExcl: _diaSiguiente(periodo.fecha_fin), usuarioIds: ids })
+    : new Map();
+  const [anotadas] = await pool.query(
+    `SELECT nc.pedido_id, nc.numero_pedido, nc.tipo, nc.venta_neta, r.usuario_id
+       FROM nomina_comisiones nc JOIN nomina_recibos r ON r.id = nc.recibo_id
+      WHERE r.periodo_id = :id`,
+    { id: periodoId }
+  );
+  const llave = (u, p, t) => `${u}|${p}|${t}`;
+  const yaEstan = new Map(anotadas.map((a) => [llave(a.usuario_id, a.pedido_id, a.tipo), a]));
+  const entrarian = new Set();
+  const nuevas = [];
+  for (const [usuario, lineas] of hoy) {
+    for (const v of lineas) {
+      const k = llave(usuario, v.pedido_id, v.tipo);
+      entrarian.add(k);
+      const a = yaEstan.get(k);
+      if (!a || Math.abs(Number(a.venta_neta) - Number(v.venta_neta)) > 0.004) {
+        nuevas.push({ numero_pedido: v.numero_pedido, venta_neta: round2(v.venta_neta) });
+      }
+    }
+  }
+  const quitadas = anotadas
+    .filter((a) => !entrarian.has(llave(a.usuario_id, a.pedido_id, a.tipo)))
+    .map((a) => ({ numero_pedido: a.numero_pedido, venta_neta: round2(a.venta_neta) }));
+  if (!nuevas.length && !quitadas.length && !personal) return null;
+  return { nuevas, quitadas, personal };
+}
+
+/**
  * Cuántos días trabajó de verdad en la semana (los que faltan para llegar a los
  * de su horario, sin contar vacaciones, son faltas y no se pagan). Recalcula la
  * semana en el mismo movimiento para que el recibo quede al día.
@@ -737,6 +792,7 @@ function _diaSiguiente(fecha) {
 }
 
 module.exports = {
+  porRecalcular,
   duenoDeRecibo,
   duenoDeConcepto,
   listarEmpleados,

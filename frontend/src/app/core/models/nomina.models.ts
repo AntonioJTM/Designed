@@ -165,6 +165,15 @@ export interface PeriodoNomina {
   total_nomina: number;
   /** Alguien pidió que se pague y espera autorización (fase 3). */
   pago_pedido?: { id: number; solicitante: string; solicitado_en: string } | null;
+  /**
+   * Desde que se calculó entraron o salieron ventas de su comisión, o cambió su
+   * personal: hay que recalcularla antes de pagarla (2026-10-26). null = al día.
+   */
+  por_recalcular?: {
+    nuevas: { numero_pedido: string; venta_neta: number }[];
+    quitadas: { numero_pedido: string; venta_neta: number }[];
+    personal: boolean;
+  } | null;
 }
 
 /** Fila del listado histórico de periodos. */
@@ -215,6 +224,10 @@ export interface VentaComision {
   venta_neta: number;
   /** Lo que regresó de la venta (sin IVA) y ya no paga comisión (2026-10-14). */
   devuelto?: number;
+  /** Lo que se cubrió con un ajuste a mano (condonado, sin IVA) y no paga comisión (2026-10-26). */
+  condonado?: number;
+  /** Un renglón 'devolucion' que descuenta una venta que se CANCELÓ después de pagarse (2026-10-26). */
+  cancelada?: boolean;
   comision: number;
 }
 

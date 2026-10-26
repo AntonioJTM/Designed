@@ -35,6 +35,8 @@ const DE: Record<DeTransferencia, string> = {
   espera: 'Nota en espera',
   abono: 'Abono',
   anticipo: 'Anticipo',
+  // Lo abonado que se le regresó por el banco al cancelar una venta a crédito (2026-10-26).
+  regreso: 'Se le regresó',
 };
 
 /**

@@ -28,15 +28,16 @@
 
         @if (aFavor() > 0) {
           <!-- Pesó menos de lo que dejó pagado: la diferencia sale del cajón. -->
-          @if (turnos().length > 1) {
+          @if (turnos().length > 0 && !turnoUnicoAqui()) {
             <label class="field">
               Sale de la caja
               <select [(ngModel)]="turnoId" name="turno">
                 <option [ngValue]="null">Elige la caja…</option>
-                @for (t of turnos(); track t.id) { <option [ngValue]="t.id">{{ t.caja || 'Caja ' + t.caja_id }}</option> }
+                @for (t of turnos(); track t.id) { <option [ngValue]="t.id">{{ nombreTurno(t) }}</option> }
               </select>
             </label>
-          } @else if (turnos().length === 1) {
+            @if (avisoOtraTienda(); as a) { <p class="aviso">{{ a }}</p> }
+          } @else if (turnoUnicoAqui()) {
             <p class="nota-modal">Se le devuelven en efectivo del turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>.</p>
           }
         } @else if (faltaNota() > 0) {
@@ -129,17 +130,18 @@
                 <input type="number" min="0" step="0.01" [(ngModel)]="recibido" name="recibido" [placeholder]="enEfectivo().toFixed(2)" />
                 <span class="ayuda">Vacío = pagó justo. Cambio: {{ cambio() | dinero }}</span>
               </label>
-              @if (turnos().length > 1) {
+              @if (turnos().length > 0 && !turnoUnicoAqui()) {
                 <label class="field">
                   Entra a la caja
                   <select [(ngModel)]="turnoId" name="turno">
                     <option [ngValue]="null">Elige la caja…</option>
-                    @for (t of turnos(); track t.id) { <option [ngValue]="t.id">{{ t.caja || 'Caja ' + t.caja_id }}</option> }
+                    @for (t of turnos(); track t.id) { <option [ngValue]="t.id">{{ nombreTurno(t) }}</option> }
                   </select>
                 </label>
               }
             </div>
-            @if (turnos().length === 1) {
+            @if (avisoOtraTienda(); as a) { <p class="aviso">{{ a }}</p> }
+            @if (turnoUnicoAqui()) {
               <p class="nota-modal">El efectivo entra al turno de <b>{{ turnos()[0].caja || 'la caja' }}</b>.</p>
             }
           }

@@ -19,6 +19,7 @@ import { ConfirmacionService } from '../../../core/services/confirmacion.service
 import { AuthService } from '../../../core/services/auth.service';
 import { AutorizacionesService } from '../../../core/services/autorizaciones.service';
 import { guardarArchivo, mensajeDeError } from '../../../shared/descargar';
+import { folioCorto } from '../../../shared/folio.pipe';
 
 /** Una opción del selector de semana. */
 interface OpcionSemana {
@@ -54,6 +55,8 @@ const SEMANAS_ATRAS = 12;
     .semana-sel select:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }
     .semana-sel .btn-icono { width: 44px; height: 44px; }
     .estado-periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .aviso.recalcular { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+    .aviso.recalcular > span { flex: 1 1 18rem; min-width: 0; }
     .estado-periodo .pill { white-space: normal; }
     .sub2 { font-size: 0.75rem; color: var(--tinta-3); }
     .extra { color: var(--ok-t); }
@@ -192,6 +195,12 @@ export class Nomina {
 
   crear(): void {
     this.accion(this.api.crearPeriodo(this.fecha), 'Nómina de la semana creada.');
+  }
+
+  /** "POS-79FA, POS-8D33…": los folios cortos de las ventas que cambiaron (hasta 3). */
+  foliosCortos(ventas: { numero_pedido: string }[]): string {
+    const cortos = ventas.slice(0, 3).map((v) => folioCorto(v.numero_pedido));
+    return cortos.join(', ') + (ventas.length > 3 ? '…' : '');
   }
 
   calcular(): void {

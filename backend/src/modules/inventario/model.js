@@ -1985,7 +1985,16 @@ async function configurar(datos) {
   return rows[0];
 }
 
+/** De dónde sale y a dónde llega un traspaso (para "cada quien, sus tiendas"). */
+async function almacenesDeTraspaso(id) {
+  const [[t]] = await pool.query(
+    'SELECT almacen_origen_id, almacen_destino_id FROM traspasos WHERE id = :id', { id: Number(id) }
+  );
+  return t ?? null;
+}
+
 module.exports = {
+  almacenesDeTraspaso,
   minimosEnPaquetes,
   listarStock,
   resumenPorAlmacen,

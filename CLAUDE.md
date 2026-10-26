@@ -427,7 +427,10 @@ tienda-hilos/
   teléfono, y al pie `ticket_leyenda`. Viven en `configuracion` (claves `fiscal_*` y
   `ticket_leyenda`, migración `2026-10_datos_fiscales_ticket.sql`, públicas; pantalla
   Configuración → "Datos fiscales" y "Ticket"), NUNCA en el código ni en una migración: el
-  repositorio es público (la constancia, `ticketinfo.pdf`, está en `.gitignore`). El logo es
+  repositorio es público (la constancia, `ticketinfo.pdf`, está en `.gitignore` ESTÉ DONDE ESTÉ: el
+  2026-10-26 se encontró publicada en `Documentos/` y se BORRÓ DE LA HISTORIA, junto con un .zip de
+  ventas por cliente; `*.zip` también se ignora y los drivers de impresora viven en
+  `D:\Imagenes\Documentos privados\`). El logo es
   `public/hitex-ticket.png` (1009 × 588) y `imprimirTicket` ESPERA a que cargue antes de imprimir
   (`prepararHoja`), o saldría en blanco; si no carga, va "HITEX" en letras.
 - **El pago en efectivo se asienta por lo COBRADO, no por el billete.** Una venta de $432 pagada
@@ -528,7 +531,13 @@ tienda-hilos/
   cuenta llegó" cuentan solo lo vigente; lo regresado va aparte (`canceladas`, `importe_cancelado`:
   "sin contar $X de N ventas canceladas") y su renglón sigue en la lista, tachado ("no suma"). Si al
   cancelar quedó a su SALDO A FAVOR, sigue en el banco y SÍ suma (`a_favor`, `A_FAVOR_SQL`).
-  `e2e-transferencias-canceladas.js`.
+  `e2e-transferencias-canceladas.js`. **Auditoría 2026-10-26:** lo abonado a una venta a crédito que se le
+  REGRESÓ por el banco al cancelarla es un renglón en NEGATIVO (fuente `'regreso'`, «Se le regresó por
+  el banco») que resta de su cuenta; "Por revisar", "Procesadas" y "Sin facturar" cuentan lo que ENTRÓ;
+  el `total` de la lista son TODOS los renglones (también los que no suman); una nota en espera entregada
+  como pendiente de pago es «Nota pendiente»; y la venta cancelada que ya estaba facturada sale «Cancela
+  su factura». (Notas: «Registrar su pago» y «Entregar» ya no eligen solo el turno de OTRA tienda,
+  `shared/turnos-de-la-nota.ts`.)
 - **CANCELAR regresa TODO tal cual se vendió** (2026-10-23, usuario: "no pregunte cómo lo regresa ni
   el peso"): la ventana solo enseña lo que se vendió y `cambiarEstado` IGNORA `devoluciones` al pasar
   a `cancelado` (se devuelve todo el dinero: vuelve toda la mercancía como salió).
@@ -541,7 +550,14 @@ tienda-hilos/
   reactiva. Sin cliente, se regresa como siempre. **Y la venta A CRÉDITO ya abonada** (2026-10-26):
   "lo que ya abonó a esta nota" queda a su saldo a favor (como siempre, `pasarSobranteAFavor`) o se le
   regresa (`abonado_se_regresa: 'efectivo'` —sale del turno, hasta lo que haya en el cajón— o
-  `'banco'`), con un `ajuste` negativo en su saldo a favor. `e2e-transferencias-canceladas.js`. Lo que el cliente
+  `'banco'`), con un `ajuste` negativo en su saldo a favor. `e2e-transferencias-canceladas.js`.
+  **SOLO EL DINERO SE REGRESA** (2026-10-26, auditoría; decisión del usuario): `clientes/model.js →
+  rastrearPagos` dice de dónde salió cada peso abonado (efectivo, transferencia, su saldo a favor o un
+  ajuste a mano) con el mismo reparto de lo más viejo a lo más nuevo; el detalle trae `abonado_libre`
+  (`libreSiSeCancela`). Lo CONDONADO se va con la venta (ni se regresa ni queda a favor), lo pagado con
+  su saldo vuelve a su saldo y solo lo demás se puede regresar; por el banco pide la cuenta
+  (`cuenta_regreso`) y sale en Transferencias en negativo (fuente `'regreso'`). También pregunta en una
+  NOTA EN ESPERA. `e2e-cancelar-lo-abonado.js`. Lo que el cliente
   regresa a medias o en otra presentación va por «Devolución» (saldo a favor). Lo de abajo queda solo
   para el estado viejo `devuelto`, que la pantalla ya no ofrece.
 - **La mercancía puede regresar en OTRA presentación** (solo `devuelto`, ver arriba). Se entrega el paquete y el cliente devuelve
@@ -1473,6 +1489,18 @@ tienda-hilos/
     de `clientes/model.js → repartirAbonos`, que se separó de `aplicarAbonos` para correrlo sobre
     los movimientos HASTA una fecha); apartado o pedido, cuando sus `pagos` llegan al total.
     Lo que el cliente REGRESA no paga comisión (2026-10-14; ver "DEVOLUCIONES CON SALDO A FAVOR").
+    **Ni lo CONDONADO** (2026-10-26, decisión del usuario: "solo sobre lo cobrado"): lo de la nota que
+    se cubrió con un ajuste a mano no paga comisión (`rastrearPagos`, `nomina_comisiones.condonado`;
+    la pantalla y el PDF dicen "sin $X condonados").
+    **Ni la venta que se CANCELA después de pagarse** (2026-10-26, auditoría #7): la siguiente nómina que
+    se calcule la descuenta, un renglón 'devolucion' en negativo marcado `cancelada` ("se canceló"),
+    con lo que neto se pagó de ella (`comisiones.js → cancelacionesPorDescontar`; cuándo se canceló:
+    `pedidos.actualizado_en`). Una sola vez, aunque se recalcule.
+    **NO SE PAGA UNA NÓMINA QUE YA NO CUADRA** (2026-10-26, decisión del usuario: "no dejar pagarla
+    hasta recalcular"): si desde que se calculó entraron o salieron ventas de su comisión o cambió su
+    personal (`nomina/model.js → porRecalcular`), el periodo trae `por_recalcular`, la pantalla avisa con
+    «Volver a calcular» y apaga pagar, y pagarla o pedir que se pague da 409 `NOMINA_POR_RECALCULAR`
+    (`service.js → exigirAlDia`, también en `alPedir` de `pagar_nomina`).
     `nomina/comisiones.js`: `ventasSinPagarComision` calcula para cada venta cuándo quedó liquidada;
     `_calcular` toma las liquidadas hasta el sábado que NO estén en otra nómina viva (no cancelada) y
     las anota en `nomina_comisiones` (migración `2026-10_comisiones_al_liquidar.sql`: folio,

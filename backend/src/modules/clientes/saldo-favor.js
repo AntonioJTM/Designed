@@ -221,27 +221,44 @@ async function pagarConSaldo(conn, { clienteId, pedidoId, numeroPedido, monto, u
  * negativo: un "a favor" que no salía en Cuánto debe ni se podía usar al
  * cobrar. Ahora ese sobrante pasa a su SALDO A FAVOR: un `ajuste` que deja la
  * cuenta en $0 y un `reintegro` en su saldo con la venta. Va dentro de la
- * transacción de quien llama; devuelve cuánto pasó.
+ * transacción de quien llama.
+ *
+ * LO CONDONADO SE VA CON LA VENTA (2026-10-26, decisión del usuario): la parte
+ * que se cubrió con un ajuste a mano («Corregir deuda») no entró como dinero y
+ * no pasa a su saldo a favor (`clientesModel.rastrearPagos` dice de dónde salió
+ * cada peso). Devuelve lo que pasó a su saldo (`monto`), cuánto de eso es DINERO
+ * (efectivo o banco: lo único que se puede regresar), cuánto lo había pagado con
+ * su saldo a favor y lo condonado que se quitó.
  */
 async function pasarSobranteAFavor(conn, { clienteId, pedidoId = null, numeroPedido = null, usuarioId = null }) {
+  const nada = { monto: 0, dinero: 0, saldo: 0, condonado: 0 };
   const enCuenta = await clientesModel.saldo(clienteId, conn, true);
-  if (enCuenta > -0.004) return 0;
-  const monto = round2(-enCuenta);
+  if (enCuenta > -0.004) return nada;
+  const sobra = round2(-enCuenta);
+  const { sobrante } = clientesModel.rastrearPagos(await clientesModel.movimientosConOrigen(conn, clienteId));
+  const condonado = round2(Math.min(sobra, sobrante.ajuste));
+  const monto = round2(sobra - condonado);
+  const dinero = round2(Math.min(monto, sobrante.efectivo + sobrante.transferencia));
   await clientesModel.agregarMovimiento({
     cliente_id: clienteId,
     tipo: 'ajuste',
-    monto,
+    monto: sobra,
     pedido_id: null,
     // Sin el folio: este ajuste no lleva venta (no debe cambiar cómo se reparten
     // los abonos) y así otra tienda no ve de qué venta fue (el `reintegro` sí la lleva).
-    notas: 'Lo abonado a una venta cancelada ya no paga nada: pasó a su saldo a favor',
+    notas: condonado > 0.004
+      ? `Lo abonado a una venta cancelada ya no paga nada${monto > 0.004 ? ': pasó a su saldo a favor' : ''}; ` +
+        `$${condonado.toFixed(2)} de un ajuste a mano se quitaron con la venta`
+      : 'Lo abonado a una venta cancelada ya no paga nada: pasó a su saldo a favor',
     usuario_id: usuarioId ?? null,
   }, conn);
-  await agregar(conn, {
-    clienteId, tipo: 'reintegro', monto, pedidoId, usuarioId,
-    notas: `Lo abonado${numeroPedido ? ` a ${numeroPedido}` : ''} (se canceló) pasó a su saldo a favor`,
-  });
-  return monto;
+  if (monto > 0.004) {
+    await agregar(conn, {
+      clienteId, tipo: 'reintegro', monto, pedidoId, usuarioId,
+      notas: `Lo abonado${numeroPedido ? ` a ${numeroPedido}` : ''} (se canceló) pasó a su saldo a favor`,
+    });
+  }
+  return { monto, dinero, saldo: round2(monto - dinero), condonado };
 }
 
 /**

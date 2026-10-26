@@ -452,7 +452,9 @@ export class VentasService {
     // Al cancelar, lo que pagó queda a su saldo a favor en vez de regresárselo (2026-10-26).
     aFavor?: { efectivo?: boolean; transferencia?: boolean },
     // Una venta a crédito ya abonada: lo abonado se le regresa (2026-10-26).
-    abonadoSeRegresa?: 'efectivo' | 'banco'
+    abonadoSeRegresa?: 'efectivo' | 'banco',
+    // Por el banco: de qué cuenta salió (Transferencias lo resta de esa cuenta).
+    cuentaRegreso?: number | null
   ): Observable<Pedido> {
     return this.http
       .patch<ApiResponse<Pedido>>(`${this.base}/pedidos/${id}/estado`, {
@@ -460,6 +462,7 @@ export class VentasService {
         devoluciones: devoluciones?.length ? devoluciones : undefined,
         ...(aFavor ? { a_favor: aFavor } : {}),
         ...(abonadoSeRegresa ? { abonado_se_regresa: abonadoSeRegresa } : {}),
+        ...(abonadoSeRegresa === 'banco' && cuentaRegreso ? { cuenta_regreso: cuentaRegreso } : {}),
       })
       .pipe(map(data));
   }

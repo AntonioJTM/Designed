@@ -559,7 +559,12 @@ export function armarTicketPagoNota(d: TicketPagoNota, tienda: DatosTienda): str
     d.pedido.almacen ? renglon('Tienda', esc(d.pedido.almacen)) : '',
   ].join('');
   const pagada = d.falta <= 0.004;
-  const hoy = Math.abs(d.falta_hoy - d.falta) > 0.004 ? renglon('Hoy le falta', esc(dineroTicket(d.falta_hoy))) : '';
+  // Hoy, contando su crédito (2026-10-26): si lo que faltaba pasó a su cuenta, lo dice.
+  const enCredito = Number(d.falta_hoy_credito ?? 0);
+  const hoy = Math.abs(d.falta_hoy - d.falta) <= 0.004 ? ''
+    : d.falta_hoy <= 0.004 ? renglon('Hoy', 'Ya está pagada')
+      : renglon('Hoy le falta', esc(dineroTicket(d.falta_hoy)))
+        + (enCredito > 0.004 ? `<div class="art-extra">De eso, ${esc(dineroTicket(enCredito))} en su cuenta de crédito</div>` : '');
   // Dos formas a la vez (2026-10-26): cada una en su renglón; y lo que pasó a crédito.
   const partes = d.partes?.length ? d.partes : [{ metodo: d.metodo ?? '', monto: d.monto, referencia: d.referencia }];
   const credito = d.credito

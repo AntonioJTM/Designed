@@ -401,7 +401,12 @@
                       </span>
                     </td>
                     <td class="num">{{ c.monto_inicial | dinero }}</td>
-                    <td class="num">{{ c.ventas_efectivo | dinero }}</td>
+                    <td class="num">
+                      {{ c.ventas_efectivo | dinero }}
+                      @if (+(c.canceladas_a_favor ?? 0) > 0) {
+                        <div class="muted nota-corte">{{ c.canceladas_a_favor | dinero }} canceladas, a su saldo a favor</div>
+                      }
+                    </td>
                     <td class="num">{{ c.monto_esperado | dinero }}</td>
                     <td class="num">{{ c.monto_final | dinero }}</td>
                     <td>

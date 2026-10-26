@@ -74,6 +74,20 @@ describe('Nomina (fase 3)', () => {
     expect(pagados).toEqual([]);
   });
 
+  // 2026-10-26, auditoría: no se paga una nómina que cambió desde que se calculó.
+  it('con ventas nuevas desde que se calculó, avisa y no deja pagarla', async () => {
+    const f = await montar([], 1, true, {
+      ...PERIODO,
+      por_recalcular: { nuevas: [{ numero_pedido: 'POS-1792686502945-E443', venta_neta: 255.75 }], quitadas: [], personal: false },
+    });
+    const el = f.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('entra 1 venta');
+    expect(el.textContent).toContain('POS-E443');
+    expect(botones(el)).toContain('Volver a calcular');
+    const pagar = [...el.querySelectorAll('button')].find((x) => x.textContent?.includes('Marcar como pagada'));
+    expect(pagar?.disabled).toBeTrue();
+  });
+
   it('nadie toca su propio recibo; el administrador sí', async () => {
     const f = await montar(['ver:nomina', 'pedir:pagar_nomina'], 2);
     expect(f.componentInstance.puedeTocar(recibo(1, 2))).toBeFalse();

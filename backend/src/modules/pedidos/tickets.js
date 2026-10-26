@@ -15,6 +15,7 @@
 
 const { pool } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
+const clientesModel = require('../clientes/model');
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -64,6 +65,22 @@ async function pagoDeNota(pedidoId, pagoId) {
   );
   const aCredito = round2(cr?.monto ?? 0);
 
+  // LO QUE LE FALTA HOY (2026-10-26, auditoría): lo que no cubren sus pagos ni su
+  // cargo a crédito, MÁS lo que de ese cargo todavía debe en su cuenta. Antes solo
+  // contaba el crédito de ese mismo momento: una nota que pasó a crédito después (o
+  // que ya liquidó su crédito) salía "debiendo".
+  // (El cargo completo: lo que regresó y se descontó de la nota ya bajó lo que debe.)
+  const [[cargo]] = await pool.query(
+    "SELECT COALESCE(SUM(monto), 0) AS monto FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo'",
+    { id: pedidoId }
+  );
+  const fiadoHoy = round2(cargo?.monto ?? 0);
+  let debeEnCredito = 0;
+  if (p.cliente_id && fiadoHoy > 0) {
+    const deuda = (await clientesModel.aplicarAbonos(pool, p.cliente_id)).find((d) => d.pedidoId === Number(p.id));
+    debeEnCredito = round2(deuda?.porPagar ?? 0);
+  }
+
   const de = Number(p.nota_pendiente) ? 'Nota pendiente de pago'
     : Number(p.encargo) ? 'Nota en espera'
       : p.estado === 'apartado' || Number(p.inventario_descontado) === 0 ? 'Apartado'
@@ -89,7 +106,9 @@ async function pagoDeNota(pedidoId, pagoId) {
     llevaba_pagado: llevaba,
     pagado,
     falta: Math.max(0, round2(total - pagado - aCredito)),
-    falta_hoy: Math.max(0, round2(total - suma(pagos) - aCredito)),
+    falta_hoy: round2(Math.max(0, round2(total - suma(pagos) - fiadoHoy)) + debeEnCredito),
+    // De lo que falta hoy, lo que debe en su cuenta de crédito.
+    falta_hoy_credito: debeEnCredito,
   };
 }
 

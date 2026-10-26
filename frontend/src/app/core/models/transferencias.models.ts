@@ -13,10 +13,11 @@ export interface CuentaDeposito {
   ultimos: string | null;
 }
 
-export type FuenteTransferencia = 'pago' | 'abono' | 'anticipo';
+/** 'regreso' (2026-10-26): lo abonado que se le regresó por el banco al cancelar una venta a crédito. */
+export type FuenteTransferencia = 'pago' | 'abono' | 'anticipo' | 'regreso';
 export type EstadoTransferencia = 'por_revisar' | 'procesada';
-/** De qué es: venta, nota pendiente, nota en espera, abono o anticipo. */
-export type DeTransferencia = 'venta' | 'nota' | 'espera' | 'abono' | 'anticipo';
+/** De qué es: venta, nota pendiente, nota en espera, abono, anticipo o lo que se le regresó. */
+export type DeTransferencia = 'venta' | 'nota' | 'espera' | 'abono' | 'anticipo' | 'regreso';
 
 export interface Transferencia {
   /** "pago-12", "abono-5", "anticipo-3". */
@@ -62,6 +63,12 @@ export interface CifrasTransferencias {
   /** Las de ventas canceladas: NO suman en las demás cifras (2026-10-26). */
   canceladas: number;
   importe_cancelado: number;
+  /** Lo que se le regresó por el banco al cancelar: ya va restado del importe (2026-10-26). */
+  regresos?: number;
+  importe_regresado?: number;
+  /** De ventas canceladas que YA se habían facturado: hay que cancelar su factura. */
+  facturadas_canceladas?: number;
+  importe_facturadas_canceladas?: number;
 }
 
 export interface ListaTransferencias {
@@ -69,7 +76,8 @@ export interface ListaTransferencias {
   total: number;
   cifras: CifrasTransferencias;
   /** Lo que llegó a cada cuenta (id null = sin cuenta). */
-  por_cuenta: { id: number | null; banco: string | null; ultimos: string | null; cuantas: number; importe: number }[];
+  /** `regresado`: lo que se le regresó por el banco desde esa cuenta (ya restado del importe, 2026-10-26). */
+  por_cuenta: { id: number | null; banco: string | null; ultimos: string | null; cuantas: number; importe: number; regresado?: number }[];
   limit: number;
   offset: number;
   hay_mas: boolean;

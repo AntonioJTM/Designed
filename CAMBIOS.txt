@@ -53,6 +53,17 @@ POR DECIDIR CON EL USUARIO (entradas 73 y 75)
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  AUDITORÍA /verificar, MÓDULOS 10 A 12: el .zip de ventas, la constancia y los drivers se
+  BORRARON DE LA HISTORIA de GitHub (subida forzada), la nómina no se paga si cambió desde
+  que se calculó, la venta cancelada ya pagada descuenta su comisión, sin SQL en los
+  controladores y «dev» fuera de la nómina (entrada 122; DESPLEGADO en 20261026-141604).
+  Antes:
+  AUDITORÍA /verificar, MÓDULOS 02 A 05: al cancelar solo el DINERO se regresa (lo
+  condonado se va con la venta, lo de su saldo vuelve a su saldo), Transferencias resta
+  lo regresado por el banco y cuenta todos sus renglones, la nota en espera pregunta,
+  el turno de otra tienda no se elige solo, ticket y comisión corregidos (entrada 121;
+  DESPLEGADO en 20261026-134645, migración 2026-10_cancelar_lo_abonado en las dos bases).
+  Antes:
   CANCELAR UNA VENTA A CRÉDITO YA PAGADA también pregunta: lo abonado queda a su
   saldo a favor o se le regresa en efectivo / por el banco (entrada 120;
   DESPLEGADO en 20261026-111603, sin base).
@@ -911,6 +922,122 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (122) · Auditoría /verificar, módulos 10 a 12: GitHub limpio, nómina al día, capas
+-------------------------------------------------------------------------------
+
+"Ahora vamos a hacer los módulos del 10 al 12" (usuario). Decidió: borrar de la HISTORIA el
+.zip de ventas y la constancia (y subir forzado), sacar también los drivers de impresora
+(la propuesta de venta se queda), que «dev» es de prueba y sale de la nómina, y "no dejar
+pagar una nómina hasta recalcularla". DESPLEGADO en 20261026-141604 (sin base).
+
+  · GITHUB (#1, #2, #23): el .zip "VENTAS POR CLIENTE…" (191 PDF con el nombre de cada
+    cliente, commit be7cdcc), la constancia `Documentos/ticketinfo.pdf` (3565351) y los
+    drivers de impresora se BORRARON DE TODA LA HISTORIA (git filter-branch en una copia
+    aparte, 35 commits, solo cambian esos 5 archivos) y se subió FORZADO a
+    AntonioJTM/Designed (`--force-with-lease`, 04a8d35 → 071fac6, que además trae el
+    .gitignore: `ticketinfo.pdf` donde esté, `*.zip`, `/VENTAS POR CLIENTE*` y los drivers).
+    La carpeta de trabajo se puso en la historia nueva sin tocar lo que no tenía commit. Los
+    drivers viven en `D:\Imagenes\Documentos privados\`. El .zip y la constancia ya no
+    estaban en el disco (los quitó alguien antes). OJO: GitHub todavía sirve el commit viejo
+    si se conoce su número (be7cdcc…): para borrarlo del todo hay que pedirle al soporte de
+    GitHub que limpie los commits sin rama del repositorio.
+  · CAPAS (#22): las consultas que estaban en 7 controladores (caja, clientes, inventario,
+    opciones, pedidos, remesas, usuarios) pasaron a sus modelos (`almacenDeCaja`,
+    `almacenDeTurno`, `tiendasDelAbono`, `turnoDelMovimiento`, `almacenesDeTraspaso`,
+    `almacenDePedido`, `almacenesDeCargas`, `almacenes/model.js → esMatriz / nombresDe`) y
+    `opciones` estrenó `model.js`. Hacen lo mismo. El verificador queda en 0 hallazgos.
+  · NÓMINA (#7): la venta que se cancela DESPUÉS de pagarse su comisión se descuenta en la
+    siguiente nómina que se calcule (renglón 'devolucion' en negativo, `cancelada`, "se
+    canceló" en la pantalla y en el PDF), con lo neto que se pagó; una sola vez.
+    `comisiones.js → cancelacionesPorDescontar`; la fecha es `pedidos.actualizado_en`.
+  · NÓMINA (#8): `nomina/model.js → porRecalcular` compara lo que pagaría comisión si se
+    calculara hoy con lo anotado (y el personal): el periodo trae `por_recalcular`, Nómina
+    avisa "Desde que se calculó entra 1 venta (POS-E443)…" con «Volver a calcular» y apaga
+    pagar; pagarla o pedir que se pague da 409 NOMINA_POR_RECALCULAR.
+  · REPORTES (#20): en Cortes, bajo "Ventas en efectivo", "$X canceladas, a su saldo a favor".
+  · HITEX (#9): «dev» (cajero de Moroleón, de prueba) salió de la nómina con «Sacar de la
+    nómina» (`nomina_empleados.activo = 0`) y la semana del 18 al 24 se recalculó (respaldo
+    `/root/respaldos/hitex_antes_dev_fuera_nomina_20261026-141659.sql.gz`): ya no trae su
+    recibo y entran las ventas del 21 y 22 (#8) de la vendedora (de
+    dos ventas, sin lo condonado; una regresó completa) y su comisión. Los montos de la
+    nómina real no se anotan aquí: el repositorio es público.
+    Su cuenta para entrar al sistema sigue activa: eso lo decide el usuario.
+  · Pendiente del usuario (#24): el tipo de gasto «pruebas», los límites de Viajes / Limpieza
+    / Papelería y los tiempos de Rotación; y (#10) el corte de los dos turnos abiertos.
+  · Pruebas: `e2e-nomina-al-dia.js` (13); nomina-pdf, nomina-jornada, permisos, tiendas,
+    cargador, varios-puestos, surtir-a-medias, surtir-inventario, traspaso-estados,
+    cancelar-lo-abonado y transferencias-canceladas siguen bien; servidor 101, pantallas
+    666/666; verificador 2,466 comprobaciones, 0 hallazgos.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (121) · Auditoría /verificar, módulos 02 a 05: al cancelar, solo el DINERO se regresa
+-------------------------------------------------------------------------------
+
+/verificar sobre hitex (2,395 comprobaciones, 8 avisos; dos revisores en solo lectura)
+dio 11 hallazgos importantes y 13 menores. El usuario pidió arreglar "del módulo 2 al
+5" (punto de venta y tickets, caja, ventas/notas/transferencias, clientes/crédito) y
+decidió dos cosas: lo CONDONADO con un ajuste a mano "se borra con la venta" (ni se
+regresa ni queda a favor) y la COMISIÓN va "solo sobre lo cobrado". DESPLEGADO en
+20261026-134645; migración `2026-10_cancelar_lo_abonado.sql` en LAS DOS bases (respaldo
+`/root/respaldos/hitex_antes_cancelar_lo_abonado_20261026-134548.sql.gz`).
+
+  · DE DÓNDE SALIÓ LO PAGADO (#4): `clientes/model.js → rastrearPagos` es el mismo
+    reparto que `repartirAbonos` (lo directo a su nota, lo demás de lo más viejo a lo
+    más nuevo) sabiendo el ORIGEN de cada peso: efectivo, transferencia, saldo a favor
+    («Descontar de lo que debe») o ajuste («Corregir deuda»). Lo que sobra es lo ÚLTIMO
+    que llegó. `libreSiSeCancela` simula la cancelación de una nota; el detalle de la
+    venta lo trae en `abonado_libre`. Antes "lo que ya abonó" era `credito_pagado`, que
+    contaba la condonación y el saldo a favor como dinero: C-0007 / POS-7B03 diría
+    "$345 que ya abonó" y se podían sacar $345 del cajón cuando por el sistema solo
+    entraron $45 por transferencia ($300 son el ajuste "SE LOS PAGO… AL CLIENTE").
+  · `saldo-favor.js → pasarSobranteAFavor` ya no pasa lo condonado al saldo a favor (la
+    cuenta queda en $0 igual; el ajuste dice "$X de un ajuste a mano se quitaron con
+    la venta") y devuelve `{ monto, dinero, saldo, condonado }`. Al cancelar, regresar
+    en efectivo o por el banco solo toma el DINERO; lo pagado con su saldo regresa a su
+    saldo. Respuesta: `abonado_condonado`. Una venta cuyo abonado se acomodó (incluida
+    la que solo tenía condonación) ya no se reactiva (409 VENTA_CON_SALDO_FAVOR), y la
+    que quedó a favor por elección dice eso, no "no había efectivo en la caja" (#17).
+  · VENTANA DE CANCELAR (`pedido-detalle`): pregunta solo por el dinero ("$250 que
+    abonó a esta nota"), y abajo dice lo que no se regresa: lo pagado con su saldo a
+    favor, lo condonado y lo que paga sus otras notas (#19). Por el banco pregunta
+    "¿De qué cuenta se le regresan?" (`cuenta_regreso`). También en una NOTA EN ESPERA
+    con lo que dejó (#3: antes no preguntaba y el efectivo salía siempre del cajón); su
+    título y su aviso dicen "nota en espera", no "apartado".
+  · TRANSFERENCIAS (#5, #6, #15, #16): fuente nueva 'regreso' (el ajuste de su saldo a
+    favor con el método de transferencia, en NEGATIVO, «Se le regresó por el banco»),
+    que resta de su cuenta; "Por revisar", "Procesadas" y "Sin facturar" cuentan lo que
+    ENTRÓ; "A qué cuenta llegó" dice "se regresaron $X". El `total` de la lista son
+    TODOS los renglones (antes las vigentes: "Ver más" se escondía antes de tiempo y
+    decía "3 transferencias" con 4 renglones). La nota en espera entregada como
+    pendiente de pago es «Nota pendiente». Una venta cancelada que ya estaba facturada
+    sale «Cancela su factura», con un aviso arriba (POS-D41A en hitex).
+  · AUTORIZACIONES (#13): el resumen de cancelar dice cuánto de lo abonado se regresa
+    (y que lo que no haya en el cajón le queda a favor), lo de su saldo y lo condonado.
+  · CAJA (#20): la venta cancelada cuyo efectivo quedó a su saldo a favor sale "Venta
+    cancelada · quedó a su saldo a favor" y la cifra lo dice. (#12) «Registrar su
+    pago» y «Entregar» ya no eligen solos el turno de OTRA tienda
+    (`shared/turnos-de-la-nota.ts`): primero los de la tienda de la nota, el de otra
+    tienda se elige a mano con aviso.
+  · TICKET de un abono a una nota (#11): "Hoy le falta" cuenta lo que la nota debe en su
+    crédito ("De eso, $X en su cuenta de crédito") o dice "Ya está pagada". ENTREGAR con
+    dos formas (#18): sus pagos y su cargo llevan la misma hora (su ticket no sale
+    partido).
+  · COMISIÓN (#21): lo de la nota que se cubrió con un ajuste a mano no paga comisión
+    (`nomina_comisiones.condonado`, congelado; la pantalla y el PDF dicen "sin $X
+    condonados"). Una venta así paga comisión solo sobre lo cobrado.
+  · Fuera de esto (otro módulo o para operar): #1 y #2 (ventas reales y la constancia
+    en el repositorio público), #7 a #10 (comisión de una venta cancelada ya pagada,
+    nómina del 18 al 24 sin recalcular, la cuenta "dev" en nómina, dos turnos abiertos
+    11 días con $61,684.75 y $8,308.75), #14, #22 a #24.
+  · Pruebas: `e2e-cancelar-lo-abonado.js` (35), `origen-de-lo-pagado.test.js` (7);
+    transferencias-canceladas, clientes-credito, cancelacion-caja, devoluciones,
+    notas-pendientes, pago-nota-formas, nombre-cancelacion, pedidos-encargo, vendedor,
+    nomina-pdf y tiendas siguen bien; servidor 101, pantallas 665/665. Visto en Chrome a
+    1440 y 390 px (ventana de cancelar, Transferencias, Caja).
 
 
 -------------------------------------------------------------------------------

@@ -496,6 +496,21 @@ describe('Tickets de abono y de anticipo', () => {
     expect(pagada).not.toContain('Le falta por pagar');
   });
 
+  // 2026-10-26, auditoría: "Hoy le falta" cuenta lo que pasó a su crédito.
+  it('reimpreso: hoy le falta lo de su crédito, o que ya está pagada', () => {
+    const d: TicketPagoNota = {
+      id: 79, cliente, fecha: '2026-10-15 12:00:00', monto: 1000, metodo: 'Efectivo', referencia: null,
+      pedido: { id: 5, numero_pedido: 'POS-1792036260049-468D', creado_en: '2026-10-14 21:51:03', total: 3017.5, de: 'Nota pendiente de pago' },
+      llevaba_pagado: 0, pagado: 1000, falta: 2017.5, falta_hoy: 1517.5, falta_hoy_credito: 1517.5,
+    };
+    const html = armarTicketPagoNota(d, tienda);
+    expect(html).toContain('Hoy le falta</span><span>$1,517.50');
+    expect(html).toContain('De eso, $1,517.50 en su cuenta de crédito');
+    const ya = armarTicketPagoNota({ ...d, falta_hoy: 0, falta_hoy_credito: 0 }, tienda);
+    expect(ya).toContain('Ya está pagada');
+    expect(ya).not.toContain('Hoy le falta');
+  });
+
   // DOS FORMAS (2026-10-26): cada una en su renglón, y lo que pasó a su crédito.
   it('abono a una nota con dos formas y lo demás a crédito', () => {
     const d: TicketPagoNota = {

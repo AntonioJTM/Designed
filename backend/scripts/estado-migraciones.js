@@ -123,6 +123,8 @@ const MIGRACIONES = [
   ['2026-10_rotacion_inventario (permisos)', 'permisos#clave=ver:rotacion'],
   ['2026-10_rotacion_inventario (tiempos)', 'permisos#clave=hacer:ajustes_rotacion'],
   ['2026-10_vendedor_en_venta', 'pedidos.vendedor_id'],
+  ['2026-10_cancelar_lo_abonado', "transferencias^'regreso'"],
+  ['2026-10_cancelar_lo_abonado (condonado)', 'nomina_comisiones.condonado'],
 ];
 
 (async () => {

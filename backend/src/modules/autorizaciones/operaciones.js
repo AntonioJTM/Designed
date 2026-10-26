@@ -103,6 +103,22 @@ async function queSeCancela(pedidoId) {
   return 'una venta';
 }
 
+/**
+ * Lo que quedaría libre de lo abonado a una venta a crédito si se cancela, por
+ * origen (`clientes/model.js → libreSiSeCancela`), o null si no hay nada.
+ */
+const abonadoLibreDe = async (pedidoId) => {
+  const p = await una(
+    `SELECT p.cliente_id,
+            EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo') AS fiada
+       FROM pedidos p WHERE p.id = :id`,
+    { id: Number(pedidoId) || 0 }
+  );
+  if (!p?.cliente_id || !Number(p.fiada)) return null;
+  const libre = await require('../clientes/model').libreSiSeCancela(pool, p.cliente_id, Number(pedidoId));
+  return libre.total > 0.004 ? libre : null;
+};
+
 /** El id de la venta de una ruta guardada ("/pedidos/123/estado"). */
 const pedidoDeRuta = (ruta) => Number(String(ruta ?? '').match(/\/pedidos\/(\d+)/)?.[1] ?? 0);
 
@@ -373,12 +389,24 @@ const OPERACIONES = {
         dinero.push(af.transferencia ? `${pesos(transferido)} de la transferencia quedan a su saldo a favor`
           : `${pesos(transferido)} de la transferencia se le regresan por el banco`);
       }
-      // Una venta a crédito ya abonada: lo abonado se le regresa en vez de quedarle a favor.
-      if (req.body?.estado === 'cancelado' && req.body?.abonado_se_regresa) {
-        dinero.push(`lo que abonó se le regresa ${req.body.abonado_se_regresa === 'efectivo' ? 'en efectivo de la caja' : 'por el banco'}`);
+      // Una venta a crédito ya abonada (2026-10-26): CUÁNTO y qué pasa con eso. Solo el
+      // dinero que entró se puede regresar; lo pagado con su saldo a favor regresa a su
+      // saldo y lo condonado con un ajuste a mano se va con la venta.
+      const libre = req.body?.estado === 'cancelado' && p?.cliente_id ? await abonadoLibreDe(req.params.id) : null;
+      if (libre) {
+        const entro = Math.round((libre.efectivo + libre.transferencia) * 100) / 100;
+        const como = req.body?.abonado_se_regresa;
+        if (entro > 0) {
+          dinero.push(como === 'efectivo'
+            ? `${pesos(entro)} que abonó se le regresan en efectivo de la caja (lo que no haya en el cajón le queda a favor)`
+            : como === 'banco' ? `${pesos(entro)} que abonó se le regresan por el banco`
+              : `${pesos(entro)} que abonó quedan a su saldo a favor`);
+        }
+        if (libre.saldo > 0) dinero.push(`${pesos(libre.saldo)} que pagó con su saldo a favor regresan a su saldo`);
+        if (libre.ajuste > 0) dinero.push(`${pesos(libre.ajuste)} de un ajuste a mano se quitan con la venta`);
       }
-      return `${verbo} ${p?.numero_pedido ?? (await queSeCancela(req.params.id)).replace(/^una? /, 'la ')} (${pesos(p?.total)}) · ${p?.cliente ?? ''}` +
-        dinero.map((d) => ` · ${d}`).join('');
+      return (`${verbo} ${p?.numero_pedido ?? (await queSeCancela(req.params.id)).replace(/^una? /, 'la ')} (${pesos(p?.total)}) · ${p?.cliente ?? ''}` +
+        dinero.map((d) => ` · ${d}`).join('')).slice(0, 500);
     },
   },
 
@@ -778,6 +806,8 @@ const OPERACIONES = {
       if (!p) throw new AppError(404, 'NO_ENCONTRADO', 'Periodo de nómina no encontrado');
       if (p.estado !== 'borrador') throw new AppError(409, 'NOMINA_NO_BORRADOR', `Esa nómina ya está ${p.estado === 'pagado' ? 'pagada' : 'cancelada'}.`);
       if (!Number(p.recibos)) throw new AppError(422, 'SIN_RECIBOS', 'Calcula la nómina antes de pedir que se pague.');
+      // Que esté al día: no se pide pagar una nómina que ya no cuadra (2026-10-26).
+      await require('../nomina/service').exigirAlDia(Number(req.params.id));
     },
     async describir(req) {
       const r = await resumenNomina(req.params.id);

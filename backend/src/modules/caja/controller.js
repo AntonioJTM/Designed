@@ -2,7 +2,7 @@
 
 const service = require('./service');
 const permisos = require('../permisos/service');
-const { pool } = require('../../config/db');
+const cajaModel = require('./model');
 
 /**
  * CADA QUIEN, SUS TIENDAS (2026-10-15): solo las cajas de sus tiendas, y un
@@ -11,17 +11,14 @@ const { pool } = require('../../config/db');
 async function _cajaDeSusTiendas(auth, cajaId) {
   const almacenes = await permisos.almacenesDe(auth);
   if (almacenes === null) return;
-  const [[c]] = await pool.query('SELECT almacen_id FROM cajas WHERE id = :id', { id: Number(cajaId) });
+  const c = await cajaModel.almacenDeCaja(cajaId);
   if (c) permisos.exigirAlmacen(almacenes, c.almacen_id, 'Esa caja');
 }
 
 async function _turnoDeSusTiendas(auth, sesionId) {
   const almacenes = await permisos.almacenesDe(auth);
   if (almacenes === null) return;
-  const [[s]] = await pool.query(
-    'SELECT c.almacen_id FROM sesiones_caja s JOIN cajas c ON c.id = s.caja_id WHERE s.id = :id',
-    { id: Number(sesionId) }
-  );
+  const s = await cajaModel.almacenDeTurno(sesionId);
   if (s) permisos.exigirAlmacen(almacenes, s.almacen_id, 'Ese turno');
 }
 

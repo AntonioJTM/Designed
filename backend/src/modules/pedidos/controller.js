@@ -8,7 +8,7 @@ const { AppError } = require('../../middlewares/error');
 const permisos = require('../permisos/service');
 const { puedeEn } = require('../autorizaciones/autorizable');
 const { NOMBRE: NOMBRE_PERMISO } = require('../permisos/catalogo');
-const { pool } = require('../../config/db');
+const pedidosModel = require('./model');
 
 /**
  * "Tu puesto no tiene permiso para «Vender a crédito»…", con el nombre que se ve
@@ -30,7 +30,7 @@ async function deSusTiendas(req, res, next, id) {
     if (auth?.tipo !== 'usuario' || !(Number(id) > 0)) return next();
     const almacenes = await permisos.almacenesDe(auth);
     if (almacenes === null) return next();
-    const [[p]] = await pool.query('SELECT almacen_id FROM pedidos WHERE id = :id', { id: Number(id) });
+    const p = await pedidosModel.almacenDePedido(id);
     if (p) permisos.exigirAlmacen(almacenes, p.almacen_id, 'Esa venta');
     return next();
   } catch (err) { return next(err); }
@@ -160,7 +160,7 @@ async function cambiarEstado(req, res, next) {
       req.body.estado,
       req.auth?.sub,
       req.body.devoluciones,
-      { aFavor: req.body.a_favor, abonadoSeRegresa: req.body.abonado_se_regresa }
+      { aFavor: req.body.a_favor, abonadoSeRegresa: req.body.abonado_se_regresa, cuentaRegreso: req.body.cuenta_regreso }
     );
     res.json({ data, error: null });
   } catch (err) { next(err); }

@@ -34,7 +34,7 @@
  */
 
 const { pool } = require('../../config/db');
-const { repartirAbonos } = require('../clientes/model');
+const { repartirAbonos, rastrearPagos } = require('../clientes/model');
 // La comisión es de quien VENDIÓ (2026-10-23): el vendedor elegido en la caja o,
 // si no se eligió, quien registró la venta.
 const VENDEDOR = require('../pedidos/vendedores').SQL_VENDEDOR;
@@ -140,6 +140,55 @@ async function devolucionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 0
 }
 
 /**
+ * LA VENTA QUE SE CANCELÓ DESPUÉS DE PAGARSE SU COMISIÓN (2026-10-26, auditoría):
+ * cancelar regresa todo, así que lo que ya se pagó se descuenta en la siguiente
+ * nómina que se calcule, igual que una devolución (un renglón 'devolucion' en
+ * negativo, marcado `cancelada`). Se descuenta lo que neto se pagó de ella en las
+ * nóminas vivas (lo pagado menos lo ya descontado), así nunca dos veces; si esa
+ * nómina se cancela, el descuento vuelve a quedar pendiente. Cuándo se canceló:
+ * `pedidos.actualizado_en` (una venta cancelada ya no se vuelve a tocar).
+ */
+async function cancelacionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 0 }) {
+  if (!usuarioIds.length) return [];
+  const [rows] = await conn.query(
+    `SELECT p.id, p.numero_pedido, ${VENDEDOR} AS usuario_id, COALESCE(c.nombre_comercial, c.nombre) AS cliente,
+            DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS vendida_en,
+            DATE_FORMAT(p.actualizado_en, '%Y-%m-%d %H:%i:%s') AS cancelada_en,
+            x.neta, x.comision, x.porcentaje
+       FROM (SELECT nc.pedido_id, SUM(nc.venta_neta) AS neta, SUM(nc.comision) AS comision,
+                    MAX(CASE WHEN nc.tipo <> 'devolucion' THEN nc.porcentaje END) AS porcentaje
+               FROM nomina_comisiones nc
+               JOIN nomina_recibos r   ON r.id = nc.recibo_id
+               JOIN nomina_periodos np ON np.id = r.periodo_id
+              WHERE np.estado <> 'cancelado' AND np.id <> :periodo AND nc.pedido_id IS NOT NULL
+              GROUP BY nc.pedido_id
+             HAVING MAX(nc.tipo <> 'devolucion') = 1) x
+       JOIN pedidos p ON p.id = x.pedido_id
+       LEFT JOIN clientes c ON c.id = p.cliente_id
+      WHERE p.estado IN ('cancelado', 'devuelto') AND ${VENDEDOR} IN (:ids)
+        AND p.creado_en >= :desde AND p.actualizado_en < :hasta`,
+    { ids: usuarioIds, desde: `${DESDE} 00:00:00`, hasta, periodo: periodoId ?? 0 }
+  );
+  return rows
+    .filter((v) => Number(v.neta) > TOL)
+    .map((v) => ({
+      pedido_id: Number(v.id),
+      numero_pedido: v.numero_pedido,
+      usuario_id: Number(v.usuario_id),
+      cliente: v.cliente ?? null,
+      tipo: 'devolucion',
+      cancelada: true,
+      vendida_en: v.vendida_en,
+      liquidada_en: v.cancelada_en,
+      total: 0,
+      venta_neta: -round2(v.neta),
+      devuelto: round2(v.neta),
+      porcentaje: Number(v.porcentaje ?? 0),
+      comision: -round2(v.comision),
+    }));
+}
+
+/**
  * Las ventas de esos vendedores desde `DESDE` que NO están en ninguna nómina
  * viva (salvo `periodoId`, que se está recalculando), con lo que llevan pagado
  * hasta `hasta` (exclusivo) y CUÁNDO quedaron liquidadas (`liquidada_en`, o null
@@ -207,14 +256,20 @@ async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }
     }
   }
   const clientes = [...new Set(ventas.filter((v) => fiadas.has(Number(v.id))).map((v) => Number(v.cliente_id)))];
-  /** cliente → [{ en, pagadoPor: Map(pedido → pagado) }] después de cada movimiento. */
+  /**
+   * cliente → [{ en, pagadoPor: Map(pedido → pagado), condonadoPor: Map(pedido → condonado) }]
+   * después de cada movimiento. LO CONDONADO NO PAGA COMISIÓN (2026-10-26, decisión
+   * del usuario: "solo sobre lo cobrado"): lo que de la nota se cubrió con un ajuste a
+   * mano («Corregir deuda»), con el mismo reparto (`rastrearPagos`).
+   */
   const cuentas = new Map();
   if (clientes.length) {
     const [movs] = await conn.query(
-      `SELECT cliente_id, tipo, monto, pedido_id, DATE_FORMAT(creado_en, '%Y-%m-%d %H:%i:%s') AS en
-         FROM credito_movimientos
-        WHERE cliente_id IN (:cl) AND creado_en < :hasta
-        ORDER BY creado_en, id`,
+      `SELECT m.cliente_id, m.tipo, m.monto, m.pedido_id, DATE_FORMAT(m.creado_en, '%Y-%m-%d %H:%i:%s') AS en,
+              mp.interno, mp.nombre AS metodo
+         FROM credito_movimientos m LEFT JOIN metodos_pago mp ON mp.id = m.metodo_pago_id
+        WHERE m.cliente_id IN (:cl) AND m.creado_en < :hasta
+        ORDER BY m.creado_en, m.id`,
       { cl: clientes, hasta }
     );
     for (const cl of clientes) {
@@ -224,9 +279,11 @@ async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }
         // Varios movimientos en el mismo segundo cuentan juntos.
         if (i + 1 < suyos.length && suyos[i + 1].en === suyos[i].en) continue;
         const reparto = repartirAbonos(suyos.slice(0, i + 1));
+        const origen = rastrearPagos(suyos.slice(0, i + 1)).deudas;
         pasos.push({
           en: suyos[i].en,
           pagadoPor: new Map(reparto.filter((d) => d.pedidoId != null).map((d) => [Number(d.pedidoId), d.pagado])),
+          condonadoPor: new Map(origen.filter((d) => d.pedidoId != null).map((d) => [Number(d.pedidoId), d.porOrigen.ajuste])),
         });
       }
       cuentas.set(cl, pasos);
@@ -261,6 +318,13 @@ async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }
       if (!cubierta) liquidada = null;
     }
     const regreso = Math.min(devuelto.get(id)?.neto ?? 0, round2(v.venta_neta));
+    // Lo condonado al liquidarla (o hoy, si todavía se debe), pasado a venta neta
+    // (sin IVA ni envío, en la misma proporción).
+    let condonado = 0;
+    for (const paso of pasos) if (!liquidada || paso.en <= liquidada) condonado = paso.condonadoPor.get(id) ?? 0;
+    const condonadoNeto = total > TOL
+      ? round2(Math.min(round2(v.venta_neta) - regreso, (Math.min(condonado, total) * Number(v.venta_neta)) / total))
+      : 0;
     return {
       pedido_id: id,
       numero_pedido: v.numero_pedido,
@@ -270,8 +334,9 @@ async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }
       vendida_en: v.vendida_en,
       liquidada_en: liquidada,
       total,
-      venta_neta: round2(v.venta_neta - regreso),
+      venta_neta: Math.max(0, round2(v.venta_neta - regreso - Math.max(0, condonadoNeto))),
       devuelto: round2(regreso),
+      condonado: Math.max(0, condonadoNeto),
       pagado: Math.min(pagado, total),
       falta: round2(Math.max(0, total - pagado)),
     };
@@ -286,7 +351,11 @@ async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }
  */
 async function liquidadasEnSemana(conn, { periodoId, hastaExcl, usuarioIds }) {
   const ventas = await ventasSinPagarComision(conn, { usuarioIds, hasta: hastaExcl, periodoId });
-  const descuentos = await devolucionesPorDescontar(conn, { usuarioIds, hasta: hastaExcl, periodoId });
+  const descuentos = [
+    ...(await devolucionesPorDescontar(conn, { usuarioIds, hasta: hastaExcl, periodoId })),
+    // Y lo de las ventas que se cancelaron después de pagarse (2026-10-26).
+    ...(await cancelacionesPorDescontar(conn, { usuarioIds, hasta: hastaExcl, periodoId })),
+  ];
   const porUsuario = new Map();
   for (const v of [...ventas.filter((x) => x.liquidada_en), ...descuentos]) {
     if (!porUsuario.has(v.usuario_id)) porUsuario.set(v.usuario_id, []);
@@ -310,13 +379,14 @@ async function anotar(conn, reciboId, ventas, porcentaje) {
     await conn.query(
       `INSERT INTO nomina_comisiones
          (recibo_id, pedido_id, numero_pedido, cliente, tipo, vendida_en, liquidada_en,
-          total, venta_neta, devuelto, porcentaje, comision)
+          total, venta_neta, devuelto, condonado, porcentaje, comision)
        VALUES (:recibo, :pedido, :numero, :cliente, :tipo, :vendida, :liquidada,
-               :total, :neta, :devuelto, :pct, :comision)`,
+               :total, :neta, :devuelto, :condonado, :pct, :comision)`,
       {
         recibo: reciboId, pedido: v.pedido_id, numero: v.numero_pedido, cliente: v.cliente,
         tipo: v.tipo, vendida: v.vendida_en, liquidada: v.liquidada_en,
-        total: v.total, neta: v.venta_neta, devuelto: v.devuelto ?? 0, pct: v.porcentaje ?? porcentaje,
+        total: v.total, neta: v.venta_neta, devuelto: v.devuelto ?? 0, condonado: v.condonado ?? 0,
+        pct: v.porcentaje ?? porcentaje,
         comision: comisionDeLinea(v, porcentaje),
       }
     );
@@ -372,9 +442,12 @@ async function reporte(periodo, { usuarioId = null } = {}) {
       `SELECT nc.recibo_id, nc.pedido_id, nc.numero_pedido, nc.cliente, nc.tipo,
               DATE_FORMAT(nc.vendida_en, '%Y-%m-%d %H:%i:%s') AS vendida_en,
               DATE_FORMAT(nc.liquidada_en, '%Y-%m-%d %H:%i:%s') AS liquidada_en,
-              nc.total, nc.venta_neta, nc.devuelto, nc.porcentaje, nc.comision, r.usuario_id
+              nc.total, nc.venta_neta, nc.devuelto, nc.condonado, nc.porcentaje, nc.comision, r.usuario_id,
+              (nc.tipo = 'devolucion' AND pc.estado IN ('cancelado', 'devuelto')
+                AND NOT EXISTS (SELECT 1 FROM devoluciones dv WHERE dv.pedido_id = nc.pedido_id)) AS cancelada
          FROM nomina_comisiones nc
          JOIN nomina_recibos r ON r.id = nc.recibo_id
+         LEFT JOIN pedidos pc  ON pc.id = nc.pedido_id
         WHERE r.periodo_id = :id ${usuarioId ? 'AND r.usuario_id = :u' : ''}
         ORDER BY nc.liquidada_en IS NULL, nc.liquidada_en, nc.vendida_en, nc.id`,
       { id: periodo.id, u: usuarioId ?? 0 }
@@ -388,6 +461,8 @@ async function reporte(periodo, { usuarioId = null } = {}) {
         ...(await ventasSinPagarComision(pool, { usuarioIds: ids, hasta: '9999-12-31 00:00:00' })),
         // Lo que regresó de ventas ya pagadas: se descuenta en la próxima nómina.
         ...(await devolucionesPorDescontar(pool, { usuarioIds: ids, hasta: '9999-12-31 00:00:00' })),
+        // Y lo de las que se cancelaron después de pagarse (2026-10-26).
+        ...(await cancelacionesPorDescontar(pool, { usuarioIds: ids, hasta: '9999-12-31 00:00:00' })),
       ];
 
   return {
@@ -408,6 +483,9 @@ async function reporte(periodo, { usuarioId = null } = {}) {
           total: round2(v.total),
           venta_neta: round2(v.venta_neta),
           devuelto: round2(v.devuelto ?? 0),
+          condonado: round2(v.condonado ?? 0),
+          // El descuento es porque la venta se canceló (no por una devolución).
+          cancelada: Boolean(Number(v.cancelada ?? 0)),
           comision: comisionDeLinea(v, pct),
         }));
       const suyas = pendientes.filter((v) => v.usuario_id === uid);
@@ -454,6 +532,6 @@ const devueltaCompleta = (v) =>
 
 module.exports = {
   devueltaCompleta,
-  DESDE, NOMBRE_TIPO, ventasSinPagarComision, devolucionesPorDescontar, liquidadasEnSemana, anotar, comisionDe,
+  DESDE, NOMBRE_TIPO, ventasSinPagarComision, devolucionesPorDescontar, cancelacionesPorDescontar, liquidadasEnSemana, anotar, comisionDe,
   comisionDeLinea, reporte,
 };

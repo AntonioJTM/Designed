@@ -6,7 +6,7 @@ const lugares = require('./lugares');
 const tickets = require('./tickets');
 const { DIAS_SIN_VENIR } = require('../notificaciones/model');
 const permisos = require('../permisos/service');
-const { pool } = require('../../config/db');
+const clientesModel = require('./model');
 
 /** El turno con que se cobra tiene que ser de SUS tiendas (2026-10-15). */
 const _cajaDeSusTiendas = (auth, sesionId) => permisos.exigirTurno(auth, sesionId);
@@ -22,15 +22,7 @@ const _cajaDeSusTiendas = (auth, sesionId) => permisos.exigirTurno(auth, sesionI
 async function _abonoDeSusTiendas(auth, movId) {
   const almacenes = await permisos.almacenesDe(auth);
   if (almacenes === null) return null;
-  const [[m]] = await pool.query(
-    `SELECT p.almacen_id AS de_nota, cj.almacen_id AS de_caja
-       FROM credito_movimientos m
-       LEFT JOIN pedidos p       ON p.id = m.pedido_id
-       LEFT JOIN sesiones_caja s ON s.id = m.sesion_caja_id
-       LEFT JOIN cajas cj        ON cj.id = s.caja_id
-      WHERE m.id = :id`,
-    { id: Number(movId) }
-  );
+  const m = await clientesModel.tiendasDelAbono(movId);
   const suyas = [m?.de_nota, m?.de_caja].filter((a) => a != null).map(Number);
   if (suyas.length && !suyas.some((a) => almacenes.includes(a))) {
     throw new AppError(404, 'OTRA_TIENDA', 'Ese abono no es de tus tiendas.');
@@ -40,8 +32,8 @@ async function _abonoDeSusTiendas(auth, movId) {
 
 /** El ticket de un anticipo cobrado en la caja de OTRA tienda no se reimprime aquí. */
 async function _movimientoDeSusTiendas(auth, tabla, movId) {
-  const [[m]] = await pool.query(`SELECT sesion_caja_id FROM ${tabla} WHERE id = :id`, { id: Number(movId) });
-  if (m?.sesion_caja_id) await permisos.exigirTurno(auth, m.sesion_caja_id);
+  const sesionId = await clientesModel.turnoDelMovimiento(tabla, movId);
+  if (sesionId) await permisos.exigirTurno(auth, sesionId);
 }
 const { parsePagination, parseBool } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');

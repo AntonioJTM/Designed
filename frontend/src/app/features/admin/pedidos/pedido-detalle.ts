@@ -29,6 +29,8 @@ import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
 import { vendioOtraPersona } from '../../../shared/vendedor';
+import { CuentaDeposito } from '../../../shared/cuenta-deposito';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
 
 /** Una cifra de la franja de arriba del pedido. */
 interface CifraPedido {
@@ -77,7 +79,7 @@ const MESES_LARGOS = [
 @Component({
   selector: 'app-pedido-detalle',
   host: { '(document:keydown.escape)': 'alEscape()' },
-  imports: [BotonWhatsapp, FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal, AbonoModal],
+  imports: [BotonWhatsapp, CuentaDeposito, FormsModule, RouterLink, FechaPipe, CantidadPipe, DineroPipe, DevolucionModal, AbonoModal],
   templateUrl: './pedido-detalle.html',
   styleUrls: ['./pedido-detalle.scss', './pedido-devoluciones.scss', './pedido-bultos.scss', './pedido-cancelar.scss'],
 })
@@ -87,6 +89,7 @@ export class PedidoDetalle implements OnDestroy {
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
+  private readonly cuentasBanco = inject(TransferenciasService);
 
   readonly pedido = signal<Pedido | null>(null);
   readonly cargando = signal(true);
@@ -598,6 +601,8 @@ export class PedidoDetalle implements OnDestroy {
     this.efectivoAFavor = true;
     this.transferenciaAFavor = true;
     this.abonado = 'favor';
+    this.cuentaRegreso = null;
+    this.marcarCuenta.set(false);
     this.nuevoEstado = 'cancelado';
     this.abrirDevolucion();
   }
@@ -748,21 +753,66 @@ export class PedidoDetalle implements OnDestroy {
 
   /** Una venta a crédito ya abonada: qué pasa con lo abonado (2026-10-26). */
   abonado: 'favor' | 'efectivo' | 'banco' = 'favor';
+  /** Por el banco: de qué cuenta se le regresa (Transferencias lo resta de esa cuenta). */
+  cuentaRegreso: number | null = null;
+  /** Se intentó cancelar sin decir la cuenta: se pinta en rojo. */
+  readonly marcarCuenta = signal(false);
 
-  /** Lo que ya abonó a esta venta a crédito (con abonos a su cuenta). */
+  /**
+   * Lo abonado a esta venta a crédito que se le puede REGRESAR si se cancela: solo
+   * el DINERO que entró, efectivo o transferencia (2026-10-26, auditoría: antes
+   * contaba también lo condonado y lo pagado con su saldo a favor). El servidor lo
+   * calcula con el mismo reparto de lo más viejo a lo más nuevo (`abonado_libre`).
+   */
   abonadoDeLaVenta(p: Pedido): number {
-    return this.fiado(p) > 0 ? Math.max(0, Number(p.credito_pagado ?? 0)) : 0;
+    const l = p.abonado_libre;
+    if (this.fiado(p) <= 0 || !l) return 0;
+    return Math.round((Number(l.efectivo) + Number(l.transferencia)) * 100) / 100;
   }
 
-  /** Se pregunta qué pasa con el dinero (al cancelar, con cliente y con algo pagado). */
+  /** Lo abonado con su SALDO A FAVOR («Descontar de lo que debe»): regresa a su saldo. */
+  abonadoConSaldo(p: Pedido): number {
+    return this.fiado(p) > 0 ? Number(p.abonado_libre?.saldo ?? 0) : 0;
+  }
+
+  /** Lo que se cubrió con un AJUSTE a mano («Corregir deuda»): se va con la venta (decisión del usuario). */
+  abonadoCondonado(p: Pedido): number {
+    return this.fiado(p) > 0 ? Number(p.abonado_libre?.ajuste ?? 0) : 0;
+  }
+
+  /** De lo abonado a esta nota, lo que al cancelarla paga sus OTRAS notas a crédito. */
+  abonadoAOtrasNotas(p: Pedido): number {
+    if (this.fiado(p) <= 0) return 0;
+    const pagado = Number(p.credito_pagado ?? 0);
+    return Math.max(0, Math.round((pagado - Number(p.abonado_libre?.total ?? 0)) * 100) / 100);
+  }
+
+  /**
+   * Se pregunta qué pasa con el dinero (al cancelar, con cliente y con algo pagado).
+   * También en una NOTA EN ESPERA con lo que dejó (2026-10-26, auditoría: antes no
+   * preguntaba y el efectivo salía siempre del cajón).
+   */
   preguntaDinero(p: Pedido): boolean {
-    return this.nuevoEstado === 'cancelado' && !!p.cliente_id && !this.esApartadoSinEntregar(p)
-      && (this.efectivoADevolver() > 0 || this.transferidoDeLaVenta() > 0 || this.abonadoDeLaVenta(p) > 0);
+    return this.nuevoEstado === 'cancelado' && !!p.cliente_id
+      && (this.efectivoADevolver() > 0 || this.transferidoDeLaVenta() > 0 || this.abonadoDeLaVenta(p) > 0
+        || this.abonadoConSaldo(p) > 0 || this.abonadoCondonado(p) > 0 || this.abonadoAOtrasNotas(p) > 0);
+  }
+
+  /** Se regresa por el banco y hay cuentas que elegir, pero no se eligió ninguna. */
+  faltaCuentaRegreso(p: Pedido): boolean {
+    return this.cuentasBanco.faltaCuenta(
+      this.preguntaDinero(p) && this.abonadoDeLaVenta(p) > 0 && this.abonado === 'banco', this.cuentaRegreso
+    );
   }
 
   confirmarDevolucion(): void {
     const p = this.pedido();
     if (!p?.detalle || !this.nuevoEstado) return;
+    if (this.nuevoEstado === 'cancelado' && this.faltaCuentaRegreso(p)) {
+      this.marcarCuenta.set(true);
+      this.error.set('Elige de qué cuenta se le regresa lo que abonó.');
+      return;
+    }
 
     // Regresa todo tal cual se vendió (un apartado nunca salió: solo se libera).
     this.aplicarEstado(this.nuevoEstado);
@@ -782,7 +832,10 @@ export class PedidoDetalle implements OnDestroy {
       : undefined;
     const abonadoSeRegresa = estado === 'cancelado' && this.preguntaDinero(p) && this.abonadoDeLaVenta(p) > 0 && this.abonado !== 'favor'
       ? this.abonado : undefined;
-    this.ventas.cambiarEstado(p.id, estado, undefined, aFavor, abonadoSeRegresa).subscribe({
+    const cuentaRegreso = abonadoSeRegresa === 'banco' ? this.cuentasBanco.elegida(this.cuentaRegreso) : null;
+    // Lo que de lo abonado pagó sus otras notas (para decirlo al terminar).
+    const aOtras = estado === 'cancelado' ? this.abonadoAOtrasNotas(p) : 0;
+    this.ventas.cambiarEstado(p.id, estado, undefined, aFavor, abonadoSeRegresa, cuentaRegreso).subscribe({
       next: (r) => {
         this.aplicando.set(false);
         this.confirmando.set(false);
@@ -801,15 +854,20 @@ export class PedidoDetalle implements OnDestroy {
           ? ` Se le regresaron ${regresado.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} de lo que había abonado.`
           : '');
         // Venta a crédito ya abonada: lo abonado pasó a su saldo a favor (2026-10-20).
+        const pesos = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
         const abonado = Number(r?.abonado_a_favor ?? 0);
-        const abonadoTxt = abonado > 0
-          ? ` Lo que había abonado, ${abonado.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}, le quedó como saldo a favor.`
-          : '';
+        const condonado = Number(r?.abonado_condonado ?? 0);
+        const abonadoTxt = (abonado > 0 ? ` Lo que había abonado, ${pesos(abonado)}, le quedó como saldo a favor.` : '')
+          // Lo condonado se fue con la venta y lo demás pagó sus otras notas (2026-10-26).
+          + (condonado > 0 ? ` ${pesos(condonado)} de un ajuste a mano se quitaron con la venta.` : '')
+          + (aOtras > 0 ? ` ${pesos(aOtras)} de lo que había abonado pagan sus otras notas a crédito.` : '');
         this.mensaje.set(
           this.esApartadoSinEntregar(p)
             ? estado === 'apartado'
               ? `Se volvió a apartar la mercancía en ${almacen}.`
-              : `Apartado cancelado. Se liberó lo apartado en ${almacen}.`
+              : this.esEncargo(p)
+                ? `Nota en espera cancelada. Se liberó lo apartado en ${almacen}.${quedoTxt}${sinEfectivo}`
+                : `Apartado cancelado. Se liberó lo apartado en ${almacen}.${quedoTxt}${sinEfectivo}`
             : estado === 'cancelado' || estado === 'devuelto'
               ? `${estado === 'cancelado' ? 'Venta cancelada' : 'Mercancía devuelta'}. Regresó al inventario de ${almacen}.${quedoTxt}${sinEfectivo}${abonadoTxt}`
               : `Pedido marcado como ${etiquetaEstado(estado, p.canal, p.encargo).toLowerCase()}.`

@@ -11,4 +11,14 @@
   .pregunta-dinero { display: flex; flex-direction: column; gap: 6px; }
   .que { font-variant-numeric: tabular-nums; color: var(--tinta-2); }
   p { margin: 0; }
+  // Lo abonado que NO se regresa (su saldo a favor, lo condonado, sus otras notas).
+  .abonado-otros {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--tinta-2);
+    b { font-variant-numeric: tabular-nums; color: var(--tinta); font-weight: 600; }
+  }
 }

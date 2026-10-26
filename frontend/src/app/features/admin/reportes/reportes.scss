@@ -46,3 +46,6 @@ table.grid tfoot td {
 .pct-num { min-width: 52px; text-align: right; }
 // Mientras llega la búsqueda nueva, lo de antes se ve apagado.
 .recargando { opacity: 0.6; transition: opacity 0.15s; }
+
+// Lo de ventas canceladas que quedó a su saldo a favor, bajo "Ventas en efectivo" (2026-10-26).
+.nota-corte { font-size: 0.75rem; font-weight: 400; white-space: normal; }

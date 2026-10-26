@@ -104,10 +104,10 @@ export class ComisionesSemanaComponent {
     return fecha ? diaCorto(fecha.slice(0, 10)) : '';
   }
 
-  /** Lo que no cuenta de la venta (IVA y envío): total − venta neta − lo que regresó. */
+  /** Lo que no cuenta de la venta (IVA y envío): total − venta neta − lo que regresó − lo condonado. */
   noCuenta(v: VentaComision): number {
     if (v.tipo === 'devolucion') return 0;
-    return Math.round((v.total - v.venta_neta - Number(v.devuelto ?? 0)) * 100) / 100;
+    return Math.round((v.total - v.venta_neta - Number(v.devuelto ?? 0) - Number(v.condonado ?? 0)) * 100) / 100;
   }
 
   /**

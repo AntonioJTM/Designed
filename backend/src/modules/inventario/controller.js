@@ -6,7 +6,8 @@ const traspasoPdf = require('./traspaso-pdf');
 const { parsePagination, parseBool } = require('../../utils/query');
 const { AppError } = require('../../middlewares/error');
 const permisos = require('../permisos/service');
-const { pool } = require('../../config/db');
+const inventarioModel = require('./model');
+const almacenesModel = require('../almacenes/model');
 
 /** Los almacenes que puede ver quien pregunta (null = todos). */
 const alcance = (req) => permisos.almacenesDe(req.auth);
@@ -31,9 +32,7 @@ async function traspasoDeSusTiendas(req, res, next, id) {
     if (auth?.tipo !== 'usuario' || !(Number(id) > 0)) return next();
     const almacenes = await permisos.almacenesDe(auth);
     if (almacenes === null) return next();
-    const [[t]] = await pool.query(
-      'SELECT almacen_origen_id, almacen_destino_id FROM traspasos WHERE id = :id', { id: Number(id) }
-    );
+    const t = await inventarioModel.almacenesDeTraspaso(id);
     if (!t) return next();
     if (!permisos.puedeAlmacen(almacenes, t.almacen_origen_id) && !permisos.puedeAlmacen(almacenes, t.almacen_destino_id)) {
       permisos.exigirAlmacen(almacenes, t.almacen_origen_id, 'Ese envío');
@@ -218,8 +217,9 @@ async function solicitarTraspaso(req, res, next) {
     if (!suyoOrigen && !suyoDestino) permisos.exigirAlmacen(almacenes, req.body.almacen_destino_id, 'Ese almacén');
     // A ciegas se le pide a la MATRIZ (la que surte), no a cualquier tienda (2026-10-16).
     if (!suyoOrigen) {
-      const [[origen]] = await pool.query('SELECT es_matriz FROM almacenes WHERE id = :id', { id: Number(req.body.almacen_origen_id) });
-      if (!Number(origen?.es_matriz)) permisos.exigirAlmacen(almacenes, req.body.almacen_origen_id, 'Ese almacén');
+      if (!(await almacenesModel.esMatriz(req.body.almacen_origen_id))) {
+        permisos.exigirAlmacen(almacenes, req.body.almacen_origen_id, 'Ese almacén');
+      }
     }
     const data = await service.solicitarTraspaso(req.body, req.auth.sub, { aCiegas: !suyoOrigen });
     res.status(201).json({ data, error: null });

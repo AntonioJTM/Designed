@@ -16,7 +16,7 @@ import { TransferenciasService } from '../core/services/transferencias.service';
     @if (svc.cuentas(); as cs) {
       @if (cs.length) {
         <label class="field">
-          <span>¿A qué cuenta llegó?</span>
+          <span>{{ pregunta() }}</span>
           <select [ngModel]="cuenta()" (ngModelChange)="cuenta.set($event)" [name]="nombre()"
                   [class.invalido]="marcar() && !cuenta()" [attr.aria-invalid]="marcar() && !cuenta()">
             @if (cs.length > 1) { <option [ngValue]="null" disabled>Elige la cuenta</option> }
@@ -32,6 +32,8 @@ export class CuentaDeposito {
   /** El id de la cuenta elegida (null = sin elegir). */
   readonly cuenta = model<number | null>(null);
   readonly nombre = input('cuenta_deposito');
+  /** Lo que pregunta: al regresarle dinero por el banco es «¿De qué cuenta salió?» (2026-10-26). */
+  readonly pregunta = input('¿A qué cuenta llegó?');
   /** Pintarlo en rojo si falta (después de intentar cobrar). */
   readonly marcar = input(false);
 

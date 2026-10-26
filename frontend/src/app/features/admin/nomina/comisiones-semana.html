@@ -63,7 +63,7 @@
                   </td>
                   <td>
                     @if (x.tipo === 'devolucion') {
-                      {{ dia(x.liquidada_en) }} <div class="sub3">regresó mercancía</div>
+                      {{ dia(x.liquidada_en) }} <div class="sub3">{{ x.cancelada ? 'se canceló' : 'regresó mercancía' }}</div>
                     } @else if (x.liquidada_en) { {{ dia(x.liquidada_en) }} } @else { <span class="sub3">al venderla (regla anterior)</span> }
                   </td>
                   <td class="num">{{ x.tipo === 'devolucion' ? '' : (x.total | dinero) }}</td>
@@ -74,6 +74,8 @@
                     } @else {
                       @if (devueltaCompleta(x)) { <div class="sub3">regresó completa: no cuenta como venta</div> }
                       @else if (+(x.devuelto ?? 0) > 0) { <div class="sub3">regresaron {{ x.devuelto | dinero }}</div> }
+                      <!-- Lo condonado con un ajuste a mano no paga comisión (2026-10-26). -->
+                      @if (+(x.condonado ?? 0) > 0) { <div class="sub3">sin {{ x.condonado | dinero }} condonados</div> }
                       @if (noCuenta(x) > 0) { <div class="sub3">sin {{ noCuenta(x) | dinero }} de envío o IVA</div> }
                     }
                   </td>

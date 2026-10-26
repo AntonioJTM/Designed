@@ -7,6 +7,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import { Pedido } from '../../../core/models/ventas.models';
 import { ConfirmacionService } from '../../../core/services/confirmacion.service';
 import { TicketService } from '../../../core/services/ticket.service';
+import { TransferenciasService } from '../../../core/services/transferencias.service';
+import { signal } from '@angular/core';
 
 /**
  * Lo que importa del detalle del pedido:
@@ -85,6 +87,17 @@ describe('PedidoDetalle', () => {
         { provide: AuthService, useValue: { puede: (k: string) => permisos.has(k), puedeOPide: (k: string) => permisos.has(k) || permisos.has(k.replace('hacer:', 'pedir:')) } },
         // La ventana de confirmación del sistema: contesta lo que diga `respuesta`.
         { provide: ConfirmacionService, useValue: { pedir: () => Promise.resolve(respuesta) } },
+        // Las cuentas de banco (para regresar por el banco): dos, así hay que elegir.
+        {
+          provide: TransferenciasService,
+          useValue: {
+            cuentas: signal([{ id: 1, banco: 'Banamex', titular: null, ultimos: '1111' }, { id: 2, banco: 'Banorte', titular: null, ultimos: '2222' }]),
+            cargarCuentas: () => undefined,
+            nombreCuenta: (c: { banco: string }) => c.banco,
+            faltaCuenta: (es: boolean, id: number | null) => es && !id,
+            elegida: (id: number | null) => id ?? null,
+          },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(PedidoDetalle);
@@ -240,7 +253,7 @@ describe('PedidoDetalle', () => {
     c.cambiarEstado();
     c.confirmarDevolucion();
 
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, undefined, undefined]);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, undefined, undefined, null]);
     expect(c.mensaje()).toContain('Se liberó lo apartado');
   });
 
@@ -257,7 +270,7 @@ describe('PedidoDetalle', () => {
     expect(modal.textContent).not.toContain('Regresa como');
     expect(modal.querySelector('select, input[type=number]')).toBeNull();
     c.confirmarDevolucion();
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, undefined, undefined]);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, undefined, undefined, null]);
   });
 
   // 2026-10-26: "aquí no se regresa dinero la mayor parte; a veces se abona como saldo a favor".
@@ -284,13 +297,14 @@ describe('PedidoDetalle', () => {
     f.detectChanges();
     expect(modal.textContent).toContain('en efectivo de la caja');
     c.confirmarDevolucion();
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, { efectivo: false, transferencia: true }, undefined]);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, { efectivo: false, transferencia: true }, undefined, null]);
   });
 
   it('una venta a crédito ya abonada pregunta qué pasa con lo abonado', async () => {
     actual = {
       ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, cliente_id: 20,
       pagos: [], credito: [{ tipo: 'cargo', monto: '348.00', creado_en: '2026-09-05 10:00:00' }], credito_pagado: 348,
+      abonado_libre: { efectivo: 348, transferencia: 0, saldo: 0, ajuste: 0, total: 348 },
     } as unknown as Pedido;
     const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
     const f = await montar();
@@ -298,14 +312,72 @@ describe('PedidoDetalle', () => {
     c.abrirCancelar();
     f.detectChanges();
     const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
-    expect(modal.textContent).toContain('$348.00 que ya abonó a esta nota');
+    expect(modal.textContent).toContain('$348.00 que abonó a esta nota');
     expect(c.abonado).toBe('favor');
     c.confirmarDevolucion();
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, {}, undefined]);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, {}, undefined, null]);
     c.abrirCancelar();
     c.abonado = 'efectivo';
     c.confirmarDevolucion();
-    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, {}, 'efectivo']);
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, {}, 'efectivo', null]);
+  });
+
+  // 2026-10-26, auditoría: lo condonado y lo pagado con su saldo a favor no se regresan.
+  it('de lo abonado solo ofrece regresar el dinero; lo demás lo explica', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, cliente_id: 20,
+      pagos: [], credito: [{ tipo: 'cargo', monto: '1000.00', creado_en: '2026-09-05 10:00:00' }], credito_pagado: 1000,
+      abonado_libre: { efectivo: 450, transferencia: 0, saldo: 150, ajuste: 300, total: 900 },
+    } as unknown as Pedido;
+    const f = await montar();
+    const c = f.componentInstance;
+    c.abrirCancelar();
+    f.detectChanges();
+    const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
+    expect(c.abonadoDeLaVenta(actual)).toBe(450);
+    expect(modal.textContent).toContain('$450.00 que abonó a esta nota');
+    expect(modal.textContent).toContain('$150.00 que pagó con su saldo a favor regresan a su saldo a favor');
+    expect(modal.textContent).toContain('$300.00 de un ajuste a mano');
+    expect(modal.textContent).toContain('$100.00 de lo que abonó pagan sus otras notas a crédito');
+  });
+
+  it('regresarlo por el banco pide de qué cuenta, y la manda', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'pagado', inventario_descontado: 1, cliente_id: 20,
+      pagos: [], credito: [{ tipo: 'cargo', monto: '400.00', creado_en: '2026-09-05 10:00:00' }], credito_pagado: 400,
+      abonado_libre: { efectivo: 0, transferencia: 400, saldo: 0, ajuste: 0, total: 400 },
+    } as unknown as Pedido;
+    const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
+    const f = await montar();
+    const c = f.componentInstance;
+    c.abrirCancelar();
+    c.abonado = 'banco';
+    f.detectChanges();
+    const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
+    expect(modal.textContent).toContain('¿De qué cuenta se le regresan?');
+    c.confirmarDevolucion();
+    expect(llamada).not.toHaveBeenCalled();
+    expect(c.error()).toContain('de qué cuenta');
+    c.cuentaRegreso = 2;
+    c.confirmarDevolucion();
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, {}, 'banco', 2]);
+  });
+
+  it('cancelar una nota en espera también pregunta qué pasa con lo que dejó', async () => {
+    actual = {
+      ...pedidoBase(), canal: 'punto_venta', estado: 'en_preparacion', inventario_descontado: 0, encargo: 1, cliente_id: 20,
+      pagos: [{ id: 4, metodo_pago_id: 1, metodo: 'Efectivo', monto: '150.00', estado: 'completado', creado_en: '2026-09-05 10:00:00' }],
+    } as unknown as Pedido;
+    const llamada = spyOn(ventasFalso, 'cambiarEstado').and.callThrough();
+    const f = await montar();
+    const c = f.componentInstance;
+    c.abrirCancelar();
+    f.detectChanges();
+    const modal = (f.nativeElement as HTMLElement).querySelector('[role=dialog]')!;
+    expect(modal.textContent).toContain('¿Qué pasa con lo que pagó?');
+    c.confirmarDevolucion();
+    expect(llamada.calls.mostRecent().args as unknown[]).toEqual([5, 'cancelado', undefined, { efectivo: true }, undefined, null]);
+    expect(c.mensaje()).toContain('Nota en espera cancelada');
   });
 
   it('sin cliente no pregunta: se le regresa como siempre', async () => {

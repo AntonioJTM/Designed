@@ -29,7 +29,9 @@ const { pool, withTransaction } = require('../../config/db');
 const { AppError } = require('../../middlewares/error');
 const { porPalabras } = require('../../utils/query');
 
-const FUENTES = ['pago', 'abono', 'anticipo'];
+// 'regreso' (2026-10-26): lo abonado a una venta a crédito que se le regresó por el banco al
+// cancelarla. Es una SALIDA: va en negativo y resta de su cuenta.
+const FUENTES = ['pago', 'abono', 'anticipo', 'regreso'];
 const ESTADOS = ['por_revisar', 'procesada'];
 
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
@@ -97,7 +99,8 @@ const FUENTES_SQL = `
   SELECT 'pago' AS fuente, g.id AS fuente_id, g.creado_en AS fecha, g.monto AS importe,
          g.referencia_transaccion AS referencia, p.cliente_id,
          CAST(g.pedido_id AS CHAR) AS pedidos, p.numero_pedido AS folios,
-         CASE WHEN p.encargo = 1 THEN 'espera' WHEN p.nota_pendiente = 1 THEN 'nota' ELSE 'venta' END AS de,
+         -- Una nota en espera que se entregó como pendiente de pago ES nota pendiente (2026-10-26).
+         CASE WHEN p.nota_pendiente = 1 THEN 'nota' WHEN p.encargo = 1 THEN 'espera' ELSE 'venta' END AS de,
          -- Cancelada Y regresada: no suma. Si al cancelar quedó a su SALDO A FAVOR
          -- (2026-10-26), el dinero sigue en el banco: suma, y se marca \`a_favor\`.
          ((g.estado = 'reembolsado' OR p.estado IN ('cancelado', 'devuelto')) AND NOT ${A_FAVOR_SQL}) AS cancelada,
@@ -116,7 +119,15 @@ const FUENTES_SQL = `
   UNION ALL
   SELECT 'anticipo', s.id, s.creado_en, s.monto, s.referencia, s.cliente_id, NULL, NULL, 'anticipo', 0, 0
     FROM saldo_favor_movimientos s
-   WHERE s.tipo = 'anticipo' AND s.metodo_pago_id IN (:metodos)`;
+   WHERE s.tipo = 'anticipo' AND s.metodo_pago_id IN (:metodos)
+  UNION ALL
+  -- Lo que se le REGRESÓ por el banco al cancelar una venta a crédito (2026-10-26):
+  -- el ajuste de su saldo a favor con el método de transferencia, en negativo.
+  SELECT 'regreso', s.id, s.creado_en, s.monto, s.referencia, s.cliente_id,
+         CAST(s.pedido_id AS CHAR), pr.numero_pedido, 'regreso', 0, 0
+    FROM saldo_favor_movimientos s
+    LEFT JOIN pedidos pr ON pr.id = s.pedido_id
+   WHERE s.tipo = 'ajuste' AND s.metodo_pago_id IN (:metodos)`;
 
 const DESDE_SQL = `
   FROM (${FUENTES_SQL}) x
@@ -148,7 +159,7 @@ function _filtros({ desde, hasta, q, cuenta, estado, facturada, de }) {
   else if (estado === 'por_revisar') w.push("(t.estado IS NULL OR t.estado = 'por_revisar')");
   if (facturada === true) w.push('t.facturada = 1');
   else if (facturada === false) w.push('(t.facturada IS NULL OR t.facturada = 0)');
-  if (de && ['venta', 'nota', 'espera', 'abono', 'anticipo'].includes(de)) { w.push('x.de = :de'); params.de = de; }
+  if (de && ['venta', 'nota', 'espera', 'abono', 'anticipo', 'regreso'].includes(de)) { w.push('x.de = :de'); params.de = de; }
   if (q) {
     // Por palabras (como los hilos): el nombre, su número, el folio de la venta
     // ("79FA") o el número de operación.
@@ -181,23 +192,33 @@ async function listar(filtros = {}, { limit = 100, offset = 0 } = {}) {
   // en transferencia y efectivo, y en las transferencias no descuenta la transferencia de
   // la venta cancelada"): las cifras y "A qué cuenta llegó" cuentan solo lo vigente; lo
   // cancelado se dice aparte y su renglón sigue en la lista, marcado.
+  // Lo que se le REGRESÓ por el banco resta del importe y de su cuenta; "Por revisar",
+  // "Procesadas" y "Sin facturar" cuentan lo que ENTRÓ (2026-10-26).
   const vigente = (expr) => `CASE WHEN x.cancelada THEN 0 ELSE ${expr} END`;
+  const entrada = (expr) => `CASE WHEN x.cancelada OR x.de = 'regreso' THEN 0 ELSE ${expr} END`;
   const [[c]] = await pool.query(
-    `SELECT COALESCE(SUM(${vigente('1')}), 0) AS cuantas, COALESCE(SUM(${vigente('x.importe')}), 0) AS importe,
-            COALESCE(SUM(${vigente("CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN 1 ELSE 0 END")}), 0) AS por_revisar,
-            COALESCE(SUM(${vigente("CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN x.importe ELSE 0 END")}), 0) AS importe_por_revisar,
-            COALESCE(SUM(${vigente("CASE WHEN t.estado = 'procesada' THEN x.importe ELSE 0 END")}), 0) AS importe_procesado,
-            COALESCE(SUM(${vigente('CASE WHEN COALESCE(t.facturada, 0) = 0 THEN 1 ELSE 0 END')}), 0) AS sin_facturar,
-            COALESCE(SUM(${vigente('CASE WHEN COALESCE(t.facturada, 0) = 0 THEN x.importe ELSE 0 END')}), 0) AS importe_sin_facturar,
+    `SELECT COUNT(*) AS renglones,
+            COALESCE(SUM(${entrada('1')}), 0) AS cuantas, COALESCE(SUM(${vigente('x.importe')}), 0) AS importe,
+            COALESCE(SUM(${entrada("CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN 1 ELSE 0 END")}), 0) AS por_revisar,
+            COALESCE(SUM(${entrada("CASE WHEN COALESCE(t.estado, 'por_revisar') = 'por_revisar' THEN x.importe ELSE 0 END")}), 0) AS importe_por_revisar,
+            COALESCE(SUM(${entrada("CASE WHEN t.estado = 'procesada' THEN x.importe ELSE 0 END")}), 0) AS importe_procesado,
+            COALESCE(SUM(${entrada('CASE WHEN COALESCE(t.facturada, 0) = 0 THEN 1 ELSE 0 END')}), 0) AS sin_facturar,
+            COALESCE(SUM(${entrada('CASE WHEN COALESCE(t.facturada, 0) = 0 THEN x.importe ELSE 0 END')}), 0) AS importe_sin_facturar,
             COALESCE(SUM(${vigente('CASE WHEN t.cuenta_bancaria_id IS NULL THEN 1 ELSE 0 END')}), 0) AS sin_cuenta,
             COALESCE(SUM(CASE WHEN x.cancelada THEN 1 ELSE 0 END), 0) AS canceladas,
-            COALESCE(SUM(CASE WHEN x.cancelada THEN x.importe ELSE 0 END), 0) AS importe_cancelado
+            COALESCE(SUM(CASE WHEN x.cancelada THEN x.importe ELSE 0 END), 0) AS importe_cancelado,
+            COALESCE(SUM(CASE WHEN x.de = 'regreso' THEN 1 ELSE 0 END), 0) AS regresos,
+            COALESCE(SUM(CASE WHEN x.de = 'regreso' THEN -x.importe ELSE 0 END), 0) AS importe_regresado,
+            -- La de una venta cancelada que YA se había facturado: hay que cancelar su factura.
+            COALESCE(SUM(CASE WHEN x.cancelada AND t.facturada = 1 THEN 1 ELSE 0 END), 0) AS facturadas_canceladas,
+            COALESCE(SUM(CASE WHEN x.cancelada AND t.facturada = 1 THEN x.importe ELSE 0 END), 0) AS importe_facturadas_canceladas
        ${DESDE_SQL} ${where}`,
     base
   );
   const [cuentas] = await pool.query(
     `SELECT t.cuenta_bancaria_id AS id, cb.banco, RIGHT(COALESCE(cb.numero_cuenta, cb.clabe), 4) AS ultimos,
-            COUNT(*) AS cuantas, SUM(x.importe) AS importe
+            SUM(CASE WHEN x.de = 'regreso' THEN 0 ELSE 1 END) AS cuantas, SUM(x.importe) AS importe,
+            SUM(CASE WHEN x.de = 'regreso' THEN -x.importe ELSE 0 END) AS regresado
        ${DESDE_SQL} ${where ? `${where} AND` : 'WHERE'} NOT x.cancelada
       GROUP BY t.cuenta_bancaria_id, cb.banco, ultimos
       ORDER BY importe DESC`,
@@ -209,7 +230,9 @@ async function listar(filtros = {}, { limit = 100, offset = 0 } = {}) {
 
   return {
     items: items.map(({ _pedidos, ...i }) => i),
-    total: Number(c.cuantas),
+    // Todos los renglones de la lista, también los cancelados (que no suman): con el
+    // número de las vigentes, "Ver más" se escondía antes de tiempo (2026-10-26).
+    total: Number(c.renglones),
     cifras: {
       cuantas: Number(c.cuantas),
       importe: round2(c.importe),
@@ -221,9 +244,15 @@ async function listar(filtros = {}, { limit = 100, offset = 0 } = {}) {
       sin_cuenta: Number(c.sin_cuenta),
       canceladas: Number(c.canceladas),
       importe_cancelado: round2(c.importe_cancelado),
+      regresos: Number(c.regresos),
+      importe_regresado: round2(c.importe_regresado),
+      facturadas_canceladas: Number(c.facturadas_canceladas),
+      importe_facturadas_canceladas: round2(c.importe_facturadas_canceladas),
     },
     por_cuenta: cuentas.map((k) => ({
       id: k.id != null ? Number(k.id) : null, banco: k.banco, ultimos: k.ultimos, cuantas: Number(k.cuantas), importe: round2(k.importe),
+      // Lo que se le regresó por el banco desde esa cuenta (ya va restado del importe).
+      regresado: round2(k.regresado ?? 0),
     })),
   };
 }
@@ -232,6 +261,7 @@ function _cifrasVacias() {
   return {
     cuantas: 0, importe: 0, por_revisar: 0, importe_por_revisar: 0, importe_procesado: 0,
     sin_facturar: 0, importe_sin_facturar: 0, sin_cuenta: 0, canceladas: 0, importe_cancelado: 0,
+    regresos: 0, importe_regresado: 0, facturadas_canceladas: 0, importe_facturadas_canceladas: 0,
   };
 }
 
@@ -264,7 +294,7 @@ async function _conVentas(items) {
 
 /** "pago-12" → { fuente, fuenteId } o 404. */
 function partirClave(clave) {
-  const m = /^(pago|abono|anticipo)-(\d+)$/.exec(String(clave ?? ''));
+  const m = /^(pago|abono|anticipo|regreso)-(\d+)$/.exec(String(clave ?? ''));
   if (!m) throw new AppError(404, 'NO_ENCONTRADA', 'Esa transferencia no existe');
   return { fuente: m[1], fuenteId: Number(m[2]) };
 }
@@ -279,11 +309,11 @@ async function _origen(conn, fuente, fuenteId, metodos) {
     );
     return g ? [Number(g.id)] : null;
   }
-  if (fuente === 'anticipo') {
+  if (fuente === 'anticipo' || fuente === 'regreso') {
     const [[s]] = await conn.query(
-      `SELECT id FROM saldo_favor_movimientos WHERE id = :id AND tipo = 'anticipo'
+      `SELECT id FROM saldo_favor_movimientos WHERE id = :id AND tipo = :tipo
          AND metodo_pago_id IN (:metodos) FOR UPDATE`,
-      { id: fuenteId, metodos }
+      { id: fuenteId, metodos, tipo: fuente === 'anticipo' ? 'anticipo' : 'ajuste' }
     );
     return s ? [Number(s.id)] : null;
   }
@@ -338,7 +368,7 @@ async function _guardar(conn, fuente, fuenteId, ids, cambios, usuarioId) {
     const ref = cambios.referencia ? String(cambios.referencia).trim() || null : null;
     if (fuente === 'pago') {
       await conn.query('UPDATE pagos SET referencia_transaccion = :ref WHERE id IN (:ids)', { ref, ids });
-    } else if (fuente === 'anticipo') {
+    } else if (fuente === 'anticipo' || fuente === 'regreso') {
       await conn.query('UPDATE saldo_favor_movimientos SET referencia = :ref WHERE id IN (:ids)', { ref, ids });
     } else {
       await conn.query('UPDATE credito_movimientos SET referencia = :ref WHERE id IN (:ids)', { ref, ids });
@@ -360,7 +390,8 @@ async function _guardar(conn, fuente, fuenteId, ids, cambios, usuarioId) {
     sets.push('estado = :estado');
     p.estado = cambios.estado;
   }
-  if (cambios.facturada !== undefined) {
+  // Lo que se le regresó no lleva factura (2026-10-26): se marca procesada, no facturada.
+  if (cambios.facturada !== undefined && fuente !== 'regreso') {
     p.fact = cambios.facturada ? 1 : 0;
     sets.push('facturada_por = IF(:fact = facturada, facturada_por, IF(:fact = 1, :u, NULL))');
     sets.push('facturada_en = IF(:fact = facturada, facturada_en, IF(:fact = 1, NOW(), NULL))');

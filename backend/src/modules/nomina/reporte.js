@@ -474,12 +474,19 @@ function hojaComisiones(doc, periodo, recibos, { reglaAnterior }) {
         cm.ventas.map((v) => [
           ...ventaYTipo(v),
           v.tipo === 'devolucion'
-            ? { t: diaCorto(v.liquidada_en), sub: 'regresó mercancía' }
+            ? { t: diaCorto(v.liquidada_en), sub: v.cancelada ? 'se canceló' : 'regresó mercancía' }
             : v.liquidada_en ? diaCorto(v.liquidada_en) : { t: 'al venderla', sub: 'regla anterior' },
           v.tipo === 'devolucion' ? '' : pdf.dinero(v.total),
           // Lo que regresó no paga comisión (2026-10-14).
-          n(v.devuelto) > 0 && v.tipo !== 'devolucion'
-            ? { t: pdf.dinero(v.venta_neta), sub: `regresó ${pdf.dinero(v.devuelto)}` }
+          // Ni lo condonado con un ajuste a mano (2026-10-26).
+          (n(v.devuelto) > 0 || n(v.condonado) > 0) && v.tipo !== 'devolucion'
+            ? {
+              t: pdf.dinero(v.venta_neta),
+              sub: [
+                n(v.devuelto) > 0 ? `regresó ${pdf.dinero(v.devuelto)}` : '',
+                n(v.condonado) > 0 ? `condonado ${pdf.dinero(v.condonado)}` : '',
+              ].filter(Boolean).join(' · '),
+            }
             : pdf.dinero(v.venta_neta),
           { t: pdf.dinero(v.comision), bold: true },
         ]),
@@ -643,7 +650,7 @@ function hojaRecibo(doc, periodo, r) {
         apartado: 'apartados liquidados',
         pedido: 'notas en espera pagadas',
         nota: 'notas pendientes que se terminaron de pagar',
-        devolucion: 'lo que regresó de ventas que ya habían pagado comisión',
+        devolucion: 'lo que regresó (o se canceló) de ventas que ya habían pagado comisión',
       };
       const grupos = ['contado', 'credito', 'nota', 'pedido', 'apartado', 'devolucion']
         .map((tipo) => ({ tipo, ventas: cm.ventas.filter((v) => v.tipo === tipo) }))
