@@ -34,8 +34,17 @@ backend/uploads/
 
 # La Constancia de Situación Fiscal de la empresa (de ahí salen los datos del
 # ticket, que viven en la base: Configuración -> Datos fiscales). El repositorio
-# es PÚBLICO: no se sube.
-/ticketinfo.pdf
+# es PÚBLICO: no se sube, ESTÉ DONDE ESTÉ (2026-10-26: estaba en Documentos/ y se
+# publicó; se borró de la historia).
+ticketinfo.pdf
+
+# Datos reales y archivos de otros (2026-10-26, auditoría): las exportaciones de
+# ventas por cliente venían en un .zip y se publicaron (se borraron de la historia),
+# y los instaladores de drivers de impresora son de otras empresas. Viven en
+# D:\Imagenes\Documentos privados\, fuera del repositorio.
+*.zip
+/VENTAS POR CLIENTE*
+/Documentos/Drivers impresoras/
 
 # Los permisos PERSONALES de Claude Code (los que se van aprobando en cada
 # sesión): llevan rutas de la máquina y comandos sueltos. El repo es PÚBLICO.
