@@ -9,7 +9,7 @@
 
 
 ===============================================================================
- DÓNDE SE QUEDÓ  ·  actualizado 2026-10-26
+ DÓNDE SE QUEDÓ  ·  actualizado 2026-10-26 (noche)
 ===============================================================================
 
 ⚠ DOS SISTEMAS Y DOS BASES EN EL SERVIDOR (desde 2026-10-05)
@@ -45,14 +45,32 @@ POR DECIDIR CON EL USUARIO (entradas 79 y 80)
     pero su pantalla abierta conserva lo que ya tenía hasta recargar).
 
 POR DECIDIR CON EL USUARIO (entradas 73 y 75)
-  · Commit: lo del 17 y 18 ya se commiteó (último: 7a80990, por fuera de esta
-    sesión). Quedan 11 archivos: lo de la entrada 75 y los cambios de otra
-    sesión en verificar-sistema.js, revisor-general.md y las skills verificar.
-    No se hace commit hasta que el usuario lo pida.
+  · Commit: GitHub quedó en dd73db0 después de BORRAR DE LA HISTORIA los datos reales
+    (entrada 124, con permiso del usuario). Sin commit queda todo lo de las entradas 123 y
+    124 (desplegado). No se hace commit hasta que el usuario lo pida.
+  · Recomendado al usuario (entrada 124): cambiar la contraseña del administrador (su hash
+    estuvo público en un dump viejo) y pedirle a GitHub Support que purgue los commits viejos.
   (La bajada de A-ALECRICO 2/30 con 0.8 kg de destare era PRUEBA del usuario:
   "solo puse conos y peso aprox", no es real.)
 
 LO ÚLTIMO QUE SE TERMINÓ
+  AUDITORÍA /verificar COMPLETA, TODO RESUELTO: los 48 hallazgos importantes y los ~150
+  menores de los 12 módulos (una venta una sola vez de verdad, comisiones, transferencias,
+  "Debe" con las notas, Clientes sin lo devuelto, margen sin lo devuelto, cajas solo en
+  tiendas, la Matriz protegida, el cono y la presentación dentro de su transacción, el
+  horario congelado en el recibo, la campana que manda a cada quien lo suyo, textos de
+  tienda en todas partes…), datos reales borrados de la historia de GitHub y el esquema al
+  día (entrada 124; DESPLEGADO en 20261026-214606, tres migraciones en las dos bases).
+  Antes:
+  LA SKILL /verificar REHECHA para que no falle y vaya con el modelo del proyecto: una
+  guía común para los 12 agentes (con lo DECIDIDO por el usuario que no se propone
+  cambiar), un mapa de los 12 módulos que el propio verificador comprueba (sección 0:
+  cada archivo, regla de CLAUDE.md, permiso, operación, E2E y tabla que se nombra
+  existe, y ningún módulo, pantalla ni E2E queda sin dueño) y los 12 agentes que
+  descubren sus archivos con Glob (los de antes citaban 38 archivos inexistentes);
+  4,169 comprobaciones contra hitex, 0 hallazgos (entrada 123; NO se despliega: son
+  herramientas de Claude Code).
+  Antes:
   AUDITORÍA /verificar, MÓDULOS 10 A 12: el .zip de ventas, la constancia y los drivers se
   BORRARON DE LA HISTORIA de GitHub (subida forzada), la nómina no se paga si cambió desde
   que se calculó, la venta cancelada ya pagada descuenta su comisión, sin SQL en los
@@ -922,6 +940,207 @@ CÓMO TRABAJA EL USUARIO
     algo que todavía no existe. Lo pidió explícitamente el 2026-07-26.
   · Cada cambio se anota aquí antes de darlo por cerrado, con una entrada
     fechada nueva arriba y este bloque reescrito.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (124) · Auditoría /verificar completa: los 48 importantes y los ~150 menores, resueltos
+-------------------------------------------------------------------------------
+
+"Sí corrige la guía y vamos a resolver todos los detalles" (usuario, después del /verificar con los
+12 agentes nuevos: 47 hallazgos importantes, ~150 menores en M1–M12). Decisiones del usuario en el
+camino: #1/#2 (datos reales en GitHub) → "Borrar de la historia"; el margen → "Sí, restar lo
+devuelto". DESPLEGADO en 20261026-214606 (migraciones 2026-10_pago_regresado_en_efectivo,
+2026-10_vistas_sin_canceladas y 2026-10_recibo_horario en LAS DOS bases; respaldo previo
+/root/respaldos/hitex_antes_auditoria_124_20261026-214407.sql.gz).
+
+GITHUB (#1, #2; autorizado por el usuario)
+  · Se reescribió la historia de AntonioJTM/Designed (filter-branch + subida forzada, hoy en
+    dd73db0): fuera muestras/HTX*.xlsx (listas reales del proveedor) y db/dump_*.sql; los nombres,
+    correos, teléfonos, RFC, razón social, domicilio, cuentas y CLABE reales se cambiaron por unos
+    de ejemplo en TODOS los commits (y en el árbol de trabajo). .gitignore: HTX*.xlsx, *.sql.gz,
+    db/dump_*.sql, dump_*.sql.
+  · El dump viejo traía el correo, teléfono y la CONTRASEÑA (hash) del administrador: SE LE
+    RECOMENDÓ AL USUARIO CAMBIAR LA CONTRASEÑA del administrador (es la misma en hitex) y pedirle
+    a GitHub Support que purgue los commits viejos que quedan en su caché.
+
+LO IMPORTANTE (#3 a #48)
+  · Una sola vez (#3–#5): la llave de cobro va LIGADA al carrito (`pos.ts → conLlave`; si el
+    servidor contesta una venta que ya existía, el ticket dice "ya había quedado registrada"); la
+    llave de un solo uso ya no se suelta si se corta la conexión; `unaVez()` también en corregir
+    deuda, ajustar saldo a favor y la Devolución (con su llave en las tres ventanas).
+  · Cancelar bloquea el turno (#6); la nota pendiente cancelada vuelve solo como pendiente salvo
+    que lo pagado la cubra (#7, `REACTIVAR_COMO_NOTA`); a una nota en espera no se le pega un
+    comprobante que la dé por pagada (#8, `NOTA_EN_ESPERA_USA_ABONOS`); lo que llegó al banco se
+    queda en Transferencias aunque se regrese la diferencia en efectivo (#9, migración
+    2026-10_pago_regresado_en_efectivo, `pagos.devuelto_efectivo`).
+  · Comisiones (#10, #11): solo se descuenta lo que se PAGÓ en una nómina pagada, y la venta
+    reactivada vuelve a entrar.
+  · El cono calculado cobra la oferta y el precio por lista del paquete (#12); los traspasos se
+    surten y reciben aunque se desactive la presentación (#13) y no aceptan el mismo hilo dos veces
+    (#14, `HILO_REPETIDO`); «Un solo hilo» le pone peso al paquete (#15); el selector de hilos trae
+    todas las presentaciones (#16, hasta 1000); bajar conos usa los conos del paquete y pregunta si
+    no los dice, con el lector listo para el siguiente (#17); "no cuadra" también con saldo cero
+    (#18); el destare se queda en el kardex (#19); quitar un paquete revisa con candado (#20); el
+    calibre tiene que ser de su material (#21, `CALIBRE_NO_DEL_MATERIAL`); cajas solo en tiendas
+    activas con mostrador (#22, `ALMACEN_SIN_MOSTRADOR`, `ALMACEN_INACTIVO`, `ALMACEN_CON_CAJAS`,
+    `CAJA_INACTIVA`).
+  · Clientes restan lo devuelto (#23, `clientes/regreso.js`) y "Debe" suma las notas pendientes
+    (#24, en la lista, el expediente, Cuánto debe y el tablero); Ventas da el mismo "falta" que el
+    detalle (#25); v_movimiento_hilo sin canceladas y v_ventas_por_empleado por vendedor (#26,
+    migración 2026-10_vistas_sin_canceladas); el pronóstico de un hilo nuevo va por su promedio
+    (#27); la campana manda solo lo que cada quien atiende y olvida lo de la sesión anterior (#28,
+    #29); el PDF de una carga no nombra otra tienda y el historial pide Reportes (#30, #31);
+    Productos no enseña kilos ni costos ajenos (#32, #33); la gerente no le quita a nadie una tienda
+    que no ve (#34); nunca sin administrador activo (#35, `ULTIMO_ADMINISTRADOR`); Hoy enseña los
+    mismos avisos que la campana y "Hacer el corte" abre ESA caja (#36, #37); diez textos que
+    engañaban (#38–#47); el margen resta lo devuelto (#48, decisión del usuario).
+
+LOS MENORES (M1–M12), por módulo
+  · 01 Hoy y campana: montos con centavos; plurales del botón; el número de la campana sobre el
+    botón del menú en el celular; foco azul dentro del panel y Escape regresa a la campana; "Y N
+    más" en las notas vencidas y a los clientes nuevos (Todos los clientes con `?orden=nuevo`);
+    "Surtir ›" solo a quien envía y "falta que confirmen" a quien firma (también en el servidor);
+    «Mi clave» quita su aviso al guardarla; «Con notas vencidas» dice además lo vencido (la cifra de
+    la campana); «Cobrado este mes» cuenta también las notas pendientes.
+  · 02 Caja y tickets: "1 cono"; el texto del billete; la configuración del ticket se vuelve a
+    pedir; el servidor valida los paquetes de la venta (existir, ser del hilo) y congela el peso
+    guardado; el ticket con los lotes en el orden de la caja; "hay aquí" sin lo de notas en espera;
+    avisos junto al lector (desactivada, sin precio); palabras de tienda (paquete, nota en espera);
+    "Nueva venta" ya no es azul.
+  · 03 Caja: cifras con centavos y puntos por clase; lo abonado a una nota cancelada a favor se
+    marca; abrir y cerrar turno piden `ver:caja`; pedir un retiro revisa el turno y el cajón
+    (alPedir) y se cierra si cortan el turno; los tipos de gasto solo con todas las tiendas (y su
+    autorización también); "Reportes → Cortes" solo a quien lo abre; SQL fuera del controlador de
+    gastos.
+  · 04 Ventas y notas: "nota en espera" en mensajes, kardex y caja; la ventana de cancelar dice si
+    es una nota pendiente y de dónde sale el efectivo; el conteo de notas de sus tiendas; "Pendiente
+    · a crédito" ya no se ofrece en una venta de contado; la Devolución calcula con el precio sin
+    redondear; puntos y dinero de Ventas.
+  · 05 Clientes: "cada día", "Su cliente sigue", "dado de baja como cliente"; "Dejaron de venir"
+    cuenta VISITAS; el ajuste del sistema al cancelar dice su motivo; el historial del saldo a favor
+    dice "los 30 más recientes de N"; sin regiones vivas por tecla; colores a tokens y letra con
+    `tintaSobre`; el dinero de Clientes con centavos.
+  · 06 Inventario: Ajuste / merma con el lector listo y el saldo en kg; la tabla cuenta los
+    paquetes REALES; "Paquetes libres"; el kardex dice "Bajada a conos"; la recarga en vivo no pisa
+    un filtro nuevo; el movimiento a mano ya no acepta `referencia_tipo`; el cono nace DENTRO de la
+    bajada y uno desactivado se dice (`CONO_DESACTIVADO`); "bajo mínimo" con la regla de la campana.
+  · 07 Surtir inventario: la presentación nace (o toma su peso) DENTRO de la carga
+    (`_planPresentacion` + `crearRemesa(…, preparar)`); el precio que cobra la caja; "N hilos
+    iguales" sin culpar al primer paquete; plurales; el Reporte de entradas por fecha de ingreso, con
+    proveedor y factura; "Ya habías pedido…" también en la lista; la plantilla dice Excel; ids
+    únicos y estilos fuera de la plantilla.
+  · 08 Surtir sucursal: a ciegas con el peso del catálogo; "Hay en Matriz" = libres; pendientes
+    primero en la lista; GET de traspasos pide «Surtir sucursal» (o Kardex); paquetes enteros; la
+    solicitud solo a quien puede pedir; el PDF dice lo PEDIDO; el lector con `label for`; el tope se
+    revisa otra vez después de preguntar "¿sí está aquí?".
+  · 09 Catálogo: cambiar el precio por kilo pide «Cambiar precios»; quitar un paquete pide cargar o
+    ajustar; imágenes con «Productos»; Público no se desactiva; precio de lista > $0; un hilo con
+    ventas de años anteriores no se ofrece a borrar; el cono tiene su "Si se vende"; «Agregar bulto
+    a mano» con el cursor en el código, Enter al peso y "Añadiendo…"; aviso al quitar
+    Multipresentación; materiales desactivados fuera del alta.
+  · 10 Tablero, Rotación y Reportes: "2 o más: rápido"; notas en espera en lugar de apartados; el
+    carril de las gráficas ya no se ve en los huecos; puntos por clase (tono-serie-1/2 nuevos);
+    "todas las tiendas"; Parejo con el que más se aleja; "Hilo parado" dicho como es; "de enero al
+    mes pasado"; la rotación del total con un hilo elegido; ventas anteriores en los 12 meses; "el
+    kardex no cuadra"; CSV protegido y Cortes con lo que quedó a favor; "por confirmar".
+  · 11 Nómina: "Regresar a borrador" de una semana cancelada; el recibo propio dice por qué no se
+    toca; horas extra solo por día (`HORAS_EXTRA_POR_DIA`); el saldo de vacaciones con candado; qué
+    pasó con cada venta al recalcular (entra / cambia / descuento); la comisión negativa se ve; el
+    recibo CONGELA su horario (migración 2026-10_recibo_horario); se puede guardar sin horario;
+    textos de condonado y cancelado; guardar el empleado conserva lo que no viene.
+  · 12 Administración: la Matriz no se apaga sin otra (`MATRIZ_SIN_ALMACEN`); la nómina avisa en
+    vivo a Autorizaciones y la campana; Autorizaciones con kilos y su lista completa; Permisos dice
+    que el menú cambia solo; e2e-varios-puestos y e2e-permisos con cuerpos válidos.
+  · db/schema_mysql.sql al día (autorizaciones, la llave de cobro y la clave para autorizar),
+    cotejado columna por columna contra 'desarrollo'. PRODUCT.md: "nota en espera" y "a crédito".
+
+LA GUÍA DE /verificar (G1–G3)
+  · El verificador lee el texto como se ve (sin etiquetas); el mapa ubica CUENTA_CON_TRANSFERENCIAS
+    en configuracion/service.js; el agente del módulo 08 dice cinco hojas; el margen va en lo
+    decidido.
+
+LAS PRUEBAS
+  · Servidor: 102 unitarias. Pantalla: 666. `verificar-sistema.js`: 4,406 comprobaciones, 0
+    hallazgos. E2E contra 'desarrollo': 35 de 42 pasan (1,215 comprobaciones; dos se ajustaron a
+    las palabras nuevas: "1 paquete" y "apartado para la nota en espera", y e2e-varios-puestos y
+    e2e-permisos mandan un cuerpo válido); las otras 7 no corren sin las listas de muestras/
+    (ROJO 1-30, MARINO OSCURO 2-30, BLANCO 2-30), como ya se sabía.
+
+
+-------------------------------------------------------------------------------
+ 2026-10-26 (123) · La skill /verificar rehecha: guía común, mapa verificable y 12 agentes que no fallan
+-------------------------------------------------------------------------------
+
+"Puede mejorar esto /verificar para encontrar detalles de todo tipo pero siempre apegándonos al
+modelo que tiene este proyecto… que no falle nunca y siempre todo lo que se haga vaya acorde al
+proyecto" (usuario). NO SE DESPLIEGA: son herramientas de Claude Code (.claude/, .agents/ y
+backend/scripts/verificar-sistema.js), no el sistema de la tienda. Sin commit.
+
+LO QUE ESTABA MAL
+  · Los 12 agentes revisor-m01…m12 (creados hoy por otra sesión) mandaban leer "completos" 38
+    archivos que NO EXISTEN (caja/movimiento-modal.ts y caja-form-modal.*, inventario/traspasos.js
+    y conos.js, clientes-list.*, ajuste-credito-modal.* y ajuste-saldo-modal.*, pedidos/encargos.js y
+    notas.js, remesas/resumen.js, nomina/vacaciones.js, middlewares/operacion-unica.js, un schema.js
+    en seis módulos, hoy/controller.js y service.js…) y se saltaban otros que sí existen (los gastos
+    de la caja, entregar-modal, pago-nota-modal, kardex, carga-lista, datos-carga, comisiones-semana,
+    recibo-modal, usuario-form-modal, cuenta-bancaria-modal…). Un agente así pierde el tiempo o se
+    inventa lo que "leyó".
+  · Traían reglas congeladas que ya cambiaron: el destare "por cono" (desde el 2026-10-21 es DEL
+    PAQUETE), el permiso `hacer:cargar_mercancia` (es `hacer:cargar_inventario`), "7 pestañas", un
+    "motivo obligatorio" al recibir con faltantes que el código no pide.
+  · Nada les decía qué decidió ya el usuario: podían proponer "arreglar" el vendedor sin permiso,
+    las columnas de Ventas o quitar «Precio y peso». Y la skill no decía qué hacer si un agente
+    falla, ni obligaba a confirmar un hallazgo antes de reportarlo, ni distinguía un módulo sin
+    revisar de uno en ✓.
+
+LO QUE SE HIZO
+  · `.claude/skills/verificar/guia-agente.md` (nueva; UNA para los doce): qué es solo lectura y qué
+    comandos sí; dónde está la verdad (CLAUDE.md > código > DESIGN/PRODUCT > CAMBIOS > la guía: si
+    la guía contradice a CLAUDE.md, gana CLAUDE.md y se reporta "guía desactualizada"); cómo
+    descubrir los archivos con Glob y cómo leer los modelos grandes por función; las NUEVE miradas
+    (regla → código → pantalla → prueba; texto vs lo que hoy hace el código; dinero e inventario;
+    cuadre; tiendas / permisos / costo; autorizaciones y tiempo real; operatividad en mostrador y
+    bodega; DESIGN.md; base); la lista de lo DECIDIDO POR EL USUARIO (no se propone cambiar);
+    gravedad; y el FORMATO de entrega fijo (qué leí, reglas revisadas en tabla, importantes,
+    menores, decidido, no pude confirmar, pruebas que faltan, propuestas).
+  · `.claude/skills/verificar/mapa-modulos.md` (nuevo): por módulo, su agente, carpetas de pantalla
+    y servidor, lo que comparte, los títulos EXACTOS de sus bloques de CLAUDE.md, funciones y
+    códigos de error para buscar en los modelos grandes, permisos, operaciones de autorización, E2E,
+    pruebas unitarias, tablas y lo decidido. Todo módulo del servidor, toda pantalla del panel y
+    toda E2E tienen dueño.
+  · `backend/scripts/verificar-sistema.js`, sección 0 "La propia auditoría": las tres copias de
+    .claude y .agents idénticas; en el mapa, la guía y los 12 agentes cada ruta existe (admite `*`
+    y `**`); cada «regla» está en CLAUDE.md con ese título; cada función citada aparece en el
+    código; cada permiso en catalogo.js; cada operación en operaciones.js; cada E2E en
+    backend/scripts; cada tabla o vista en el esquema o en una migración; ningún
+    backend/src/modules/*, features/admin/* ni e2e-*.js sin módulo; cada agente se llama como dice
+    y manda leer la guía; revisor-general los nombra a todos. Ya sirvió: encontró un título que
+    CLAUDE.md parte en dos renglones («"Se vende por" va FIJO en…») y se corrigió el mapa. Las
+    pruebas unitarias ya no se cuentan como reglas del módulo 12 (lo inflaban a 106): van en su
+    propio renglón. Tablas esenciales de hitex: también autorizaciones, operaciones_unicas,
+    tipos_gasto, gastos, transferencias, ventas_anteriores, devolucion_bultos y nomina_comisiones.
+    De 2,466 a 4,169 comprobaciones.
+  · `.claude/skills/verificar/SKILL.md` (reescrita; copia idéntica en .agents/): reglas que no se
+    rompen (solo lectura, solo hitex, nunca ✓ sin leer, nada inventado, lo decidido no se arregla,
+    español con números); argumentos (`/verificar`, un módulo por número o alias, `tiendas`,
+    `rapido`, `sin-bd`); el script con `--sin-bd` si no hay red; brief ÚNICO para los 12 agentes
+    con lo que dijo el script de su módulo y git status; si un agente falla se relanza una vez y
+    luego va como SIN REVISAR; consolidación con verificación cruzada (abrir cada archivo:línea),
+    filtro de decisiones, deduplicación, pruebas que faltan y máximo 5 + 5 propuestas; el reporte;
+    y cómo mantener la skill.
+  · Los 12 agentes `revisor-m01…m12` reescritos: leen guía + mapa + CLAUDE.md antes del código,
+    descubren archivos con Glob, traen "qué es este módulo" y "en qué fijarte" alineados a
+    CLAUDE.md de hoy y "decidido por el usuario en tu módulo". `revisor-general.md` es el mismo
+    ritual para cuando se invoca como agente. `revisor-tiendas` no cambió.
+  · CLAUDE.md: el párrafo de "Herramientas de Claude Code" describe la skill nueva y la regla de
+    mantenimiento (una pantalla, un módulo o una E2E nueva va al mapa, o el verificador lo marca).
+
+LA VERIFICACIÓN
+  · `node scripts/verificar-sistema.js` contra hitex: 4,169 comprobaciones, 0 hallazgos, base en
+    orden, 101 pruebas unitarias del servidor; con `--sin-bd`: 4,145, 0 hallazgos. Sección 0 en
+    orden.
+  · Lo que sigue: correr `/verificar` completo (los 12 agentes nuevos en paralelo) cuando el
+    usuario lo pida; de ahí saldrán los primeros hallazgos con el formato nuevo.
 
 
 -------------------------------------------------------------------------------

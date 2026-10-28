@@ -1,67 +1,148 @@
 ---
 name: verificar
-description: Auditoría estricta módulo por módulo de Hitex (los 12 módulos, solo contra la base "hitex") con la "Prueba del Manual de Uso" (cifras que suman, promesas vs casillas reales, plazos unificados, diccionario Hitex), "Auditoría de Operatividad de Usuario" (pistola lectora, teclado, prevención de errores de dedo, vistas previas Antes→Después, continuidad de trabajo) y ojo de experto CRM / POS / UI/UX (DESIGN.md). Es 100 % de solo lectura.
+description: Auditoría estricta de Hitex en SOLO LECTURA, apegada al modelo del proyecto (CLAUDE.md, DESIGN.md, PRODUCT.md): corre el verificador automático contra la base "hitex" y lanza 12 agentes en paralelo, uno por módulo (revisor-m01 a revisor-m12), que revisan regla por regla, texto por texto y de extremo a extremo (pantalla → servidor → SQL → pruebas). Con un módulo (/verificar caja), solo ese; /verificar tiendas corre el revisor de tiendas; /verificar rapido solo el script. No cambia nada ni propone deshacer lo que el usuario ya decidió.
 disable-model-invocation: true
 ---
 
-# Verificar todo el sistema Hitex (Módulo por Módulo + Prueba del Manual de Uso + Operatividad de Usuario + Experto CRM & UI/UX · Solo `hitex`)
+# /verificar · Auditoría estricta de Hitex, apegada al modelo del proyecto
 
-El usuario pidió `/verificar`. Quiere una **auditoría estricta módulo por módulo** (en **solo lectura**, sin modificar ningún archivo ni escribir en la base de datos) que revise que cada pieza esté donde debe ir, que las cifras de cada pantalla cuadren, que no haya contradicciones ni palabras viejas, que la **operatividad real del usuario** (mostrador, bodega y administración) sea rápida y a prueba de errores de dedo, y que le propongas mejoras reales tanto de **lógica/operatividad/CRM** como de **Diseño UI/UX conectado con la lógica**, trabajando **únicamente con la base `hitex`**.
+El usuario pidió `/verificar`. Quiere saber qué está mal, qué se quedó en el pasado y qué no
+cuadra, **sin que se toque nada** y **sin que se le proponga deshacer lo que ya decidió**. La
+verdad del proyecto está en `CLAUDE.md` (reglas y decisiones), `DESIGN.md` (lo visual),
+`PRODUCT.md` (la voz) y `CAMBIOS.txt` (lo más reciente). Esta skill, su guía y su mapa van
+después: si se contradicen con `CLAUDE.md` o con el código, gana `CLAUDE.md` y lo que se
+reporta es "la guía está vieja".
 
-## Pasos a seguir
+Archivos de la skill (los tres viven también, idénticos, en `.agents/skills/verificar/`):
+- `SKILL.md` (este): el ritual del coordinador.
+- `guia-agente.md`: qué revisa cada agente, cómo lee, las nueve miradas, lo decidido por el
+  usuario y el formato de entrega.
+- `mapa-modulos.md`: qué carpetas, reglas de `CLAUDE.md`, permisos, operaciones, pruebas y
+  tablas le tocan a cada uno de los 12 módulos. `verificar-sistema.js` (sección 0) comprueba que
+  todo lo que nombra exista y que nada del sistema se quede sin módulo.
 
-1. **Corre el verificador automático profundo sobre `hitex` (más de 1,600 comprobaciones; el número exacto lo dice el propio script):**
-   Desde `backend/`:
-   ```bash
-   node scripts/verificar-sistema.js
-   ```
-   *(El script usa `hitex` por omisión e incluye reglas de arquitectura, `DESIGN.md`, ecuaciones de pantalla, plazos cruzados, promesas de mensajes contra controles reales, diccionario de palabras viejas y los 6 pilares de **Operatividad de Usuario**: anti-doble clic en todos los `submit`, anti-negativos en todos los `input[type="number"]`, cierre seguro de modales sin clic accidental afuera, pistola lectora con `autocomplete="off"` y auto-enfoque, vistas previas Antes → Después y captura en serie).*
+## Reglas que no se rompen
 
-2. **Revisa migraciones en `hitex` y el estado de Git:**
-   Desde `backend/`:
-   ```bash
-   node scripts/estado-migraciones.js --base hitex
-   git status -s
-   ```
+1. **Solo lectura.** Ni tú ni los agentes modifican un archivo, escriben en una base, corren
+   E2E, sembrados, `npm test`, `ng test` ni despliegan. Lo único que corre es
+   `verificar-sistema.js` (lee código y hace `SELECT` en `hitex`) y `estado-migraciones.js`.
+2. **Solo `hitex`.** Nada contra `desarrollo` (datos inventados) salvo que el usuario lo pida.
+3. **Nunca un ✓ sin leer.** Un módulo que ningún agente revisó completo va como "SIN REVISAR",
+   nunca como ✓.
+4. **Nada inventado.** Cada hallazgo importante del reporte lo CONFIRMAS tú abriendo el
+   `archivo:línea` que cita el agente. Lo que no confirmes va en "No se pudo confirmar".
+5. **Lo decidido por el usuario no se "arregla".** Sección 5 de la guía. Si un agente lo propone,
+   lo mueves a "Decidido por el usuario" y no a hallazgos.
+6. **En español, con ejemplos con números de la tienda** (paquetes, kilos, pesos), sin nombres
+   de código en la prosa salvo el `archivo:línea` del hallazgo.
 
-3. **Aplica la «Prueba del Manual de Uso» (Coherencia entre pantallas y código):**
-   No te quedes solo con que el código compile; revisa activamente estas **6 familias de fallas** (apoyándote en `.claude/agents/revisor-general.md`):
-   - **Promesas sin botón:** si un mensaje de error o texto dice *"hazlo en «X»"* o *"desactívala en «Precio y peso»"*, verifica en el `.html` que esa ventana realmente tenga esa casilla o botón.
-   - **Las cifras de arriba siempre suman el total de abajo:**
-     - En **Caja**: `Fondo + Ventas efectivo + Abonos y otros ingresos (abonos, anticipos, pagos de nota, entregas, ingresos) − Devoluciones − Retiros = Debería haber`.
-     - En **Reportes › Ventas por día**: `Sin IVA − Descuentos + IVA + Envío = Total`.
-     - En **PDFs (Nómina / Comisiones)**: que una devolución no cuente como venta ni sume al vendido, y que no se corten textos largos en las columnas.
-   - **Un solo plazo y signo (`<` vs `<=`) en todo el sistema:**
-     - **Atraso de cobranza (el vencimiento de CADA nota, 2026-10-20):** una nota a crédito vence el día en que se fió más sus días de crédito (`pedidos.dias_credito`; sin decirlos, `DIAS_SIN_ABONAR` = 15); una cuenta está atrasada si alguna nota ya venció. La misma cuenta (`vencimientoDe` / `diasSinAbonarDeTodos`) en Caja, Campana, Clientes › Cuánto debe y Cómo va el negocio.
-     - **Cliente nuevo en Hoy:** capturado en los *últimos* 15 días (nunca decir *"hace 15 días o más"*).
-     - **Stock mínimo (`<=`):** decir *"N paquetes o menos"* (nunca *"menos de N"*) y abrir en Paquetes.
-   - **Candados de cobro y cierre de operaciones:**
-     - Una venta **a crédito** que aún se debe jamás debe ofrecer *"Subir captura"* en el pedido (se cobra como abono en su expediente).
-     - Al entregar una **nota en espera** (`encargos`), igual que en ventas y abonos, ofrecer **Imprimir ticket** y **Mandar por WhatsApp**.
-     - En **WhatsApp**, una vez enviado el ticket, ocultar *"Le llega a…"* y *"Cambiar número"*.
-   - **Rótulos de Kardex y permisos por tienda:**
-     - En Kardex (`_describir`), distinguir el envío normal de un traspaso del **faltante (merma)** al recibirlo y del **regreso al cancelar** uno en camino.
-     - Ocultar *"Cobranza atrasada"* en Hoy a quien solo trabaja en una tienda.
-   - **Diccionario Hitex, plurales y centavos:**
-     - Sin palabras viejas en pantalla (*"categoría"*, *"remesa"*, *"fiar/fiado"*, *"apartado"* de venta, *"las cinco pestañas"*, *"dado de alta"* fijo en masculino), sin plurales rotos (*"1 paquetes"*, *"1 solicitudes"*) y con centavos visibles en saldos del expediente.
+## Qué pidió exactamente (los argumentos)
 
-4. **Aplica la «Auditoría de Operatividad de Usuario» (Mostrador, Bodega y Administración):**
-   Ponte en los zapatos del cajero con fila, del almacenista con pistola lectora y del administrador, y revisa estos **6 pilares de operatividad**:
-   - **Pilar 1 · Velocidad en mostrador, pistola lectora y teclado:** auto-enfoque al abrir pantallas de escaneo, `autocomplete="off"` en entradas de pistola, 1 solo `Enter` para mandar WhatsApp, cálculo de cambio en vivo y acceso en 1 clic a los hilos frecuentes del cliente.
-   - **Pilar 2 · Prevención de errores humanos (Poka-Yoke):** todos los botones de guardar/cobrar bloqueados contra doble clic (`[disabled]`), todos los campos numéricos protegidos contra negativos (`min="0"` o `min="1"`), y que **ningún modal de captura se cierre por clic accidental en el fondo oscuro**.
-   - **Pilar 3 · Claridad «Antes → Después» antes de confirmar:** toda acción delicada (retiro/ingreso de caja, cambio de stock mínimo, desarme de conos, abono a deuda, recepción de traspaso con faltantes) debe mostrar cómo está hoy y cómo quedará después antes de confirmar.
-   - **Pilar 4 · Continuidad de trabajo (sin callejones sin salida):** las tareas repetitivas (*"Capturar otro color"*, *"Agregar bulto a mano"*) limpian el campo y siguen sin cerrar la ventana; todo cobro/entrega cierra ofreciendo Ticket y WhatsApp; cada aviso en `Hoy` o `Campana` lleva con 1 clic a la pantalla filtrada.
-   - **Pilar 5 · Mensajes humanos accionables:** cuando algo se bloquea (paquete de otra sucursal, hilo con historial, efectivo insuficiente en caja, cliente con atraso), el mensaje dice exactamente en qué almacén o nota está y cómo resolverlo.
-   - **Pilar 6 · Diseño UI/UX operativo (`DESIGN.md`):** un solo botón azul primario por vista, `tabular-nums`, códigos en `IBM Plex Mono`, botones táctiles $\ge 44\text{ px}$ y `.tabla-scroll` en tablas anchas.
+| Lo que escribió | Qué se hace |
+|---|---|
+| `/verificar` | Todo: script + los 12 agentes en paralelo + consolidación. |
+| `/verificar 03`, `/verificar caja`, `/verificar inventario`, … | Script completo + SOLO el agente de ese módulo. Alias: 01 hoy, campana, avisos · 02 pos, punto de venta, ticket, whatsapp · 03 caja, cortes, gastos, turno · 04 ventas, pedidos, devoluciones, notas, transferencias · 05 clientes, credito, expediente, saldo a favor, lugares · 06 inventario, conos, kardex, ajuste, merma, minimos · 07 remesas, cargas, surtir inventario, proveedores, excel, plantilla · 08 traspasos, surtir sucursal, envios · 09 catalogo, productos, hilos, presentaciones, materiales, precios, listas · 10 tablero, negocio, rotacion, reportes, temporadas · 11 nomina, comisiones, vacaciones, horario · 12 administracion, almacenes, personal, usuarios, permisos, autorizaciones, configuracion, tiempo real, seguridad. |
+| `/verificar tiendas` | Script + el agente `revisor-tiendas` sobre `git diff` y lo que el usuario señale. |
+| `/verificar rapido` | Solo el paso 1 (script y migraciones), sin agentes. |
+| `/verificar sin-bd` | Como `/verificar`, pero el script con `--sin-bd` (cuando no hay red al servidor). |
 
-5. **Entrega el reporte en español sencillo con esta estructura:**
-   - **Veredicto general** (cuántas comprobaciones automáticas pasaron y el estado de `hitex`).
-   - **Tabla de estado de los 12 módulos** (`✓` o `✖`).
-   - **Hallazgos encontrados**, separados en:
-     - **Lo importante** (fallas donde el dinero, la deuda, el inventario, los plazos, un botón prometido o la operatividad del usuario fallan), y
-     - **Menores** (palabras viejas en pantalla, plurales fijos, textos o detalles visuales),
-     indicando archivo, línea y un ejemplo real con números.
-   - **Propuestas de mejora de Experto (en 2 bloques obligatorios):**
-     - **Bloque A · Mejoras de Lógica, Operatividad de Usuario y CRM.**
-     - **Bloque B · Mejoras de Diseño UI/UX conectadas con la lógica** (respetando al 100 % *"La bodega bien llevada"* de `DESIGN.md`).
-   - Recuerda que **no se tocó ningún archivo ni dato en `hitex`** y pregunta qué hallazgos o mejoras quiere aplicar.
+Si el argumento no se reconoce, pregunta antes de lanzar nada.
+
+## Paso 0 · Prepararse (un minuto)
+
+1. Lee `guia-agente.md` y `mapa-modulos.md` de esta carpeta (los vas a necesitar para
+   consolidar y para armar el brief).
+2. `git status -s` desde la raíz: lo que esté sin guardar también se audita, y se dice.
+3. Si `ListAgents` muestra otra sesión de este proyecto, avísale que vas a auditar en solo
+   lectura (no estorba, pero puede estar a medio cambio: se anota).
+4. Fecha de hoy: la necesitan los agentes para calcular plazos (15 días, 60 días, semanas).
+
+## Paso 1 · El verificador automático (desde `backend/`)
+
+```bash
+node scripts/verificar-sistema.js            # código + reglas de DESIGN.md + base hitex
+node scripts/estado-migraciones.js --base hitex
+```
+
+- Si no conecta a la base (sin red o sin credenciales): vuelve a correr con `--sin-bd`, y el
+  reporte lo dice en la primera línea ("la base no se revisó"). No es un ✓ de base.
+- **Sección 0 del script ("La propia auditoría")**: si marca algo (un archivo del mapa que ya no
+  existe, una carpeta nueva sin módulo, una E2E sin dueño, una regla de `CLAUDE.md` que ya no
+  está con ese título), la auditoría SIGUE, pero el veredicto lo pone primero: "la guía de
+  /verificar necesita mantenimiento". Corregir la guía es lo único que se ofrece arreglar en el
+  momento, y solo si el usuario dice que sí.
+- Guarda la salida completa: de ahí sacas, para cada agente, las líneas de SU módulo.
+- `verificar-sistema.js` sale con 1 si hay un GRAVE; eso no detiene la auditoría.
+
+## Paso 2 · Los agentes, en paralelo y con el mismo brief
+
+Lanza los 12 (o el que toque) EN UN SOLO MENSAJE, con `subagent_type` = el nombre del agente
+del mapa (`revisor-m01-hoy-campana` … `revisor-m12-administracion-autorizaciones`). El brief de
+cada uno es este, con sus huecos llenos:
+
+```
+Audita SOLO el módulo NN (<nombre>) de Hitex. Hoy es <AAAA-MM-DD>.
+Antes de leer código: tu archivo de agente, `.claude/skills/verificar/guia-agente.md` completa
+y tu sección NN de `.claude/skills/verificar/mapa-modulos.md`; luego los bloques de CLAUDE.md
+que esa sección lista, completos.
+SOLO LECTURA: no modifiques nada, no corras pruebas, E2E ni scripts que escriban, no toques
+ninguna base (hitex es la real).
+Lo que dijo verificar-sistema.js de tu módulo: <sus líneas, o "0 hallazgos en tu módulo">.
+Sección 0 del script (la guía): <sus líneas, o "en orden">.
+Cambios sin guardar en git que tocan tu módulo: <git status -s filtrado, o "ninguno">.
+Entrega EXACTAMENTE el formato de la sección 7 de la guía, en español, con archivo:línea reales,
+ejemplos con números de tienda y sin propuestas que contradigan la sección 5 de la guía.
+```
+
+Mientras corren no inventes resultados: espera las notificaciones.
+
+## Paso 3 · Si un agente falla
+
+- Si regresa con error, vacío, o sin el formato (sin "Estado:", sin "Qué leí"): lo relanzas UNA
+  vez con el mismo brief.
+- Si vuelve a fallar: ese módulo va en el reporte como **SIN REVISAR**, con el motivo. Nunca ✓.
+- Si un agente dice "No existen" sobre archivos que el mapa nombra: eso es un hallazgo menor
+  contra `mapa-modulos.md` (guía desactualizada), no contra el sistema.
+
+## Paso 4 · Consolidar (tu trabajo, no el de los agentes)
+
+1. **Verificación cruzada.** Para CADA hallazgo importante: abre el `archivo:línea` citado y
+   confirma que dice lo que el agente dice; si cita una regla, búscala en `CLAUDE.md`. Lo que
+   no cuadre pasa a "No se pudo confirmar" con la razón. Un hallazgo sin `archivo:línea` no entra
+   como importante.
+2. **Filtro de decisiones.** Compáralo con la sección 5 de la guía y con "DECIDIDO POR EL
+   USUARIO" de `CAMBIOS.txt`: lo que choque va a su propia sección, con la cita de la decisión.
+3. **Deduplica** lo que dos módulos reportaron (el cruce caja/ventas/clientes es normal): un solo
+   renglón con los dos módulos.
+4. **Ordena** por gravedad: primero lo que descuadra dinero o mercancía, luego privacidad y
+   permisos, luego candados, luego textos que engañan; al final lo menor.
+5. **Pruebas que faltan**: junta las reglas sin prueba de todos los agentes en una lista corta.
+6. **Propuestas**: máximo 5 de A (lógica, operatividad, CRM) y 5 de B (diseño conectado con la
+   lógica, dentro de `DESIGN.md`), cada una ligada a un hallazgo o a una regla, y ninguna que
+   contradiga la sección 5. No es una lista de deseos.
+
+## Paso 5 · El reporte (en español sencillo)
+
+1. **Veredicto en tres líneas**: el script (comprobaciones, hallazgos, graves), `hitex` (base
+   revisada o no; migraciones al día o no) y los agentes (cuántos ✓, ✖, SIN REVISAR).
+2. **Tabla de los 12 módulos**: número, nombre, estado, agente, archivos leídos (pantalla /
+   servidor), hallazgos importantes / menores.
+3. **Lo importante**, numerado, cada uno con `archivo:línea`, qué pasa, qué debería (la regla),
+   cómo se comprobó, un ejemplo con números de tienda y qué pasa si se deja así.
+4. **Menores**, en renglones cortos.
+5. **Decidido por el usuario** (no se propone cambiar), con la cita.
+6. **No se pudo confirmar**.
+7. **Pruebas que faltan**.
+8. **Propuestas** A y B.
+9. **La guía de /verificar** (solo si la sección 0 marcó algo): qué hay que actualizar.
+10. Cierre: "No se tocó ningún archivo ni dato en `hitex`. Dime cuáles hallazgos o propuestas
+    quieres que aplique." Aplicar algo sigue el ritual de `/desplegar` (pruebas, migración en
+    las dos bases con respaldo, bitácora), nunca desde esta skill.
+
+## Mantener la skill (cuando cambia el sistema)
+
+- Una pantalla, un módulo del servidor o una E2E nueva: su renglón en `mapa-modulos.md` (y el
+  script lo exige). Un bloque nuevo de `CLAUDE.md`: a la sección de su módulo. Una decisión
+  nueva del usuario: a la sección 5 de la guía y al "Decidido" de su módulo.
+- Los tres archivos se copian idénticos a `.agents/skills/verificar/`; el script avisa si
+  difieren.

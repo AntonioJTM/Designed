@@ -4,6 +4,7 @@ const model = require('./model');
 const variantesService = require('../variantes/service');
 const variantesModel = require('../variantes/model');
 const almacenesModel = require('../almacenes/model');
+const categoriasModel = require('../categorias/model');
 const { AppError } = require('../../middlewares/error');
 const { motivosCarga, enLista } = require('../../utils/cargado');
 const { paginado } = require('../../utils/query');
@@ -44,7 +45,26 @@ async function obtener(id, { conDetalle = true } = {}) {
   return { ...producto, variantes, imagenes };
 }
 
+/**
+ * El calibre tiene que ser de SU material (2026-10-26, auditoría): la pantalla solo
+ * ofrece los del material elegido, pero al cambiar de material se quedaba el de antes
+ * (BLANCO · VISCOSA · 2/30) y después la lista del proveedor cargaba ahí el blanco 2/30
+ * de acrilán. Igual que la carga de la lista (CALIBRE_NO_DEL_MATERIAL).
+ */
+async function _exigirCalibreDelMaterial(categoriaId, calibre) {
+  const cal = String(calibre ?? '').trim();
+  if (!cal || !categoriaId) return;
+  const material = await categoriasModel.obtener(categoriaId);
+  if (!material) return;
+  const calibres = String(material.calibres ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (calibres.length && !calibres.includes(cal)) {
+    throw new AppError(422, 'CALIBRE_NO_DEL_MATERIAL',
+      `El calibre ${cal} no es de ${material.nombre} (sus calibres: ${calibres.join(', ')}).`);
+  }
+}
+
 async function crear(datos) {
+  await _exigirCalibreDelMaterial(datos.categoria_id, datos.grosor_calibre);
   const registro = {
     categoria_id: datos.categoria_id,
     linea_id: datos.linea_id ?? null,
@@ -103,6 +123,11 @@ async function actualizar(id, datos) {
   if (!actual) throw new AppError(404, 'NO_ENCONTRADO', 'Producto no encontrado');
 
   const merge = (campo) => (datos[campo] !== undefined ? datos[campo] : actual[campo]);
+  // Solo si cambia el material o el calibre: un hilo viejo con otro calibre se sigue
+  // pudiendo editar en lo demás.
+  if (datos.categoria_id !== undefined || datos.grosor_calibre !== undefined) {
+    await _exigirCalibreDelMaterial(merge('categoria_id'), merge('grosor_calibre'));
+  }
   const registro = {
     categoria_id: merge('categoria_id'),
     linea_id: merge('linea_id'),

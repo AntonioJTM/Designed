@@ -135,6 +135,10 @@ tienda-hilos/
   multipresentación), peso = PROMEDIO de los bultos, precio = `productos.precio_kg`— y luego entran
   los bultos y la mercancía. Una remesa posterior reutiliza la presentación. Se admite cargar sobre
   `paquete` o `simple` (ambos se llevan en kilos); sobre un `cono` da 422 `NO_ES_PAQUETE`.
+  **Crear la presentación o ponerle su peso va DENTRO de la transacción de la carga** (2026-10-26,
+  auditoría: `remesas/service.js → _planPresentacion` revisa sin tocar nada y `crearRemesa(…,
+  preparar)` lo hace adentro): una carga rechazada ya no deja la presentación creada ni el peso
+  cambiado. Por «Un solo hilo» también se le pone el peso (promedio) si no tenía.
   Varios lotes distintos pueden ser del MISMO hilo (el archivo real trae dos): el lote es una
   etiqueta del bulto y todos suman al mismo saldo, no se separa el inventario.
 - **La LISTA COMPLETA del proveedor: varios hilos en un archivo** (2026-10-03). Recibir remesa
@@ -219,6 +223,9 @@ tienda-hilos/
   CARGAS: un traspaso o un desarme no son mercancía nueva. Los pide quien tenga `ver:remesa`,
   `ver:catalogo` o `ver:inventario` (`requirePermisoAlguno`); el precio de compra solo sale con
   `hacer:ver_costos`. Las fuentes estándar del PDF traen acentos y ñ pero NO flechas ni "≈".
+  A quien no ve el almacén de una carga, el PDF le dice "otra tienda" (2026-10-26), y el historial
+  (`GET /remesas`) pide ver los reportes. El Reporte de entradas va por la fecha en que LLEGÓ
+  (`fecha_ingreso`) y trae proveedor y factura.
   El frontend los pide con `HttpClient` (blob) —un `<a href>` no manda el token— y los guarda con
   `shared/descargar.ts`.
 - **Se cobra por el peso del bulto, no por el nominal.** Los bultos pesan distinto entre sí
@@ -227,7 +234,9 @@ tienda-hilos/
   trae su `peso_kg` real, su lote y sus conos, o viene en `null` si el código es el principal de
   la presentación. Un 404 significa "no es un código" y el POS cae a la búsqueda por texto.
   Dos bultos distintos SUMAN sus pesos; el mismo bulto escaneado dos veces NO se cobra doble
-  (es una pieza física única).
+  (es una pieza física única). El servidor revisa cada paquete de la venta (2026-10-26): tiene que
+  existir (422 `CODIGO_DESCONOCIDO`) y ser del hilo de su renglón (422 `BULTO_DE_OTRO_HILO`), y su
+  peso y lote se congelan de lo GUARDADO, no de la petición.
   **En una línea con bultos, los kilos SON los de los bultos** (2026-10-06): la caja no deja
   teclearlos y cada bulto lleva su ✕ para quitar el que no se lleva (`pos.ts → quitarBulto`). Y
   el servidor rechaza una línea cuyos bultos pesen más de lo que se cobra (422
@@ -291,7 +300,9 @@ tienda-hilos/
   con entrada SACA sus kilos del almacén donde está hoy (salida `referencia_tipo = 'bulto'`; el
   motivo dice la carga), solo si sigue disponible (409 `BULTO_NO_DISPONIBLE`), si no viene en camino
   (409 `PAQUETE_EN_CAMINO`) y si el saldo alcanza (409 `STOCK_INSUFICIENTE`). Así, quitar un
-  paquete con el código mal y volverlo a capturar bien deja el inventario igual. Los capturados a
+  paquete con el código mal y volverlo a capturar bien deja el inventario igual. Quitarlo pide
+  «Cargar mercancía» o «Ajuste y merma» (2026-10-26) y el estado se vuelve a revisar con la fila
+  bloqueada (`quitarBultoConSalida`). Los capturados a
   mano ANTES del 2026-10-07 nunca metieron kilos: solo borran su registro. La lista trae
   `con_entrada` (metió kilos) y la confirmación lo dice. La ventana "Agregar bulto a mano" pregunta "¿A qué almacén entra?" (primero donde
   hay de ese hilo, con sus kilos) y dice "Entran X kg a …"; conserva la elección entre un bulto y
@@ -312,7 +323,9 @@ tienda-hilos/
   almacén de la caja o del pedido). Sin almacén (capturado a mano antes del 2026-10-07) se
   permite y queda apuntado en esa tienda. El lector (`GET /variantes/resolver/:codigo`) trae
   `bulto.almacen_id/almacen/en_camino_folio` y la caja y "Modificar pedido" avisan al escanear
-  (`shared/paquete-aqui.ts`). `e2e-paquete-de-otra-tienda.js`.
+  (`shared/paquete-aqui.ts`). `e2e-paquete-de-otra-tienda.js`. Lo que dice "hay aquí" en la
+  búsqueda y la báscula NO cuenta lo de notas en espera (2026-10-26), y un paquete de una
+  presentación desactivada se avisa junto al lector, no hasta cobrar.
   ANTES la venta NO lo validaba y le corregía la ubicación al paquete, y eso descuadraba: el
   PERLA JASPE 00633586 estaba en Almacén General, se vendió en la caja de Tienda Principal, la
   venta le quitó sus 19.95 kg a la TIENDA y la bodega se quedó con los kilos de un paquete que ya
@@ -343,7 +356,9 @@ tienda-hilos/
   crédito (cuánto quedó a deber), Nota pendiente de pago (sin "pagado" ni "cambio"), Apartado.
   **Una NOTA EN ESPERA no lleva ticket** (todavía se modifica): `armarTicket` lo rechaza
   (`SIN_TICKET`) y `llevaTicket()` esconde el botón. El cambio no se guarda: la caja lo pasa al
-  imprimir.
+  imprimir. Los datos de la tienda (papel, datos fiscales) se vuelven a pedir cada 2 minutos y, si
+  no contestaron, en el siguiente ticket (2026-10-26: se quedaban toda la sesión). Los paquetes van
+  en el orden en que se escanearon (por lote, como la caja).
   **CADA DEVOLUCIÓN TIENE SU TICKET, aparte del de la venta** (2026-10-15: "que el ticket salga
   como devolución y cuánto tiene a favor; no elimines el de venta"). `armarTicketDevolucion(p, d,
   tienda)` (mismo encabezado y hoja que la venta: `cabeceraTienda` + `hojaTicket`): la banda dice
@@ -473,7 +488,9 @@ tienda-hilos/
   `EFECTIVO_INSUFICIENTE` y no se cancela. Una venta así ya no se reactiva (409
   `VENTA_CON_SALDO_FAVOR`). Lo mismo con la diferencia de una nota en espera que pesó menos
   (`_devolverDiferencia`).
-  El movimiento del dinero va ANTES de tocar inventario, para que ese 409 no deje nada movido.
+  El movimiento del dinero va ANTES de tocar inventario, para que ese 409 no deje nada movido. El
+  turno de donde sale se lee con `FOR UPDATE` (`_sesionParaDevolucion`, 2026-10-26): un corte al
+  mismo tiempo ya no se lleva ese dinero.
 - **Retiros e ingresos de efectivo** van por `POST /caja/sesiones/:id/movimientos` (modal "Sacar
   o meter efectivo" de la pantalla Caja, `caja/movimiento-caja-modal.ts`; pide
   `hacer:mover_efectivo`). El retiro EXIGE
@@ -527,6 +544,10 @@ tienda-hilos/
   (`ver:transferencias` y todas las tiendas; marcar con `hacer:revisar_transferencias`, varias de
   una vez con `POST /transferencias/marcar`). Una cuenta con transferencias no se borra (409
   `CUENTA_CON_TRANSFERENCIAS`). Un cobro NUEVO por transferencia lleva su `anotar`.
+  **Lo que llegó al banco se queda** (2026-10-26, auditoría): una nota en espera pagada por
+  transferencia que pesó menos regresa la diferencia en EFECTIVO; su pago baja a lo cobrado y lo
+  regresado queda en `pagos.devuelto_efectivo` (migración `2026-10_pago_regresado_en_efectivo.sql`):
+  Transferencias suma `monto + devuelto_efectivo` y dice "se le regresaron $X al entregarla".
   **Lo de una venta CANCELADA y REGRESADA no suma** (2026-10-26, usuario): las cifras y "A qué
   cuenta llegó" cuentan solo lo vigente; lo regresado va aparte (`canceladas`, `importe_cancelado`:
   "sin contar $X de N ventas canceladas") y su renglón sigue en la lista, tachado ("no suma"). Si al
@@ -607,7 +628,8 @@ tienda-hilos/
   `variante_conversiones.destare_kg` —NO en la presentación, porque cada desarme puede llevar uno
   distinto—. `kg_consumidos` no cambia: del paquete sale su peso real y eso
   es lo que se descuenta. El destare solo dice cuánto pesó el resultado
-  (`kg_enconados = kg_consumidos + destare_kg`) y queda escrito en las dos patas del kardex.
+  (`kg_enconados = kg_consumidos + destare_kg`) y queda escrito en las dos patas del kardex; lo
+  que escriba la tienda se AGREGA al motivo, no lo reemplaza (2026-10-26).
   NO cambia el precio del cono (que es el del paquete, por kilo).
 - **EL PESO DE UN CONO SALE DE SUS BAJADAS** (2026-10-19: "la cantidad de conos se conoce cuando
   escaneas el paquete… ya solo se le suma el destare"). `producto_variantes.peso_kg` del cono =
@@ -639,7 +661,9 @@ tienda-hilos/
   kilos. Ofrece esos dos tipos y nada más: `entrada` la hace la remesa, `devolucion` la cancelación del pedido y `salida` la
   reemplazó el traspaso. El **ajuste** es la ÚNICA forma de cuadrar el sistema con un conteo
   físico —no lo quites— y la **merma** de dar de baja hilo dañado. El endpoint
-  `POST /inventario/movimientos` sigue aceptando los cinco tipos.
+  `POST /inventario/movimientos` sigue aceptando los cinco tipos, pero ya NO `referencia_tipo` ni
+  `referencia_id` (2026-10-26: por la API se hacía pasar por una venta o una carga). El saldo que
+  contesta va redondeado a gramos.
 - **Un solo camino para mover mercancía entre almacenes: el traspaso.** Se eliminó
   `POST /inventario/transferencias` (y su tarjeta en Inventario) porque movía kilos sin mover los
   bultos, y eso descuadraba su ubicación. No lo reintroduzcas: todo va por
@@ -764,9 +788,15 @@ tienda-hilos/
   La pantalla del traspaso compara contra lo LIBRE (`equivalencia-paquetes` devuelve
   `kg_apartado` y `kg_libre`), que es contra lo que valida el servidor.
   **Solo PAQUETES.** Un cono da 422 `NO_SE_TRASPASAN_CONOS`: a la sucursal se le manda el paquete
-  cerrado y allá se desarma.
+  cerrado y allá se desarma. **Auditoría 2026-10-26:** una solicitud ya hecha se envía y se recibe
+  aunque mientras se haya desactivado la presentación; el mismo hilo dos veces en una solicitud es
+  422 `HILO_REPETIDO`; los paquetes van ENTEROS; A CIEGAS se aparta con el peso del CATÁLOGO (con el
+  promedio de la Matriz la respuesta delataba si allá había); "Hay en Matriz" de la autorización
+  cuenta los paquetes LIBRES; los pendientes salen primero en la lista (no se pierden tras 100);
+  `GET /inventario/traspasos` pide «Surtir sucursal» (y `/:id` también «Kardex»).
 - **Matriz → sucursales, por PAQUETES.** El almacén marcado con `almacenes.es_matriz` (único, como
-  `es_tienda_linea`) es el que surte a las demás.
+  `es_tienda_linea`) es el que surte a las demás. No se le quita la marca, ni se desactiva ni se
+  borra sin marcar otra (409 `MATRIZ_SIN_ALMACEN`, 2026-10-26).
   Las líneas de `paquete` se capturan en PAQUETES —los paquetes son cerrados y nadie los pesa— y se
   apartan y descuentan a N × el peso PROMEDIO REAL de los paquetes del origen (no el nominal: los
   bultos van de 10.75 a 19.80 kg). Al PEDIR los kilos son un APROXIMADO a propósito: quien surte
@@ -815,7 +845,11 @@ tienda-hilos/
   falla o solo se pidió autorización (202), la suelta para reintentar; con la primera trabajando, 409 `YA_SE_ESTA_REGISTRANDO`; de
   otra persona, ruta o método, 422 `CLAVE_REPETIDA`. Sin la cabecera pasa como siempre (scripts
   y la autorización que se repite). Se tiran las de más de 2 días. Una operación de dinero nueva
-  lleva su `unaVez()` y su llave en la pantalla.
+  lleva su `unaVez()` y su llave en la pantalla. **Auditoría 2026-10-26:** también corregir la
+  deuda, ajustar el saldo a favor y la Devolución; la llave NO se suelta si se corta la conexión
+  (antes se borraba y el reintento repetía la operación); y la llave de la caja va LIGADA a la
+  venta (`pos.ts → conLlave`): si cambió el carrito, es otra llave, y si el servidor contesta la
+  que ya existía, el ticket dice "ya había quedado registrada".
 - **EL SISTEMA EN TIEMPO REAL** (2026-10-19, las tres etapas). Las pantallas abiertas se ponen al día
   solas cuando otro guarda algo. Son eventos del servidor (`GET /api/v1/tiempo-real`, módulo
   `tiempo-real/`): lo que escribe y sale bien avisa QUÉ TIPO de cosa cambió (`tipos.js →
@@ -874,7 +908,8 @@ tienda-hilos/
   `VENTA_A_CREDITO_USA_ABONOS` (2026-10-17) —lo que falta ES su deuda y quedaba "pagada" con la
   deuda viva—; el depósito va como abono en su expediente y la pantalla lo dice
   (`depositoComoAbono()`). Sí se le pega la prueba a una transferencia que ya tenga. Igual una
-  NOTA PENDIENTE DE PAGO sin transferencia: 409 `NOTA_PENDIENTE_USA_ABONOS` (2026-10-20: el pago
+  NOTA EN ESPERA sin entregar: 409 `NOTA_EN_ESPERA_USA_ABONOS` (2026-10-26; el depósito va al
+  entregarla o como abono). Una NOTA PENDIENTE DE PAGO sin transferencia: 409 `NOTA_PENDIENTE_USA_ABONOS` (2026-10-20: el pago
   por TODO lo que faltaba la daba por pagada aunque el depósito fuera de una parte; va en
   «Registrar su pago» con lo que depositó). Y pegar la captura da el pedido por pagado SOLO si con
   eso queda cubierto y no es a crédito (antes, a la transferencia de una venta a crédito que se
@@ -938,7 +973,10 @@ tienda-hilos/
   · `direccion` es un campo libre y NO reemplaza a `direcciones`: esa tabla es para los envíos de
     la tienda en línea, con receptor y código postal.
   · Lo CANCELADO y lo DEVUELTO no cuenta en su historial ni en sus totales. Preguntar "cuánto me
-    ha comprado" e incluir lo que devolvió sería mentir.
+    ha comprado" e incluir lo que devolvió sería mentir. Desde el 2026-10-26 también lo que regresó
+    con «Devolución» (`clientes/regreso.js → regresoDinero / regresoKg`), en la lista, el
+    expediente y las seis miradas, como Reportes. Y "Debe" es UNO: su crédito MÁS sus notas
+    pendientes de pago, en la lista ("$X en notas"), el expediente, Cuánto debe y el tablero.
   · **Qué colores compra más se agrupa por `producto_id`, nunca por nombre:** el mismo color en dos
     calibres son dos productos y agruparlos por nombre los sumaría en un renglón que no existe.
 - **El crédito es un LIBRO de movimientos, no un saldo.** `credito_movimientos` guarda cada cargo y
@@ -1000,7 +1038,8 @@ tienda-hilos/
   misma transacción del abono, del ajuste (condonar), de la venta fiada (un saldo a favor la paga
   al nacer) y de cancelar o reactivar una fiada (los abonos se vuelven a repartir: cancelar la más
   antigua paga la siguiente). El detalle del pedido trae `credito_pagado`/`credito_por_pagar` y la
-  lista calcula "Falta" con lo mismo; la pantalla dice "ya está pagado" o "debe $X".
+  lista calcula "Falta" con lo mismo (el MISMO reparto, 2026-10-26: la lista decía otra cifra que
+  el detalle); la pantalla dice "ya está pagado" o "debe $X".
   · **A mano no se marca pagada una fiada que se debe** (409 `VENTA_FIADA_SIN_PAGAR`) ni se
     regresa a pendiente una ya pagada con abonos (409 `VENTA_FIADA_PAGADA`); el selector del
     detalle ni las ofrece. Antes el pedido decía "pagado" con la cuenta debiéndolo.
@@ -1079,8 +1118,11 @@ tienda-hilos/
     deudaMasVieja / atrasoDe / diasSinAbonarDeTodos`). Antes contaba desde el ÚLTIMO ABONO y quien
     abonaba $50 cada dos semanas nunca salía atrasado con una nota de hace meses. Con la MISMA
     cuenta y el MISMO plazo que la caja (`DIAS_SIN_ABONAR` = 15, "más de 15 días"; el campo sigue
-    llamándose `dias_sin_abonar`, y `nota_vieja_por_pagar` dice lo que falta de esa nota). Tramos: Al día (hasta 15) / Atrasado (16-30) / Muy atrasado
-    (31-60) / Más de 2 meses; claves `al_dia`, `atrasado`, `un_mes`, `vencido`. La campana sale
+    llamándose `dias_sin_abonar`, y `nota_vieja_por_pagar` dice lo que falta de esa nota). Desde el
+    2026-10-20 los tramos van por días de VENCIDA (cada nota a sus días de crédito): Al corriente /
+    Vencida hasta 15 días / 16 a 45 / más de 45; claves `al_dia`, `atrasado`, `un_mes`, `vencido`.
+    «Con notas vencidas» es lo que deben esos clientes y `vencido_notas`, lo vencido de sus notas
+    (la cifra de la campana y Hoy; 2026-10-26). La campana sale
     de esta misma cartera, así Cuánto debe, Cómo va el negocio, la campana y la caja nunca se
     contradicen.
   · **Clientes enfriados** (ya NO se pintan en el tablero: viven en Clientes → Dejaron de venir;
@@ -1099,7 +1141,8 @@ tienda-hilos/
     cifra como si fuera lo que no es. Un hilo que NUNCA se vendió cuenta desde que entró: es el caso
     más importante y filtrarlo por "última venta" lo dejaría fuera justo por no tener ninguna.
   · **Margen**: sobre la VENTA, no sobre el costo, que es como se lee un margen
-    comercial. Solo cuenta las líneas con costo capturado.
+    comercial. Solo cuenta las líneas con costo capturado y lo entregado. **Resta lo que el cliente
+    regresó** (2026-10-26, decisión del usuario): 100 kg con 40 de vuelta son 60.
   El hilo muerto y el margen son **solo administradores y gerentes**: exponen costos. El menú se
   lo muestra a los DOS (antes solo al administrador, aunque el servidor dejaba entrar al gerente).
   · **Las cifras se suman sobre TODO, la lista se recorta.** El `limite` ya no va en el SQL:
@@ -1107,7 +1150,8 @@ tienda-hilos/
     no `dias`: compartían el parámetro con "días sin venir" y moverlo cambiaba el otro bloque.
 - **`v_movimiento_hilo` mira solo las salidas por VENTA** (`referencia_tipo='pedido'`, cantidad
   negativa). Un traspaso o un desarme mueven la mercancía de sitio pero no la venden, y contarlos
-  haría parecer vivo un hilo que nadie compra.
+  haría parecer vivo un hilo que nadie compra. Sin las canceladas ni devueltas, y
+  `v_ventas_por_empleado` va por el VENDEDOR (migración `2026-10_vistas_sin_canceladas.sql`).
 - **APARTADOS Y FIAR SE QUITARON DEL PUNTO DE VENTA (2026-10-13)** ("se eliminan los apartados y
   fiar", usuario). La pantalla Apartados ya no existe (`/admin/apartados` lleva al inicio) ni su
   permiso `ver:apartados`; "Fiar" se llama **"A crédito"** (mismo `a_credito`, mismo permiso
@@ -1258,7 +1302,8 @@ tienda-hilos/
     `'ingreso'` —al corte del DÍA EN QUE PAGA—, la transferencia no toca la caja, y con el último
     abono pasa sola a `'pagado'`. A mano no se marca pagada debiéndose (409
     `NOTA_PENDIENTE_SIN_PAGAR`) ni vuelve a pendiente pagada (409 `NOTA_YA_PAGADA`); el selector del
-    detalle ni las ofrece.
+    detalle ni las ofrece. Cancelada, se reactiva como PENDIENTE; como pagada o entregada solo si lo
+    que pagó la cubre (409 `REACTIVAR_COMO_NOTA`, 2026-10-26).
   · **Se paga con su SALDO A FAVOR** (2026-10-20): `POST /pedidos/:id/abonos` con
     `con_saldo_favor: true` (sin método; `saldo-favor.js → pagarConSaldo`: un `pagos` "Saldo a
     favor" y su `uso`, 409 `SALDO_FAVOR_INSUFICIENTE`). En la ventana es la forma de pago "Su saldo
@@ -1383,8 +1428,11 @@ tienda-hilos/
   producto se guarda igual y la respuesta trae `presentacion_pendiente` con el motivo, para que la
   pantalla lo diga en vez de presumir que se creó. En cuanto un `PUT` le pone precio y no tiene
   presentación, se crea sola. El formulario lo exige al crear y trae "Multipresentación" marcada.
-  **Precio público y peso se cambian con `PATCH /variantes/:id`** (precio, oferta, peso y activo;
-  solo administrador y gerente; botón "Precio y peso" en Presentaciones). Es angosto a propósito:
+  **Precio público y peso se cambian con `PATCH /variantes/:id`** (precio, peso y activo; la oferta
+  la acepta el servidor pero la ventana no la pide: el usuario no la usa; quien tiene «Cambiar
+  precios»; botón "Precio y peso" en Presentaciones, y en el cono de precio calculado "Si se vende",
+  solo para activarlo o desactivarlo, 2026-10-26). Ponerle o cambiarle el precio por kilo al HILO
+  (`PUT /productos/:id`) también pide «Cambiar precios» (403 `SIN_PERMISO`). Es angosto a propósito:
   el SKU, el tipo y el origen del cono no se tocan con existencias y ventas encima. Si es el
   paquete, los conos de precio calculado lo siguen. El CONO es la única variante extra y vive en su propia sección ("Conos para
   mostrador"), que solo aparece si ya hay paquete: existe únicamente para poder desarmar y vender
@@ -1417,6 +1465,8 @@ tienda-hilos/
   precio del tipo > `precio_oferta` > público. `pedidos.tipo_cliente_id` deja constancia de con qué
   lista se cerró, y `pedido_detalle.precio_unitario` lo congela. El tipo marcado `es_publico` NO
   guarda filas en `variante_precios`: su precio vive en la variante y no se duplica.
+  El precio de una lista va mayor que $0 (vacío = paga el público) y la lista Público no se
+  desactiva (409 `TIPO_PUBLICO`, también por la API; 2026-10-26).
   `GET /productos/:id` trae `variantes[].precios` SOLO al personal (token `usuario`; la ruta es
   pública y un visitante no ve a cuánto se vende a mayoreo). La pantalla de presentaciones recarga
   con esa ruta: sin los precios ahí, los guardaba y los volvía a enseñar vacíos (2026-10-06,
@@ -1431,7 +1481,9 @@ tienda-hilos/
   `producto_variantes.tipo_presentacion` (`paquete` | `cono` | `simple`) dice la presentación, pero
   las tres se llevan en kilos. Un cono apunta a su paquete con `origen_variante_id` +
   `piezas_por_origen`; con `modo_precio='calculado'` su precio ES el del paquete y se resincroniza
-  al cambiarlo. `piezas_por_origen` y `variante_conversiones.piezas_generadas` son INFORMATIVOS
+  al cambiarlo, y al cobrar toma también la oferta y el precio por lista DEL PAQUETE (2026-10-26:
+  a Mayoreo se le cobraba el público en el cono). El cono nace DENTRO de la transacción de la
+  bajada o de la devolución (`crearCono`); uno desactivado no recibe conos (409 `CONO_DESACTIVADO`). `piezas_por_origen` y `variante_conversiones.piezas_generadas` son INFORMATIVOS
   —cuántos conos son— no la unidad de inventario. La ganancia de enconar viene del DESTARE: el tubo
   pesa, así que de 18.5 kg salen 19 kg vendibles. Desarmar va SIEMPRE por `POST /inventario/desarmes`, nunca moviendo existencias a
   mano: es una transacción que descuenta kilos, da entrada a piezas y deja las dos patas en el
@@ -1468,7 +1520,13 @@ tienda-hilos/
     6 de 6 dan el sueldo exacto.
   · HORAS EXTRA: se captura el día y la hora real de salida (o entrada); cuentan contra su
     horario de ESE día —en su descanso, todo— y se pagan AL DOBLE, siempre (no doble/triple).
-    Llegar tarde o salir temprano no resta. Un renglón por día.
+    Llegar tarde o salir temprano no resta. Un renglón por día. Por el camino viejo
+    (`POST /recibos/:id/conceptos` con `horas_extra`) ya no entran: 422 `HORAS_EXTRA_POR_DIA`.
+    El recibo CONGELA su horario al calcularse (`nomina_recibos.horario_json`, migración
+    `2026-10_recibo_horario.sql`): una semana pagada se reimprime con el de ESA semana. Una semana
+    CANCELADA la regresa a borrador quien paga la nómina («Regresar a borrador»), y un empleado
+    puede quedarse sin horario (paga la semana completa).
+  · VACACIONES: el saldo se vuelve a revisar con el empleado BLOQUEADO al registrarlas (2026-10-26).
   · VACACIONES por ley (art. 76 LFT 2023: 12, 14… 20, luego +2 cada 5 años), SIN prima, desde
     `fecha_ingreso`, por rango de fechas (`nomina_vacaciones`); gastan solo días de trabajo de
     su horario y se pagan como días normales. Cuentan contra el año (aniversario a aniversario)
@@ -1478,9 +1536,8 @@ tienda-hilos/
     vista previa en `features/admin/nomina/jornada.ts`: si cambia una regla, cambian las dos.
   · **El ENVÍO no cuenta para la comisión** (confirmado por el usuario el 2026-10-07: "un pedido de
     $1,000 con $120 de envío: comisión sobre los $1,000"). Ya era así (`subtotal − descuento`); la
-    pantalla ahora lo dice ("sin IVA ni envío") y la lista de ventas del recibo marca "Pedido · lo
-    llevó el chofer" y "+ $120 de envío, no cuenta" (`ventasDelPeriodo` trae `encargo` y
-    `metodo_entrega`). `e2e-nomina-pdf.js` lo comprueba.
+    pantalla lo dice ("sin IVA ni envío"; el reporte de comisiones, "sin $120.00 de envío o IVA").
+    Ya no hay chofer desde el 2026-10-13. `e2e-nomina-pdf.js` lo comprueba.
   · **LA COMISIÓN SE PAGA CUANDO LA VENTA SE LIQUIDA** (2026-10-07: "si fue una venta a crédito no
     se pagan comisiones hasta que se liquide… si cerré mi nómina no se mete; cuando se liquide,
     ahí se agrega"; el usuario eligió COMPLETA al liquidarse —no por abono— y lo mismo para
@@ -1495,7 +1552,9 @@ tienda-hilos/
     **Ni la venta que se CANCELA después de pagarse** (2026-10-26, auditoría #7): la siguiente nómina que
     se calcule la descuenta, un renglón 'devolucion' en negativo marcado `cancelada` ("se canceló"),
     con lo que neto se pagó de ella (`comisiones.js → cancelacionesPorDescontar`; cuándo se canceló:
-    `pedidos.actualizado_en`). Una sola vez, aunque se recalcule.
+    `pedidos.actualizado_en`). Una sola vez, aunque se recalcule. **Solo se descuenta lo que se
+    PAGÓ** (2026-10-26, auditoría): el descuento cuenta si la comisión original está en una nómina
+    PAGADA; y una venta reactivada después de descontarse vuelve a entrar.
     **NO SE PAGA UNA NÓMINA QUE YA NO CUADRA** (2026-10-26, decisión del usuario: "no dejar pagarla
     hasta recalcular"): si desde que se calculó entraron o salieron ventas de su comisión o cambió su
     personal (`nomina/model.js → porRecalcular`), el periodo trae `por_recalcular`, la pantalla avisa con
@@ -1541,6 +1600,8 @@ tienda-hilos/
     el material, no tocar código.
   No existe `materiales` ni `productos.material_id`: se eliminaron para que "material" signifique
   una sola cosa.
+  El calibre tiene que ser uno de los de SU material (422 `CALIBRE_NO_DEL_MATERIAL`, al crear y al
+  cambiar material o calibre; 2026-10-26).
   **Un color en dos calibres son DOS productos**, porque el calibre vive en el producto: "MARINO
   OSCURO 1/30" y "MARINO OSCURO 2/30" se capturan por separado, cada uno con su `precio_kg` (que
   suele cambiar con el calibre) y sus propias presentaciones. Se valoró mover el calibre a la
@@ -1620,7 +1681,7 @@ tienda-hilos/
   nombre y teléfono y nada más (sin apodo desde el 2026-10-14; el número lo da el sistema),
   con `limite_credito: 0`, así que el cobro sale
   completo. Es la decisión del usuario para un cliente nuevo: no se le fía todavía. La
-  campana avisa a los 15 días (`nuevos_sin_credito`) para que se decida si se le abre
+  campana avisa DURANTE sus primeros 15 días (`nuevos_sin_credito`) para que se decida si se le abre
   crédito o se le sigue cobrando todo.
 
 - **AUTORIZACIONES (2026-10-19, fase 1)**: "que se haga la solicitud y el administrador o quien tenga
@@ -1714,6 +1775,9 @@ tienda-hilos/
     el botón (`AuthService.puede`) es solo para no ofrecer lo que va a fallar.
   · El ADMINISTRADOR no se configura: lo puede todo siempre (por código, no por filas), para que
     nunca se quede nadie sin poder entrar a Permisos. Permisos es solo suyo.
+  · **Nunca se queda el sistema sin administrador activo** (409 `ULTIMO_ADMINISTRADOR`, 2026-10-26).
+    Y quien edita a alguien que también trabaja en una tienda que el editor no ve, le CONSERVA esa
+    tienda (la gerente no se la quita sin querer; `usuarios/service.js → _tiendas`).
   · **Solo un administrador da —o toca— el puesto de administrador** (403 `SOLO_ADMINISTRADOR` en
     `usuarios/controller.js`): Personal se puede abrir a otros puestos, y sin esto quien lo
     tuviera podría darse el puesto que lo puede todo. Vale también como puesto EXTRA: no se da
@@ -1796,7 +1860,9 @@ tienda-hilos/
     al año) con índice ≥ 1.3 (`UMBRAL_TEMPORADA`).
   · **Pronóstico**: con temporada, lo del mismo mes del año pasado × la tendencia (este año contra
     el pasado, de enero al último mes completo, topada entre 0.5 y 2; × 1 con menos de 3 meses);
-    sin ella, el promedio diario de las últimas 8 semanas (desde 4).
+    sin ella, el promedio diario de las últimas 8 semanas (desde 4). Un hilo NUEVO (su primera
+    venta no cae en el arranque de lo que se compara) va siempre por el promedio diario: el "año
+    pasado" no lo tenía (2026-10-26).
   · **Qué pedir**: se acaba = se descuenta el pronóstico día por día; pedir a más tardar = se acaba
     − (proveedor + colchón) semanas; cuánto = lo que se venderá desde que llega hasta `meses_cubre`
     meses + colchón, menos lo que quede al llegar, de 10 en 10. Estados: ya (pasó o ≤7 días),
@@ -1885,7 +1951,11 @@ tienda-hilos/
   campana, lo vendido hoy por hora y lo que debería haber en cada cajón. El cajero entra al punto
   de venta (`rutaDeInicio` en `core/navegacion.ts`).
 - **Caja es su propia pantalla** (`/admin/caja`): abrir turno, sacar o meter efectivo, el corte y
-  el alta de cajas. El punto de venta solo cobra. Las dos recuerdan la caja elegida en
+  el alta de cajas. Abrir y cerrar el turno piden `ver:caja`; una caja solo va en una TIENDA activa
+  con mostrador (422 `ALMACEN_SIN_MOSTRADOR` / `ALMACEN_INACTIVO`), no se le quita el mostrador a una
+  tienda con cajas activas (409 `ALMACEN_CON_CAJAS`) y una caja desactivada no abre turno (409
+  `CAJA_INACTIVA`) (2026-10-26). Caja lee `?caja=` (el aviso del turno abierto lleva a ESA) y elegir
+  una sola al entrar ya no la guarda como si alguien la hubiera escogido. El punto de venta solo cobra. Las dos recuerdan la caja elegida en
   `localStorage['caja_sel']`, así abren la misma. El abono en efectivo (expediente y Apartados)
   entra al turno de ESA caja; con varias abiertas y ninguna elegida, hay que escogerla (antes caía
   en la primera de la lista y descuadraba dos cortes). "Venderle" en el expediente abre el punto de
@@ -2064,9 +2134,12 @@ tienda-hilos/
   (`modules/notificaciones`): solicitudes de traspaso por surtir, envíos por acusar recibo y
   existencias bajo su mínimo. **No hay tabla de notificaciones ni "marcar como leída"** a propósito:
   el aviso tiene que estar ahí hasta que el pendiente se resuelva, y una marca de leído solo lo
-  taparía. Los avisos de CLIENTES cuentan **uno por tema**, no uno por cliente: "5 clientes
-  te deben desde hace más de 15 días" es un aviso, no cinco, o la campana marcaría 40 y
-  nadie la abriría. Los umbrales tienen nombre en `notificaciones/model.js`
+  taparía. Los avisos de CLIENTES cuentan **uno por tema**, no uno por cliente: "12 notas a
+  crédito vencidas" es un aviso, no doce, o la campana marcaría 40 y nadie la abriría.
+  **Cada quien recibe solo lo que atiende** (2026-10-26): el servidor ni calcula ni manda la
+  cobranza a quien no tiene Clientes, "Surtir ›" a quien no puede enviar ni "falta que confirmen"
+  a quien no puede firmar (`notificaciones/routes.js → ve`); Hoy enseña los mismos avisos que la
+  campana, también Autorizaciones, Tu clave y el WhatsApp. Los umbrales tienen nombre en `notificaciones/model.js`
   (`DIAS_SIN_ABONAR`, `DIAS_SIN_VENIR`, `DIAS_CLIENTE_NUEVO`, `DIAS_TURNO_ABIERTO`), no van sueltos en el SQL.
   **Un turno de caja abierto de 2 días o más sin su corte se avisa** (2026-10-20, auditoría: dos
   llevaban 5 días): `turnos_abiertos` en `GET /notificaciones` (de SUS tiendas), grupo "Caja" de
@@ -2086,11 +2159,13 @@ tienda-hilos/
   quedando arriba de la barra.
 - **Inventario contesta tres preguntas, en ese orden.** Es como las hace la tienda y por eso la
   pantalla está armada así: (1) *cuánto hay en cada almacén* → una tarjeta por almacén con su
-  cifra, su parte del total y el desglose paquete/enconado; (2) *dónde está cada hilo* → gráfica
-  de barras apiladas (`shared/charts/stacked-bars.ts`), un renglón por hilo y un tramo por
-  almacén; (3) *el detalle exacto* → tabla agrupada por hilo y buscador. **Las presentaciones del
+  cifra, su parte del total y el desglose paquete/enconado; (2) *dónde está cada hilo* → barras
+  apiladas de cajas HTML, un renglón por hilo y un tramo por almacén, medidas contra el hilo
+  mayor; (3) *el detalle exacto* → tabla agrupada por hilo y buscador. **Las presentaciones del
   mismo hilo van JUNTAS** en la tabla, con el nombre una sola vez: antes cada una era un
   renglón suelto con el nombre repetido y parecía que la tabla tenía duplicados.
+- **El detalle del hilo dice "no cuadra" también donde el saldo es CERO** pero el sistema tiene
+  paquetes ahí (2026-10-26: esa tienda ni salía).
 - **Tocar un hilo en Inventario abre su DETALLE** (2026-10-06: "cuando doy clic en cualquier hilo,
   que me diga los bultos que están y su lote; selecciono el lote y me da las presentaciones que
   tiene cada uno"). El nombre del hilo en "Detalle por hilo" es un botón, y al lado va "Lotes y
@@ -2128,9 +2203,9 @@ tienda-hilos/
   nombre los sumaría en un renglón. La pantalla muestra además material y línea (`categorias` y
   `lineas`), porque con el color solo no se sabe qué hilo es.
 - **Un número en pantalla lleva su unidad, y una barra dice contra qué se mide.** Los encabezados de
-  almacén dicen "· kg", el total del hilo va como "1,919.71 kg · 29% del inventario", y esa barra se
-  llena con ese mismo porcentaje. Antes se medía contra el hilo más grande, que no aparecía en
-  ninguna parte, así que la barra no significaba nada.
+  almacén dicen "· kg" y cada barra dice contra qué se mide. La tabla dice cuántos paquetes hay
+  de verdad en ese almacén (`paquetes`, los disponibles y apartados), no "≈ N" con el peso del
+  catálogo (2026-10-26).
 - **Sin mínimo capturado no hay alerta de stock.** `stock_minimo = 0` significa "no configurado",
   no "el mínimo es cero". La condición vive en `COND_ALERTA` (`inventario/model.js`) y exige
   `stock_minimo > 0`; sin eso, una fila en cero contaba como alerta y la pantalla decía
@@ -2249,7 +2324,9 @@ tienda-hilos/
   que su campo.
 - **La campana no manda a nadie a una pantalla que no puede abrir**, y cada puesto ve solo los
   avisos de lo que atiende (el globo cuenta solo esos). La cobranza lleva a Clientes → Cuánto debe;
-  los que dejaron de venir, a Clientes → Dejaron de venir; los apartados ya pagados, a Apartados.
+  los que dejaron de venir, a Clientes → Dejaron de venir; un turno abierto de días, a ESA caja
+  (`cajaDe(id)`, Caja lee `?caja=`); los clientes nuevos que no caben, a Todos los clientes con
+  los más nuevos arriba (`?orden=nuevo`).
 - **Cantidades sin ceros de relleno.** MySQL devuelve `DECIMAL(12,3)` siempre con tres decimales
   (`350000.000`). En pantalla usa el pipe `cantidad` (`shared/cantidad.pipe.ts`), que recorta los
   ceros sobrantes y agrupa miles: `350,000`, `2.5`, `1.25`. Acepta la unidad como argumento:
@@ -2266,14 +2343,23 @@ tienda-hilos/
   `.claude/hooks/antes-de-desplegar.js`, que corre `npm test` del backend y `ng test` sin ventana
   antes de `npm run deploy` y no deja subir si fallan). Los permisos PERSONALES van en
   `.claude/settings.local.json` (en `.gitignore`): nunca rutas de la máquina ni comandos con
-  servidores en el compartido. El ritual de subir está en la skill `/desplegar`; la skill
-  `/verificar` (también en `.agents/skills/verificar/`) y el agente `revisor-general` auditan en
-  solo lectura y de forma estricta módulo por módulo (los 12 módulos de Hitex, trabajando
-  **únicamente sobre la base `hitex`**, apoyados en `backend/scripts/verificar-sistema.js` con 989
-  comprobaciones que incluyen las reglas visuales de `DESIGN.md`) y entregan propuestas de mejora
-  tanto de lógica/CRM como de Diseño UI/UX conectado con la lógica de negocio; y el agente
-  `revisor-tiendas` revisa "cada quien, sus tiendas", permisos y costo. **Trello EN PAUSA**: no
-  escribir ahí hasta que el usuario diga.
+  servidores en el compartido. El ritual de subir está en la skill `/desplegar`. La skill
+  `/verificar` (rehecha el 2026-10-26; copia idéntica en `.agents/skills/verificar/`) audita en
+  SOLO LECTURA, **únicamente sobre la base `hitex`** y apegada a este archivo: corre
+  `backend/scripts/verificar-sistema.js` (más de 4,100 comprobaciones de código, `DESIGN.md` y
+  base) y lanza en paralelo UN agente por módulo (`revisor-m01` a `revisor-m12`, en
+  `.claude/agents/`), que leen primero `guia-agente.md` (las nueve miradas, lo DECIDIDO por el
+  usuario que no se propone cambiar y el formato de entrega) y su sección de `mapa-modulos.md`
+  (carpetas, títulos de sus reglas de CLAUDE.md, permisos, operaciones, E2E, pruebas y tablas) y
+  descubren sus archivos con Glob. **La sección 0 del verificador revisa la propia auditoría**:
+  todo lo que nombran el mapa, la guía y los agentes tiene que existir (rutas, reglas de
+  CLAUDE.md con ese título, permisos, operaciones, E2E, tablas) y ningún `backend/src/modules/*`,
+  `features/admin/*` ni `e2e-*.js` puede quedarse sin módulo: una pantalla, un módulo o una E2E
+  nueva se agrega al mapa, y un bloque nuevo de este archivo, a la sección de su módulo. El
+  coordinador confirma cada hallazgo importante abriendo el `archivo:línea`, nunca marca ✓ un
+  módulo que no se leyó y manda a "Decidido por el usuario" lo que contradiga una decisión.
+  `revisor-general` es el mismo ritual como agente; `revisor-tiendas` revisa "cada quien, sus
+  tiendas", permisos y costo. **Trello EN PAUSA**: no escribir ahí hasta que el usuario diga.
 - API REST versionada bajo `/api/v1`. Recursos en plural: `/api/v1/productos`, `/api/v1/pedidos`.
 - Respuestas JSON con forma `{ "data": ..., "error": null }` o `{ "data": null, "error": {...} }`.
 - Nombres de tablas/campos en español (como en el esquema); en el código JS usar los mismos nombres.
@@ -2374,7 +2460,7 @@ tienda-hilos/
       congela en la venta. Migración: `db/migrations/2026-09_costo_y_margen.sql`.
 - [x] Módulo de análisis (BACKEND): cobranza por antigüedad, clientes enfriados, hilo muerto y
       margen por hilo. `GET /api/v1/analisis/tablero` los trae los cuatro de un viaje.
-- [x] La campana avisa de cobranza atrasada (15 días sin abonar desde el 2026-10-16; antes 30) y de clientes que dejaron de
+- [x] La campana avisa de las notas a crédito vencidas (desde el 2026-10-20; antes, 15 días sin abonar) y de clientes que dejaron de
       venir (60 días). El globo cuenta UN aviso por asunto, no uno por cliente: contar cada uno
       lo inflaría a decenas y dejaría de significar nada.
 - [x] **Tablero visual** (Admin → Cómo va el negocio, solo administradores): las cuatro

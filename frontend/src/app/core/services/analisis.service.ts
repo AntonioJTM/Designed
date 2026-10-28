@@ -12,7 +12,7 @@ function data<T>(r: ApiResponse<T>): T {
 
 /** Filtros del tablero. Los que no se pasan usan el valor por omisión del backend. */
 export interface FiltrosTablero {
-  /** Cobranza: días sin abonar para considerarlo atrasado. */
+  /** Cobranza: días de vencida para avisarlo. */
   dias_aviso?: number;
   /** Clientes enfriados: días sin venir. */
   dias?: number;
@@ -40,7 +40,7 @@ export class AnalisisService {
   private readonly http = inject(HttpClient);
   private readonly base = `${environment.apiUrl}/analisis`;
 
-  /** Los cuatro análisis de un solo viaje. Solo administradores y gerentes. */
+  /** Los análisis del tablero de un solo viaje (Cómo va el negocio). */
   tablero(f: FiltrosTablero = {}): Observable<Tablero> {
     return this.http
       .get<ApiResponse<Tablero>>(`${this.base}/tablero`, { params: aParams(f) })

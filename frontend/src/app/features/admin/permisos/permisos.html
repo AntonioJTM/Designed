@@ -39,7 +39,7 @@
     @if (matriz()!.no_las_ven?.length) {
       <section class="aviso no-las-ven" role="status">
         <b>{{ matriz()!.no_las_ven!.length === 1 ? 'Esta persona no ve' : 'Estas personas no ven' }} cosas que su puesto sí tiene,
-          porque trabaja{{ matriz()!.no_las_ven!.length === 1 ? '' : 'n' }} en una sola tienda:</b>
+          porque no trabaja{{ matriz()!.no_las_ven!.length === 1 ? '' : 'n' }} en todas las tiendas:</b>
         <ul>
           @for (n of matriz()!.no_las_ven!; track n.usuario_id) {
             <li>

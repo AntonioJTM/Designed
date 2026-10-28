@@ -128,7 +128,7 @@
                           <tbody>
                             @for (l of t.lineas; track l.variante_id) {
                               <tr>
-                                <td>{{ l.producto }} <span class="muted mono">· {{ l.sku }}</span></td>
+                                <td>{{ l.producto }}@if (l.calibre) { {{ l.calibre }}} <span class="muted mono">· {{ l.sku }}</span></td>
                                 <td class="num">
                                   @if (l.paquetes) {
                                     {{ l.paquetes | cantidad }} {{ +l.paquetes === 1 ? 'paquete' : 'paquetes' }}

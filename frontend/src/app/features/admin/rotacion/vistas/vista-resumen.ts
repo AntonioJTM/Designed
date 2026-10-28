@@ -73,7 +73,8 @@ export class VistaResumen {
       {
         etiqueta: this.surte() ? 'Surtido en 12 meses' : 'Vendido en 12 meses', tono: 'tono-acento',
         valor: toneladas(c.vendido_12m),
-        pie: `${kilos(c.vendido_12m)}${cambio ? ` · ${cambio.texto.replace(/^[↑↓] /, '').toLowerCase()} que el año anterior` : ''}`,
+        // Compara de enero al último mes completo, este año contra el pasado (2026-10-26: decía "el año anterior").
+        pie: `${kilos(c.vendido_12m)}${cambio ? ` · ${cambio.texto.replace(/^[↑↓] /, '').toLowerCase()} que el año pasado, de enero al mes pasado` : ''}`,
       },
       {
         etiqueta: 'Hay hoy', tono: 'tono-tinta', valor: toneladas(c.hay_kg),

@@ -57,7 +57,7 @@
                 Cuánto paga
                 <span class="moneda">
                   <span aria-hidden="true">$</span>
-                  <input type="number" min="0.01" step="0.01" [(ngModel)]="monto" name="monto" [placeholder]="falta().toFixed(2)" />
+                  <input type="number" min="0.01" step="0.01" [(ngModel)]="monto" name="monto" [placeholder]="comoCampo(falta())" />
                 </span>
                 <span class="ayuda">
                   @if (quedaria() > 0) { Le quedarían {{ quedaria() | dinero }} por pagar. } @else { Con esto queda pagada. }
@@ -106,7 +106,7 @@
               <label class="field">
                 <span>{{ esTransferencia() ? 'No. de operación' : 'Referencia' }} <span class="muted">(opcional)</span></span>
                 <input type="text" [(ngModel)]="referencia" name="referencia" maxlength="120" autocomplete="off"
-                       [placeholder]="esTransferencia() ? 'El folio que trae el comprobante' : 'Folio de la transferencia, por ejemplo'" />
+                       [placeholder]="esTransferencia() ? 'El folio que trae el comprobante' : 'Un número o nota para encontrarlo'" />
               </label>
             }
           </div>

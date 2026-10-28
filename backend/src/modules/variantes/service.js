@@ -183,7 +183,9 @@ async function skuDesdeNombre(nombre) {
     `No se pudo generar un SKU libre a partir de "${nombre}"`);
 }
 
-async function crear(datos) {
+// `conn`: dentro de la transacción de quien la crea (desarme, carga, devolución):
+// si esa operación falla, la presentación tampoco queda (2026-10-26, auditoría).
+async function crear(datos, conn) {
   const producto = await productosModel.obtener(datos.producto_id);
   if (!producto) throw new AppError(422, 'PRODUCTO_INVALIDO', 'El producto no existe');
 
@@ -200,7 +202,7 @@ async function crear(datos) {
     activo: datos.activo ?? true,
     ...presentacion,
   };
-  return model.crear(registro);
+  return model.crear(registro, conn);
 }
 
 async function actualizar(id, datos) {
@@ -281,10 +283,10 @@ async function agregarCodigo(varianteId, datos, usuarioId = null, almacenes = nu
   const cod = datos.codigo.trim();
   const dueno = await model.variantePorCodigo(cod);
   if (dueno && dueno !== varianteId) {
-    throw new AppError(409, 'CODIGO_EN_USO', 'Ese código ya está asignado a otra variante');
+    throw new AppError(409, 'CODIGO_EN_USO', 'Ese código ya es de otro hilo o de otro paquete');
   }
   if (dueno === varianteId) {
-    throw new AppError(409, 'CODIGO_DUPLICADO', 'Esa variante ya tiene ese código');
+    throw new AppError(409, 'CODIGO_DUPLICADO', 'Esa presentación ya tiene ese código');
   }
   const almacenId = await _almacenDelBulto(varianteId, datos.almacen_id ?? null, almacenes);
   return model.agregarBultoConEntrada(varianteId, { ...datos, codigo: cod, almacen_id: almacenId }, usuarioId);
@@ -363,7 +365,7 @@ async function eliminarCodigo(codigoId, usuarioId = null, almacenes = null) {
   }
   if (c.estado && c.estado !== 'disponible') {
     const que = {
-      vendido: 'ya se vendió', apartado: 'está apartado para un pedido', desarmado: 'ya se bajó a conos',
+      vendido: 'ya se vendió', apartado: 'está apartado (una nota en espera o un envío)', desarmado: 'ya se bajó a conos',
       faltante: 'se dio por faltante al recibir un envío',
     };
     throw new AppError(409, 'BULTO_NO_DISPONIBLE', `El bulto ${c.codigo} ${que[c.estado] ?? 'no está disponible'}: ya no se puede quitar.`);
@@ -374,6 +376,10 @@ async function eliminarCodigo(codigoId, usuarioId = null, almacenes = null) {
       `El bulto ${c.codigo} viene en camino (${u.en_camino_folio}): recibe el envío antes de quitarlo.`);
   }
   const r = await model.quitarBultoConSalida(c, usuarioId);
+  if (r?.error === 'NO_DISPONIBLE') {
+    throw new AppError(409, 'BULTO_NO_DISPONIBLE',
+      `El paquete ${c.codigo} ya no está disponible (se vendió, se apartó o se bajó a conos mientras): ya no se puede quitar.`);
+  }
   if (r?.error === 'STOCK_INSUFICIENTE') {
     throw new AppError(409, 'STOCK_INSUFICIENTE',
       `En «${r.almacen}» hay ${r.hay} kg de este hilo y el bulto pesa ${r.kg} kg: ajusta el inventario antes de quitarlo.`);

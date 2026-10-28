@@ -4,9 +4,9 @@
       <h1>Autorizaciones</h1>
       <p class="sub">
         Lo que alguien pidió hacer y necesita que lo autorice quien lo puede hacer directo: sacar o meter efectivo,
-        cancelar o devolver una venta, corregir una deuda o un saldo a favor, cambiar precios, un ajuste o una merma,
-        subirle el crédito a un cliente, cargar mercancía, pedirle mercancía a otra tienda, las vacaciones y pagar
-        la nómina.
+        un gasto arriba de su límite, un tipo de gasto nuevo, cancelar o devolver una venta, corregir una deuda o un
+        saldo a favor, cambiar precios, un ajuste o una merma, subirle el crédito a un cliente, cargar mercancía,
+        pedirle mercancía a otra tienda, las vacaciones y pagar la nómina.
         <b>Aceptar la hace en ese momento</b>; si ya no se puede, aquí dice por qué.
       </p>
     </div>
@@ -220,9 +220,9 @@
                 @for (l of a.detalle!.lineas; track l.variante_id) {
                   <tr>
                     <td>{{ l.hilo }}</td>
-                    <td class="num">{{ l.pedido }} {{ l.unidad === 'paquetes' ? 'paq' : 'kg' }}</td>
+                    <td class="num">{{ l.unidad === 'paquetes' ? l.pedido + ' paq' : (l.pedido | cantidad: 'kg') }}</td>
                     <td class="num" [class.poco]="l.en_origen !== null && l.en_origen < vale(l)">
-                      {{ l.en_origen === null ? '—' : l.en_origen + (l.unidad === 'paquetes' ? ' paq' : ' kg') }}
+                      {{ l.en_origen === null ? '—' : l.unidad === 'paquetes' ? l.en_origen + ' paq' : (l.en_origen | cantidad: 'kg') }}
                     </td>
                     <td class="num">
                       <span class="cant-paq">
@@ -240,7 +240,7 @@
           </div>
           <p class="resumen-ajuste">{{ resumenAjuste(a) }}</p>
           @if (!ajusteValido(a)) {
-            <p class="muted">Cada renglón va de 0 a lo que se pidió, en paquetes enteros; al menos uno con algo. Para no dar nada, recházala.</p>
+            <p class="muted">Cada renglón va de 0 a lo que se pidió (los paquetes, enteros); al menos uno con algo. Para no dar nada, recházala.</p>
           }
         </div>
         <div class="modal-foot">

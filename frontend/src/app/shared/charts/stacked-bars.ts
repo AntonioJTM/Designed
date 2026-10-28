@@ -51,9 +51,12 @@ export interface BarraApilada {
         <text [attr.x]="0" [attr.y]="b.cy + 4" class="viz-axis" text-anchor="start">
           {{ b.corta }}<title>{{ b.label }}{{ b.detalle ? ' · ' + b.detalle : '' }}</title>
         </text>
-        <!-- carril tenue: hasta dónde llegaría el máximo -->
-        <rect [attr.x]="gutter" [attr.y]="b.y" [attr.width]="plotW()" [attr.height]="barH"
-              rx="4" fill="var(--viz-grid)" opacity="0.5" />
+        <!-- carril tenue: de donde acaba la barra hasta el máximo (no debajo de ella: el
+             hueco entre tramos enseñaba el gris, no el fondo; 2026-10-26) -->
+        @if (plotW() - b.anchoTotal > 1) {
+          <rect [attr.x]="gutter + b.anchoTotal" [attr.y]="b.y" [attr.width]="plotW() - b.anchoTotal" [attr.height]="barH"
+                rx="4" fill="var(--viz-grid)" opacity="0.5" />
+        }
         @for (s of b.piezas; track s.serie) {
           <path [attr.d]="s.d" [attr.fill]="s.color">
             <title>
@@ -153,6 +156,7 @@ export class StackedBars {
         y,
         cy,
         piezas,
+        anchoTotal,
         valX: this.gutter + anchoTotal + 8,
         corta: d.label.length > 22 ? d.label.slice(0, 21) + '…' : d.label,
       };

@@ -167,11 +167,25 @@ async function previa(buffer, nombreArchivo) {
  * y, si el producto todavía no tiene ninguna, SE CREA con los datos del propio
  * archivo. Así el alta es: guardar el producto → subir el Excel.
  */
-async function _resolverPresentacion(datos, bultos) {
+/**
+ * QUÉ SE LE HACE a la presentación con esta carga, SIN hacerlo todavía: la que ya
+ * existe (y si le falta el peso, el que se le pone) o la que hay que crear. Se hace
+ * dentro de la transacción de la carga (`model.crearRemesa → preparar`), después de
+ * revisar códigos, proveedor y fecha: antes, una carga rechazada dejaba creada la
+ * presentación o cambiado su peso (2026-10-26, auditoría).
+ */
+async function _planPresentacion(datos, bultos) {
+  const pesos = bultos.map((b) => Number(b.peso_kg));
+  const promedio = pesos.length ? round3(pesos.reduce((s, x) => s + x, 0) / pesos.length) : null;
+  const sinPeso = (v) => !v.peso_kg || Number(v.peso_kg) <= 0;
+
   if (datos.variante_id) {
     const v = await variantesModel.obtener(datos.variante_id);
     if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', 'La presentación no existe');
-    return v;
+    // Igual que por producto (2026-10-26, auditoría): si el paquete todavía no tiene
+    // peso, esta carga se lo pone con el PROMEDIO real de sus bultos. Sin eso, cargado
+    // por «Un solo hilo» no se podía pedir en paquetes ni bajar a conos.
+    return { variante: v, ponerPeso: v.tipo_presentacion !== 'cono' && sinPeso(v) && promedio ? promedio : null };
   }
 
   const producto = await productosModel.obtener(datos.producto_id);
@@ -192,28 +206,34 @@ async function _resolverPresentacion(datos, bultos) {
     // La presentación se crea al dar de alta el producto, sin peso: no había
     // mercancía. La primera remesa lo completa con el PROMEDIO real de sus
     // bultos, que es el dato bueno para el desarme y el precio del cono.
-    if (!existente.peso_kg || Number(existente.peso_kg) <= 0) {
-      const pesos = bultos.map((b) => Number(b.peso_kg));
-      const promedio = round3(pesos.reduce((s, x) => s + x, 0) / pesos.length);
-      await variantesService.actualizar(existente.id, { peso_kg: promedio });
-      return { ...existente, peso_kg: promedio };
-    }
-    return existente;
+    return { variante: existente, ponerPeso: sinPeso(existente) ? promedio : null };
   }
 
   // No tiene ninguna: se crea con lo que dice el archivo. El peso del paquete es
   // el PROMEDIO de los bultos (varían entre sí) y el precio lo hereda del
   // producto. Ambos se pueden corregir después.
-  const pesos = bultos.map((b) => Number(b.peso_kg));
-  const promedio = round3(pesos.reduce((s, p) => s + p, 0) / pesos.length);
+  return {
+    variante: null,
+    crear: {
+      producto_id: datos.producto_id,
+      sku: await variantesService.skuDesdeNombre(producto.nombre),
+      presentacion: producto.multipresentacion ? 'Paquete' : null,
+      tipo_presentacion: producto.multipresentacion ? 'paquete' : 'simple',
+      peso_kg: promedio,
+    },
+  };
+}
 
-  return variantesService.crear({
-    producto_id: datos.producto_id,
-    sku: await variantesService.skuDesdeNombre(producto.nombre),
-    presentacion: producto.multipresentacion ? 'Paquete' : null,
-    tipo_presentacion: producto.multipresentacion ? 'paquete' : 'simple',
-    peso_kg: promedio,
-  });
+/** Hace lo que dijo el plan, con la conexión de la carga: devuelve el id de la presentación. */
+async function _hacerPlan(conn, plan) {
+  if (plan.crear) return (await variantesService.crear(plan.crear, conn)).id;
+  if (plan.ponerPeso) {
+    await conn.query(
+      'UPDATE producto_variantes SET peso_kg = :p WHERE id = :id AND (peso_kg IS NULL OR peso_kg <= 0)',
+      { p: plan.ponerPeso, id: plan.variante.id }
+    );
+  }
+  return plan.variante.id;
 }
 
 /**
@@ -223,13 +243,14 @@ async function _resolverPresentacion(datos, bultos) {
 async function confirmar(datos, usuarioId) {
   if (!datos.variante_id && !datos.producto_id) {
     throw new AppError(422, 'FALTA_DESTINO',
-      'Indica el producto o la presentación a la que entra la remesa');
+      'Indica el hilo o la presentación a la que entra la carga');
   }
 
-  const variante = await _resolverPresentacion(datos, datos.bultos);
-  if (variante.tipo_presentacion === 'cono') {
+  const plan = await _planPresentacion(datos, datos.bultos);
+  const variante = plan.variante;
+  if (variante?.tipo_presentacion === 'cono') {
     throw new AppError(422, 'NO_ES_PAQUETE',
-      `"${variante.sku}" es un cono y se lleva en piezas; la remesa entra en kilos.`);
+      `"${variante.sku}" es la presentación de conos: los paquetes de una carga entran a la del paquete.`);
   }
   const almacen = await almacenesModel.obtener(datos.almacen_id);
   if (!almacen) throw new AppError(422, 'ALMACEN_INVALIDO', 'El almacén no existe');
@@ -246,7 +267,7 @@ async function confirmar(datos, usuarioId) {
 
   return model.crearRemesa(
     {
-      variante_id: variante.id,
+      variante_id: variante?.id ?? null,
       almacen_id: datos.almacen_id,
       archivo: datos.archivo ?? null,
       notas: datos.notas ?? null,
@@ -261,7 +282,8 @@ async function confirmar(datos, usuarioId) {
         conos: b.conos ?? null,
       })),
     },
-    usuarioId
+    usuarioId,
+    (conn) => _hacerPlan(conn, plan)
   );
 }
 

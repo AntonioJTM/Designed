@@ -52,7 +52,7 @@ export class BotonPlantilla {
         this.bajando.set(false);
       },
       error: async (e) => {
-        this.error.set(await mensajeDeError(e));
+        this.error.set(await mensajeDeError(e, 'No se pudo bajar la plantilla de Excel.'));
         this.bajando.set(false);
       },
     });

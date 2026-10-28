@@ -10,8 +10,9 @@
       } @else {
         Cada venta paga su comisión <b>una vez, completa</b>, en la nómina de la semana en que quedó pagada: la de
         contado el día que se vende; la de a crédito y las notas (en espera o pendientes de pago) cuando se terminan de pagar. Lo que se liquida
-        en una semana ya cerrada entra en la siguiente. Sobre la venta neta: sin IVA ni envío, y sin lo que el
-        cliente regresó (si regresa después de pagada la comisión, se descuenta en la siguiente).
+        en una semana ya cerrada entra en la siguiente. Sobre la venta neta: sin IVA ni envío, sin lo que el
+        cliente regresó y sin lo condonado con un ajuste a mano. Si regresa o se cancela después de pagada la
+        comisión, se descuenta en la siguiente.
       }
     </p>
   }
@@ -58,7 +59,7 @@
                     <div class="sub3">{{ x.cliente || 'sin cliente' }}</div>
                   </td>
                   <td>
-                    <span [class]="'pill ' + tono(x.tipo)">{{ tipo(x.tipo) }}</span>
+                    <span [class]="'pill ' + tono(x.tipo)">{{ x.tipo === 'devolucion' && x.cancelada ? 'Se canceló' : tipo(x.tipo) }}</span>
                     <div class="sub3">vendida {{ dia(x.vendida_en) }}</div>
                   </td>
                   <td>
@@ -115,7 +116,7 @@
                     <div class="sub3">{{ x.cliente || 'sin cliente' }}</div>
                   </td>
                   <td>
-                    <span [class]="'pill ' + tono(x.tipo)">{{ tipo(x.tipo) }}</span>
+                    <span [class]="'pill ' + tono(x.tipo)">{{ x.tipo === 'devolucion' && x.cancelada ? 'Se canceló' : tipo(x.tipo) }}</span>
                     <div class="sub3">vendida {{ dia(x.vendida_en) }}</div>
                   </td>
                   <td class="num">{{ x.total | dinero }}</td>

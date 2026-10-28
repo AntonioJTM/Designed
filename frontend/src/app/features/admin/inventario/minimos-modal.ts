@@ -34,8 +34,8 @@ import { CantidadPipe } from '../../../shared/cantidad.pipe';
         <form (ngSubmit)="guardar()">
           <div class="modal-body">
             <p class="explica">
-              La campana y «Por reabastecer» avisan cuando a un hilo le quedan <b>menos</b> de los paquetes que
-              digas. Se pone a todos los hilos que ya maneja ese almacén, cada uno con el peso promedio de sus
+              La campana y «Por reabastecer» avisan cuando a un hilo le quedan los paquetes que digas
+              <b>o menos</b>. Se pone a todos los hilos que ya maneja ese almacén, cada uno con el peso promedio de sus
               propios paquetes.
             </p>
             @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }

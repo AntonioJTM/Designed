@@ -117,6 +117,10 @@
             } @else if (saldo() > 0) {
               <div class="cuenta-cifras"><span>Debe <b>{{ saldo() | dinero }}</b></span></div>
             }
+            @if (enNotas() > 0) {
+              <!-- No es crédito, pero se debe (2026-10-26). -->
+              <div class="cuenta-cifras"><span>En notas pendientes de pago <b>{{ enNotas() | dinero }}</b></span></div>
+            }
             @if (e.credito_movimientos.length > 0) {
               <table class="movs" style="margin-top: 14px">
                 <tbody>
@@ -240,7 +244,7 @@
           <section class="card angosta">
             <div class="card-head"><div><h2>Su ritmo</h2><p>Contra su propia costumbre, no contra la de los demás.</p></div></div>
             @if (habitos(); as h) {
-              <div class="dato"><span>Compra cada</span><span>{{ h.ritmo ? h.ritmo + ' días' : '—' }}</span></div>
+              <div class="dato"><span>Compra cada</span><span>{{ h.ritmo ? (h.ritmo === 1 ? 'día' : h.ritmo + ' días') : '—' }}</span></div>
               <div class="dato"><span>Lleva sin venir</span><span>{{ h.dias_sin_venir === null ? '—' : h.dias_sin_venir + ' días' }}</span></div>
               <div class="dato">
                 <span>Cómo va</span>
@@ -285,8 +289,12 @@
                 <span class="muted">paga lo próximo que compre a crédito</span>
               </div>
             } @else {
-              <div><span class="muted">Debe</span><span class="grande">{{ saldo() | dinero }}</span>
-                @if (saldo() <= 0) { <span class="muted">{{ limite() > 0 ? 'sin deuda' : 'no se le ha dado a crédito' }}</span> }
+              <div><span class="muted">Debe</span><span class="grande">{{ saldo() + enNotas() | dinero }}</span>
+                @if (enNotas() > 0) {
+                  <span class="muted">a crédito {{ saldo() | dinero }} · en notas pendientes de pago {{ enNotas() | dinero }}</span>
+                } @else if (saldo() <= 0) {
+                  <span class="muted">{{ limite() > 0 ? 'sin deuda' : 'no se le ha dado a crédito' }}</span>
+                }
               </div>
             }
             @if (limite() > 0) {
@@ -313,7 +321,8 @@
 
         <app-saldo-favor [clienteId]="e.id" [nombre]="e.nombre_comercial || e.nombre" [saldo]="saldoFavor()"
                          [deuda]="e.deuda_total ?? { credito: 0, notas: 0, total: 0 }"
-                         [movimientos]="e.saldo_favor_movimientos ?? []" [vePedidos]="vePedidos()"
+                         [movimientos]="e.saldo_favor_movimientos ?? []" [totalMovimientos]="e.saldo_favor_total_movimientos ?? null"
+                         [vePedidos]="vePedidos()"
                          [puedeRecibir]="!!e.activo" (recibir)="recibiendo.set(true)"
                          [puedeAjustar]="puedeCorregir()" (ajustar)="ajustandoFavor.set(true)"
                          (aplicado)="saldoAplicado($event)" />

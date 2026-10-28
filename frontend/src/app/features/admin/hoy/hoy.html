@@ -17,7 +17,7 @@
     <div class="kpis">
       @for (k of kpis(); track k.etiqueta) {
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+          <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
           <span class="kpi-valor">{{ k.valor }}</span>
           <span class="kpi-pie">{{ k.pie }}</span>
         </div>
@@ -53,7 +53,9 @@
                     <b>{{ i.titulo }}</b>
                     @if (i.detalle) { <span>{{ i.detalle }}</span> }
                   </div>
-                  <a class="btn btn-ghost btn-sm" [routerLink]="i.ruta" [queryParams]="i.query ?? null">{{ i.accion }}</a>
+                  @if (i.ruta) {
+                    <a class="btn btn-ghost btn-sm" [routerLink]="i.ruta" [queryParams]="i.query ?? null">{{ i.accion }}</a>
+                  }
                 </div>
               }
             </div>
@@ -97,7 +99,8 @@
           <div>
             <h2>Ventas de hoy por hora</h2>
             <p>
-              Ventas cobradas en todas las tiendas.
+              <!-- Registradas (también las de crédito y las notas sin cobrar) y de SUS tiendas (2026-10-26). -->
+              Ventas registradas hoy {{ deQueTiendas() }}, cobradas o no.
               @if (datos(); as d) { Van {{ d.vendido_hoy.ventas }}. }
             </p>
           </div>

@@ -432,6 +432,8 @@ async function previaLista(buffer, nombreArchivo) {
   for (const h of r.hilos) {
     const { producto, ambiguos } = _empatar(catalogo, h.nombre, h.calibre);
     h.estado = producto ? 'existe' : ambiguos.length ? 'ambiguo' : 'nuevo';
+    // Cuántos hilos iguales hay en el catálogo (pueden ser 3, no siempre 2).
+    if (ambiguos.length) h.iguales = ambiguos.length;
     h.producto = producto
       ? {
           id: producto.id,
@@ -441,6 +443,12 @@ async function previaLista(buffer, nombreArchivo) {
           linea: producto.linea,
           activo: !!producto.activo,
           precio_kg: producto.precio_kg != null ? Number(producto.precio_kg) : null,
+          // A cómo lo cobra la caja: el de su presentación o, sin ella, su precio por
+          // kilo (el que le pone la carga) — 2026-10-26, auditoría: se enseñaba el
+          // precio por kilo aunque la presentación tuviera otro.
+          precio_cobra: tienePrecio(producto)
+            ? Number(producto.variante_id ? producto.precio : producto.precio_kg)
+            : null,
           sku: producto.sku,
           // Lo que de verdad cobra la caja es el precio de la presentación (o el
           // de la que le crea la carga, si todavía no tiene).
@@ -450,8 +458,9 @@ async function previaLista(buffer, nombreArchivo) {
     h.parecidos = producto ? [] : _parecidos(catalogo, h.nombre, h.calibre);
 
     if (ambiguos.length) {
+      // Sin renglón: no entra el COLOR completo, no solo su primer paquete (2026-10-26).
       r.errores.push({
-        fila: h.bultos[0].fila,
+        fila: null,
         mensaje:
           `Hay ${ambiguos.length} hilos «${h.nombre} ${h.calibre}» en el catálogo ` +
           `(${ambiguos.map((p) => `${p.linea ?? 'sin línea'}, id ${p.id}`).join('; ')}). ` +

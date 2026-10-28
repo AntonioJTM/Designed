@@ -63,6 +63,11 @@ export class UsuarioFormModal implements OnInit {
    */
   readonly todas = signal(false);
   readonly tiendasSel = signal<number[]>([]);
+  /** Las tiendas de la persona que quien edita NO ve: se conservan al guardar (2026-10-26). */
+  readonly otrasTiendas = computed(() => {
+    const visibles = new Set(this.almacenes().map((a) => a.id));
+    return (this.usuario()?.tiendas ?? []).filter((t) => !visibles.has(t.id)).map((t) => t.nombre);
+  });
   /** El ojito: enseña lo que se ESCRIBIÓ, para revisarlo (2026-10-20). La de antes no se ve nunca. */
   readonly verContrasena = signal(false);
 

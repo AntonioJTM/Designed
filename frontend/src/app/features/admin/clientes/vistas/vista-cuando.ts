@@ -13,8 +13,8 @@ const TONOS: [string, string][] = [
   ['var(--viz-calor-1)', 'var(--acento-oscuro)'],
   ['var(--viz-calor-2)', 'var(--viz-calor-tinta)'],
   ['var(--viz-rampa-2)', 'var(--tinta)'], // tinta: 4.78:1 (blanco daba 3.64:1)
-  ['var(--viz-rampa-3)', '#FFFFFF'],
-  ['var(--viz-rampa-4)', '#FFFFFF'],
+  ['var(--viz-rampa-3)', 'var(--superficie)'],
+  ['var(--viz-rampa-4)', 'var(--superficie)'],
 ];
 
 /**

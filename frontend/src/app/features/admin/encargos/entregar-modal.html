@@ -127,7 +127,7 @@
             <div class="form-grid">
               <label class="field">
                 Recibido en efectivo
-                <input type="number" min="0" step="0.01" [(ngModel)]="recibido" name="recibido" [placeholder]="enEfectivo().toFixed(2)" />
+                <input type="number" min="0" step="0.01" [(ngModel)]="recibido" name="recibido" [placeholder]="comoCampo(enEfectivo())" />
                 <span class="ayuda">Vacío = pagó justo. Cambio: {{ cambio() | dinero }}</span>
               </label>
               @if (turnos().length > 0 && !turnoUnicoAqui()) {
@@ -156,7 +156,7 @@
           <p class="ok-msg" role="status">Ya está pagada: solo se entrega.</p>
         }
 
-        <p class="nota-modal">Al entregarlo, la mercancía sale del inventario.</p>
+        <p class="nota-modal">Al entregarla, la mercancía sale del inventario.</p>
       </div>
 
       <div class="modal-foot">

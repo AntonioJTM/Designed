@@ -221,6 +221,8 @@
                   @if (t.a_favor) { <span class="pill aviso">Cancelada · quedó a su saldo a favor</span> }
                   <!-- Salió del banco: lo que abonó a una venta a crédito que se canceló (2026-10-26). -->
                   @if (t.de === 'regreso') { <span class="pill rojo">Se le regresó por el banco</span> }
+                  <!-- La nota en espera pesó menos: llegó todo al banco y la diferencia se le regresó al entregarla. -->
+                  @if (t.regresado) { <span class="de">se le regresaron {{ t.regresado | dinero }} al entregarla</span> }
                 </td>
                 <td class="cliente">
                   @if (t.cliente_id) {

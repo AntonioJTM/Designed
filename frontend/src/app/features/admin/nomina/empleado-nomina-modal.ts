@@ -44,6 +44,7 @@ interface DiaCaptura {
   templateUrl: './empleado-nomina-modal.html',
   host: { '(document:keydown.escape)': 'cerrar()' },
   styles: `
+    .sin-margen { margin: 0; }
     .horario { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
     .horario th { text-align: left; font-weight: 500; color: var(--tinta-3); font-size: 0.78125rem; padding: 0 8px 6px; }
     .horario td { padding: 4px 8px; border-top: 1px solid var(--borde-suave); }
@@ -51,7 +52,7 @@ interface DiaCaptura {
     .horario td.dia label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .horario input[type=time] {
       min-height: 38px; padding: 0 8px; border: 1px solid var(--borde-campo); border-radius: 8px;
-      font: inherit; font-size: 0.875rem; background: #fff; color: var(--tinta);
+      font: inherit; font-size: 0.875rem; background: var(--superficie); color: var(--tinta);
     }
     .horario input[type=time]:disabled { background: var(--superficie-2); color: var(--tinta-3); }
     .horario td.horas { color: var(--tinta-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -114,8 +115,10 @@ export class EmpleadoNominaModal implements OnInit {
     });
     this.comidaMin = Number(e.comida_min ?? 0);
     const tiene = new Map((e.horario ?? []).map((d) => [d.dia_semana, d]));
-    // Sin horario todavía, se propone lunes a sábado de 9 a 18 para no empezar de cero.
-    const propuesto = !tiene.size;
+    // A quien ENTRA a la nómina se le propone lunes a sábado de 9 a 18; a quien ya
+    // estaba sin horario se le deja así (2026-10-26: editar solo su sueldo le guardaba
+    // un horario que nadie capturó).
+    const propuesto = !tiene.size && !e.en_nomina;
     this.dias = ORDEN_SEMANA.map((dia) => {
       const d = tiene.get(dia);
       return {

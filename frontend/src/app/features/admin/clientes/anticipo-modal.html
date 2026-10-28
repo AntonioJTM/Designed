@@ -75,7 +75,8 @@
           }
 
           @if (total() > 0) {
-            <p class="total-anticipo" role="status">
+            <!-- Sin role="status": cambia con cada tecla (DESIGN.md). -->
+            <p class="total-anticipo">
               Deja <b>{{ total() | dinero }}</b>; le quedarán <b>{{ saldoFavor() + total() | dinero }}</b> a favor.
             </p>
           }

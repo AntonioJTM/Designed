@@ -41,7 +41,7 @@
         <div class="kpis">
           @for (k of kpis(); track k.etiqueta) {
             <div class="kpi">
-              <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+              <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
               <span class="kpi-valor">{{ k.valor }}</span>
               <span class="kpi-pie">{{ k.pie }}</span>
             </div>
@@ -221,7 +221,7 @@
         <div class="kpis">
           @for (k of kpisColor(); track k.etiqueta) {
             <div class="kpi">
-              <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+              <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
               <span class="kpi-valor">{{ k.valor }}</span>
               <span class="kpi-pie">{{ k.pie }}</span>
             </div>
@@ -234,8 +234,8 @@
               <h2>Kilos vendidos por color</h2>
               <p>
                 {{ rangoTexto() }}. Cada hilo es un color en su calibre, con el paquete y el cono sumados.
-                Lo vendido es lo que salió del inventario: no cuenta lo cancelado, lo devuelto ni los
-                apartados que aún no se entregan. «% ya vendido» es lo vendido desde siempre contra eso
+                Lo vendido es lo que salió del inventario: no cuenta lo cancelado, lo devuelto ni las
+                notas en espera que aún no se entregan. «% ya vendido» es lo vendido desde siempre contra eso
                 más lo que queda hoy.
               </p>
             </div>

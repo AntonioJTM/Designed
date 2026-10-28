@@ -20,7 +20,8 @@ interface Kpi {
   etiqueta: string;
   valor: string;
   pie: string;
-  punto: string;
+  /** El punto va por clase (`.punto.tono-*`), no con style= (DESIGN.md). */
+  tono: string;
 }
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -150,18 +151,18 @@ export class PedidosList {
   }
 
   private armarKpis(r: ResumenPedidos): Kpi[] {
-    const d = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+    const d = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const ventas = (n: number) => `${n} ${n === 1 ? 'venta' : 'ventas'}`;
     return [
-      { etiqueta: 'Hoy', valor: d(r.hoy.total), pie: ventas(r.hoy.ventas), punto: 'var(--acento)' },
-      { etiqueta: 'Esta semana', valor: d(r.semana.total), pie: `${ventas(r.semana.ventas)} desde el lunes`, punto: 'var(--viz-series-1)' },
+      { etiqueta: 'Hoy', valor: d(r.hoy.total), pie: ventas(r.hoy.ventas), tono: 'tono-acento' },
+      { etiqueta: 'Esta semana', valor: d(r.semana.total), pie: `${ventas(r.semana.ventas)} desde el lunes`, tono: 'tono-acento' },
       {
         etiqueta: 'Por cobrar',
         valor: d(r.por_cobrar.total),
         // Lo fiado se debe en la CUENTA del cliente, no venta por venta: por eso
         // se cuentan clientes, no ventas.
         pie: `${r.por_cobrar.ventas} ${r.por_cobrar.ventas === 1 ? 'cliente debe' : 'clientes deben'} en su cuenta`,
-        punto: 'var(--punto-aviso)',
+        tono: 'tono-aviso',
       },
       {
         etiqueta: 'Canceladas',
@@ -169,7 +170,7 @@ export class PedidosList {
         // Es lo que valían esas ventas, no dinero devuelto: en una fiada o un
         // apartado no se devolvió eso.
         pie: `este mes · ${d(r.canceladas_mes.total)} en ventas`,
-        punto: 'var(--punto-alerta)',
+        tono: 'tono-alerta',
       },
     ];
   }

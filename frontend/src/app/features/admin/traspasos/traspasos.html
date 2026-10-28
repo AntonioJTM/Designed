@@ -245,6 +245,8 @@
     dice MÁS O MENOS cuántos kilos son: paquetes × el peso promedio de los que hay
     en el origen. Quien surte agarra los que tenga a la mano.
   -->
+  <!-- Solo a quien puede pedir (directo o con autorización): con solo ver la pantalla salía 403 (2026-10-26). -->
+  @if (puedePedir()) {
   <section class="card" id="nueva">
     <div class="card-head">
       <div>
@@ -252,7 +254,7 @@
         @if (aCiegas()) {
           <p>Pide los paquetes que necesitas. Si en {{ nombreAlmacen(origen) }} no hay tantos, te mandan los que tengan.</p>
         } @else {
-          <p>Se pide en paquetes. Al lado dice más o menos cuántos kilos son, con el peso promedio de los paquetes que hay en la bodega.</p>
+          <p>Se pide en paquetes. Al lado dice más o menos cuántos kilos son, con el peso promedio de los paquetes que hay en {{ nombreAlmacen(origen) || 'el origen' }}.</p>
         }
       </div>
     </div>
@@ -422,6 +424,7 @@
       </div>
     }
   </section>
+  }
 
   <!-- Los que ya se cerraron: recibidos (completos o con faltante) y cancelados. -->
   <section class="card">
@@ -560,7 +563,7 @@
                         <span class="muted">{{ l.enPaquetes ? 'paq' : 'kg' }}</span>
                       </span>
                       @if (l.recibido < l.enviado) {
-                        <div class="sub neg">faltan {{ l.enviado - l.recibido | cantidad }}</div>
+                        <div class="sub neg">faltan {{ l.enviado - l.recibido | cantidad }} {{ l.enPaquetes ? 'paq' : 'kg' }}</div>
                       }
                     }
                   </td>

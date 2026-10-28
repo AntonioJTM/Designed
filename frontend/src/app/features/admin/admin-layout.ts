@@ -1,4 +1,5 @@
 import { AfterViewInit, Component, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
+import { DineroPipe } from '../../shared/dinero.pipe';
 import { Title } from '@angular/platform-browser';
 import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
@@ -7,7 +8,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { NotificacionesService } from '../../core/services/notificaciones.service';
 import { MENU, rutaDeInicio } from '../../core/navegacion';
 import { fechaRelativa } from '../../shared/fecha.pipe';
-import { DESTINO_AVISO, urlDe } from '../../core/avisos';
+import { DESTINO_AVISO, cajaDe, clienteDe, urlDe } from '../../core/avisos';
 import { CantidadPipe } from '../../shared/cantidad.pipe';
 import { TiempoRealService } from '../../core/services/tiempo-real.service';
 import { PERMISOS_QUE_AUTORIZAN } from '../../core/models/autorizaciones.models';
@@ -25,7 +26,7 @@ import { MisVacacionesModal } from './nomina/mis-vacaciones-modal';
   templateUrl: './admin-layout.html',
   styleUrls: ['./admin-layout.scss', './admin-avisos.scss', './admin-cuenta.scss'],
   host: {
-    '(document:keydown.escape)': 'abierto.set(false)',
+    '(document:keydown.escape)': 'cerrarAvisos()',
     '(document:click)': 'clicAfuera($event)',
     '(window:resize)': 'revisarMenu()',
   },
@@ -68,6 +69,9 @@ export class AdminLayout implements AfterViewInit {
   readonly menuAbierto = signal(false);
 
   readonly veMercancia = computed(() => { this.sesion(); return this.auth.puede('ver:surtir'); });
+  /** "Surtir ›" a quien envía y "falta que confirmen" a quien firma (2026-10-26, auditoría). */
+  readonly veEnviar = computed(() => this.veMercancia() && this.auth.puede('hacer:enviar_traspaso'));
+  readonly veRecibir = computed(() => this.veMercancia() && this.auth.puede('hacer:recibir_traspaso'));
   readonly veInventario = computed(() => { this.sesion(); return this.auth.puede('ver:inventario'); });
   readonly veCatalogo = computed(() => { this.sesion(); return this.auth.puede('ver:catalogo'); });
   readonly veClientes = computed(() => { this.sesion(); return this.auth.puede('ver:clientes'); });
@@ -117,7 +121,8 @@ export class AdminLayout implements AfterViewInit {
     // Las solicitudes que esperan SU autorización: el servidor ya las cuenta por persona.
     if (this.veAutorizaciones() && (p.autorizaciones?.num ?? 0) > 0) n += 1;
     if (p.mi_clave_apagada) n += 1;
-    if (this.veMercancia()) n += p.traspasos_por_enviar.length + p.traspasos_por_recibir.length;
+    if (this.veEnviar()) n += p.traspasos_por_enviar.length;
+    if (this.veRecibir()) n += p.traspasos_por_recibir.length;
     if (this.veInventario() && p.alertas_stock > 0) n += 1;
     if (this.veCatalogo() && (p.sin_precio?.num ?? 0) > 0) n += 1;
     if (this.veNotas() && (p.notas_pendientes?.num ?? 0) > 0) n += 1;
@@ -242,19 +247,25 @@ export class AdminLayout implements AfterViewInit {
     this.menuAbierto.update((v) => !v);
   }
 
+  private readonly campana = viewChild<ElementRef<HTMLButtonElement>>('campana');
+
+  /** Cierra el panel (Escape o ✕) y el cursor regresa a la campana. */
+  cerrarAvisos(): void {
+    if (!this.abierto()) return;
+    this.abierto.set(false);
+    this.campana()?.nativeElement.focus();
+  }
+
   alternar(): void {
     this.abierto.update((v) => !v);
     // Al abrirla se refresca: si acabas de surtir algo, el número debe bajar.
     if (this.abierto()) this.notif.refrescar();
   }
 
-  /** Dinero para los avisos de la campana. */
+  /** Dinero para los avisos de la campana: con centavos, como el resto (2026-10-26). */
+  private readonly formato = new DineroPipe();
   dinero(v: unknown): string {
-    return Number(v ?? 0).toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-      maximumFractionDigits: 0,
-    });
+    return this.formato.transform(Number(v ?? 0));
   }
 
   /** "CAMEL 2/30, OPTIK 2/30 y 1 más": los hilos sin precio, en un renglón. */
@@ -284,6 +295,8 @@ export class AdminLayout implements AfterViewInit {
   /** A dónde lleva cada aviso: los mismos destinos que Hoy (`core/avisos.ts`). */
   readonly destino = DESTINO_AVISO;
   readonly url = urlDe;
+  readonly cajaDe = cajaDe;
+  readonly clienteDe = clienteDe;
 
   /** "Tu clave para autorizar se apagó": se vuelve a poner aquí mismo. */
   abrirMiClave(): void {

@@ -99,3 +99,6 @@
 }
 
 .avisos-mas { margin: 4px 12px 8px; font-size: 0.8125rem; color: var(--tinta-3); }
+/* El panel es blanco: el contorno del foco vuelve al azul de siempre (el claro de
+   la barra oscura casi no se veía aquí, 2.1:1; 2026-10-26, auditoría). */
+.avisos :focus-visible { outline-color: var(--acento); }

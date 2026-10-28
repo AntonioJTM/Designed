@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { Deuda, DeudorCartera } from '../../../../core/models/rediseno.models';
 import { DineroPipe } from '../../../../shared/dinero.pipe';
 import { COLOR, fechaCorta, pesos, plural } from '../clientes-ui';
+import { tintaSobre } from '../../../../shared/charts/contraste';
 
 /**
  * Cómo va cada cuenta según sus NOTAS VENCIDAS (los tramos de `cartera`, 2026-10-20):
@@ -26,9 +27,8 @@ const TOPE_BARRAS = 12;
  * mostrador. El abono se registra aquí mismo; corregir una deuda NO, eso vive
  * en el expediente y pide su permiso.
  *
- * Los días se cuentan desde el ÚLTIMO MOVIMIENTO de la cuenta, no desde la
- * venta: quien abonó la semana pasada está pagando, y tratarlo como moroso
- * llevaría a cobrarle a quien no toca.
+ * Los tramos van por los días que lleva VENCIDA su nota más vencida (cada nota
+ * vence a sus días de crédito, 2026-10-20); lo abonado paga primero lo más viejo.
  */
 @Component({
   selector: 'app-vista-deuda',
@@ -56,16 +56,21 @@ export class VistaDeuda {
     const mes = d.por_cobrar_mes ?? { monto: 0, clientes: 0, hasta: '' };
     return [
       {
+        // Lo de su cuenta de crédito MÁS las notas pendientes de pago (2026-10-26,
+        // auditoría: con solo el crédito decía "nadie te debe" con notas por cobrar).
         etiqueta: 'Por cobrar',
-        valor: pesos(d.total_por_cobrar),
-        pie: d.num_clientes ? `${plural(d.num_clientes, 'cliente', 'clientes')} con saldo` : 'nadie te debe',
+        valor: pesos(Number(d.total_por_cobrar) + Number(d.notas_pendientes?.monto ?? 0)),
+        pie: Number(d.notas_pendientes?.monto ?? 0) > 0
+          ? `a crédito ${pesos(d.total_por_cobrar)} · en notas ${pesos(d.notas_pendientes!.monto)}`
+          : d.num_clientes ? `${plural(d.num_clientes, 'cliente', 'clientes')} con saldo` : 'nadie te debe',
         punto: COLOR.acento,
       },
       {
         etiqueta: 'Con notas vencidas',
         valor: pesos(d.vencido),
+        // Lo que deben en total esos clientes; lo vencido de sus notas es lo que dice la campana.
         pie: d.num_vencidos
-          ? `${plural(d.num_vencidos, 'cliente tiene', 'clientes tienen')} notas que pasaron sus días`
+          ? `lo que deben ${plural(d.num_vencidos, 'cliente', 'clientes')}; de eso, ${pesos(d.vencido_notas ?? d.vencido)} ya vencido`
           : 'ninguna nota pasó sus días',
         punto: COLOR.alerta,
       },
@@ -82,7 +87,9 @@ export class VistaDeuda {
       {
         etiqueta: 'Cobrado este mes',
         valor: pesos(d.cobrado_mes.monto),
-        pie: `en ${plural(d.cobrado_mes.abonos, 'abono', 'abonos')}`,
+        pie: (d.cobrado_mes.pagos_notas ?? 0) > 0
+          ? `${plural(d.cobrado_mes.abonos, 'abono', 'abonos')} a crédito · ${pesos(d.cobrado_mes.notas ?? 0)} de notas pendientes`
+          : `en ${plural(d.cobrado_mes.abonos, 'abono', 'abonos')} a crédito`,
         punto: COLOR.serie3,
       },
     ];
@@ -91,14 +98,14 @@ export class VistaDeuda {
   /** La cartera por antigüedad: una barra partida con la rampa de claro a oscuro. */
   readonly tramos = computed(() => {
     const d = this.datos();
-    const tinta = ['var(--tinta)', '#FFFFFF', '#FFFFFF', '#FFFFFF'];
+    // La letra de cada tramo, la de MÁS contraste (WCAG): blanco fijo sobre el segundo daba 3.64:1.
     const lista = d.por_antiguedad.map((t, i) => ({
       clave: t.clave,
       etiqueta: TRAMO[t.clave as DeudorCartera['tramo']]?.leyenda ?? t.etiqueta,
       monto: t.monto,
       clientes: t.clientes,
       color: COLOR.rampa[i] ?? COLOR.rampa[3],
-      tinta: tinta[i] ?? '#FFFFFF',
+      tinta: tintaSobre(COLOR.rampa[i] ?? COLOR.rampa[3]),
     }));
     const total = lista.reduce((s, t) => s + t.monto, 0);
     return lista.map((t) => {
@@ -126,7 +133,7 @@ export class VistaDeuda {
 
   /**
    * "Cuánto de su crédito han usado": solo los que TIENEN límite (sin límite
-   * no hay contra qué medir). En naranja, los que ya casi no tienen dónde fiar.
+   * no hay contra qué medir). En naranja, a los que ya casi no les queda crédito.
    */
   readonly porUso = computed(() => {
     const filas = this.datos()

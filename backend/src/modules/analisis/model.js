@@ -97,6 +97,9 @@ async function cartera({ diasAviso } = {}) {
     // Lo que se pasó del plazo que la tienda considere razonable.
     vencido: Math.round(porAvisar.reduce((s, r) => s + Number(r.saldo), 0) * 100) / 100,
     num_vencidos: porAvisar.length,
+    // De eso, solo lo que falta de las notas YA vencidas: la cifra de la campana y
+    // Hoy (2026-10-26, auditoría: "Notas vencidas $1,000" allá y "$5,000" aquí).
+    vencido_notas: Math.round(porAvisar.reduce((s, r) => s + Number(r.vencido_por_pagar ?? 0), 0) * 100) / 100,
     dias_aviso: diasAviso,
     // CRÉDITO POR COBRAR ESTE MES (2026-10-22): lo vencido y lo que vence hasta
     // el último día del mes, de sus notas a crédito.
@@ -137,8 +140,11 @@ async function clientesEnfriados({ dias = 60, minCompras = 2, limite = 50 } = {}
             COALESCE(s.saldo, 0) AS saldo
        FROM clientes c
        JOIN (
+         -- Visitas = días con compra (2026-10-26, auditoría): 3 notas el mismo día
+         -- son UNA visita, como en Frecuencia y el expediente. Antes contaba notas
+         -- y quien vino una vez con dos notas salía como cliente perdido.
          SELECT cliente_id,
-                COUNT(*) AS num_compras,
+                COUNT(DISTINCT DATE(creado_en)) AS num_compras,
                 SUM(total) AS total_comprado,
                 MIN(creado_en) AS primera_compra,
                 MAX(creado_en) AS ultima_compra
@@ -265,8 +271,19 @@ async function hiloMuerto({ dias = 90, limite = 50, conCosto = true } = {}) {
  * equivocadas. Las líneas sin costo se cuentan aparte para que la pantalla
  * pueda avisar cuánta venta está quedando fuera del análisis.
  */
+/**
+ * LO QUE REGRESÓ NO CUENTA EN EL MARGEN (2026-10-26, decisión del usuario: "sí, restar
+ * lo devuelto"): 100 kg vendidos a $90 con costo de $60 dan $3,000; si regresan 40 kg,
+ * la ganancia es la de los 60 que se quedaron, $1,800. Igual que la comisión y Venta por
+ * color. Y solo lo que SALIÓ del inventario: una nota en espera sin entregar no ha vendido.
+ */
+const DEV_MARGEN = `LEFT JOIN (SELECT detalle_id, SUM(cantidad) AS kg FROM devolucion_detalle GROUP BY detalle_id) dev
+         ON dev.detalle_id = d.id`;
+const KG_MARGEN = '(d.cantidad - COALESCE(dev.kg, 0))';
+const VENTA_MARGEN = `(d.subtotal * ${KG_MARGEN} / NULLIF(d.cantidad, 0))`;
+
 async function margenPorHilo({ desde, hasta, limite = 50 } = {}) {
-  const where = [`ped.estado NOT IN ${ESTADOS_MUERTOS}`];
+  const where = [`ped.estado NOT IN ${ESTADOS_MUERTOS}`, 'ped.inventario_descontado = 1'];
   const params = {};
   if (desde) { where.push('ped.creado_en >= :desde'); params.desde = desde; }
   if (hasta) { where.push('ped.creado_en < DATE_ADD(:hasta, INTERVAL 1 DAY)'); params.hasta = hasta; }
@@ -275,35 +292,38 @@ async function margenPorHilo({ desde, hasta, limite = 50 } = {}) {
   const [rows] = await pool.query(
     `SELECT p.id AS producto_id, p.nombre AS color, p.grosor_calibre AS calibre,
             cat.nombre AS material, l.nombre AS linea,
-            SUM(d.cantidad) AS kilos,
-            SUM(d.subtotal) AS venta,
-            SUM(d.cantidad * d.costo_unitario) AS costo,
-            SUM(d.subtotal - d.cantidad * d.costo_unitario) AS ganancia,
+            SUM(${KG_MARGEN}) AS kilos,
+            SUM(${VENTA_MARGEN}) AS venta,
+            SUM(${KG_MARGEN} * d.costo_unitario) AS costo,
+            SUM(${VENTA_MARGEN} - ${KG_MARGEN} * d.costo_unitario) AS ganancia,
             -- Margen sobre la VENTA (no sobre el costo): es como se lee un
             -- margen comercial y permite comparar hilos entre sí.
             ROUND(
-              100 * SUM(d.subtotal - d.cantidad * d.costo_unitario)
-                  / NULLIF(SUM(d.subtotal), 0), 1
+              100 * SUM(${VENTA_MARGEN} - ${KG_MARGEN} * d.costo_unitario)
+                  / NULLIF(SUM(${VENTA_MARGEN}), 0), 1
             ) AS margen_pct,
             COUNT(DISTINCT ped.id) AS num_ventas
        FROM pedido_detalle d
        JOIN pedidos ped            ON ped.id = d.pedido_id
+       ${DEV_MARGEN}
        JOIN producto_variantes pv  ON pv.id = d.variante_id
        JOIN productos p            ON p.id = pv.producto_id
        LEFT JOIN categorias cat    ON cat.id = p.categoria_id
        LEFT JOIN lineas l          ON l.id = p.linea_id
       WHERE ${whereSql} AND d.costo_unitario IS NOT NULL
       GROUP BY p.id, p.nombre, p.grosor_calibre, cat.nombre, l.nombre
+     HAVING kilos > 0.0005
       ORDER BY ganancia DESC`,
     params
   );
 
   // Lo que quedó fuera por no tener costo capturado.
   const [[sinCosto]] = await pool.query(
-    `SELECT COUNT(*) AS lineas, COALESCE(SUM(d.subtotal), 0) AS venta
+    `SELECT COUNT(*) AS lineas, COALESCE(SUM(${VENTA_MARGEN}), 0) AS venta
        FROM pedido_detalle d
        JOIN pedidos ped ON ped.id = d.pedido_id
-      WHERE ${whereSql} AND d.costo_unitario IS NULL`,
+       ${DEV_MARGEN}
+      WHERE ${whereSql} AND d.costo_unitario IS NULL AND ${KG_MARGEN} > 0.0005`,
     params
   );
 
@@ -324,4 +344,22 @@ async function margenPorHilo({ desde, hasta, limite = 50 } = {}) {
   };
 }
 
-module.exports = { cartera, clientesEnfriados, hiloMuerto, margenPorHilo };
+/**
+ * Lo que deben en NOTAS PENDIENTES DE PAGO (2026-10-26, auditoría): no es crédito,
+ * pero se debe. Sin esto el tablero decía "Nadie te debe nada" con notas por cobrar.
+ */
+async function notasPendientes() {
+  const [[r]] = await pool.query(
+    `SELECT COUNT(DISTINCT x.cliente_id) AS num_clientes, COALESCE(SUM(x.falta), 0) AS monto
+       FROM (SELECT p.cliente_id,
+                    p.total - COALESCE((SELECT SUM(pg.monto) FROM pagos pg
+                                         WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0) AS falta
+               FROM pedidos p
+              WHERE p.cliente_id IS NOT NULL AND p.nota_pendiente = 1 AND p.estado = 'pendiente'
+                AND NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')) x
+      WHERE x.falta > 0.004`
+  );
+  return { monto: Math.round(Number(r.monto) * 100) / 100, num_clientes: Number(r.num_clientes) };
+}
+
+module.exports = { cartera, clientesEnfriados, hiloMuerto, margenPorHilo, notasPendientes };

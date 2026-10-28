@@ -275,13 +275,13 @@ describe('CargaLista', () => {
     // Sin botón apagado y mudo: el panel de avance.
     expect([...el.querySelectorAll('button')].some((b) => b.textContent?.includes('Cargar'))).toBe(false);
     expect(texto()).toContain('Enviando la lista al servidor');
-    expect(texto()).toContain('0 de 3 bultos registrados');
+    expect(texto()).toContain('0 de 3 paquetes registrados');
 
     servidor.next({ tipo: 'hilo', i: 0, n: 2, hilo: 'CAMEL 2/30', nuevo: true });
     servidor.next({ tipo: 'bultos', hilo: 'CAMEL 2/30', hechos: 2, total: 3 });
     f.detectChanges();
     expect(texto()).toContain('Creando CAMEL 2/30 y registrando sus bultos');
-    expect(texto()).toContain('2 de 3 bultos registrados');
+    expect(texto()).toContain('2 de 3 paquetes registrados');
     expect(texto()).toContain('Creando el hilo y sus bultos');
 
     servidor.next({ tipo: 'hilo_listo', i: 0, hilo: 'CAMEL 2/30', folio: 'REM-1790864580000-AAAA' });

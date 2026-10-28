@@ -1,13 +1,19 @@
 import { Component, DestroyRef, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subject, Subscription, forkJoin } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import { ClientesService, FiltrosClientes, OrdenClientes } from '../../../../core/services/clientes.service';
 import { Cliente, LugaresEntrega } from '../../../../core/models/clientes.models';
 import { DineroPipe } from '../../../../shared/dinero.pipe';
 import { COLOR, fechaCorta, plural } from '../clientes-ui';
+
+const ORDENES_VALIDOS: OrdenClientes[] = ['numero', 'nombre', 'nuevo', 'saldo', 'compras', 'reciente'];
+/** El orden que trae la dirección, si es uno de los de la lista. */
+function ordenDeLaDireccion(v: string | null): OrdenClientes {
+  return ORDENES_VALIDOS.includes(v as OrdenClientes) ? (v as OrdenClientes) : 'numero';
+}
 
 /** Cuántos trae cada vuelta ("Ver más"): lo más que da el servidor. */
 const POR_PAGINA = 100;
@@ -37,6 +43,7 @@ type Mostrar = 'activos' | 'baja' | 'todos';
     .chico { font-size: 0.75rem; margin-top: 2px; }
     .tel { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .debe { color: var(--alerta-t); font-weight: 600; }
+    .en-notas { font-size: 0.75rem; white-space: nowrap; }
     .mas { display: flex; justify-content: center; padding-top: 16px; }
     .cuenta { margin: 0; font-size: 0.875rem; color: var(--tinta-3); }
   `,
@@ -56,7 +63,10 @@ export class VistaTodos implements OnInit {
   mostrar: Mostrar = 'activos';
   /** null = todos los lugares; 'sin' = sin lugar; un id = ese lugar. */
   lugar: number | 'sin' | null = null;
-  orden: OrdenClientes = 'numero';
+  /** Se puede llegar con un orden (`?orden=nuevo`, desde el aviso de los clientes nuevos). */
+  orden: OrdenClientes = ordenDeLaDireccion(
+    inject(ActivatedRoute, { optional: true })?.snapshot?.queryParamMap?.get('orden') ?? null
+  );
 
   readonly ORDENES: { valor: OrdenClientes; texto: string }[] = [
     { valor: 'numero', texto: 'Por número (C-0001…)' },

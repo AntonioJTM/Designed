@@ -448,6 +448,9 @@ export class Inventario {
     if (!peso || kg <= 0) return '';
     // Los conos se cuentan enteros, con el peso REAL de uno (2026-10-19).
     if (s.tipo_presentacion === 'cono') return textoConos(kg, peso);
+    // Los paquetes que de verdad hay ahí, como Ajuste, Mínimo y el detalle del hilo (2026-10-26).
+    const reales = s.paquetes != null ? Number(s.paquetes) : 0;
+    if (s.tipo_presentacion === 'paquete' && reales > 0) return reales === 1 ? '1 paquete' : `${reales} paquetes`;
     const n = Math.round((kg / peso) * 10) / 10;
     const texto = n.toLocaleString('es-MX', { maximumFractionDigits: 1 });
     if (s.tipo_presentacion === 'paquete') return `≈ ${texto} ${n === 1 ? 'paquete' : 'paquetes'}`;
@@ -512,6 +515,8 @@ export class Inventario {
     if (this.puedeBajarConos()) this.cargarConversiones();
     if (this.cargando()) return;
     const paginas = this.pagina;
+    // Si mientras tanto se cambió el filtro, esta respuesta ya no sirve (2026-10-26).
+    const vuelta = this.vueltaFiltros;
     const filtros = {
       almacen_id: this.filtroAlmacen || undefined,
       q: this.filtroQ.trim() || undefined,
@@ -522,7 +527,7 @@ export class Inventario {
     };
     forkJoin(Array.from({ length: paginas }, (_, i) => this.inv.stock({ ...filtros, page: i + 1 }))).subscribe({
       next: (ps) => {
-        if (this.pagina !== paginas) return; // mientras tanto se pidió otra
+        if (this.pagina !== paginas || this.vueltaFiltros !== vuelta) return; // mientras tanto se pidió otra cosa
         this.stock.set(ps.flatMap((p) => p.items));
         this.totalStock.set(ps[ps.length - 1]?.total ?? 0);
       },
@@ -530,8 +535,12 @@ export class Inventario {
     });
   }
 
+  /** Sube con cada carga con filtros nuevos: la recarga en vivo que llega tarde se tira. */
+  private vueltaFiltros = 0;
+
   /** Vuelve a la primera página con los filtros de ahora. */
   cargarStock(): void {
+    this.vueltaFiltros += 1;
     this.pagina = 1;
     this.pedirStock(false);
   }

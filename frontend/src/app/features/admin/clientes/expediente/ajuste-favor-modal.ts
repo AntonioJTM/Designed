@@ -5,6 +5,7 @@ import { AjusteSaldoFavor } from '../../../../core/models/clientes.models';
 import { ApiError } from '../../../../core/models/auth.models';
 import { autorizacionPedida } from '../../../../shared/autorizacion/pedida';
 import { DineroPipe } from '../../../../shared/dinero.pipe';
+import { nuevaClave } from '../../../../core/clave-unica';
 
 /**
  * AJUSTAR SU SALDO A FAVOR a mano (2026-10-16: "que sea ajuste de saldo a favor:
@@ -43,7 +44,7 @@ import { DineroPipe } from '../../../../shared/dinero.pipe';
                 <label [class.on]="sentido === 'quita'">
                   <input type="radio" name="sentido" value="quita" [(ngModel)]="sentido" />
                   Quitarle
-                  <span class="muted">se le dio de más o ya se le pagó</span>
+                  <span class="muted">se le dio de más por error</span>
                 </label>
                 <label [class.on]="sentido === 'agrega'">
                   <input type="radio" name="sentido" value="agrega" [(ngModel)]="sentido" />
@@ -63,11 +64,19 @@ import { DineroPipe } from '../../../../shared/dinero.pipe';
                 <label class="field">
                   Motivo
                   <input type="text" maxlength="255" [(ngModel)]="motivo" name="motivo"
-                         placeholder="Se le regresó en efectivo el 10 de octubre" />
+                         placeholder="Se capturó de más en la devolución del 10 de octubre" />
                   <span class="ayuda">Queda escrito en su historial.</span>
                 </label>
               </div>
 
+              <!-- Este ajuste NO saca dinero de la caja (2026-10-26, auditoría): el ejemplo
+                   decía "se le regresó en efectivo" y el corte salía con faltante. -->
+              @if (sentido === 'quita') {
+                <p class="ayuda">
+                  No saca dinero de la caja. Si le regresas su saldo en efectivo, sácalo también del cajón
+                  con «Sacar o meter efectivo» en Caja, o el corte saldrá con faltante.
+                </p>
+              }
               @if (monto) {
                 <div class="dato">
                   <span>Le quedaría a favor</span>
@@ -106,6 +115,8 @@ export class AjusteFavorModal {
   readonly registrado = output<AjusteSaldoFavor>();
 
   readonly guardando = signal(false);
+  /** Llave de un solo uso (2026-10-26): un reintento tras un corte no ajusta dos veces. */
+  private clave = nuevaClave();
   readonly error = signal<string | null>(null);
 
   sentido: 'quita' | 'agrega' = 'quita';
@@ -131,14 +142,15 @@ export class AjusteFavorModal {
       return;
     }
     if (this.saldoTras() < 0) {
-      this.error.set(`No se le puede quitar más de lo que tiene a favor (${this.saldo().toFixed(2)}).`);
+      this.error.set(`No se le puede quitar más de lo que tiene a favor (${this.saldo().toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}).`);
       return;
     }
     this.guardando.set(true);
     this.error.set(null);
-    this.clientes.ajustarSaldoFavor(this.clienteId(), this.sentido === 'quita' ? -m : m, motivo).subscribe({
+    this.clientes.ajustarSaldoFavor(this.clienteId(), this.sentido === 'quita' ? -m : m, motivo, this.clave).subscribe({
       next: (r) => {
         this.guardando.set(false);
+        this.clave = nuevaClave();
         this.registrado.emit(r);
         this.cerrar();
       },

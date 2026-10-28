@@ -31,6 +31,16 @@ async function crear(datos) {
 async function actualizar(id, datos) {
   const actual = await obtener(id);
   _validarNoDejarTiendaHuerfana(actual, datos);
+  _validarNoDejarSinMatriz(actual, datos);
+  // Quitarle el mostrador con cajas: esas cajas venderían desde una bodega (2026-10-26).
+  if (datos.es_punto_venta === false && Number(actual.es_punto_venta)) {
+    const n = await model.cajasActivas(id);
+    if (n > 0) {
+      throw new AppError(409, 'ALMACEN_CON_CAJAS',
+        `«${actual.nombre}» tiene ${n === 1 ? 'una caja activa' : `${n} cajas activas`}: desactívala${n === 1 ? '' : 's'} ` +
+        'o pásala' + (n === 1 ? '' : 's') + ' a otra tienda antes de quitarle el mostrador.');
+    }
+  }
   const esTiendaLinea =
     datos.es_tienda_linea !== undefined ? datos.es_tienda_linea : !!actual.es_tienda_linea;
 
@@ -65,6 +75,20 @@ function _validarNoDejarTiendaHuerfana(actual, datos) {
   }
 }
 
+/**
+ * Lo mismo con la MATRIZ (2026-10-26, auditoría): sin ella, quien es de una sola
+ * tienda no puede pedir nada (a ciegas solo se le pide a la Matriz) y Surtir
+ * sucursal no sabe de dónde proponer el origen. Se marca otra primero.
+ */
+function _validarNoDejarSinMatriz(actual, datos) {
+  if (!Number(actual.es_matriz)) return;
+  if (datos.es_matriz === false || datos.activo === false) {
+    throw new AppError(409, 'MATRIZ_SIN_ALMACEN',
+      `«${actual.nombre}» es la Matriz, la que surte a las demás. ` +
+      'Marca otro almacén como Matriz antes de desactivarlo o quitarle la marca.');
+  }
+}
+
 /** Etiquetas legibles para explicar qué impide borrar un almacén. */
 const ETIQUETA_DEP = {
   inventario: 'existencias registradas',
@@ -91,6 +115,10 @@ async function eliminar(id) {
     throw new AppError(409, 'ALMACEN_TIENDA_LINEA',
       `"${almacen.nombre}" es el almacén que surte la tienda en línea. ` +
       'Marca otro antes de eliminarlo.');
+  }
+  if (Number(almacen.es_matriz)) {
+    throw new AppError(409, 'MATRIZ_SIN_ALMACEN',
+      `«${almacen.nombre}» es la Matriz: marca otro almacén como Matriz antes de eliminarlo.`);
   }
   await model.eliminar(id);
 }

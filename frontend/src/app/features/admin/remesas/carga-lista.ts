@@ -213,7 +213,8 @@ export class CargaLista implements OnDestroy {
 
   /** Los lotes del hilo con sus bultos, para el globito de "y 2 más". */
   lotesDe(h: HiloLista): string {
-    return h.lotes.map((l) => `${l.lote}: ${l.bultos} bultos, ${l.kg} kg`).join(' · ');
+    const n = (x: number) => Number(x).toLocaleString('es-MX', { maximumFractionDigits: 3 });
+    return h.lotes.map((l) => `${l.lote}: ${l.bultos} ${Number(l.bultos) === 1 ? 'paquete' : 'paquetes'}, ${n(l.kg)} kg`).join(' · ');
   }
 
   /** "18.7 a 19.4 kg"; un solo número si todos pesan igual. */
@@ -247,6 +248,8 @@ export class CargaLista implements OnDestroy {
     this.archivo = f;
     this.previa.set(null);
     this.ultima.set(null);
+    // El aviso de la lista anterior se va: no se lee como si la nueva ya estuviera pedida.
+    this.pedida.set(null);
     this.error.set(null);
     this.errorCarga.set(null);
     this.verTodosErrores.set(false);

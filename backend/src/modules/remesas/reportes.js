@@ -30,7 +30,7 @@ const { AppError } = require('../../middlewares/error');
 const pdf = require('../../utils/pdf');
 
 const ESTADO = {
-  disponible: 'En existencia', apartado: 'Apartado (pedido o envío)', vendido: 'Vendido', desarmado: 'Bajado a conos',
+  disponible: 'En existencia', apartado: 'Apartado (nota en espera o envío)', vendido: 'Vendido', desarmado: 'Bajado a conos',
   faltante: 'No llegó (faltó en un envío)',
 };
 
@@ -89,7 +89,7 @@ function _cifrasLote(l) {
   return partes.join(' · ');
 }
 
-async function _carga(id) {
+async function _carga(id, almacenes = null) {
   const [[r]] = await pool.query(
     `SELECT r.id, r.folio, r.num_bultos, r.kg_total, r.costo_kg, r.lotes, r.archivo, r.notas,
             DATE_FORMAT(r.creado_en, '%Y-%m-%d %H:%i:%s') AS creado_en,
@@ -111,18 +111,22 @@ async function _carga(id) {
   );
   if (!r) throw new AppError(404, 'NO_ENCONTRADO', 'Esa carga no existe');
   const [bultos] = await pool.query(
-    `SELECT vc.codigo, vc.peso_kg, vc.lote, vc.conos, vc.estado, a.nombre AS almacen
+    `SELECT vc.codigo, vc.peso_kg, vc.lote, vc.conos, vc.estado, vc.almacen_id, a.nombre AS almacen
        FROM variante_codigos vc
        LEFT JOIN almacenes a ON a.id = vc.almacen_id
       WHERE vc.remesa_id = :id
       ORDER BY vc.id`,
     { id }
   );
+  // A quien no ve esa tienda, sin el nombre (2026-10-26, auditoría; como el Reporte de
+  // entradas): la gerente de la Matriz sabía qué paquetes tiene hoy Moroleón.
+  const ve = (almacenId) => !Array.isArray(almacenes) || almacenId == null || almacenes.includes(Number(almacenId));
+  for (const b of bultos) if (!ve(b.almacen_id)) b.almacen = 'otra tienda';
   return { ...r, bultos };
 }
 
-async function pdfCarga(id, { usuarioId, veCostos }) {
-  const c = await _carga(id);
+async function pdfCarga(id, { usuarioId, veCostos, almacenes = null }) {
+  const c = await _carga(id, almacenes);
   const doc = pdf.crear();
   doc.info.Title = `Carga ${c.folio}`;
   _dibujarCarga(doc, c, veCostos);
@@ -207,14 +211,15 @@ function _dibujarCarga(doc, c, veCostos) {
   }
   pdf.nota(doc,
     'La columna "Hoy" dice cómo está cada bulto al generar este reporte: si sigue en existencia (y en qué ' +
-    'almacén), si ya se vendió o si se bajó a conos. Lo demás es lo que entró ese día.');
+    'almacén), si está apartado (para una nota en espera o un envío), si ya se vendió, si se bajó a conos o si ' +
+    'no llegó en un envío. Lo demás es lo que entró ese día.');
 }
 
 // ------------------------------------------------- varias cargas (una lista)
 
-async function pdfCargas(ids, { usuarioId, veCostos }) {
+async function pdfCargas(ids, { usuarioId, veCostos, almacenes = null }) {
   const cargas = [];
-  for (const id of ids) cargas.push(await _carga(id));
+  for (const id of ids) cargas.push(await _carga(id, almacenes));
   const doc = pdf.crear();
   const primera = cargas[0];
   const titulo = cargas.length === 1 ? `Carga ${primera.folio}` : `Carga de ${cargas.length} hilos`;
@@ -226,11 +231,11 @@ async function pdfCargas(ids, { usuarioId, veCostos }) {
     derecha: pdf.fecha(primera.creado_en, { conHora: false }),
   });
 
-  const almacenes = [...new Set(cargas.map((c) => c.almacen))];
+  const entraron = [...new Set(cargas.map((c) => c.almacen))];
   const usuarios = [...new Set(cargas.map((c) => c.usuario).filter(Boolean))];
   pdf.datos(doc, [
     ['Archivo', primera.archivo],
-    ['Entró a', almacenes.join(', ')],
+    ['Entró a', entraron.join(', ')],
     ['Proveedor', primera.proveedor],
     ['Factura', primera.factura],
     ['Pedimento', primera.pedimento],
@@ -272,7 +277,7 @@ async function pdfCargas(ids, { usuarioId, veCostos }) {
       pdf.kg(c.kg_total),
       conosDe(c) ? pdf.numero(conosDe(c)) : '',
     ]),
-    { total: [`${cargas.length} hilos`, '', '', pdf.numero(bultos), pdf.kg(kgTotal), conos ? pdf.numero(conos) : ''] }
+    { total: [`${cargas.length} ${cargas.length === 1 ? 'hilo' : 'hilos'}`, '', '', pdf.numero(bultos), pdf.kg(kgTotal), conos ? pdf.numero(conos) : ''] }
   );
 
   // Los hilos que se crearon con esta carga entran sin precio de venta.
@@ -340,13 +345,17 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
     where.push(almacenes.length ? 'r.almacen_id IN (:almacenesAlcance)' : '1 = 0');
     params.almacenesAlcance = almacenes;
   }
-  if (desde) { where.push('r.creado_en >= :desde'); params.desde = desde; }
-  // `hasta` incluye el día completo, como lo teclea la persona.
-  if (hasta) { where.push('r.creado_en < DATE_ADD(:hasta, INTERVAL 1 DAY)'); params.hasta = hasta; }
+  // Por el día que LLEGÓ (fecha de ingreso), como el historial (2026-10-26, auditoría:
+  // un contenedor que llegó el 3 y se capturó el 6 no salía del 1 al 5).
+  const llego = 'COALESCE(r.fecha_ingreso, DATE(r.creado_en))';
+  if (desde) { where.push(`${llego} >= :desde`); params.desde = desde; }
+  if (hasta) { where.push(`${llego} <= :hasta`); params.hasta = hasta; }
 
   const [cargas] = await pool.query(
     `SELECT r.id, r.folio, DATE_FORMAT(r.creado_en, '%Y-%m-%d %H:%i:%s') AS creado_en,
             r.num_bultos, r.kg_total, r.costo_kg, r.lotes, pv.sku,
+            DATE_FORMAT(COALESCE(r.fecha_ingreso, r.creado_en), '%Y-%m-%d') AS llego,
+            prov.nombre AS proveedor, r.factura,
             a.nombre AS almacen, u.nombre AS usuario,
             COALESCE(e.disp, 0) AS disp, COALESCE(e.disp_kg, 0) AS disp_kg,
             COALESCE(e.apar, 0) AS apar, COALESCE(e.apar_kg, 0) AS apar_kg,
@@ -357,6 +366,7 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
        JOIN producto_variantes pv ON pv.id = r.variante_id
        JOIN almacenes a           ON a.id = r.almacen_id
        LEFT JOIN usuarios u       ON u.id = r.usuario_id
+       LEFT JOIN proveedores prov ON prov.id = r.proveedor_id
        LEFT JOIN (
          SELECT remesa_id,
                 SUM(estado = 'disponible') AS disp, SUM(IF(estado = 'disponible', peso_kg, 0)) AS disp_kg,
@@ -367,7 +377,7 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
            FROM variante_codigos WHERE remesa_id IS NOT NULL GROUP BY remesa_id
        ) e ON e.remesa_id = r.id
       WHERE ${where.join(' AND ')}
-      ORDER BY r.creado_en, r.id`,
+      ORDER BY COALESCE(r.fecha_ingreso, DATE(r.creado_en)), r.id`,
     params
   );
 
@@ -416,9 +426,10 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
   } else {
     pdf.seccion(doc, 'Cargas');
     const columnas = [
-      { titulo: 'Fecha', ancho: 1.5 },
+      { titulo: 'Llegó', ancho: 0.9 },
       { titulo: 'Folio', ancho: 0.9 },
-      { titulo: 'Almacén', ancho: 1.2 },
+      { titulo: 'Proveedor · factura', ancho: 1.4 },
+      { titulo: 'Almacén', ancho: 1.1 },
       { titulo: 'Bultos', ancho: 0.6, alin: 'right' },
       { titulo: 'Kilos', ancho: 1.0, alin: 'right' },
       { titulo: 'Lotes', ancho: 0.95 },
@@ -426,8 +437,9 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
       { titulo: 'La cargó', ancho: 1.2 },
     ];
     const filas = cargas.map((c) => [
-      pdf.fechaCorta(c.creado_en),
+      pdf.fechaCorta(c.llego),
       folioCorto(c.folio),
+      [c.proveedor, c.factura].filter(Boolean).join(' · ') || '—',
       c.almacen,
       pdf.numero(c.num_bultos),
       pdf.kg(c.kg_total),
@@ -436,7 +448,7 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
       c.usuario ?? '',
     ]);
     pdf.tabla(doc, columnas, filas, {
-      total: ['Total', `${cargas.length} cargas`, '', pdf.numero(suma('num_bultos')), pdf.kg(kgTotal), '',
+      total: ['Total', `${cargas.length} ${cargas.length === 1 ? 'carga' : 'cargas'}`, '', '', pdf.numero(suma('num_bultos')), pdf.kg(kgTotal), '',
         ...(veCostos ? [costoProm != null ? pdf.dinero(costoProm) : ''] : []), ''],
     });
     if (veCostos && conCosto.length < cargas.length) {
@@ -523,7 +535,10 @@ async function pdfProducto(productoId, { usuarioId, veCostos, desde, hasta, alma
           pdf.numero(l.bultos.length),
           pdf.kg(l.kg),
           l.conos ? pdf.numero(l.conos) : '',
-          `${pdf.numero(l.bultos.filter((b) => b.estado === 'disponible').length)} bultos`,
+          (() => {
+            const n = l.bultos.filter((b) => b.estado === 'disponible').length;
+            return `${pdf.numero(n)} ${n === 1 ? 'paquete' : 'paquetes'}`;
+          })(),
         ])
       );
 

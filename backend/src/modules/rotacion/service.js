@@ -216,7 +216,17 @@ function _promedioDiario(serie, d) {
 function _modelo(serie, d) {
   const base = _base(serie, d);
   const tend = _tendencia(serie, d);
-  const conTemporada = ['completa', 'confiable'].includes(d.historia.nivel) && base.every((b) => b);
+  // Con temporada solo si el HILO tiene su año: vendió algo en esos 12 meses y ya se
+  // vendía cuando empieza el más viejo (2026-10-26, auditoría). Un color nuevo, o uno
+  // que no venía en las ventas de años anteriores, salía con 0 kg por día y "Sobra"
+  // aunque vendiera 60 kg por semana: va con el promedio de sus semanas recientes.
+  const primeraDelHilo = [...(serie ?? [])].filter(([, kg]) => kg > 0).map(([dia]) => dia).sort()[0] ?? null;
+  const inicioBase = base.every((b) => b)
+    ? base.map((b, i) => `${c.claveMes(b.anio, i + 1)}-01`).sort()[0]
+    : null;
+  const tieneSuAnio = !!inicioBase && !!primeraDelHilo && primeraDelHilo <= c.sumarDias(inicioBase, 31)
+    && base.reduce((t, b) => t + b.kg, 0) > 0;
+  const conTemporada = ['completa', 'confiable'].includes(d.historia.nivel) && tieneSuAnio;
   const modelo = c.modeloDeVenta(conTemporada
     ? { base: base.map((b) => b.kg), tendencia: tend.valor }
     : { promedioDiario: _promedioDiario(serie, d) });

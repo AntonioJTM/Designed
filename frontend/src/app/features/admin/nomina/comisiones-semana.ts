@@ -120,7 +120,7 @@ export class ComisionesSemanaComponent {
     const d = v.proxima_nomina.devoluciones ?? 0;
     const partes = [
       n > 0 ? `${n} ${n === 1 ? 'venta ya pagada entra' : 'ventas ya pagadas entran'}` : '',
-      d > 0 ? `${d} ${d === 1 ? 'devolución de una venta ya pagada se descuenta' : 'devoluciones de ventas ya pagadas se descuentan'}` : '',
+      d > 0 ? `${d} ${d === 1 ? 'descuento (regresó o se canceló una venta ya pagada) se aplica' : 'descuentos (ventas ya pagadas que regresaron o se cancelaron) se aplican'}` : '',
     ].filter(Boolean);
     return partes.length ? `${partes.join(' y ')} en la próxima nómina que se calcule` : '';
   }

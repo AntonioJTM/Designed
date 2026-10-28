@@ -126,8 +126,11 @@ export class ComoSeCalculaModal implements OnInit {
     const paso1: Paso = {
       titulo: 'Qué cuenta como venta',
       textos: ['Los kilos que salieron del inventario por una venta, con paquete y cono sumados. No cuentan las ventas canceladas, '
-        + 'lo devuelto ni lo apartado que todavía no se entrega. Los envíos entre almacenes y las mermas no son venta. '
-        + 'Es lo mismo que cuenta Reportes → Venta por color.'],
+        + 'lo devuelto ni las notas en espera que todavía no se entregan. Los envíos entre almacenes y las mermas no son venta. '
+        + 'Es lo mismo que cuenta Reportes → Venta por color.',
+        // Las de años anteriores cuentan en los 12 meses y en la temporada, no en la rotación (2026-10-26).
+        'Si se cargaron ventas de años anteriores, también cuentan en «Vendido en 12 meses» y en la temporada; '
+        + 'la rotación (paso 2) usa solo lo vendido en el sistema, que es de lo que hay kardex.'],
     };
     if (d && h && h.vendido_12m > 0) {
       const c = d.como_se_vende;
@@ -144,7 +147,7 @@ export class ComoSeCalculaModal implements OnInit {
       titulo: 'Rotación: cuántas veces al año se renueva',
       formula: 'Rotación = kilos vendidos en 12 meses ÷ kilos que hubo en promedio',
       textos: ['Lo que hubo en promedio sale del kardex: cuánto había al cerrar cada día, sumado y dividido entre los días.',
-        'Más de 2: rápido · de 1 a 2: normal · menos de 1: lento, se queda más de un año.'],
+        '2 o más: rápido · de 1 a menos de 2: normal · menos de 1: lento, se queda más de un año.'],
     };
     const r = h?.rotacion;
     if (r && r.existencia_promedio && r.dias) {
@@ -202,7 +205,10 @@ export class ComoSeCalculaModal implements OnInit {
     const paso5: Paso = {
       titulo: 'Cuándo pedir',
       formula: 'Pedir a más tardar = el día en que se acaba − lo que tarda el proveedor − el colchón',
-      textos: [],
+      // Mientras no se guarden, los tiempos son los de fábrica (2026-10-26).
+      textos: a && !a.confirmados
+        ? [`Lo que tarda el proveedor (${prov} semanas) y el colchón están POR CONFIRMAR: se cambian en Qué pedir → «Cambiar».`]
+        : [],
     };
     if (d && h) {
       if (h.estado === 'sobra') {

@@ -49,6 +49,8 @@ export interface StockItem {
   cantidad_reservada: string;
   disponible: string;
   stock_minimo: string;
+  /** Los paquetes que de verdad hay ahí (solo en una presentación paquete). */
+  paquetes?: number | string | null;
   stock_maximo?: string | null;
   ubicacion_fisica?: string | null;
   actualizado_en: string;
@@ -114,6 +116,8 @@ export interface TraspasoDetalle {
     variante_id: number;
     sku: string;
     producto: string;
+    /** El calibre del hilo (ROJO 1/30 y ROJO 2/30 son dos). */
+    calibre?: string | null;
     tipo_presentacion?: string;
     peso_kg?: string | null;
     paquetes: string | null;

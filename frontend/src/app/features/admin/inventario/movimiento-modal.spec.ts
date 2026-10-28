@@ -89,7 +89,7 @@ describe('MovimientoModal', () => {
     c.mov.cantidad = 10;
     c.registrar();
     expect(enviado).toBeNull();
-    expect(c.error()).toBe('Elige variante, almacén y cantidad.');
+    expect(c.error()).toBe('Elige el hilo, el almacén y la cantidad.');
   });
 
   it('registra la merma, avisa y NO se cierra', async () => {
@@ -113,7 +113,7 @@ describe('MovimientoModal', () => {
       cantidad: 5,
       motivo: 'Se mojó',
     });
-    expect(c.mensaje()).toContain('1919.71 → 1842.912');
+    expect(c.mensaje()).toContain('Había 1,919.71 kg y quedan 1,842.912 kg');
     expect(hechos).toBe(1);
     // Sigue abierto: en un conteo se cuadran varios SKU seguidos.
     expect(cerrados).toBe(0);

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { concat, forkJoin, of, throwError } from 'rxjs';
@@ -154,8 +154,8 @@ export class ProductoPresentaciones {
   precioPublico: number | null = null;
   pesoPaquete: number | null = null;
   /**
-   * Si se vende (2026-10-17): una presentación con mercancía o ventas no se
-   * borra —el aviso dice "desactívala en «Precio y peso»"— y aquí se desactiva.
+   * Si se vende (2026-10-17): las presentaciones no se borran (2026-10-20); para
+   * dejar de venderla se desactiva aquí.
    */
   varianteActiva = true;
   readonly guardandoPublico = signal(false);
@@ -849,6 +849,22 @@ export class ProductoPresentaciones {
     this.avisoBulto.set(null);
     this.error.set(null);
     this.modal.set('bulto');
+    // El cursor al CÓDIGO, no al almacén: la lectura de la pistola se perdía (2026-10-26).
+    this.enfocarBulto('codigo');
+  }
+
+  private readonly injector = inject(Injector);
+  private readonly campoCodigo = viewChild<ElementRef<HTMLInputElement>>('campoCodigo');
+  private readonly campoPeso = viewChild<ElementRef<HTMLInputElement>>('campoPeso');
+  /** El paquete que se está añadiendo: el botón se apaga (un doble clic daba un 409). */
+  readonly agregandoBulto = signal(false);
+
+  private enfocarBulto(cual: 'codigo' | 'peso'): void {
+    afterNextRender(() => {
+      const c = (cual === 'codigo' ? this.campoCodigo() : this.campoPeso())?.nativeElement;
+      c?.focus();
+      c?.select();
+    }, { injector: this.injector });
   }
 
   /**
@@ -894,7 +910,7 @@ export class ProductoPresentaciones {
   agregarCodigoVar(): void {
     const v = this.principal();
     const codigo = this.nuevoCodigo.trim();
-    if (!v || !codigo) return;
+    if (!v || !codigo || this.agregandoBulto()) return;
     if (this.faltaAlmacenBulto()) {
       this.error.set('Elige a qué almacén entra el bulto: ahí se suman sus kilos.');
       return;
@@ -904,6 +920,7 @@ export class ProductoPresentaciones {
       return;
     }
     this.error.set(null);
+    this.agregandoBulto.set(true);
     this.catalogo
       .agregarCodigo(v.id, {
         codigo,
@@ -915,6 +932,7 @@ export class ProductoPresentaciones {
       })
       .subscribe({
         next: (c) => {
+          this.agregandoBulto.set(false);
           this.codigos.update((m) => ({ ...m, [v.id]: [...(m[v.id] ?? []), c] }));
           this.avisoBulto.set(
             `Bulto ${c.codigo} añadido: entraron ${Number(c.peso_kg).toLocaleString('en-US', { maximumFractionDigits: 3 })} kg a ${c.almacen}.`
@@ -925,8 +943,10 @@ export class ProductoPresentaciones {
           this.nuevoPeso = null;
           this.nuevoConos = null;
           // El lote y el lugar se quedan: los bultos que se capturan juntos suelen ser del mismo.
+          this.enfocarBulto('codigo');
         },
         error: (e) => {
+          this.agregandoBulto.set(false);
           // Se pidió la autorización: en verde y el campo listo para el siguiente bulto.
           const pedida = autorizacionPedida(e);
           if (pedida) {
@@ -934,6 +954,7 @@ export class ProductoPresentaciones {
             this.nuevoCodigo = '';
             this.nuevoPeso = null;
             this.nuevoConos = null;
+            this.enfocarBulto('codigo');
             return;
           }
           this.avisoBulto.set(null);
@@ -945,6 +966,11 @@ export class ProductoPresentaciones {
   /** Enter del lector: evita submit y agrega el código escaneado. */
   capturarCodigoVar(ev: Event): void {
     ev.preventDefault();
+    // Sin peso todavía, el Enter del lector pasa al peso (antes daba error).
+    if (!(Number(this.nuevoPeso) > 0)) {
+      this.enfocarBulto('peso');
+      return;
+    }
     this.agregarCodigoVar();
   }
 
@@ -1020,6 +1046,11 @@ export class ProductoPresentaciones {
     this.pesoPaquete = v.peso_kg != null ? Number(v.peso_kg) : null;
     this.varianteActiva = v.activo === true || Number(v.activo) === 1;
     this.modal.set('precio');
+  }
+
+  /** "Precio y peso", "Precio" o, en el cono de precio calculado, solo "Si se vende". */
+  tituloPrecio(v: Variante): string {
+    return this.pesoEditable(v) ? 'Precio y peso' : this.precioEditable(v) ? 'Precio' : 'Si se vende';
   }
 
   /** El cono con precio calculado sigue al paquete: su precio no se edita. */
@@ -1109,6 +1140,8 @@ export class ProductoPresentaciones {
   cambiosLista(): { v: Variante; tipoId: number; precio: number | null }[] {
     const cambios: { v: Variante; tipoId: number; precio: number | null }[] = [];
     for (const v of this.variantes()) {
+      // El cono de precio calculado no lleva precio por lista: cobra el de su paquete.
+      if (!this.precioEditable(v)) continue;
       for (const t of this.tiposConPrecio()) {
         const crudo = this.preciosLista[this.claveLista(v.id, t.id)];
         const nuevo = crudo == null || (crudo as unknown) === '' ? null : Number(crudo);

@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requirePermisoAlguno } = require('../../middlewares/auth');
 const { autorizable } = require('../autorizaciones/autorizable');
 
 const router = Router();
@@ -21,8 +21,9 @@ const movimientoSchema = z
     tipo: z.enum(['entrada', 'salida', 'ajuste', 'devolucion', 'merma']),
     cantidad: z.coerce.number().nonnegative(),
     costo_unitario: z.coerce.number().nonnegative().nullable().optional(),
-    referencia_tipo: z.string().trim().max(30).optional(),
-    referencia_id: z.coerce.number().int().positive().nullable().optional(),
+    // Sin referencia_tipo / referencia_id (2026-10-26, auditoría): por la API un
+    // movimiento a mano se hacía pasar por una venta ("Venta mostrador POS-…") o
+    // una carga. Los documentos los liga el sistema, nunca la petición.
     motivo: z.string().trim().max(255).optional(),
   })
   .strict();
@@ -64,7 +65,8 @@ const traspasoSchema = z
         z
           .object({
             variante_id: z.coerce.number().int().positive(),
-            paquetes: z.coerce.number().positive().max(1000000).optional(),
+            // Paquetes ENTEROS (2026-10-26, auditoría: "2.5 paquetes" pasaba y se topaba en 2).
+            paquetes: z.coerce.number().int('Los paquetes van enteros.').positive().max(1000000).optional(),
             cantidad: z.coerce.number().positive().max(1000000).optional(),
           })
           .strict()
@@ -138,7 +140,8 @@ router.get('/conversiones', ...soloStaff, controller.listarConversiones);
 router.get('/desarmes/previa/:codigo', ...soloStaff, controller.previaDesarmeBulto);
 // Cuántos paquetes son X kilos, con el peso real de los bultos de la bodega.
 router.get('/equivalencia-paquetes', ...soloStaff, controller.equivalenciaPaquetes);
-router.get('/traspasos', ...soloStaff, controller.listarTraspasos);
+// Quien entra a Surtir sucursal (2026-10-26, auditoría: cualquiera del personal los listaba).
+router.get('/traspasos', ...soloStaff, requirePermiso('ver:surtir'), controller.listarTraspasos);
 // Los pedidos a otra tienda que esperan autorización o ya se resolvieron (2026-10-20).
 // Literal antes de '/traspasos/:id'.
 router.get('/traspasos/autorizaciones', ...soloStaff, requirePermiso('ver:surtir'), async (req, res, next) => {
@@ -148,7 +151,8 @@ router.get('/traspasos/autorizaciones', ...soloStaff, requirePermiso('ver:surtir
     next(err);
   }
 });
-router.get('/traspasos/:id', ...soloStaff, controller.obtenerTraspaso);
+// También desde el kardex («Ver envío»).
+router.get('/traspasos/:id', ...soloStaff, requirePermisoAlguno('ver:surtir', 'ver:kardex'), controller.obtenerTraspaso);
 // El PDF de lo que se envió (?tipo=envio) o de lo que se recibió (?tipo=recepcion).
 router.get('/traspasos/:id/pdf', ...soloStaff, requirePermiso('ver:surtir'), controller.pdfTraspaso);
 

@@ -70,7 +70,9 @@ router.put('/:clave', ...revisar, validate(unaSchema), async (req, res, next) =>
 // Marcar VARIAS de una vez: Procesadas y/o Facturadas.
 const variasSchema = z
   .object({
-    claves: z.array(z.string().regex(/^(pago|abono|anticipo)-\d+$/)).min(1).max(500),
+    // También los renglones «Se le regresó» (2026-10-26, auditoría: con uno entre las
+    // elegidas fallaba todo el «Marcar»).
+    claves: z.array(z.string().regex(/^(pago|abono|anticipo|regreso)-\d+$/)).min(1).max(500),
     estado: cambiosSchema.estado,
     facturada: cambiosSchema.facturada,
   })

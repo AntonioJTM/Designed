@@ -22,6 +22,12 @@ import { DatosCargaCampos } from './datos-carga';
   selector: 'app-datos-carga-modal',
   imports: [FormsModule, CantidadPipe, DatosCargaCampos],
   templateUrl: './datos-carga-modal.html',
+  // En lugar de style= en la plantilla (2026-10-26).
+  styles: `
+    .separado-abajo { margin: 0 0 16px; }
+    .separado { margin-top: 16px; }
+    .casilla-lista { display: flex; gap: 8px; align-items: flex-start; }
+  `,
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class DatosCargaModal implements OnInit {

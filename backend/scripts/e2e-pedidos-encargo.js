@@ -168,7 +168,7 @@ const ck = (n, ok, d) => {
       items: [{ variante_id: paquete.id, cantidad: 19.2, bultos: [{ codigo: cod[0], peso_kg: 19.2 }] }],
     });
     ck('el mostrador no vende un paquete apartado: 409 que dice para quién', r.status === 409 && r.error?.code === 'BULTO_NO_DISPONIBLE' &&
-      /apartado para el pedido/.test(r.error?.message ?? ''), r.error);
+      /apartado para la nota en espera/.test(r.error?.message ?? ''), r.error);
     r = await api('GET', '/pedidos/encargos');
     enLista = r.data?.items?.find((x) => x.id === p1.id);
     ck('en Pedidos: 2 paquetes escaneados', enLista?.hilos?.[0]?.escaneados === 2 && enLista?.hilos?.[0]?.paquetes === 2, enLista?.hilos);

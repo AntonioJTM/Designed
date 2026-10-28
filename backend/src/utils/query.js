@@ -2,12 +2,12 @@
 
 /**
  * Normaliza parámetros de paginación desde el query string.
- * page >= 1, limit entre 1 y 100 (por defecto 20).
+ * page >= 1, limit entre 1 y `max` (100 si no se dice; por defecto 20).
  */
-function parsePagination(query = {}) {
+function parsePagination(query = {}, { max = 100 } = {}) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
   const limitRaw = Number.parseInt(query.limit, 10) || 20;
-  const limit = Math.min(100, Math.max(1, limitRaw));
+  const limit = Math.min(max, Math.max(1, limitRaw));
   const offset = (page - 1) * limit;
   return { page, limit, offset };
 }

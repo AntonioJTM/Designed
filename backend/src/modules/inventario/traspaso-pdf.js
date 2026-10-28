@@ -249,7 +249,10 @@ async function pdfEnvio(id, { usuarioId }) {
     ],
     t.lineas.map((l) => [
       etiqueta(l),
-      _cuanto(l.paquetes_solicitados ?? l.paquetes, l.cantidad_solicitada ?? l.cantidad),
+      // Lo PEDIDO: una línea en kilos no tiene paquetes pedidos (decía los que salieron).
+      l.paquetes_solicitados != null || l.cantidad_solicitada != null
+        ? _cuanto(l.paquetes_solicitados, l.cantidad_solicitada ?? l.cantidad)
+        : _cuanto(l.paquetes, l.cantidad),
       noSalio(l) ? 'No salió (no había)' : _cuanto(l.paquetes, l.cantidad),
       noSalio(l) ? '' : pdf.kg(l.cantidad),
     ]),

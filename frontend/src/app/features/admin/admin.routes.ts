@@ -123,7 +123,7 @@ export const ADMIN_ROUTES: Routes = [
       { path: 'usuarios', ...p('ver:personal'), title: nombreDe('personal'), loadComponent: () => import('./usuarios/usuarios').then((m) => m.Usuarios) },
       { path: 'permisos', ...p('admin'), title: nombreDe('permisos'), loadComponent: () => import('./permisos/permisos').then((m) => m.PermisosPantalla) },
       // La ruta específica va primero para que no la absorba 'nomina'.
-      { path: 'nomina/configuracion', ...p('ver:nomina'), title: 'Configuración de nómina', loadComponent: () => import('./nomina/nomina-config').then((m) => m.NominaConfig) },
+      { path: 'nomina/configuracion', ...p('ver:nomina'), title: 'Sueldos y comisiones', loadComponent: () => import('./nomina/nomina-config').then((m) => m.NominaConfig) },
       { path: 'nomina', ...p('ver:nomina'), title: nombreDe('nomina'), loadComponent: () => import('./nomina/nomina').then((m) => m.Nomina) },
       { path: 'configuracion', ...p('ver:config'), title: nombreDe('config'), loadComponent: () => import('./configuracion/configuracion').then((m) => m.Configuracion) },
     ],

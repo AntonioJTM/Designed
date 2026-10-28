@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { Component, ElementRef, Injector, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Conversion, InventarioService, PreviaDesarme } from '../../../core/services/inventario.service';
 import { Almacen } from '../../../core/models/inventario.models';
@@ -71,6 +71,13 @@ export class DesarmeModal implements OnInit {
    */
   destarePaquete: number | null = null;
   motivo = '';
+  /**
+   * Cuántos conos salieron, cuando el paquete no lo dice (2026-10-26, auditoría): antes
+   * el servidor pedía "Captúralo" y aquí no había dónde, y el paquete no se podía bajar.
+   */
+  conosCapturados: number | null = null;
+  private readonly lector = viewChild<ElementRef<HTMLInputElement>>('lector');
+  private readonly injector = inject(Injector);
 
   /** Solo las tiendas (almacenes con mostrador): en la bodega no se bajan conos. */
   readonly tiendas = computed(() => this.almacenes().filter((a) => !!Number(a.es_punto_venta)));
@@ -84,9 +91,21 @@ export class DesarmeModal implements OnInit {
     return d > 0 ? Math.round(d * 1000) / 1000 : 0;
   }
 
+  /** El paquete no dice cuántos conos rinde: se escriben aquí. */
+  pideConos(): boolean {
+    const p = this.previaBulto();
+    return !!p && p.bulto.conos == null;
+  }
+
   /** Los conos que salen del paquete escaneado. */
-  private conosDelPaquete(): number {
+  conosDelPaquete(): number {
+    if (this.pideConos()) return Number(this.conosCapturados ?? 0);
     return Number(this.previaBulto()?.conos_a_generar ?? 0);
+  }
+
+  /** El cursor de vuelta al lector, con el campo vacío, para el siguiente paquete. */
+  private alLector(): void {
+    afterNextRender(() => this.lector()?.nativeElement.focus(), { injector: this.injector });
   }
 
   /** A cuántos gramos por cono sale el destare escrito: para notar un error de dedo. */
@@ -171,6 +190,8 @@ export class DesarmeModal implements OnInit {
       next: (p) => {
         this.previaBulto.set(p);
         this.codigo = '';
+        // Si el paquete no dice sus conos, se propone lo que rinde su cono (si ya existe).
+        this.conosCapturados = p.bulto.conos == null ? (p.conos_a_generar ?? null) : null;
         // La tienda donde ESTÁ el paquete; si no está en una tienda, la que tenga
         // saldo de él, o la primera (y entonces avisa que no está ahí).
         const ids = new Set(this.tiendas().map((t) => t.id));
@@ -181,6 +202,9 @@ export class DesarmeModal implements OnInit {
       error: (e) => {
         this.previaBulto.set(null);
         this.error.set(this.msg(e));
+        // El campo queda vacío para el siguiente escaneo (si no, se pegaba al anterior).
+        this.codigo = '';
+        this.alLector();
       },
     });
   }
@@ -215,9 +239,13 @@ export class DesarmeModal implements OnInit {
       this.error.set(problema);
       return;
     }
+    const conos = this.conosDelPaquete();
+    if (this.pideConos() && !(Number.isInteger(conos) && conos >= 1)) {
+      this.error.set('Este paquete no dice cuántos conos rinde: escribe cuántos salieron.');
+      return;
+    }
     if (this.pasaDelTope()) {
       const t = this.topeDestare();
-      const conos = this.conosDelPaquete();
       this.error.set(
         `El destare del paquete es de ${this.destare().toLocaleString('es-MX')} kg: con ${conos} conos son ` +
           `${this.gramosPorCono().toLocaleString('es-MX')} g por cono` +
@@ -238,6 +266,8 @@ export class DesarmeModal implements OnInit {
         almacen_destino_id: Number(this.tienda),
         // El destare del PAQUETE completo (2026-10-21); el servidor lo suma tal cual.
         destare_kg: this.destare() > 0 ? this.destare() : undefined,
+        // Solo si el paquete no dice cuántos rinde (el servidor manda los del paquete).
+        ...(this.pideConos() ? { conos } : {}),
         motivo: this.motivo.trim() || undefined,
       })
       .subscribe({
@@ -250,7 +280,9 @@ export class DesarmeModal implements OnInit {
           );
           this.previaBulto.set(null);
           this.motivo = '';
+          this.conosCapturados = null;
           this.bajando.set(false);
+          this.alLector();
           // El modal NO se cierra: bajar varios paquetes seguidos es lo normal.
           this.hecho.emit();
         },

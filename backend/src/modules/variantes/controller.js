@@ -31,7 +31,9 @@ async function _bultosDeSusTiendas(req, variante) {
 
 async function listar(req, res, next) {
   try {
-    const { page, limit, offset } = parsePagination(req.query);
+    // Hasta 1,000 (2026-10-26, auditoría): los selectores de hilo (Surtir inventario → Un
+    // solo hilo) piden TODOS; topados en 100, los hilos más nuevos no salían.
+    const { page, limit, offset } = parsePagination(req.query, { max: 1000 });
     const almacenId = await _almacenVisible(req, req.query.almacen_id ? Number(req.query.almacen_id) : undefined);
     const data = await service.listar({
       producto_id: req.query.producto_id ? Number(req.query.producto_id) : undefined,

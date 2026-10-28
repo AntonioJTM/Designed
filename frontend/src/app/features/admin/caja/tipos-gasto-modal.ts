@@ -15,7 +15,7 @@ interface Fila {
 /**
  * TIPOS DE GASTO y su LÍMITE POR GASTO (2026-10-20): Viajes, Limpieza,
  * Papelería… Un gasto arriba del límite de su tipo pide autorización; sin
- * límite, nunca. Se desactiva en vez de borrar (los gastos de antes lo nombran).
+ * límite, TODOS los de ese tipo la piden. Se desactiva en vez de borrar (los gastos de antes lo nombran).
  * No se cierra al guardar: se capturan varios seguidos.
  */
 @Component({
@@ -29,7 +29,7 @@ interface Fila {
       padding: 10px 12px; border: 1px solid var(--borde); border-radius: 8px;
     }
     .tipo.inactivo { background: var(--superficie-2); }
-    .tipo .field.check { min-height: 40px; margin: 0; }
+    .tipo .field.check { margin: 0; }
     .nuevo { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--borde); }
     h3 { margin: 0 0 8px; font-size: 0.9375rem; font-weight: 600; }
     @media (max-width: 560px) { .tipo { grid-template-columns: 1fr 1fr; } }

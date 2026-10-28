@@ -49,3 +49,6 @@
 
 // El destare que pasa del tope de la tienda (2026-10-20): en rojo, junto al campo.
 .ayuda.destare-alto { color: var(--peligro-t); font-weight: 500; }
+/* Cuántos conos salieron, cuando el paquete no lo dice (2026-10-26). */
+.previa .conos-salen { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.previa .conos-salen input { width: 5.5rem; }

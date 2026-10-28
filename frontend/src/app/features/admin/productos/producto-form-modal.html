@@ -27,7 +27,7 @@
       <!-- Guardado: el paso que sigue es capturar sus presentaciones -->
       <div class="modal-body columna" style="gap: 12px">
         <p class="ok-msg" role="status">
-          Producto <b>{{ p.nombre }}</b> guardado.
+          Producto <b>{{ p.nombre }}{{ p.grosor_calibre ? ' ' + p.grosor_calibre : '' }}</b> guardado.
           @if (!p.presentacion_pendiente) {
             Su presentación en kilos se creó sola; los bultos y el inventario entran
             subiendo el Excel del proveedor en «Presentaciones».
@@ -128,8 +128,8 @@
                 </span>
               } @else {
                 <span class="ayuda">
-                  El precio de lista del hilo. Las presentaciones que se capturen después
-                  arrancan con este precio.
+                  El precio de lista del hilo. NO cambia lo que se cobra: eso es el precio de su
+                  presentación, en Presentaciones → «Precio y peso».
                 </span>
               }
             </label>
@@ -173,6 +173,13 @@
                 <span class="ayuda"> — se maneja en paquete y en conos. Necesario para poder desarmarlo.</span>
               </span>
             </label>
+            <!-- Quitarla con paquete o conos ya creados deja su «Precio y peso» sin poder guardar (2026-10-26). -->
+            @if (quitaMultipresentacion()) {
+              <p class="aviso full">
+                Este hilo ya tiene su paquete (y quizá conos): sin «Multipresentación», «Precio y peso» de esas
+                presentaciones ya no se podrá guardar. Déjala marcada.
+              </p>
+            }
             <label class="field check full">
               <input type="checkbox" formControlName="por_lotes" />
               <span>
@@ -215,7 +222,7 @@
             </button>
           } @else {
             <span class="nota">
-              Las presentaciones, los bultos y las imágenes se capturan aparte.
+              Las presentaciones y sus paquetes se capturan aparte, en «Presentaciones».
             </span>
           }
           <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>

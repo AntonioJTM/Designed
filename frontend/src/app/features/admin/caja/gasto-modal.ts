@@ -178,7 +178,9 @@ export class GastoModal implements OnInit {
    * Da de alta tipos ahí mismo quien los administra (directo) o quien los PIDE
    * (el cajero, 2026-10-20: quien autoriza lo acepta poniéndole su límite).
    */
-  readonly administraTipos = this.auth.puedeOPide('hacer:tipos_gasto');
+  // Directo, solo quien ve todas las tiendas (los tipos son de todas); pedirlo, el cajero.
+  readonly administraTipos = (this.auth.puede('hacer:tipos_gasto') && this.auth.veTodasLasTiendas())
+    || (this.auth.puedeOPide('hacer:tipos_gasto') && !this.auth.puede('hacer:tipos_gasto'));
   /** Se pidió la autorización de un tipo: el aviso dentro de la ventana. */
   readonly tipoPedido = signal<string | null>(null);
   readonly nuevoTipo = signal(false);

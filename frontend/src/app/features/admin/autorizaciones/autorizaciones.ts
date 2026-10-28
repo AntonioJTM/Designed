@@ -8,6 +8,7 @@ import { Autorizacion, EstadoAutorizacion, LineaAjuste, VistaAutorizaciones } fr
 import { ApiError } from '../../../core/models/auth.models';
 import { fechaRelativa } from '../../../shared/fecha.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
+import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { folioCorto } from '../../../shared/folio.pipe';
 import { CargaSolicitud } from './carga-solicitud';
 import { DevolucionSolicitud } from './devolucion-solicitud';
@@ -86,7 +87,7 @@ const ESTADOS: Record<EstadoAutorizacion, { texto: string; tono: string }> = {
  */
 @Component({
   selector: 'app-autorizaciones',
-  imports: [FormsModule, DineroPipe, CargaSolicitud, DevolucionSolicitud],
+  imports: [FormsModule, DineroPipe, CantidadPipe, CargaSolicitud, DevolucionSolicitud],
   templateUrl: './autorizaciones.html',
   styleUrl: './autorizaciones.scss',
   // Escape cierra la ventana abierta, como en los demás modales (2026-10-20).

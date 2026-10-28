@@ -37,8 +37,16 @@ async function codigosExistentes(codigos) {
  * Registra la remesa completa en una sola transacción: el documento, sus
  * bultos y la entrada al inventario con su movimiento de kardex.
  */
-async function crearRemesa(datos, usuarioId) {
-  return withTransaction((conn) => _crearRemesaEn(conn, datos, usuarioId));
+/**
+ * `preparar(conn)`: lo que hay que hacerle a la presentación (crearla o ponerle su
+ * peso), DENTRO de la misma transacción: si la carga se rechaza, no queda
+ * cambiada (2026-10-26, auditoría). Devuelve el id de la presentación.
+ */
+async function crearRemesa(datos, usuarioId, preparar = null) {
+  return withTransaction(async (conn) => {
+    const varianteId = preparar ? await preparar(conn) : datos.variante_id;
+    return _crearRemesaEn(conn, { ...datos, variante_id: varianteId }, usuarioId);
+  });
 }
 
 /**
@@ -126,7 +134,8 @@ async function _crearRemesaEn(conn, datos, usuarioId, alAvanzar = null) {
       usuario: usuarioId ?? null,
       motivo:
         datos.notas ??
-        `Carga ${folio}: ${bultos.length} bultos${lotes.length ? `, lote(s) ${lotes.join(', ')}` : ''}`,
+        `Carga ${folio}: ${bultos.length} ${bultos.length === 1 ? 'paquete' : 'paquetes'}` +
+          (lotes.length ? `, ${lotes.length === 1 ? 'lote' : 'lotes'} ${lotes.join(', ')}` : ''),
     }
   );
 

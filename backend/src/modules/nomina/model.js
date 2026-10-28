@@ -179,12 +179,15 @@ async function periodosEnRango(desde, hasta, conn = pool) {
  * Registra unas vacaciones y recalcula las semanas en borrador que tocan, para
  * que esos días se paguen como días normales. Todo junto o nada.
  */
-async function crearVacaciones(datos) {
+async function crearVacaciones(datos, revisarSaldo = null) {
   return withTransaction(async (conn) => {
     // Bloquea al empleado: dos registros a la vez no deben pasarse del saldo.
     await conn.query('SELECT usuario_id FROM nomina_empleados WHERE usuario_id = :id FOR UPDATE', {
       id: datos.usuario_id,
     });
+    // El SALDO, otra vez y ya con el candado (2026-10-26, auditoría: se revisaba
+    // antes, sin candado, y dos aprobadas al mismo tiempo se pasaban).
+    if (revisarSaldo) await revisarSaldo(conn);
     const [encimadas] = await conn.query(
       `SELECT DATE_FORMAT(fecha_inicio, '%d/%m/%Y') AS ini, DATE_FORMAT(fecha_fin, '%d/%m/%Y') AS fin
          FROM nomina_vacaciones
@@ -325,8 +328,10 @@ async function listarRecibos(periodoId) {
             r.sueldo_base, r.dias_laborales, r.dias_trabajados, r.dias_vacaciones,
             r.salario_diario, r.valor_hora, r.pago_vacaciones,
             r.num_pedidos, r.ventas_netas, r.porcentaje_comision, r.comision,
-            r.otras_percepciones, r.deducciones, r.total_pagar, r.notas
+            r.otras_percepciones, r.deducciones, r.total_pagar, r.notas, r.horario_json,
+            p.estado AS periodo_estado
        FROM nomina_recibos r
+       JOIN nomina_periodos p ON p.id = r.periodo_id
        JOIN usuarios u  ON u.id = r.usuario_id
        JOIN roles rol   ON rol.id = u.rol_id
       WHERE r.periodo_id = :id
@@ -348,11 +353,18 @@ async function listarRecibos(periodoId) {
   );
   const porRecibo = new Map(recibos.map((r) => [r.id, []]));
   for (const c of conceptos) porRecibo.get(c.recibo_id)?.push(c);
-  // El horario VIGENTE de cada quien: el recibo lo usa para calcular horas extra.
+  // El horario: en una semana PAGADA, el congelado al calcularla (2026-10-26); si
+  // no, el VIGENTE de cada quien (el recibo lo usa para calcular horas extra).
   const horarios = await horariosDe(recibos.map((r) => r.usuario_id));
   for (const r of recibos) {
     r.conceptos = porRecibo.get(r.id) ?? [];
-    r.horario = horarios.get(Number(r.usuario_id)) ?? [];
+    let congelado = null;
+    if (r.periodo_estado === 'pagado' && r.horario_json) {
+      try { congelado = JSON.parse(r.horario_json); } catch { congelado = null; }
+    }
+    r.horario = congelado ?? horarios.get(Number(r.usuario_id)) ?? [];
+    delete r.horario_json;
+    delete r.periodo_estado;
   }
 
   return recibos;
@@ -560,11 +572,12 @@ async function _calcular(conn, periodoId) {
       `INSERT INTO nomina_recibos
          (periodo_id, usuario_id, sueldo_base, dias_laborales, dias_trabajados, dias_vacaciones,
           salario_diario, valor_hora, pago_vacaciones, num_pedidos, ventas_netas,
-          porcentaje_comision, comision, total_pagar)
+          porcentaje_comision, comision, total_pagar, horario_json)
        VALUES (:periodo_id, :usuario_id, :sueldo_base, :laborales, :trabajados, :vacaciones,
                :diario, :hora, :pago_vacaciones, :num_pedidos, :ventas_netas,
-               :pct, :comision, :sueldo_base + :pago_vacaciones + :comision)
+               :pct, :comision, :sueldo_base + :pago_vacaciones + :comision, :horario_json)
        ON DUPLICATE KEY UPDATE
+         horario_json        = :horario_json,
          sueldo_base         = :sueldo_base,
          dias_laborales      = :laborales,
          dias_trabajados     = :trabajados,
@@ -586,6 +599,9 @@ async function _calcular(conn, periodoId) {
         ventas_netas: ventasNetas,
         pct,
         comision,
+        // El horario con que se calculó, CONGELADO (2026-10-26): al reimprimir una semana
+        // pagada sale el de ESA semana, no el vigente.
+        horario_json: horario.length ? JSON.stringify(horario) : null,
       }
     );
     if (alLiquidar) {
@@ -657,7 +673,10 @@ async function porRecalcular(periodoId) {
       entrarian.add(k);
       const a = yaEstan.get(k);
       if (!a || Math.abs(Number(a.venta_neta) - Number(v.venta_neta)) > 0.004) {
-        nuevas.push({ numero_pedido: v.numero_pedido, venta_neta: round2(v.venta_neta) });
+        // Qué le pasó (2026-10-26, auditoría: todo decía "entra"): una venta que ya
+        // estaba y cambió su venta neta, un descuento (regresó o se canceló) o una nueva.
+        const que = a ? 'cambia' : v.tipo === 'devolucion' ? 'descuento' : 'entra';
+        nuevas.push({ numero_pedido: v.numero_pedido, venta_neta: round2(v.venta_neta), que });
       }
     }
   }

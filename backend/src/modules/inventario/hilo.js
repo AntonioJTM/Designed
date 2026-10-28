@@ -191,6 +191,25 @@ async function detalleHilo(productoId, almacenes = null) {
       String(a.lote).localeCompare(String(b.lote))
   );
 
+  // Donde HAY paquetes pero el saldo está en 0 (o no hay renglón) también se enseña,
+  // para que diga "no cuadra" (2026-10-26, auditoría: después de un conteo que dejó 0 kg,
+  // sus 3 paquetes seguían "disponibles" ahí y la ventana no lo decía). Van con el paquete.
+  const nombreAlmacen = new Map(grupos.filter((g) => g.almacen_id != null).map((g) => [Number(g.almacen_id), g.almacen]));
+  const conPaquete = presentaciones.find((p) => p.tipo_presentacion === 'paquete') ??
+    presentaciones.find((p) => p.tipo_presentacion !== 'cono');
+  if (conPaquete) {
+    for (const [almacenId, b] of porAlmacenDisponible) {
+      if (!almacenId || !(b.bultos > 0)) continue;
+      const yaEsta = saldos.some((x) => x.variante_id === conPaquete.variante_id && Number(x.almacen_id) === almacenId);
+      if (!yaEsta && (!Array.isArray(almacenes) || almacenes.includes(almacenId))) {
+        saldos.push({
+          variante_id: conPaquete.variante_id, almacen_id: almacenId,
+          almacen: nombreAlmacen.get(almacenId) ?? 'Almacén', cantidad: 0, cantidad_reservada: 0,
+        });
+      }
+    }
+  }
+
   return {
     hilo,
     presentaciones: presentaciones.map((p) => {

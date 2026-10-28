@@ -166,7 +166,7 @@ export class NotasPendientesPantalla {
         this.pasando.set(null);
         this.mensaje.set(
           `${n.numero_pedido}: ${dinero(p.a_credito)} pasaron a la cuenta de crédito de ${this.quien(n)}, a ${dias} días` +
-            (p.estado === 'pagado' ? '; su saldo a favor la cubrió y ya está pagada.' : '.')
+            (p.estado === 'pagado' ? '; con lo que ya había abonado a su cuenta quedó pagada.' : '.')
         );
         this.cargar();
       },

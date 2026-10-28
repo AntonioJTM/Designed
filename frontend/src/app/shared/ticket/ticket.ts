@@ -180,7 +180,7 @@ function lineaHtml(d: PedidoLinea): string {
       detalle.push(`${esc(nombreLote(g.lote))}: ${paquetes(g.bultos.length)} (${g.bultos.map((b) => esc(b.codigo)).join(', ')})`);
     }
   }
-  if (Number(d.piezas) > 0) detalle.push(`${Number(d.piezas)} conos`);
+  if (Number(d.piezas) > 0) detalle.push(Number(d.piezas) === 1 ? '1 cono' : `${Number(d.piezas)} conos`);
   return `<div class="art">
     <div class="art-nombre">${esc(hiloDeLinea(d))}</div>
     ${renglon(`${esc(kg(d.cantidad))} × ${esc(dineroTicket(d.precio_unitario))}`, esc(dineroTicket(d.subtotal)))}

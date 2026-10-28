@@ -87,7 +87,7 @@
       <div class="card-head">
         <div>
           <h2>Calendario de compras de cada año</h2>
-          <p>Para que el hilo llegue 3 semanas antes de que empiece su temporada. El proveedor tarda {{ d.ajustes.semanas_proveedor }} semanas.</p>
+          <p>Para que el hilo llegue 3 semanas antes de que empiece su temporada. El proveedor tarda {{ d.ajustes.semanas_proveedor }} semanas@if (!d.ajustes.confirmados) { (por confirmar)}.</p>
         </div>
         <a class="btn-enlace" routerLink="/admin/rotacion/que-pedir">Cambiar los tiempos en «Qué pedir»</a>
       </div>
@@ -118,7 +118,9 @@
           @for (s of d.sin_temporada; track s.hilo) {
             <div class="cal-fila" role="row">
               <span role="rowheader" class="cal-hilo">{{ s.hilo }}</span>
-              <span role="cell" class="cal-sin">Sin temporada: se pide cuando le queden {{ d.ajustes.meses_cubre }} meses de venta. {{ s.hoy }}</span>
+              <!-- Cómo se calcula de verdad (2026-10-26, auditoría): la fecha sale de cuándo se acaba
+                   menos lo que tarda el proveedor y el colchón; los meses solo dicen CUÁNTO se pide. -->
+              <span role="cell" class="cal-sin">Sin temporada: se pide {{ d.ajustes.semanas_proveedor + d.ajustes.semanas_colchon }} semanas antes de que se acabe@if (!d.ajustes.confirmados) { (tiempos por confirmar)}. {{ s.hoy }}</span>
               <span role="cell" class="cal-texto">{{ s.derecha }}</span>
             </div>
           }
@@ -148,7 +150,7 @@
             <ul>
               @for (p of d.parejos; track p.hilo) { <li><span>{{ p.hilo }}</span><b>{{ kilos(p.kg_mes) }} al mes</b></li> }
             </ul>
-            <p class="pie">No {{ d.parejos.length === 1 ? 'tiene' : 'tienen' }} temporada: ningún mes se aleja más de {{ d.parejos[0].se_aleja }}% de lo normal.</p>
+            <p class="pie">No {{ d.parejos.length === 1 ? 'tiene' : 'tienen' }} temporada: ningún mes se aleja más de {{ masSeAleja(d.parejos) }}% de lo normal.</p>
           </section>
         }
       </div>

@@ -15,6 +15,12 @@ async function listar({ activo } = {}) {
   return rows;
 }
 
+/** Cuántas cajas ACTIVAS cuelgan de un almacén (para no quitarle el mostrador). */
+async function cajasActivas(id) {
+  const [[r]] = await pool.query('SELECT COUNT(*) AS n FROM cajas WHERE almacen_id = :id AND activo = 1', { id });
+  return Number(r.n);
+}
+
 async function obtener(id) {
   const [rows] = await pool.query(
     `SELECT ${CAMPOS} FROM almacenes WHERE id = :id LIMIT 1`,
@@ -111,6 +117,7 @@ async function nombresDe(ids) {
 }
 
 module.exports = {
+  cajasActivas,
   esMatriz,
   nombresDe,
   listar,

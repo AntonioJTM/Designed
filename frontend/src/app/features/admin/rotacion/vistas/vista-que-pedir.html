@@ -95,7 +95,7 @@
                   @for (q of quietos(); track q.producto_id; let ultimo = $last) {
                     <a [routerLink]="['/admin/rotacion/hilo', q.producto_id]">{{ q.hilo }}</a>{{ ultimo ? '.' : ', ' }}
                   }
-                  También salen en Hilo parado, en «Cómo va el negocio».
+                  Los que llevan 90 días o más sin venderse también salen en Hilo parado, en «Cómo va el negocio».
                 </td>
               </tr>
             }

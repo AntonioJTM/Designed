@@ -192,6 +192,7 @@ async function pdfCarga(req, res, next) {
     const { buffer, folio } = await reportes.pdfCarga(id, {
       usuarioId: req.auth.sub,
       veCostos: await permisos.veCostos(req),
+      almacenes: await permisos.almacenesDe(req.auth),
     });
     enviarPdf(res, buffer, `Carga ${folio}.pdf`);
   } catch (err) {
@@ -211,6 +212,7 @@ async function pdfCargas(req, res, next) {
     const { buffer, nombre } = await reportes.pdfCargas(ids, {
       usuarioId: req.auth.sub,
       veCostos: await permisos.veCostos(req),
+      almacenes: await permisos.almacenesDe(req.auth),
     });
     enviarPdf(res, buffer, nombre);
   } catch (err) {

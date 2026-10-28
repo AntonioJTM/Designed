@@ -30,6 +30,8 @@ const SIGNO = { entrada: 1, devolucion: 1, salida: -1, merma: -1 };
 
 // Las cantidades son DECIMAL(12,3): un gramo de resolución.
 const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
+/** "1 paquete", "12 conos": sin "(s)". */
+const cuantos = (n, uno, varios) => `${n} ${Number(n) === 1 ? uno : varios}`;
 
 const SELECT_STOCK = `
   SELECT i.id, i.variante_id, pv.sku, p.nombre AS producto,
@@ -44,7 +46,14 @@ const SELECT_STOCK = `
          i.almacen_id, a.nombre AS almacen,
          i.cantidad, i.cantidad_reservada,
          (i.cantidad - i.cantidad_reservada) AS disponible,
-         i.stock_minimo, i.stock_maximo, i.ubicacion_fisica, i.actualizado_en
+         i.stock_minimo, i.stock_maximo, i.ubicacion_fisica, i.actualizado_en,
+         -- Los paquetes que de verdad hay ahí (2026-10-26, auditoría: la tabla decía
+         -- "≈ 3 paquetes" con el peso del catálogo donde había 5 de 11.4 kg).
+         CASE WHEN pv.tipo_presentacion = 'paquete' THEN
+           (SELECT COUNT(*) FROM variante_codigos vc
+             WHERE vc.variante_id = i.variante_id AND vc.almacen_id = i.almacen_id
+               AND vc.estado IN ('disponible', 'apartado'))
+         END AS paquetes
     FROM inventario i
     JOIN producto_variantes pv ON pv.id = i.variante_id
     JOIN productos p           ON p.id = pv.producto_id
@@ -149,6 +158,7 @@ async function resumenPorAlmacen(alcance = null) {
   // Variantes con presencia en algún almacén (existencia o mínimo definido).
   const [detalle] = await pool.query(
     `SELECT i.variante_id, i.almacen_id, i.cantidad, i.stock_minimo,
+            ${COND_ALERTA} AS en_alerta,
             pv.sku, pv.presentacion, pv.tipo_presentacion, pv.peso_kg,
             pv.producto_id, prod.nombre AS producto,
             -- El calibre y la línea distinguen productos que se llaman igual:
@@ -188,7 +198,8 @@ async function resumenPorAlmacen(alcance = null) {
     const fila = porVariante.get(d.variante_id);
     fila.existencias[d.almacen_id] = {
       cantidad: d.cantidad,
-      bajo_minimo: Number(d.cantidad) <= Number(d.stock_minimo) && Number(d.stock_minimo) > 0,
+      // La misma regla que la campana y `?ver=minimo` (COND_ALERTA): sin lo apartado.
+      bajo_minimo: !!Number(d.en_alerta),
     };
     fila.total = round3(fila.total + Number(d.cantidad));
   }
@@ -436,12 +447,13 @@ async function registrarMovimiento(datos, usuarioId) {
 
     let delta;
     if (tipo === 'ajuste') {
-      delta = cantidad - actual; // llevar el saldo al valor contado
+      delta = round3(cantidad - actual); // llevar el saldo al valor contado
     } else {
-      delta = SIGNO[tipo] * cantidad;
+      delta = round3(SIGNO[tipo] * cantidad);
     }
 
-    const nuevo = actual + delta;
+    // A gramos: "19.95 → 19.599999999999998" (2026-10-26, auditoría).
+    const nuevo = round3(actual + delta);
     if (nuevo < 0) {
       // Dice de qué hilo, dónde y qué hacer (2026-10-19); antes: "hay 12.5, se
       // intenta descontar 20", sin unidad ni hilo.
@@ -557,13 +569,17 @@ async function disponibilidadEnPaquetes(varianteId, almacenId) {
   };
 }
 
-/** El cono que sale de un paquete, o null si todavía no se ha dado de alta. */
+/**
+ * El cono que sale de un paquete, o null si todavía no se ha dado de alta. También
+ * el DESACTIVADO (con `activo`): antes se ignoraba, se intentaba crear otro con el
+ * mismo SKU y salía "El registro ya existe" (2026-10-26, auditoría).
+ */
 async function conoDe(paqueteId) {
   const [rows] = await pool.query(
-    `SELECT id, sku, piezas_por_origen, precio, modo_precio
+    `SELECT id, sku, piezas_por_origen, precio, modo_precio, activo
        FROM producto_variantes
-      WHERE origen_variante_id = :id AND tipo_presentacion = 'cono' AND activo = 1
-      ORDER BY id LIMIT 1`,
+      WHERE origen_variante_id = :id AND tipo_presentacion = 'cono'
+      ORDER BY activo DESC, id LIMIT 1`,
     { id: paqueteId }
   );
   return rows[0] || null;
@@ -606,7 +622,7 @@ async function ubicacionBulto(ejecutor, bultoId) {
 }
 
 async function desarmar(datos, usuarioId) {
-  const { cono_variante_id, almacen_origen_id, almacen_destino_id, paquetes } = datos;
+  const { almacen_origen_id, almacen_destino_id, paquetes } = datos;
 
   return withTransaction(async (conn) => {
     // LOS CONOS SOLO SE BAJAN EN UNA TIENDA (2026-10-06: "solo se pueden bajar
@@ -626,6 +642,10 @@ async function desarmar(datos, usuarioId) {
         `El paquete se abre en la tienda donde está. Si está en otro almacén, primero mándalo a ` +
         `«${tienda.nombre}» con Surtir sucursal.`);
     }
+
+    // El cono nace la primera vez que se baja un paquete, AQUÍ adentro: si la
+    // bajada se rechaza, no queda un cono vacío (2026-10-26, auditoría).
+    const cono_variante_id = datos.cono_variante_id ?? (await datos.crearCono(conn)).id;
 
     // Datos del cono y de su paquete de origen, bloqueados para no competir
     // con otra conversión simultánea.
@@ -662,12 +682,12 @@ async function desarmar(datos, usuarioId) {
       bulto = brows[0] ?? null;
       if (!bulto) {
         throw new AppError(422, 'BULTO_DESCONOCIDO',
-          `El bulto ${datos.codigo_bulto} no está registrado`);
+          `El paquete ${datos.codigo_bulto} no está registrado`);
       }
       if (bulto.estado !== 'disponible') {
         throw new AppError(409, 'BULTO_NO_DISPONIBLE', bulto.estado === 'faltante'
-          ? `El bulto ${bulto.codigo} se dio por faltante al recibir un envío (no llegó); no se puede desarmar.`
-          : `El bulto ${bulto.codigo} ya está ${bulto.estado}; no se puede desarmar.`);
+          ? `El paquete ${bulto.codigo} se dio por faltante al recibir un envío (no llegó): no se puede bajar a conos.`
+          : `El paquete ${bulto.codigo} ${{ vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: 'está apartado' }[bulto.estado] ?? 'no está disponible'}: no se puede bajar a conos.`);
       }
       // EL PAQUETE TIENE QUE ESTAR EN ESA TIENDA (usuario, 2026-10-06: "si no,
       // que mande una alerta de que el paquete en esa sucursal no existe"). Es
@@ -811,10 +831,12 @@ async function desarmar(datos, usuarioId) {
       almacen_id: almacen_origen_id,
       tipo: 'salida',
       cantidad: -kgConsumidos,
+      // Lo que escriba la tienda se AGREGA (2026-10-26, auditoría): si reemplazaba el
+      // texto, el destare dejaba de decirse en el kardex.
       motivo:
-        datos.motivo ??
-        `Desarme de ${paquetes} paquete(s) (${kgConsumidos} kg) en ${piezasGeneradas} cono(s)` +
-        (destareKg ? ` · quedan ${kgEnconados} kg enconados (+${destareKg} de destare)` : ''),
+        `Bajada a conos: ${cuantos(paquetes, 'paquete', 'paquetes')} (${kgConsumidos} kg) en ${cuantos(piezasGeneradas, 'cono', 'conos')}` +
+        (destareKg ? ` · quedan ${kgEnconados} kg enconados (+${destareKg} kg de destare)` : '') +
+        (datos.motivo ? ` · ${datos.motivo}` : ''),
     });
     await _insertarMovimiento(conn, {
       ...base,
@@ -823,12 +845,12 @@ async function desarmar(datos, usuarioId) {
       tipo: 'entrada',
       cantidad: kgEnconados,
       motivo:
-        datos.motivo ??
-        `Enconado de ${paquetes} paquete(s) de ${cono.paquete_sku}: ${piezasGeneradas} cono(s)` +
+        `Enconado de ${cuantos(paquetes, 'paquete', 'paquetes')} de ${cono.paquete_sku}: ${cuantos(piezasGeneradas, 'cono', 'conos')}` +
         (destareKg
-          ? ` · ${kgConsumidos} kg + ${destareKg} de destare` +
+          ? ` · ${kgConsumidos} kg + ${destareKg} kg de destare` +
             (datos.destare_por_cono_kg != null ? ` (${round3(datos.destare_por_cono_kg)} kg por cono)` : '')
-          : ''),
+          : '') +
+        (datos.motivo ? ` · ${datos.motivo}` : ''),
     });
 
     // EL PESO DE UN CONO se rehace con esta bajada (2026-10-19): lo que pesaron
@@ -863,7 +885,7 @@ async function desarmar(datos, usuarioId) {
 }
 
 /** Datos de la variante que necesita un traspaso, con su validación básica. */
-async function _varianteParaTraspaso(conn, varianteId) {
+async function _varianteParaTraspaso(conn, varianteId, { aunqueInactiva = false } = {}) {
   const [rows] = await conn.query(
     `SELECT pv.id, pv.sku, pv.tipo_presentacion, pv.peso_kg, pv.activo,
             prod.nombre AS producto, prod.grosor_calibre AS calibre
@@ -874,7 +896,10 @@ async function _varianteParaTraspaso(conn, varianteId) {
   );
   const v = rows[0];
   if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `La variante ${varianteId} no existe`);
-  if (!v.activo) {
+  // Desactivarla es dejar de VENDERLA: lo que ya se pidió o ya va en camino se sigue
+  // enviando y recibiendo (2026-10-26, auditoría: si no, quedaba en el aire, sin estar
+  // en ningún almacén). Solo una solicitud NUEVA la rechaza.
+  if (!v.activo && !aunqueInactiva) {
     throw new AppError(422, 'VARIANTE_INACTIVA', `"${v.producto} · ${v.sku}" está inactiva`);
   }
   // La sucursal se surte con PAQUETES cerrados; los conos nacen allá, al
@@ -902,6 +927,12 @@ async function solicitarTraspaso(datos, usuarioId, { aCiegas = false } = {}) {
   const { almacen_origen_id, almacen_destino_id, items } = datos;
   if (almacen_origen_id === almacen_destino_id) {
     throw new AppError(422, 'ALMACENES_IGUALES', 'El origen y el destino deben ser distintos');
+  }
+  // Cada hilo UNA vez (2026-10-26, auditoría): con dos renglones del mismo hilo, al
+  // enviar los dos tomaban los mismos paquetes escaneados y se movía el doble de kilos.
+  const ids = items.map((it) => Number(it.variante_id));
+  if (new Set(ids).size !== ids.length) {
+    throw new AppError(422, 'HILO_REPETIDO', 'Pon cada hilo una sola vez en el pedido.');
   }
 
   return withTransaction(async (conn) => {
@@ -936,9 +967,17 @@ async function solicitarTraspaso(datos, usuarioId, { aCiegas = false } = {}) {
         paquetes = Number(item.paquetes);
         // N × el peso promedio de los paquetes del origen: quien surte agarra los
         // que tenga a la mano, así que es un aproximado y se dice así.
-        const ref = await pesoPorPaquete(conn, v, almacen_origen_id);
-        cantidad = ref.kilos(paquetes);
-        estimado = ref.nominal;
+        if (aCiegas) {
+          // A ciegas, con el peso del CATÁLOGO, como lo calculó su pantalla (2026-10-26,
+          // auditoría): con el promedio de la Matriz, los kilos de la respuesta delataban
+          // si allá había paquetes de ese hilo.
+          cantidad = round3(paquetes * Number(v.peso_kg));
+          estimado = true;
+        } else {
+          const ref = await pesoPorPaquete(conn, v, almacen_origen_id);
+          cantidad = ref.kilos(paquetes);
+          estimado = ref.nominal;
+        }
       } else if (item.cantidad != null) {
         cantidad = round3(item.cantidad);
       } else {
@@ -962,7 +1001,7 @@ async function solicitarTraspaso(datos, usuarioId, { aCiegas = false } = {}) {
       if (!aCiegas && libre < cantidad) {
         throw new AppError(409, 'STOCK_INSUFICIENTE',
           `No alcanza "${v.producto} · ${v.sku}": en el origen hay ${saldo} kg` +
-          (apartado > 0 ? ` (${apartado} kg ya apartados a otra solicitud)` : '') +
+          (apartado > 0 ? ` (${apartado} kg ya apartados: otras solicitudes o notas en espera)` : '') +
           `, quedan ${libre} kg libres y se piden ${cantidad} kg.`);
       }
 
@@ -1207,7 +1246,7 @@ async function enviarTraspaso(id, usuarioId, datos = {}) {
 
     // Los paquetes escaneados, agrupados por hilo.
     const variantes = new Map();
-    for (const d of det) variantes.set(Number(d.variante_id), await _varianteParaTraspaso(conn, d.variante_id));
+    for (const d of det) variantes.set(Number(d.variante_id), await _varianteParaTraspaso(conn, d.variante_id, { aunqueInactiva: true }));
     const nombreDe = (vid) => {
       const v = variantes.get(Number(vid));
       return v ? `${v.producto}${v.calibre ? ' ' + v.calibre : ''}` : 'otro hilo';
@@ -1269,9 +1308,13 @@ async function enviarTraspaso(id, usuarioId, datos = {}) {
       const fila = await _leerCantidad(conn, v.id, t.almacen_origen_id);
       const saldo = fila ? Number(fila.cantidad) : 0;
       if (saldo < cantidad) {
+        // Lo que no cuadra es el INVENTARIO, no la solicitud (2026-10-26, auditoría): los
+        // paquetes están en la mano y pesan eso; el sistema tiene menos kilos (p. ej. se
+        // vendió por kilo sin escanear el paquete).
         throw new AppError(409, 'STOCK_INSUFICIENTE',
-          `Ya no alcanza "${v.producto} · ${v.sku}": quedan ${saldo} kg en el origen y el ` +
-          `traspaso pide ${cantidad} kg. Ajusta la solicitud o cancélala.`);
+          `De ${v.producto} el sistema tiene ${saldo} kg en el almacén que surte y los ${paquetes} ` +
+          `${paquetes === 1 ? 'paquete escaneado pesa' : 'paquetes escaneados pesan'} ${cantidad} kg: ` +
+          'cuadra el inventario con un Ajuste en Inventario (lo que de verdad hay) y vuelve a enviar.');
       }
 
       // Sale del origen. Todavía NO entra al destino: va en camino.
@@ -1382,7 +1425,7 @@ async function guardarEscaneos(id, usuarioId, codigos = [], encontrados = []) {
     const [det] = await conn.query(
       'SELECT id, variante_id, paquetes_solicitados, paquetes FROM traspaso_detalle WHERE traspaso_id = :id ORDER BY id', { id });
     const variantes = new Map();
-    for (const d of det) variantes.set(Number(d.variante_id), await _varianteParaTraspaso(conn, d.variante_id));
+    for (const d of det) variantes.set(Number(d.variante_id), await _varianteParaTraspaso(conn, d.variante_id, { aunqueInactiva: true }));
     const nombreDe = (vid) => {
       const v = variantes.get(Number(vid));
       return v ? `${v.producto}${v.calibre ? ' ' + v.calibre : ''}` : 'otro hilo';
@@ -1521,7 +1564,7 @@ async function recibirTraspaso(id, usuarioId, datos = {}) {
     const lineas = [];
 
     for (const d of det) {
-      const v = await _varianteParaTraspaso(conn, d.variante_id);
+      const v = await _varianteParaTraspaso(conn, d.variante_id, { aunqueInactiva: true });
       const enviado = Number(d.cantidad);
       const dicho = porDetalle.get(d.id);
 
@@ -1789,7 +1832,10 @@ async function listarTraspasos({ almacen_destino_id, limit, offset, almacenes })
        LEFT JOIN usuarios ur ON ur.id = t.recibido_por
        LEFT JOIN usuarios uc ON uc.id = t.cancelado_por
        ${where}
-      ORDER BY t.creado_en DESC, t.id DESC
+      -- Los que siguen vivos (por enviar o en camino) primero: Surtir sucursal trae
+      -- los 100 más recientes y una solicitud vieja salía en la campana y no ahí
+      -- (2026-10-26, auditoría).
+      ORDER BY (t.estado IN ('solicitado', 'en_transito')) DESC, t.creado_en DESC, t.id DESC
       LIMIT :limit OFFSET :offset`,
     params
   );
@@ -1994,6 +2040,7 @@ async function almacenesDeTraspaso(id) {
 }
 
 module.exports = {
+  COND_ALERTA,
   almacenesDeTraspaso,
   minimosEnPaquetes,
   listarStock,

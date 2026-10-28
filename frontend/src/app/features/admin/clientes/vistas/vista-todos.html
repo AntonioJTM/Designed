@@ -93,7 +93,11 @@
               <td>{{ lugarDe(c) || '—' }}</td>
               <td>{{ c.tipo_cliente || 'Público' }}</td>
               <td class="num">
-                @if (num(c.saldo) > 0) { <span class="debe">{{ c.saldo | dinero }}</span> } @else { <span class="muted">—</span> }
+                <!-- Su crédito MÁS sus notas pendientes de pago (2026-10-26). -->
+                @if (num(c.saldo) + num(c.en_notas) > 0) {
+                  <span class="debe">{{ num(c.saldo) + num(c.en_notas) | dinero }}</span>
+                  @if (num(c.en_notas) > 0) { <div class="muted en-notas">{{ c.en_notas | dinero }} en notas</div> }
+                } @else { <span class="muted">—</span> }
               </td>
               <td class="num">
                 @if (num(c.num_pedidos) > 0) {

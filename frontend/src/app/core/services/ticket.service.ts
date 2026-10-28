@@ -65,7 +65,21 @@ export class TicketService {
   // lo inyectan siempre, y así no arrastran la conexión al servidor por nada.
   private readonly injector = inject(Injector);
 
-  private readonly datos$: Observable<DatosTienda> = defer(() => this.injector.get(TiendaService).configuracion()).pipe(
+  /**
+   * Los datos de la tienda (papel y datos fiscales): se guardan 2 minutos y, si no
+   * contestó, el siguiente ticket los vuelve a pedir (2026-10-26, auditoría: con
+   * `shareReplay` para siempre, una falla o un cambio en Configuración se quedaban
+   * toda la sesión y los tickets salían de 58 mm y sin RFC).
+   */
+  private cache: { hasta: number; datos$: Observable<DatosTienda> } | null = null;
+  private get datos$(): Observable<DatosTienda> {
+    const ahora = Date.now();
+    if (!this.cache || this.cache.hasta < ahora) this.cache = { hasta: ahora + 120_000, datos$: this.pedirDatos() };
+    return this.cache.datos$;
+  }
+
+  private pedirDatos(): Observable<DatosTienda> {
+    return defer(() => this.injector.get(TiendaService).configuracion()).pipe(
     map((c): DatosTienda => ({
       ...BASE,
       direccion: c.tienda_direccion,
@@ -77,9 +91,13 @@ export class TicketService {
       leyenda: c.ticket_leyenda,
       papelMm: c.ticket_papel_mm,
     })),
-    catchError(() => of(BASE)),
+    catchError(() => {
+      this.cache = null;
+      return of(BASE);
+    }),
     shareReplay(1)
-  );
+    );
+  }
 
   // ---------------------------------------------------------------- imprimir
 

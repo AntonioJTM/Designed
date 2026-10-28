@@ -90,8 +90,12 @@ async function devueltoNeto(conn, pedidoIds, hasta) {
 async function devolucionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 0 }) {
   if (!usuarioIds.length) return [];
   const [ya] = await conn.query(
+    // Lo ya descontado cuenta de toda nómina viva (para no descontarlo dos veces),
+    // pero solo se descuenta si la comisión ORIGINAL ya se PAGÓ (2026-10-26,
+    // auditoría): en una nómina en borrador todavía no se pagó nada, y al recalcularse
+    // ella misma la anota con lo que regresó.
     `SELECT nc.pedido_id, SUM(nc.devuelto) AS descontado,
-            MAX(CASE WHEN nc.tipo <> 'devolucion' THEN nc.porcentaje END) AS porcentaje
+            MAX(CASE WHEN nc.tipo <> 'devolucion' AND np.estado = 'pagado' THEN nc.porcentaje END) AS porcentaje
        FROM nomina_comisiones nc
        JOIN nomina_recibos r   ON r.id = nc.recibo_id
        JOIN nomina_periodos np ON np.id = r.periodo_id
@@ -100,7 +104,7 @@ async function devolucionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 0
               SELECT dv.pedido_id FROM devoluciones dv JOIN pedidos p ON p.id = dv.pedido_id
                WHERE ${VENDEDOR} IN (:ids) AND p.creado_en >= :desde AND dv.creado_en < :hasta)
       GROUP BY nc.pedido_id
-     HAVING MAX(nc.tipo <> 'devolucion') = 1`,
+     HAVING MAX(nc.tipo <> 'devolucion' AND np.estado = 'pagado') = 1`,
     { ids: usuarioIds, desde: `${DESDE} 00:00:00`, hasta, periodo: periodoId ?? 0 }
   );
   if (!ya.length) return [];
@@ -155,14 +159,20 @@ async function cancelacionesPorDescontar(conn, { usuarioIds, hasta, periodoId = 
             DATE_FORMAT(p.creado_en, '%Y-%m-%d %H:%i:%s') AS vendida_en,
             DATE_FORMAT(p.actualizado_en, '%Y-%m-%d %H:%i:%s') AS cancelada_en,
             x.neta, x.comision, x.porcentaje
-       FROM (SELECT nc.pedido_id, SUM(nc.venta_neta) AS neta, SUM(nc.comision) AS comision,
-                    MAX(CASE WHEN nc.tipo <> 'devolucion' THEN nc.porcentaje END) AS porcentaje
+       -- Lo que se PAGÓ de ella: la comisión original cuenta solo si su nómina ya se
+       -- pagó (2026-10-26, auditoría: una en borrador todavía no pagó nada y, al
+       -- recalcularse, la suelta); los descuentos cuentan de toda nómina viva, para no
+       -- descontar dos veces.
+       FROM (SELECT nc.pedido_id,
+                    SUM(CASE WHEN nc.tipo <> 'devolucion' AND np.estado <> 'pagado' THEN 0 ELSE nc.venta_neta END) AS neta,
+                    SUM(CASE WHEN nc.tipo <> 'devolucion' AND np.estado <> 'pagado' THEN 0 ELSE nc.comision END) AS comision,
+                    MAX(CASE WHEN nc.tipo <> 'devolucion' AND np.estado = 'pagado' THEN nc.porcentaje END) AS porcentaje
                FROM nomina_comisiones nc
                JOIN nomina_recibos r   ON r.id = nc.recibo_id
                JOIN nomina_periodos np ON np.id = r.periodo_id
               WHERE np.estado <> 'cancelado' AND np.id <> :periodo AND nc.pedido_id IS NOT NULL
               GROUP BY nc.pedido_id
-             HAVING MAX(nc.tipo <> 'devolucion') = 1) x
+             HAVING MAX(nc.tipo <> 'devolucion' AND np.estado = 'pagado') = 1) x
        JOIN pedidos p ON p.id = x.pedido_id
        LEFT JOIN clientes c ON c.id = p.cliente_id
       WHERE p.estado IN ('cancelado', 'devuelto') AND ${VENDEDOR} IN (:ids)
@@ -205,11 +215,27 @@ async function ventasSinPagarComision(conn, { usuarioIds, hasta, periodoId = 0 }
        LEFT JOIN clientes c ON c.id = p.cliente_id
       WHERE ${VENDEDOR} IN (:ids) AND p.creado_en >= :desde AND p.creado_en < :hasta
         AND p.estado NOT IN ('cancelado', 'devuelto')
-        AND NOT EXISTS (
+        AND (NOT EXISTS (
               SELECT 1 FROM nomina_comisiones nc
                 JOIN nomina_recibos r   ON r.id = nc.recibo_id
                 JOIN nomina_periodos np ON np.id = r.periodo_id
                WHERE nc.pedido_id = p.id AND np.estado <> 'cancelado' AND np.id <> :periodo)
+             -- La que se CANCELÓ después de pagarse y luego se REACTIVÓ (2026-10-26,
+             -- auditoría): ya se le descontó (su renglón 'devolucion' sin devoluciones
+             -- de verdad: una venta con devoluciones no se cancela) y en neto quedó en
+             -- $0, así que vuelve a pagar su comisión. Si se cancela otra vez, se vuelve
+             -- a descontar.
+             OR (NOT EXISTS (SELECT 1 FROM devoluciones dv WHERE dv.pedido_id = p.id)
+                 AND EXISTS (
+                   SELECT 1 FROM nomina_comisiones nc
+                     JOIN nomina_recibos r   ON r.id = nc.recibo_id
+                     JOIN nomina_periodos np ON np.id = r.periodo_id
+                    WHERE nc.pedido_id = p.id AND nc.tipo = 'devolucion'
+                      AND np.estado <> 'cancelado' AND np.id <> :periodo)
+                 AND (SELECT COALESCE(SUM(nc.venta_neta), 0) FROM nomina_comisiones nc
+                        JOIN nomina_recibos r   ON r.id = nc.recibo_id
+                        JOIN nomina_periodos np ON np.id = r.periodo_id
+                       WHERE nc.pedido_id = p.id AND np.estado <> 'cancelado' AND np.id <> :periodo) <= 0.004))
       ORDER BY p.creado_en, p.id`,
     { ids: usuarioIds, desde: `${DESDE} 00:00:00`, hasta, periodo: periodoId ?? 0 }
   );

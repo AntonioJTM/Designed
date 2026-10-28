@@ -45,7 +45,7 @@ const movimientoSchema = z
 
 const cerrarSchema = z.object({ monto_final: z.coerce.number().nonnegative() }).strict();
 
-// GASTOS (2026-10-20). El límite es POR GASTO; sin límite (null) no se pide nada.
+// GASTOS (2026-10-20). El límite es POR GASTO; sin límite (null), TODO gasto de ese tipo se autoriza.
 const tipoGastoSchema = z
   .object({
     nombre: z.string().trim().min(2).max(60),
@@ -84,13 +84,15 @@ router.post('/cajas', soloAdmin, validate(cajaSchema), controller.crearCaja);
 router.put('/cajas/:id', soloAdmin, validate(actualizarCajaSchema), controller.actualizarCaja);
 router.delete('/cajas/:id', soloAdmin, controller.eliminarCaja);
 
-router.post('/sesiones', validate(abrirSchema), controller.abrirSesion);
+// Abrir y cerrar el turno: quien entra a Caja (2026-10-26, auditoría: bastaba ser del
+// personal de esa tienda, y un almacenista podía cerrar el turno por la API).
+router.post('/sesiones', requirePermiso('ver:caja'), validate(abrirSchema), controller.abrirSesion);
 router.get('/sesiones/abierta', controller.sesionAbierta); // ?caja_id=
 router.get('/sesiones/:id', controller.obtenerSesion);
 // Con AUTORIZACIÓN (2026-10-19): quien no lo hace directo lo pide.
 // Con su llave de un solo uso (`X-Clave-Unica`, 2026-10-20): un doble clic no saca dos veces.
 router.post('/sesiones/:id/movimientos', validate(movimientoSchema), unaVez(), autorizable('mover_efectivo'), controller.registrarMovimiento);
-router.post('/sesiones/:id/cerrar', validate(cerrarSchema), controller.cerrarSesion);
+router.post('/sesiones/:id/cerrar', requirePermiso('ver:caja'), validate(cerrarSchema), controller.cerrarSesion);
 
 // GASTOS DE LA CAJA (2026-10-20). Los tipos y sus límites los da quien tiene
 // «Tipos de gasto» (el administrador siempre). Registrar pide «Registrar gastos»;

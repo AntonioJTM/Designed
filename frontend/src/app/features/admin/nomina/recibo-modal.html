@@ -50,12 +50,14 @@
                 <span class="como">
                   @if (num(r.porcentaje_comision) > 0) {
                     · {{ num(r.porcentaje_comision) }}% de {{ r.ventas_netas | dinero }} de venta neta
+                  } @else if (num(r.comision) !== 0) {
+                    · hoy no gana comisión; es lo que se le descuenta de ventas que regresaron o se cancelaron
                   } @else {
                     · no recibe comisión
                   }
                 </span>
               </span>
-              <span>{{ num(r.porcentaje_comision) > 0 ? (r.comision | dinero) : '—' }}</span>
+              <span>{{ num(r.porcentaje_comision) > 0 || num(r.comision) !== 0 ? (r.comision | dinero) : '—' }}</span>
             </div>
             <div class="dato">
               <span>Horas extra y otros</span>
@@ -197,7 +199,7 @@
                     <button type="button" class="btn btn-ghost" [disabled]="ocupado()" (click)="agregarDescuento()">Agregar descuento</button>
                   </div>
                 } @else {
-                  <p class="nota-chica">Esta nómina ya no está en borrador: el recibo solo se consulta.</p>
+                  <p class="nota-chica">{{ motivoSoloLectura() }}</p>
                 }
               </section>
             </div>

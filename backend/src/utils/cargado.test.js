@@ -7,7 +7,13 @@ const { motivosCarga, enLista } = require('./cargado');
 
 test('dice lo cargado en palabras de tienda, en singular y en plural', () => {
   const c = { cargas: 1, bultos: 80, kg: 1527.5, saldos: 2, movimientos: 3, ventas: 0, traspasos: 0, desarmes: 0, compras: 0, carritos: 0 };
-  assert.deepEqual(motivosCarga(c), ['1 carga de mercancía', '80 bultos', '1,527.5 kg en existencia', '3 movimientos en el kardex']);
+  // "paquetes", como dice la tienda (2026-10-26: decía "bultos").
+  assert.deepEqual(motivosCarga(c), ['1 carga de mercancía', '80 paquetes', '1,527.5 kg en existencia', '3 movimientos en el kardex']);
+});
+
+test('las ventas de años anteriores también cuentan (no se borran en cascada)', () => {
+  assert.deepEqual(motivosCarga({ ventas_anteriores: 1 }), ['1 mes de ventas de años anteriores']);
+  assert.deepEqual(motivosCarga({ ventas_anteriores: 3 }), ['3 meses de ventas de años anteriores']);
 });
 
 test('una presentación vacía no tiene motivos', () => {

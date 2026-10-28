@@ -33,6 +33,9 @@ export function datosParaEnviar(d: DatosCarga, conCosto: boolean): DatosCargaEnv
 }
 
 /** Para comparar nombres de proveedor: sin mayúsculas, acentos ni espacios de más. */
+/** Para el id de cada bloque (ver `uid`). */
+let siguienteId = 0;
+
 const normal = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -57,6 +60,8 @@ const normal = (s: string) =>
   styleUrl: './datos-carga.scss',
 })
 export class DatosCargaCampos implements OnInit {
+  /** Un id propio por bloque: con dos abiertos a la vez (un hilo y «Datos») se repetía. */
+  readonly uid = `dc-proveedor-${++siguienteId}`;
   private readonly inv = inject(InventarioService);
 
   readonly datos = model.required<DatosCarga>();

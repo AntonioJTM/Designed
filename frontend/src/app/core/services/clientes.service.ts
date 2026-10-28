@@ -150,9 +150,9 @@ export class ClientesService {
    * que alcance.
    */
   /** Ajustar a mano su saldo a favor: positivo le agrega, negativo le quita (con motivo). */
-  ajustarSaldoFavor(id: number, monto: number, notas: string): Observable<AjusteSaldoFavor> {
+  ajustarSaldoFavor(id: number, monto: number, notas: string, clave?: string): Observable<AjusteSaldoFavor> {
     return this.http
-      .post<ApiResponse<AjusteSaldoFavor>>(`${this.base}/${id}/saldo-favor/ajuste`, { monto, notas })
+      .post<ApiResponse<AjusteSaldoFavor>>(`${this.base}/${id}/saldo-favor/ajuste`, { monto, notas }, conClave(clave))
       .pipe(map(data));
   }
 
@@ -187,9 +187,9 @@ export class ClientesService {
   }
 
   /** Corrección manual del saldo. Positivo lo sube, negativo lo baja. Solo jefes. */
-  ajustar(id: number, monto: number, notas: string): Observable<EstadoDeCuenta> {
+  ajustar(id: number, monto: number, notas: string, clave?: string): Observable<EstadoDeCuenta> {
     return this.http
-      .post<ApiResponse<EstadoDeCuenta>>(`${this.base}/${id}/ajustes`, { monto, notas })
+      .post<ApiResponse<EstadoDeCuenta>>(`${this.base}/${id}/ajustes`, { monto, notas }, conClave(clave))
       .pipe(map(data));
   }
 }

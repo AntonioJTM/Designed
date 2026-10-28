@@ -158,7 +158,7 @@ export class PermisosPantalla {
         this.borrador.set({});
         this.mensaje.set(
           `Listo: se guardaron los permisos de ${nombres.join(', ')}. ` +
-            'Lo que el servidor valida aplica ya; el menú cambia la próxima vez que la persona entre.'
+            'Aplica ya: el menú de quien esté adentro cambia solo, sin volver a entrar.'
         );
         return;
       }

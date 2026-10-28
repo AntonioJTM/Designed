@@ -19,8 +19,8 @@
   <!-- Sin matriz, el traspaso no sabe de dónde proponer el origen. -->
   @if (!cargando() && almacenes().length > 0 && !matriz()) {
     <p class="aviso">
-      No hay matriz marcada. Marca una al editar el almacén que surte a las demás, para que Surtir
-      sucursal proponga el origen solo.
+      No hay matriz marcada. Marca una al editar el almacén que surte a las demás: sin ella, Surtir
+      sucursal no propone el origen y quien es de una sola tienda no puede pedir mercancía.
     </p>
   }
 

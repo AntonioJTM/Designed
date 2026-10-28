@@ -64,7 +64,13 @@ function resolver(
               return of({ resp, yaEstaba: false });
             }
             // Ya había una igual esperando (2026-10-20): no se pidió otra, y se dice.
-            const yaEstaba = !!(resp.body as { data?: { autorizacion?: { ya_estaba?: boolean } } } | null)
+            // La lista del proveedor la pide como TEXTO (lee el avance por partes):
+            // ahí el cuerpo hay que leerlo como JSON (2026-10-26, auditoría).
+            let cuerpo = resp.body as { data?: { autorizacion?: { ya_estaba?: boolean } } } | string | null;
+            if (typeof cuerpo === 'string') {
+              try { cuerpo = JSON.parse(cuerpo); } catch { cuerpo = null; }
+            }
+            const yaEstaba = !!(cuerpo as { data?: { autorizacion?: { ya_estaba?: boolean } } } | null)
               ?.data?.autorizacion?.ya_estaba;
             return from(dialogo.avisarPedida(yaEstaba)).pipe(map(() => ({ resp, yaEstaba })));
           }),

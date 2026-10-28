@@ -27,8 +27,8 @@ test('la vista previa de "Mínimo para varios" no avisa; guardarlo, sí', () => 
   assert.deepEqual(tiposDeRuta('POST', '/inventario/configuracion/minimos', { paquetes: 5, guardar: true }), ['inventario', 'avisos']);
 });
 
-test('nómina no avisa: nadie la escucha', () => {
-  assert.deepEqual(tiposDeRuta('POST', '/nomina/periodos'), []);
+test('nómina avisa a Autorizaciones y la campana: pagarla cierra su solicitud (2026-10-26)', () => {
+  assert.deepEqual(tiposDeRuta('POST', '/nomina/periodos'), ['autorizaciones', 'avisos']);
 });
 
 test('personal y permisos avisan "sesion": el menú abierto se pone al día (2026-10-22)', () => {

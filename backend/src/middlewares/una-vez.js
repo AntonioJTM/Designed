@@ -85,12 +85,11 @@ function unaVez() {
         .finally(() => enviar(cuerpo));
       return res;
     };
-    // Se cortó sin contestar: la llave se suelta para poder reintentar.
-    res.on('close', () => {
-      if (!res.writableFinished) {
-        pool.query("DELETE FROM operaciones_unicas WHERE clave = :clave AND estado = 'en_curso'", { clave }).catch(() => {});
-      }
-    });
+    // Si el navegador corta la conexión, la llave NO se suelta (2026-10-26, auditoría):
+    // la operación sigue en el servidor y termina en `res.json`, que la deja "hecha"
+    // (o la borra si falló). Soltarla aquí dejaba que el reintento de la cajera con la
+    // misma llave registrara OTRO abono de $1,000. Si el servidor se cae a media
+    // operación, la llave queda "en curso" y a los 2 minutos se pide revisar (arriba).
     return next();
   };
 }

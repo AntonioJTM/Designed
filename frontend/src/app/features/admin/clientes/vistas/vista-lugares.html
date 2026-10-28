@@ -133,7 +133,8 @@
       <form (ngSubmit)="guardarCorreccion()">
         <div class="modal-body columna">
           <p class="muted">
-            Sus {{ plural(l.num_clientes ?? 0, 'cliente sigue', 'clientes siguen') }} en este lugar con el nombre nuevo.
+            @if ((l.num_clientes ?? 0) === 1) { Su cliente sigue en este lugar con el nombre nuevo. }
+            @else { Sus {{ plural(l.num_clientes ?? 0, 'cliente sigue', 'clientes siguen') }} en este lugar con el nombre nuevo. }
           </p>
           @if (errorCorregir()) { <p class="alert" role="alert">{{ errorCorregir() }}</p> }
           <label class="field">

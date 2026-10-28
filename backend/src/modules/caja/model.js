@@ -103,7 +103,10 @@ async function sesionAbiertaDeCaja(caja_id) {
  */
 async function abrirSesion({ caja_id, usuario_id, monto_inicial }) {
   const id = await withTransaction(async (conn) => {
-    await conn.query('SELECT id FROM cajas WHERE id = :caja_id FOR UPDATE', { caja_id });
+    const [[caja]] = await conn.query('SELECT id, activo FROM cajas WHERE id = :caja_id FOR UPDATE', { caja_id });
+    // Una caja dada de baja no abre turno (2026-10-26, auditoría: solo lo cuidaba el botón).
+    if (!caja) throw new AppError(404, 'NO_ENCONTRADO', 'Caja no encontrada');
+    if (!Number(caja.activo)) throw new AppError(409, 'CAJA_INACTIVA', 'Esa caja está dada de baja: actívala para abrir turno.');
     const [[abierta]] = await conn.query(
       "SELECT id FROM sesiones_caja WHERE caja_id = :caja_id AND estado = 'abierta' LIMIT 1",
       { caja_id }
@@ -152,20 +155,24 @@ async function obtenerSesion(id) {
 
   // Venta y devolución apuntan a un pedido: se trae su folio y su cliente para
   // que la pantalla Caja diga "POS-91B0 · Confecciones Paty" y no un número. Un
-  // 'ingreso' NO se cruza: su referencia puede ser un pedido (abono a un
-  // apartado) o un movimiento de crédito (abono a la cuenta), y su motivo ya
-  // dice cuál fue.
+  // 'ingreso' solo se cruza si es de una NOTA (pago, abono o cobro al entregarla,
+  // que apuntan al pedido); el abono a la cuenta y el anticipo apuntan a otro
+  // libro y su motivo ya dice qué fueron.
   const [movs] = await pool.query(
     `SELECT m.id, m.tipo, m.monto, m.referencia_id, m.motivo, m.creado_en,
             p.numero_pedido, COALESCE(NULLIF(cl.nombre_comercial, ''), cl.nombre) AS cliente,
             -- Una venta que se canceló y su efectivo se quedó en el cajón como saldo a
             -- favor del cliente (2026-10-26): ese dinero ya es del cliente.
-            (m.tipo = 'venta' AND p.estado IN ('cancelado', 'devuelto') AND EXISTS (
+            -- También lo que se abonó o pagó a una nota que luego se canceló a su favor
+            -- (2026-10-26, auditoría: solo se marcaba el efectivo de la venta).
+            (m.tipo IN ('venta', 'ingreso') AND p.estado IN ('cancelado', 'devuelto') AND EXISTS (
               SELECT 1 FROM saldo_favor_movimientos sf JOIN metodos_pago mp ON mp.id = sf.metodo_pago_id
                WHERE sf.pedido_id = p.id AND sf.tipo = 'reintegro' AND LOWER(mp.nombre) LIKE '%efectivo%'
             )) AS cancelada_a_favor
        FROM movimientos_caja m
-       LEFT JOIN pedidos p ON m.tipo IN ('venta', 'devolucion') AND p.id = m.referencia_id
+       LEFT JOIN pedidos p ON p.id = m.referencia_id
+             AND (m.tipo IN ('venta', 'devolucion')
+                  OR (m.tipo = 'ingreso' AND m.motivo REGEXP '^(Pago de la nota|Abono a la nota|Abono al apartado|Cobro al entregar)'))
        LEFT JOIN clientes cl ON cl.id = p.cliente_id
       WHERE m.sesion_caja_id = :id ORDER BY m.creado_en, m.id`,
     { id }

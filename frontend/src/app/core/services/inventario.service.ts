@@ -280,7 +280,7 @@ export interface ResultadoRemesa {
 
 /** Un renglón del archivo que impide cargar, o que solo hay que revisar. */
 export interface RenglonLista {
-  fila: number;
+  fila: number | null;
   mensaje: string;
 }
 
@@ -302,9 +302,13 @@ export interface HiloLista {
     linea: string | null;
     activo: boolean;
     precio_kg: number | null;
+    /** A cómo lo cobra la caja (el de su presentación o, sin ella, su precio por kilo). */
+    precio_cobra?: number | null;
     sku: string | null;
     tiene_precio: boolean;
   } | null;
+  /** Cuántos hilos iguales hay en el catálogo (solo si `ambiguo`). */
+  iguales?: number;
   /** El mismo color en otro calibre, para que se note un error de dedo. */
   parecidos: string[];
   num_bultos: number;
@@ -921,7 +925,7 @@ export class InventarioService {
     const params = new HttpParams()
       .set('tipo_presentacion', tipo)
       .set('activo', true)
-      .set('limit', 200);
+      .set('limit', 1000);
     return this.http
       .get<ApiResponse<Paginado<Variante>>>(`${this.base}/variantes`, { params })
       .pipe(map((r) => data(r).items));
@@ -988,10 +992,6 @@ export class InventarioService {
   }
 
   /**
-   * Traspaso de matriz a sucursal. En variantes de tipo paquete se manda
-   * `paquetes`; en las demás, `cantidad` en su propia unidad.
-   */
-  /**
    * Traduce kilos ↔ paquetes con el peso REAL de los bultos que hay en el
    * almacén. Sirve para decir "100 kg ≈ 5 paquetes (95.4 kg, faltan 4.6)".
    */
@@ -1003,16 +1003,18 @@ export class InventarioService {
       .pipe(map(data));
   }
 
-  /** Paso 1: la solicitud. Aparta en el origen, no mueve nada. */
+  /**
+   * Paso 1: la solicitud de traspaso (matriz → sucursal). Aparta en el origen, no
+   * mueve nada. En un paquete se manda `paquetes`; en las demás, `cantidad` en kilos.
+   */
   solicitarTraspaso(body: TraspasoInput): Observable<ResultadoTraspaso> {
     return this.http
       .post<ApiResponse<ResultadoTraspaso>>(`${this.base}/inventario/traspasos`, body)
       .pipe(map(data));
   }
 
-  /** Paso 2: sale del origen y queda en camino. */
   /**
-   * Paso 2: sale. Con los paquetes ESCANEADOS al surtir: sale su peso real y
+   * Paso 2: sale del origen y queda en camino. Con los paquetes ESCANEADOS al surtir: sale su peso real y
    * esos quedan en la sucursal. Sin escanear no se envía.
    */
   enviarTraspaso(id: number, codigos: string[], notas?: string, encontrados: string[] = []): Observable<ResultadoTraspaso> {
@@ -1044,7 +1046,6 @@ export class InventarioService {
       .pipe(map(data));
   }
 
-  /** Paso 3: el responsable acepta y dice qué llegó. */
   /**
    * El PDF de un envío: lo que salió, con cada paquete (`envio`), o de lo que se
    * recibió, con lo que faltó (`recepcion`). 2026-10-20.

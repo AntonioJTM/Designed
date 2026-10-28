@@ -52,6 +52,11 @@ export type FormaPago =
   host: { '(document:keydown.escape)': 'cerrar()' },
 })
 export class EntregarPedidoModal implements OnInit {
+  /** El número que se sugiere en el campo (sin "$" ni comas: es un campo numérico). */
+  comoCampo(v: number): string {
+    return Number(v ?? 0).toFixed(2);
+  }
+
   /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
   private clave = nuevaClave();
   private readonly ventas = inject(VentasService);

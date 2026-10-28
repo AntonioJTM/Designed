@@ -169,7 +169,6 @@ async function listarConversiones(req, res, next) {
   }
 }
 
-/** Cuántos paquetes son X kilos, con los pesos reales de la bodega. */
 /** El detalle de un hilo: saldos por presentación y almacén, y sus lotes. */
 async function detalleHilo(req, res, next) {
   try {

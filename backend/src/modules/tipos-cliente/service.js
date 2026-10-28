@@ -23,6 +23,12 @@ async function crear(datos) {
 
 async function actualizar(id, datos) {
   const actual = await obtener(id);
+  // Apagada, la caja ya no cobra con Público (2026-10-26, auditoría: solo la
+  // pantalla lo impedía).
+  if (actual.es_publico && datos.activo === false) {
+    throw new AppError(409, 'TIPO_PUBLICO',
+      'La lista Público no se puede desactivar: es la de precios base con que se cobra.');
+  }
   return model.actualizar(id, {
     nombre: datos.nombre !== undefined ? datos.nombre.trim() : actual.nombre,
     orden: datos.orden !== undefined ? datos.orden : actual.orden,
@@ -38,8 +44,9 @@ async function eliminar(id) {
   }
   const dep = await model.dependencias(id);
   const enUso = [];
-  if (Number(dep.precios) > 0) enUso.push(`${dep.precios} precio(s) capturados`);
-  if (Number(dep.pedidos) > 0) enUso.push(`${dep.pedidos} pedido(s) vendidos con él`);
+  const n = (x, uno, varios) => `${x} ${Number(x) === 1 ? uno : varios}`;
+  if (Number(dep.precios) > 0) enUso.push(n(dep.precios, 'precio capturado', 'precios capturados'));
+  if (Number(dep.pedidos) > 0) enUso.push(n(dep.pedidos, 'venta hecha con ella', 'ventas hechas con ella'));
   if (enUso.length) {
     throw new AppError(409, 'TIPO_EN_USO',
       `No se puede eliminar "${actual.nombre}": tiene ${enUso.join(' y ')}. ` +

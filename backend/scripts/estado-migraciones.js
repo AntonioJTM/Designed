@@ -125,6 +125,10 @@ const MIGRACIONES = [
   ['2026-10_vendedor_en_venta', 'pedidos.vendedor_id'],
   ['2026-10_cancelar_lo_abonado', "transferencias^'regreso'"],
   ['2026-10_cancelar_lo_abonado (condonado)', 'nomina_comisiones.condonado'],
+  ['2026-10_pago_regresado_en_efectivo', 'pagos.devuelto_efectivo'],
+  ['2026-10_vistas_sin_canceladas', "v_movimiento_hilo~'cancelado'"],
+  ['2026-10_vistas_sin_canceladas (vendedor)', 'v_ventas_por_empleado~vendedor_id'],
+  ['2026-10_recibo_horario', 'nomina_recibos.horario_json'],
 ];
 
 (async () => {

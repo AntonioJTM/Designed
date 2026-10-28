@@ -119,7 +119,7 @@ async function expediente(id, { limitePedidos = 20, almacenes = null } = {}) {
   const cliente = await model.obtener(id);
   if (!cliente) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
 
-  const [stats, colores, pedidos, credito, habitos, favor, favorMovs, deuda] = await Promise.all([
+  const [stats, colores, pedidos, credito, habitos, favor, favorMovs, deuda, favorTotal] = await Promise.all([
     // Sus compras y su costumbre: las de SUS tiendas (2026-10-15). Lo que debe
     // y su saldo a favor son uno solo: se ven completos.
     model.estadisticas(id, almacenes),
@@ -130,6 +130,7 @@ async function expediente(id, { limitePedidos = 20, almacenes = null } = {}) {
     saldoFavor.saldoFavor(id),
     saldoFavor.movimientos(id, { limit: 30, almacenes }),
     saldoFavor.deudaTotal(id),
+    saldoFavor.cuantosMovimientos(id),
   ]);
 
   // Si debe: sus notas vencidas (pasaron sus días de crédito, 2026-10-20) y la que
@@ -156,6 +157,8 @@ async function expediente(id, { limitePedidos = 20, almacenes = null } = {}) {
     // cuánto debe en total (cuenta de crédito + notas pendientes de pago).
     saldo_favor: favor,
     saldo_favor_movimientos: favorMovs,
+    // Cuántos son en total: la tarjeta trae los 30 más recientes y lo dice (2026-10-26).
+    saldo_favor_total_movimientos: favorTotal,
     deuda_total: deuda,
   };
 }
@@ -314,16 +317,17 @@ async function ajustarCredito(id, datos, usuarioId) {
     // Un ajuste sin explicación es un saldo que nadie va a poder aclarar.
     throw new AppError(422, 'FALTA_MOTIVO', 'Un ajuste de saldo necesita un motivo');
   }
-  const saldoNuevo = Number(cliente.saldo) + monto;
-  if (saldoNuevo < 0) {
-    throw new AppError(422, 'SALDO_NEGATIVO',
-      `Ese ajuste dejaría el saldo en $${saldoNuevo.toFixed(2)}. ` +
-      'Un saldo negativo se leería como crédito a favor.');
-  }
-
   // Un ajuste que baja la deuda (condonar) también puede terminar de pagar
-  // ventas fiadas: van en la misma transacción.
+  // ventas fiadas: van en la misma transacción. El saldo se lee DENTRO, con su
+  // libro bloqueado (2026-10-26, auditoría): leído antes, un abono que entraba al
+  // mismo tiempo dejaba la cuenta en negativo.
   await withTransaction(async (conn) => {
+    const saldoNuevo = Math.round((await model.saldo(id, conn, true) + monto) * 100) / 100;
+    if (saldoNuevo < 0) {
+      throw new AppError(422, 'SALDO_NEGATIVO',
+        `Ese ajuste dejaría el saldo en $${saldoNuevo.toFixed(2)}. ` +
+        'Un saldo negativo se leería como crédito a favor.');
+    }
     await model.agregarMovimiento({
       cliente_id: id, tipo: 'ajuste', monto,
       notas: String(datos.notas).trim(), usuario_id: usuarioId,

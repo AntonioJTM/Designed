@@ -85,9 +85,10 @@ function _describir(m) {
   }
   if (m.referencia_tipo === 'conversion') {
     return {
+      // Como el filtro "Bajadas de conos" (2026-10-26: decía "Desarme de paquetes").
       concepto: salida
-        ? `Desarme de paquetes ${m.conversion_paquete}`
-        : `Conos producidos ${m.conversion_cono}`,
+        ? `Bajada a conos · salió el paquete ${m.conversion_paquete}`
+        : `Bajada a conos · entraron conos ${m.conversion_cono}`,
       folio: null,
       // El bulto que se abrió: es el rastro del desarme ("¿cuál se bajó?").
       codigo_bulto: m.conversion_bulto ?? null,
@@ -164,14 +165,14 @@ async function previaDesarmeBulto(codigo, almacenes = null) {
 
   const bulto = await variantesModel.bultoPorCodigo(cod);
   if (!bulto) {
-    throw new AppError(404, 'BULTO_DESCONOCIDO', `El bulto ${cod} no está registrado`);
+    throw new AppError(404, 'BULTO_DESCONOCIDO', `El paquete ${cod} no está registrado`);
   }
   if (bulto.estado && bulto.estado !== 'disponible') {
     const donde = bulto.consumido_folio ? ` en ${bulto.consumido_folio}` : '';
     throw enOtraTienda(new AppError(409, 'BULTO_NO_DISPONIBLE', bulto.estado === 'faltante'
-      ? `El bulto ${bulto.codigo} se dio por faltante al recibir un envío${donde} (no llegó).`
-      : `El bulto ${bulto.codigo} ya está ${bulto.estado}${donde}.`),
-    [bulto.almacen_id], `El bulto ${bulto.codigo} no está disponible en esta tienda.`);
+      ? `El paquete ${bulto.codigo} se dio por faltante al recibir un envío${donde} (no llegó).`
+      : `El paquete ${bulto.codigo} ${{ vendido: 'ya se vendió', desarmado: 'ya se bajó a conos', apartado: 'está apartado' }[bulto.estado] ?? 'no está disponible'}${donde}.`),
+    [bulto.almacen_id], `El paquete ${bulto.codigo} no está disponible en esta tienda.`);
   }
 
   const paquete = await variantesModel.obtener(bulto.variante_id);
@@ -184,6 +185,11 @@ async function previaDesarmeBulto(codigo, almacenes = null) {
   // El cono puede no existir todavía: se creará al confirmar, con los conos que
   // dice el bulto. Aquí solo se informa.
   const cono = await model.conoDe(paquete.id);
+  // Un cono desactivado no recibe conos: se dice al escanear y dónde activarlo (2026-10-26).
+  if (cono && !Number(cono.activo ?? 1)) {
+    throw new AppError(409, 'CONO_DESACTIVADO',
+      `El cono de ${paquete.sku} está desactivado: actívalo en Productos → Presentaciones antes de bajar conos.`);
+  }
   // Dónde hay existencias de ese paquete, para proponer el almacén de origen.
   const existencias = await model.existenciasDe(paquete.id, almacenes);
   // Dónde está ESTE paquete: tiene que estar en la tienda donde se abre.
@@ -246,29 +252,30 @@ async function desarmar(datos, usuarioId, almacenes = null) {
       `El paquete ${previa.bulto.codigo} no tiene peso registrado, así que no se sabe cuántos kilos sacar. ` +
         'En Presentaciones de su hilo quítalo (✕ en sus bultos) y vuelve a capturarlo con «Agregar bulto a mano», con su peso.');
   }
-  const conos = datos.conos ?? previa.conos_a_generar;
+  // Los conos los dice el PAQUETE; los que mande la pantalla solo cuentan si el paquete
+  // no lo dice (2026-10-26, auditoría: mandar 24 en uno de 12 partía el peso del cono).
+  const conos = previa.bulto.conos ?? datos.conos ?? previa.conos_a_generar;
   if (!conos) {
     throw new AppError(422, 'CONOS_REQUERIDOS',
-      `El bulto ${previa.bulto.codigo} no dice cuántos conos rinde. Captúralo.`);
+      `El paquete ${previa.bulto.codigo} no dice cuántos conos rinde: escribe cuántos salieron.`);
   }
 
-  // El cono nace la primera vez que se baja un paquete a mostrador.
-  const cono =
-    previa.cono ??
-    (await variantesService.crear({
-      producto_id: (await variantesModel.obtener(previa.paquete.variante_id)).producto_id,
-      sku: `${previa.paquete.sku}-CONO`,
-      presentacion: 'Cono',
-      tipo_presentacion: 'cono',
-      origen_variante_id: previa.paquete.variante_id,
-      piezas_por_origen: conos,
-      modo_precio: 'calculado',
-    }));
-
+  // El cono nace la primera vez que se baja un paquete a mostrador, dentro de la
+  // transacción de la bajada (model.desarmar → crearCono).
+  const productoId = (await variantesModel.obtener(previa.paquete.variante_id)).producto_id;
   return model.desarmar(
     {
       ...datos,
-      cono_variante_id: cono.variante_id ?? cono.id,
+      cono_variante_id: previa.cono ? previa.cono.variante_id ?? previa.cono.id : null,
+      crearCono: (conn) => variantesService.crear({
+        producto_id: productoId,
+        sku: `${previa.paquete.sku}-CONO`,
+        presentacion: 'Cono',
+        tipo_presentacion: 'cono',
+        origen_variante_id: previa.paquete.variante_id,
+        piezas_por_origen: conos,
+        modo_precio: 'calculado',
+      }, conn),
       paquetes: 1,
       kg: pesoBulto,
       conos,

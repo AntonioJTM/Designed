@@ -42,7 +42,7 @@ const TOPE_RANKING = 12;
     .cambio.baja { color: var(--alerta-t); }
     .filtros-tabla { display: flex; flex-wrap: wrap; gap: 12px; }
     .filtros-tabla label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; font-size: 0.8125rem; color: var(--tinta-3); }
-    .filtros-tabla select { max-width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px; background: #fff; font: inherit; font-size: 0.875rem; color: var(--tinta); }
+    .filtros-tabla select { max-width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px; background: var(--superficie); font: inherit; font-size: 0.875rem; color: var(--tinta); }
     .pos-num { color: var(--tinta-3); font-variant-numeric: tabular-nums; }
   `,
 })

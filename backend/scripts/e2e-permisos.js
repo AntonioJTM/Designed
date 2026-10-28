@@ -146,7 +146,7 @@ const ck = (n, ok, d) => {
     // Mercancía
     const merma = { variante_id: NO_EXISTE, almacen_id: NO_EXISTE, tipo: 'merma', cantidad: 1 };
     ck('cajero → ajuste/merma: no', negado(await cajero('POST', '/inventario/movimientos', merma)));
-    ck('almacenista → pasa la guarda (422)', paso(await almacen('POST', '/inventario/movimientos', {})));
+    ck('almacenista → pasa la guarda (404)', paso(await almacen('POST', '/inventario/movimientos', merma)));
     ck('cajero → bajar conos: no', negado(await cajero('POST', '/inventario/desarmes', {})));
     ck('almacenista → pasa la guarda (422)', paso(await almacen('POST', '/inventario/desarmes', {})));
     ck('cajero → enviar traspaso: no', negado(await cajero('POST', `/inventario/traspasos/${NO_EXISTE}/enviar`, {})));

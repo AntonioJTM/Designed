@@ -184,6 +184,22 @@ async function conClaveAutorizacion(ids) {
 }
 
 /** Devuelve un usuario por id sin datos sensibles. */
+/**
+ * Cuántos administradores ACTIVOS hay además de `salvoId` (de puesto principal o de
+ * "también trabaja como"). Para no dejar el sistema sin quien entre a Permisos.
+ */
+async function otrosAdministradoresActivos(salvoId) {
+  const [[r]] = await pool.query(
+    `SELECT COUNT(DISTINCT u.id) AS n
+       FROM usuarios u
+       JOIN roles r ON r.nombre = 'administrador'
+      WHERE u.activo = 1 AND u.id <> :id
+        AND (u.rol_id = r.id OR EXISTS (SELECT 1 FROM usuario_roles ur WHERE ur.usuario_id = u.id AND ur.rol_id = r.id))`,
+    { id: salvoId }
+  );
+  return Number(r.n);
+}
+
 async function buscarPorId(id) {
   const [rows] = await pool.query(
     `SELECT ${CAMPOS_PUBLICOS}
@@ -325,6 +341,7 @@ async function listarRoles() {
 }
 
 module.exports = {
+  otrosAdministradoresActivos,
   buscarPorCorreoConHash,
   buscarParaClave,
   fijarClaveAutorizacion,

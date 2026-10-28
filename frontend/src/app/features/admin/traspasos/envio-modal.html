@@ -21,15 +21,16 @@
 
       @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
-      <label class="field">
-        Código del paquete
+      <!-- div + label for (2026-10-26): dentro de un <label> el botón entraba al nombre del campo. -->
+      <div class="field">
+        <label for="envio-codigo">Código del paquete</label>
         <span class="escaneo">
-          <input #lector type="text" [(ngModel)]="codigo" autocomplete="off"
+          <input #lector id="envio-codigo" type="text" [(ngModel)]="codigo" autocomplete="off"
                  (keydown.enter)="$event.preventDefault(); leer()"
                  placeholder="Escanea la etiqueta del paquete" />
           <button type="button" class="btn btn-ghost" (click)="leer()">Agregar</button>
         </span>
-      </label>
+      </div>
       @if (ultimo()) { <p class="ultimo" role="status">✓ {{ ultimo() }}</p> }
 
       <!-- Lo que se pidió contra lo que va subiendo, hilo por hilo. -->
@@ -123,7 +124,7 @@
       <!-- A medias: se guarda y los paquetes quedan apartados; el envío queda en espera. -->
       <button type="button" class="btn btn-ghost" [disabled]="enviando() || !cambiosSinGuardar()"
               (click)="guardar()">
-        Guardar y seguir después
+        {{ enviando() ? 'Guardando…' : 'Guardar y seguir después' }}
       </button>
       <button type="button" class="btn btn-primary" [disabled]="enviando() || totalPaquetes() === 0"
               (click)="confirmar()">

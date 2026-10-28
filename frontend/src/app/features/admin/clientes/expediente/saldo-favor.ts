@@ -102,7 +102,7 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
                     <!-- Las notas que pone el sistema repiten el folio; solo se dicen si
                          no hay venta a la cual ligarlo (su cuenta de crédito, un ajuste), o si
                          dicen por qué le regresó (se canceló, no había efectivo en la caja). -->
-                    @if (m.notas && (!m.numero_pedido || m.tipo === 'reintegro') && m.tipo !== 'anticipo') {
+                    @if (m.notas && (!m.numero_pedido || m.tipo === 'reintegro' || m.tipo === 'ajuste') && m.tipo !== 'anticipo') {
                       <br /><span class="muted">{{ m.notas }}</span>
                     }
                   </td>
@@ -122,6 +122,9 @@ const SIGNO: Record<MovimientoSaldoFavor['tipo'], number> = {
             </tbody>
           </table>
         </div>
+        @if ((totalMovimientos() ?? 0) > movimientos().length) {
+          <p class="muted">Los {{ movimientos().length }} más recientes de {{ totalMovimientos() }}.</p>
+        }
       }
     </section>
   `,
@@ -150,6 +153,8 @@ export class SaldoFavor {
   readonly saldo = input<number>(0);
   readonly deuda = input<DeudaTotal>({ credito: 0, notas: 0, total: 0 });
   readonly movimientos = input<MovimientoSaldoFavor[]>([]);
+  /** Cuántos tiene en total: si son más que los de la lista, se dice (2026-10-26). */
+  readonly totalMovimientos = input<number | null>(null);
   readonly vePedidos = input(false);
   /** Se ofrece "Recibir anticipo" (cliente activo). */
   readonly puedeRecibir = input(false);
@@ -164,6 +169,8 @@ export class SaldoFavor {
   readonly fechaCorta = fechaCorta;
 
   etiqueta(m: MovimientoSaldoFavor): string {
+    // Con venta, el ajuste lo hizo el sistema al cancelarla ("se le regresó por el banco…").
+    if (m.tipo === 'ajuste' && m.numero_pedido) return 'Ajuste al cancelar';
     return ETIQUETA[m.tipo] ?? m.tipo;
   }
 

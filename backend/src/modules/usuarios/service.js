@@ -66,8 +66,18 @@ async function _tiendas(datos, rol, alcance, actual = null) {
   if (!(await model.existenAlmacenes(tiendas))) {
     throw new AppError(422, 'TIENDA_INVALIDA', 'Alguna de esas tiendas no existe.');
   }
-  if (alcance !== null && (todas || tiendas.some((t) => !alcance.includes(t)))) {
-    throw new AppError(403, 'SOLO_SUS_TIENDAS', 'Solo puedes dar las tiendas que tú ves.');
+  if (alcance !== null) {
+    // Las tiendas que quien edita NO ve se quedan como estaban: ni las da ni las quita
+    // (2026-10-26, auditoría; decisión del usuario del 2026-10-16: la gerente edita a
+    // quien trabaja en su tienda y en otra). Antes, editar a alguien de Moroleón y de la
+    // Matriz daba 403 aunque solo se le cambiara el teléfono.
+    const ajenasAntes = actual && !actual.todas_las_tiendas
+      ? (actual.tiendas ?? []).map((t) => Number(t.id)).filter((t) => !alcance.includes(t))
+      : [];
+    if (todas || tiendas.some((t) => !alcance.includes(t) && !ajenasAntes.includes(t))) {
+      throw new AppError(403, 'SOLO_SUS_TIENDAS', 'Solo puedes dar las tiendas que tú ves.');
+    }
+    for (const t of ajenasAntes) if (!tiendas.includes(t)) tiendas.push(t);
   }
   return { todas, tiendas };
 }
@@ -171,6 +181,20 @@ async function actualizarStaff(id, datos, alcance = null) {
   if (t) {
     cambios.todas_las_tiendas = t.todas;
     cambios.tiendas = t.tiendas;
+  }
+  // EL ÚLTIMO ADMINISTRADOR no se quita el puesto ni se da de baja (2026-10-26,
+  // auditoría): el puesto de administrador solo lo da otro administrador, así que el
+  // sistema se quedaba sin quien entrara a Permisos y solo se arreglaba en la base.
+  const esAdminHoy = actual.rol === 'administrador' || (actual.otros_roles ?? []).some((r) => r.nombre === 'administrador');
+  if (esAdminHoy && actual.activo) {
+    const otrosIds = cambios.otros_roles ?? (actual.otros_roles ?? []).map((r) => r.id);
+    const admin = await permisosModel.porNombre('administrador');
+    const seraAdmin = rol.nombre === 'administrador' || (admin && otrosIds.map(Number).includes(Number(admin.id)));
+    const seguiraActivo = datos.activo === undefined ? true : !!datos.activo;
+    if ((!seraAdmin || !seguiraActivo) && (await model.otrosAdministradoresActivos(id)) === 0) {
+      throw new AppError(409, 'ULTIMO_ADMINISTRADOR',
+        'Es el único administrador: sin él nadie podría entrar a Permisos. Primero dale el puesto de administrador a alguien más.');
+    }
   }
   const usuario = await model.actualizar(id, cambios);
   // Sus puestos (o su acceso) pudieron cambiar: lo que puede hacer cambia YA.

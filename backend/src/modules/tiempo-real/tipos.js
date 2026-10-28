@@ -38,8 +38,10 @@ const POR_PREFIJO = [
   // «Mi clave para autorizar» no cambia el menú de nadie (revisor de tiendas).
   ['/usuarios/perfil', []],
   ['/usuarios', ['sesion']],
-  // Nómina y configuración: ninguna pantalla los escucha todavía, así que no se
-  // avisan (revisión de tiendas, 2026-10-19).
+  // La nómina: pagarla cierra su solicitud de pago, y pedir vacaciones abre una
+  // (2026-10-26, auditoría: Autorizaciones y la campana seguían enseñándola).
+  ['/nomina', ['autorizaciones', 'avisos']],
+  // La configuración: ninguna pantalla la escucha todavía, así que no se avisa.
 ];
 
 // Peticiones que se mandan con POST pero NO cambian nada: cotizar, la vista

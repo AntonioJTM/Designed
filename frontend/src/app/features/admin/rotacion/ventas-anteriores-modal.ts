@@ -35,7 +35,7 @@ const MUESTRA = 100;
             <li><b>Año</b> 2025</li>
             <li><b>Mes</b> el número o el nombre</li>
             <li><b>Kilos</b> lo que se vendió ese mes</li>
-            <li><b>Tienda</b> <span class="muted">(opcional; vacía = las dos)</span></li>
+            <li><b>Tienda</b> <span class="muted">(opcional; vacía = todas las tiendas)</span></li>
           </ul>
           <p class="muted chico">
             Un mes que ya estaba cargado se reemplaza. En los meses en que el sistema ya tiene ventas de ese hilo, mandan las del sistema.

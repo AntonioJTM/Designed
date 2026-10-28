@@ -23,7 +23,7 @@
             </span>
           </div>
           <div class="hilo-dato">
-            <span class="dato-etiqueta">Paquetes cerrados</span>
+            <span class="dato-etiqueta">Paquetes libres</span>
             <b>{{ (detalle()?.resumen?.bultos_disponibles ?? 0).toLocaleString('es-MX') }}</b>
             <span class="dato-pie">{{ (detalle()?.resumen?.kg_en_bultos ?? 0) | cantidad: 'kg' }} con su peso real</span>
           </div>
@@ -46,7 +46,7 @@
                   <th>Almacén</th>
                   <th class="num">Hay</th>
                   <th class="num">Apartado</th>
-                  <th class="num">Paquetes ahí</th>
+                  <th class="num">Paquetes ahí <span class="muted">(con los apartados)</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -188,7 +188,7 @@
               <div class="hilo-dato">
                 <span class="dato-etiqueta">Apartados</span>
                 <b>{{ l.apartados.bultos.toLocaleString('es-MX') }}</b>
-                <span class="dato-pie">{{ l.apartados.kg | cantidad: 'kg' }} · para pedidos de clientes</span>
+                <span class="dato-pie">{{ l.apartados.kg | cantidad: 'kg' }} · de notas en espera o de un envío a medias</span>
               </div>
             }
             <div class="hilo-dato">

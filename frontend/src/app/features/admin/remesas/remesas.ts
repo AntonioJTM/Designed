@@ -180,7 +180,7 @@ export class Remesas {
   avisoHistorial(r: Remesa): string | null {
     // Un archivo que entró en VARIAS cargas es una lista con varios colores: su
     // nombre no dice un hilo y no hay nada que cotejar.
-    if (r.archivo && this.archivosDeLista().has(r.archivo)) return null;
+    if (Number(r.cargas_en_lista ?? 0) > 1 || (r.archivo && this.archivosDeLista().has(r.archivo))) return null;
     return textoAviso(cotejarArchivo(r.archivo, r));
   }
 

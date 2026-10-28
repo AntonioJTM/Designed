@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { VentasService } from '../../../core/services/ventas.service';
 import { InventarioService } from '../../../core/services/inventario.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -91,6 +91,11 @@ export class CajaPantalla {
   private readonly confirmacion = inject(ConfirmacionService);
   private readonly inv = inject(InventarioService);
   private readonly auth = inject(AuthService);
+  /** Reportes → Cortes de caja: solo quien lo puede abrir (Reportes y todas las tiendas). */
+  readonly veCortes = computed(() => {
+    this.auth.sesion();
+    return this.auth.puede('ver:reportes') && this.auth.veTodasLasTiendas();
+  });
 
   readonly cajas = signal<Caja[]>([]);
   readonly cajaSel = signal<number | null>(null);
@@ -154,7 +159,8 @@ export class CajaPantalla {
     const ventas = movs.filter((m) => m.tipo === 'venta');
     // Canceladas con su efectivo en el cajón como saldo a favor del cliente (2026-10-26):
     // el dinero sigue aquí (el corte lo espera) pero ya es del cliente.
-    const aFavor = ventas.filter((m) => Number(m.cancelada_a_favor));
+    // También lo abonado a una nota que se canceló a su favor (2026-10-26).
+    const aFavor = movs.filter((m) => Number(m.cancelada_a_favor));
     const ingresos = movs.filter((m) => m.tipo === 'ingreso');
     const retiros = movs.filter((m) => m.tipo === 'retiro');
     const devoluciones = movs.filter((m) => m.tipo === 'devolucion');
@@ -177,27 +183,27 @@ export class CajaPantalla {
         etiqueta: 'Debería haber',
         valor: this.pesos(s?.esperado_actual),
         pie: `fondo ${this.pesos(s?.monto_inicial)} + lo que entró − lo que salió`,
-        punto: 'var(--acento)',
+        tono: 'tono-acento',
       },
       {
         etiqueta: 'Ventas en efectivo',
         valor: this.pesos(suma(ventas)),
         pie: `${ventas.length} ${ventas.length === 1 ? 'venta' : 'ventas'}` + (aFavor.length
-          ? ` · ${this.pesos(suma(aFavor))} de ${aFavor.length === 1 ? 'una cancelada quedaron' : `${aFavor.length} canceladas quedaron`} a su saldo a favor`
+          ? ` · ${this.pesos(suma(aFavor))} de ${aFavor.length === 1 ? 'una nota cancelada quedaron' : `${aFavor.length} cobros de notas canceladas quedaron`} a su saldo a favor`
           : ''),
-        punto: 'var(--viz-series-3)',
+        tono: 'tono-serie-3',
       },
       {
         etiqueta: 'Abonos y otros ingresos',
         valor: this.pesos(suma(ingresos)),
         pie: ingresos.length === 0 ? 'no ha entrado más efectivo' : `${ingresosPie}, en efectivo`,
-        punto: 'var(--viz-series-1)',
+        tono: 'tono-acento',
       },
       {
         etiqueta: 'Salió del cajón',
         valor: this.pesos(suma(salio)),
         pie: partes.length ? partes.join(' · ') : 'no ha salido dinero',
-        punto: 'var(--punto-alerta)',
+        tono: 'tono-alerta',
       },
     ];
   });
@@ -211,14 +217,27 @@ export class CajaPantalla {
 
   // ---- Alta y edición de cajas ----
   readonly almacenes = signal<Almacen[]>([]);
+  /** Una caja va en una TIENDA (con mostrador, activa): en una bodega no se vende (2026-10-26). */
+  readonly tiendasParaCaja = computed(() => this.almacenes().filter((a) => !!Number(a.es_punto_venta) && !!Number(a.activo ?? 1)));
   /** null = cerrado; 0 = caja nueva; >0 = editando esa caja. */
   readonly modalCaja = signal<number | null>(null);
   readonly guardandoCaja = signal(false);
   readonly errorCaja = signal<string | null>(null);
   formCaja = { nombre: '', almacen_id: '' as number | '', activo: true };
 
+  /** La caja que pide el enlace (`?caja=`): el aviso "lleva 5 días abierta" abre ESA (2026-10-26). */
+  private readonly route = inject(ActivatedRoute);
+  private cajaPedida(): number | null {
+    return Number(this.route.snapshot.queryParamMap.get('caja')) || null;
+  }
+
   constructor() {
     this.cargarCajas(true);
+    // Si ya estaba en Caja y se toca otro aviso de turno, cambia a esa caja.
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((q) => {
+      const id = Number(q.get('caja')) || null;
+      if (id && id !== this.cajaSel() && this.cajas().some((c) => c.id === id)) this.elegir(id);
+    });
     // EN VIVO (2026-10-19): una venta, un abono o un anticipo hecho en otra
     // computadora entra a las cifras del turno sin recargar.
     inject(TiempoRealService)
@@ -249,15 +268,20 @@ export class CajaPantalla {
         this.cajas.set(cs);
         this.cargando.set(false);
         if (!elegir && cs.some((c) => c.id === this.cajaSel())) return;
-        // La que se usó la última vez; si ya no existe, la primera con turno
-        // abierto; si ninguna lo tiene, la primera activa.
+        // La que pide el enlace; si no, la que se usó la última vez; si ya no existe,
+        // la primera con turno abierto; si ninguna lo tiene, la primera activa.
+        const pedida = elegir ? cs.find((c) => c.id === this.cajaPedida()) : undefined;
         const guardada = leerCajaGuardada();
         const elegida =
+          pedida ??
           cs.find((c) => c.id === guardada) ??
           cs.find((c) => c.turno_id) ??
           cs.find((c) => c.activo) ??
           cs[0];
-        if (elegida) this.elegir(elegida.id);
+        // Solo se RECUERDA la que alguien escogió (la del enlace o la de antes): la que
+        // se toma sola no se guarda, o Abonar y Anticipo la proponían como si se
+        // hubiera elegido (2026-10-26, auditoría).
+        if (elegida) this.elegir(elegida.id, !!pedida || elegida.id === guardada);
         else this.sesion.set(null);
       },
       error: (e) => {
@@ -267,11 +291,11 @@ export class CajaPantalla {
     });
   }
 
-  elegir(id: number | string): void {
+  elegir(id: number | string, recordar = true): void {
     const n = Number(id);
     if (!n) return;
     this.cajaSel.set(n);
-    guardarCaja(n);
+    if (recordar) guardarCaja(n);
     this.ultimoCorte.set(null);
     this.mensaje.set(null);
     this.error.set(null);
@@ -364,7 +388,7 @@ export class CajaPantalla {
 
   nuevaCaja(): void {
     this.abrirModalCaja(0);
-    this.formCaja = { nombre: '', almacen_id: this.almacenes()[0]?.id ?? '', activo: true };
+    this.formCaja = { nombre: '', almacen_id: this.tiendasParaCaja()[0]?.id ?? '', activo: true };
   }
 
   editarCaja(c: Caja): void {
@@ -379,7 +403,8 @@ export class CajaPantalla {
       this.inv.misAlmacenes().subscribe({
         next: (a) => {
           this.almacenes.set(a);
-          if (!this.formCaja.almacen_id && a[0]) this.formCaja.almacen_id = a[0].id;
+          const primera = this.tiendasParaCaja()[0];
+          if (!this.formCaja.almacen_id && primera) this.formCaja.almacen_id = primera.id;
         },
         error: () => {},
       });
@@ -467,7 +492,7 @@ export class CajaPantalla {
     if (/^se canceló el gasto/i.test(motivo)) return { tipo: 'Gasto cancelado', detalle: quita(/^Se canceló el gasto de /i), plural: 'gasto cancelado|gastos cancelados' };
     if (/^anticipo/i.test(motivo)) return { tipo: 'Anticipo', detalle: quita(/^Anticipo de /i), plural: 'anticipo|anticipos' };
     if (/^pago de la nota/i.test(motivo)) return { tipo: 'Pago de nota', detalle: quita(/^Pago de la nota /i), plural: 'pago de nota|pagos de notas' };
-    if (/^cobro al entregar/i.test(motivo)) return { tipo: 'Cobro de nota', detalle: quita(/^Cobro al entregar (el pedido )?/i), plural: 'cobro de nota|cobros de notas' };
+    if (/^cobro al entregar/i.test(motivo)) return { tipo: 'Cobro de nota', detalle: quita(/^Cobro al entregar (el pedido |la nota )?/i), plural: 'cobro de nota|cobros de notas' };
     if (/^reactivaci/i.test(motivo)) return { tipo: 'Reactivación', detalle: quita(/^Reactivación de /i), plural: 'reactivación|reactivaciones' };
     return { tipo: 'Ingreso', detalle: motivo || 'Efectivo que se metió al cajón', plural: 'ingreso a mano|ingresos a mano' };
   }
@@ -490,6 +515,9 @@ export class CajaPantalla {
         return { ...base, tipo: 'Gasto', tono: 'naranja', detalle: m.motivo || 'Gasto', entra: false };
       default: {
         const c = this.claseIngreso(m);
+        if (Number(m.cancelada_a_favor)) {
+          return { ...base, tipo: c.tipo, tono: 'gris', detalle: `${c.detalle} · se canceló y quedó a su saldo a favor`, entra: true };
+        }
         return { ...base, tipo: c.tipo, tono: c.tipo === 'Ingreso' ? 'gris' : 'verde', detalle: c.detalle, entra: true };
       }
     }
@@ -507,8 +535,9 @@ export class CajaPantalla {
     return fechaRelativa(iso, conHora);
   }
 
+  /** Con centavos, como el corte (2026-10-26: la tarjeta decía "$1,235" y el corte "$1,234.50"). */
   pesos(v: unknown): string {
-    return Number(v ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+    return Number(v ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   pesos2(v: unknown): string {

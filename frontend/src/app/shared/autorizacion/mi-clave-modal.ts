@@ -1,6 +1,7 @@
 import { Component, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AutorizacionesService } from '../../core/services/autorizaciones.service';
+import { NotificacionesService } from '../../core/services/notificaciones.service';
 import { ApiError } from '../../core/models/auth.models';
 
 /**
@@ -67,6 +68,7 @@ import { ApiError } from '../../core/models/auth.models';
 })
 export class MiClaveModal {
   private readonly api = inject(AutorizacionesService);
+  private readonly notif = inject(NotificacionesService);
   readonly cerrado = output<void>();
   readonly guardando = signal(false);
   readonly error = signal<string | null>(null);
@@ -85,6 +87,8 @@ export class MiClaveModal {
       next: () => {
         this.guardando.set(false);
         this.listo.set(true);
+        // "Tu clave se apagó" se quita ya, no hasta la siguiente vuelta de la campana (2026-10-26).
+        this.notif.refrescar();
       },
       error: (e) => {
         this.guardando.set(false);

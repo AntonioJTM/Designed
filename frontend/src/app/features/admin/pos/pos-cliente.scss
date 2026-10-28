@@ -35,3 +35,6 @@
 .cintillo[data-tono='credito'], .cintillo[data-tono='pendiente'] { background: var(--aviso-f); color: var(--aviso-t); }
 .cintillo[data-tono='espera'] { background: var(--acento-suave); color: var(--acento-oscuro); }
 .cintillo[data-tono='atrasado'] { background: var(--peligro-f); color: var(--peligro-t); }
+
+/* Ya había quedado registrada (se cortó la conexión y se volvió a mandar igual, 2026-10-26). */
+.ticket .nota-repetida { font-weight: 500; color: var(--ok-t); }

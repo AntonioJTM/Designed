@@ -45,7 +45,8 @@
 
           <!-- Antes → después, en vivo (2026-10-19): cómo queda su cuenta con este abono. -->
           @if (quedaDebiendo(); as q) {
-            <p class="queda" role="status">
+            <!-- Sin role="status": cambia con cada tecla y el lector lo repetiría todo (DESIGN.md). -->
+            <p class="queda">
               @if (q.queda <= 0.004) {
                 Con este abono queda <b>al corriente</b>: ya no debe nada.
               } @else {

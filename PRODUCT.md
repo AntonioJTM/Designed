@@ -80,7 +80,8 @@ diseñar:
   contabilidad.
 - **Idioma y forma de trabajo:**
   - Toda la interfaz va en español de México, con las palabras de la tienda: paquete, cono, kilos,
-    surtir, apartar, fiar, corte.
+    surtir, nota en espera, a crédito, corte. (Desde el 2026-10-13 ya no se aparta ni se "fía":
+    se dice "nota en espera" y "a crédito".)
   - Las acciones van en ventanas que no se cierran al tocar el fondo.
   - No se usan los diálogos del navegador.
   - Debe verse bien en celular, además de en la computadora.

@@ -14,6 +14,7 @@ import {
   ReporteVentas,
 } from '../../../core/models/reportes.models';
 import { ApiError } from '../../../core/models/auth.models';
+import { celdaCsv } from '../rotacion/rotacion-ui';
 import { Columnas, Columna } from '../../../shared/charts/columnas';
 import { CantidadPipe } from '../../../shared/cantidad.pipe';
 import { DineroPipe } from '../../../shared/dinero.pipe';
@@ -264,19 +265,19 @@ export class Reportes implements OnInit {
         pie: dias === 1
           ? (conVentas ? 'en el día' : 'sin ventas ese día')
           : `en ${dias} días · ${conVentas} con ventas`,
-        punto: 'var(--acento)',
+        tono: 'tono-acento',
       },
       {
         etiqueta: 'Ventas',
         valor: n.toLocaleString('es-MX'),
         pie: conVentas > 1 ? `unas ${Math.round(n / conVentas)} por día con ventas` : 'en el periodo',
-        punto: 'var(--viz-series-1)',
+        tono: 'tono-serie-1',
       },
       {
         etiqueta: 'Por venta',
         valor: n > 0 ? pesos(total / n) : '—',
         pie: 'en promedio',
-        punto: 'var(--viz-series-3)',
+        tono: 'tono-serie-3',
       },
     ];
     // Los kilos los da el reporte desde 2026-10; con un servidor viejo no se inventan.
@@ -285,7 +286,7 @@ export class Reportes implements OnInit {
         etiqueta: 'Kilos vendidos',
         valor: `${kilos.toLocaleString('es-MX', { maximumFractionDigits: 0 })} kg`,
         pie: kilos > 0 ? `${Math.round((kilosPaquete / kilos) * 100)}% en paquete` : 'sin kilos en el periodo',
-        punto: 'var(--viz-series-2)',
+        tono: 'tono-serie-2',
       });
     }
     return lista;
@@ -416,20 +417,20 @@ export class Reportes implements OnInit {
         pie: r.q
           ? (t.pct_del_periodo === null ? 'sin ventas en el periodo' : `${pctTexto(t.pct_del_periodo)} de todo lo vendido`)
           : `en ${t.num_con_venta} ${t.num_con_venta === 1 ? 'hilo' : 'hilos'}`,
-        punto: 'var(--viz-series-2)',
+        tono: 'tono-serie-2',
       },
-      { etiqueta: 'Importe', valor: pesos(t.importe), pie: 'lo cobrado por esos kilos, sin IVA', punto: 'var(--acento)' },
+      { etiqueta: 'Importe', valor: pesos(t.importe), pie: 'lo cobrado por esos kilos, sin IVA', tono: 'tono-acento' },
       {
         etiqueta: 'Queda en inventario',
         valor: kilos(t.existencia),
         pie: t.pct_vendido === null ? 'sin ventas ni existencias' : `ya se vendió el ${pctTexto(t.pct_vendido)}`,
-        punto: 'var(--viz-series-3)',
+        tono: 'tono-serie-3',
       },
       {
         etiqueta: 'Hilos',
         valor: t.num_hilos.toLocaleString('es-MX'),
         pie: `${t.num_con_venta} con ventas · ${sinVenta} sin vender en el periodo`,
-        punto: 'var(--viz-series-1)',
+        tono: 'tono-serie-1',
       },
     ];
   });
@@ -519,20 +520,18 @@ export class Reportes implements OnInit {
       case 'cortes':
         nombre = `cortes-de-caja_${desde}_a_${hasta}`;
         filas = [
-          ['Caja', 'Cajero', 'Estado', 'Abrió', 'Cerró', 'Inicial', 'Ventas en efectivo', 'Esperado', 'Contado', 'Diferencia'],
+          ['Caja', 'Cajero', 'Estado', 'Abrió', 'Cerró', 'Inicial', 'Ventas en efectivo',
+            'Canceladas, a su saldo a favor', 'Esperado', 'Contado', 'Diferencia'],
           ...this.cortes().map((c) => [
             c.caja, c.usuario, c.estado, r(c.fecha_apertura), r(c.fecha_cierre), r(c.monto_inicial),
-            r(c.ventas_efectivo), r(c.monto_esperado), r(c.monto_final), r(c.diferencia),
+            r(c.ventas_efectivo), r(c.canceladas_a_favor ?? 0), r(c.monto_esperado), r(c.monto_final), r(c.diferencia),
           ]),
         ];
         break;
     }
 
-    const celda = (v: string | number) => {
-      const s = String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const csv = '﻿' + filas.map((f) => f.map(celda).join(',')).join('\r\n');
+    // La misma celda que Rotación: un texto que empieza con = + - @ va con ' delante (2026-10-26).
+    const csv = '﻿' + filas.map((f) => f.map(celdaCsv).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;

@@ -97,6 +97,8 @@ export interface Deuda {
   num_clientes: number;
   vencido: number;
   num_vencidos: number;
+  /** De `vencido`, lo que falta solo de sus notas ya vencidas (la cifra de la campana). */
+  vencido_notas?: number;
   dias_aviso: number;
   por_antiguedad: { clave: string; etiqueta: string; monto: number; clientes: number }[];
   clientes: DeudorCartera[];
@@ -106,7 +108,8 @@ export interface Deuda {
    * último día del mes).
    */
   por_cobrar_mes: { monto: number; clientes: number; hasta: string };
-  cobrado_mes: { monto: number; abonos: number };
+  /** Abonos a crédito más lo cobrado de notas pendientes de pago, este mes (2026-10-26). */
+  cobrado_mes: { monto: number; abonos: number; credito?: number; notas?: number; pagos_notas?: number };
   /** Lo que deben en notas pendientes de pago, aparte del crédito (2026-10-20). */
   notas_pendientes?: NotasPendientesDeuda;
   /** Lo que la tienda les guarda: anticipos y lo que regresaron (2026-10-19). */

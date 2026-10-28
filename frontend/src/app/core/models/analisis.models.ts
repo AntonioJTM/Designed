@@ -48,6 +48,8 @@ export interface Cobranza {
   num_clientes: number;
   vencido: number;
   num_vencidos: number;
+  /** De `vencido`, lo que falta solo de sus notas ya vencidas (la cifra de la campana). */
+  vencido_notas?: number;
   dias_aviso: number;
   por_antiguedad: TramoCartera[];
   clientes: ClienteConSaldo[];
@@ -151,8 +153,9 @@ export interface Margen {
 /**
  * Todo el tablero, de un solo viaje.
  *
- * Hilo parado y margen exponen COSTOS: llegan en `null` a quien no tiene
- * «Ver costos y márgenes» (`hacer:ver_costos`). El servidor ni los calcula.
+ * El margen expone COSTOS: llega en `null` a quien no tiene «Ver costos y
+ * márgenes» (`hacer:ver_costos`). El hilo parado sí llega a todos: sin ese
+ * permiso, valorado a precio de venta.
  */
 export interface Tablero {
   cobranza: Cobranza;
@@ -161,4 +164,6 @@ export interface Tablero {
   margen: Margen | null;
   /** Lo que la tienda les guarda a sus clientes (2026-10-19); quiénes, en Clientes › Cuánto debe. */
   a_favor?: { total: number; num_clientes: number };
+  /** Lo que deben en notas pendientes de pago: no es crédito, pero se debe (2026-10-26). */
+  notas_pendientes?: { monto: number; num_clientes: number };
 }

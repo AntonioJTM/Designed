@@ -60,7 +60,7 @@
       <div class="card-head">
         <div>
           <h2>Cuándo se vende más</h2>
-          <p>Kilos {{ surte() ? 'surtidos' : 'vendidos' }} cada mes{{ d.alcance.almacen_id == null ? ' en las dos tiendas' : '' }}</p>
+          <p>Kilos {{ surte() ? 'surtidos' : 'vendidos' }} cada mes{{ d.alcance.almacen_id == null ? ' en todas las tiendas' : '' }}</p>
         </div>
         <button type="button" class="btn-enlace" (click)="comoTabla.set(!comoTabla())">{{ comoTabla() ? 'Ver como gráfica' : 'Ver como tabla' }}</button>
       </div>
@@ -88,7 +88,7 @@
       <div class="card-head">
         <div>
           <h2>Hay que pedir pronto</h2>
-          <p>Con lo que hay hoy y lo que se espera vender. El proveedor tarda {{ d.ajustes.semanas_proveedor }} semanas.</p>
+          <p>Con lo que hay hoy y lo que se espera vender. El proveedor tarda {{ d.ajustes.semanas_proveedor }} semanas@if (!d.ajustes.confirmados) { (por confirmar)}.</p>
         </div>
       </div>
       @if (d.pedir_pronto.lista.length) {
@@ -178,7 +178,8 @@
               <th scope="row">Los {{ ranking().length }} hilos</th>
               <td class="num">{{ kilos(totalRanking()) }}{{ totalRanking() >= 1000 ? ' · ' + toneladas(totalRanking()) : '' }}</td>
               <td class="num">100%</td>
-              <td>{{ d.cifras.rotacion ? d.cifras.rotacion.veces.toLocaleString('es-MX') + ' veces al año' : '—' }}</td>
+              <!-- Con un hilo elegido, las cifras son de ese hilo: la de todos no se sabe aquí (2026-10-26). -->
+              <td>{{ d.cifras.rotacion && d.alcance.producto_id == null ? d.cifras.rotacion.veces.toLocaleString('es-MX') + ' veces al año' : '—' }}</td>
               <td colspan="3" class="muted">{{ contraTexto() }}</td>
             </tr>
           </tfoot>
@@ -192,13 +193,13 @@
           <a [routerLink]="['/admin/rotacion/hilo', q.producto_id]">{{ q.hilo }}</a>{{ ultimo ? '.' : ', ' }}
         }
         @if (kgQuietos() > 0) { Hay {{ kilos(kgQuietos()) }} entre todos. }
-        Lo que no se ha vendido en meses también sale en Hilo parado, en «Cómo va el negocio».
+        Los que llevan 90 días o más sin venderse también salen en Hilo parado, en «Cómo va el negocio».
       </p>
     }
     @for (s of d.sobran; track s.producto_id) {
       <p class="aviso sobra">
         <b>{{ s.hilo }} sobra:</b> hay {{ kilos(s.hay_kg) }} y se venden unos {{ kilos(s.se_vende_semana) }} por semana. Al ritmo de hoy
-        alcanza para {{ s.alcanza }}; no hace falta pedir. Lo que no se ha vendido en meses también sale en Hilo parado, en «Cómo va el negocio».
+        alcanza para {{ s.alcanza }}; no hace falta pedir.
       </p>
     }
   </section>

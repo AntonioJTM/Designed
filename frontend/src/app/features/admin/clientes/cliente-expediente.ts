@@ -36,6 +36,7 @@ import {
   plural,
   sumarDias,
   ultimosMeses,
+  cadaDias,
 } from './clientes-ui';
 import { BotonWhatsapp } from '../../../shared/ticket/boton-whatsapp';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -237,6 +238,8 @@ export class ClienteExpediente implements OnInit {
   readonly saldo = computed(() => this.num(this.exp()?.saldo));
   /** Lo que le quedó a favor por devoluciones (2026-10-13); va aparte de lo que debe. */
   readonly saldoFavor = computed(() => this.num(this.exp()?.saldo_favor));
+  /** Lo que debe en NOTAS PENDIENTES DE PAGO: no es crédito, pero se debe (2026-10-26). */
+  readonly enNotas = computed(() => this.num(this.exp()?.deuda_total?.notas));
   readonly limite = computed(() => this.num(this.exp()?.limite_credito));
   readonly disponible = computed(() => this.num(this.exp()?.credito_disponible));
   readonly usoCredito = computed(() => (this.limite() > 0 ? Math.round((100 * this.saldo()) / this.limite()) : null));
@@ -274,10 +277,13 @@ export class ClienteExpediente implements OnInit {
         tinta: normal,
       });
     } else lista.push({
+      // TODO lo que debe: su cuenta de crédito MÁS sus notas pendientes de pago (2026-10-26,
+      // auditoría: con solo el crédito decía "sin deuda" a quien debía una nota).
       etiqueta: 'Debe',
-      valor: pesos(this.saldo()),
+      valor: pesos(this.saldo() + this.enNotas()),
       pie:
-        this.limite() <= 0 ? (this.saldo() > 0 ? 'sin crédito autorizado' : 'no tiene crédito autorizado')
+        this.enNotas() > 0 ? `a crédito ${pesos(this.saldo())} · en notas ${pesos(this.enNotas())}`
+        : this.limite() <= 0 ? (this.saldo() > 0 ? 'sin crédito autorizado' : 'no tiene crédito autorizado')
         : this.saldo() <= 0 ? `sin deuda · crédito hasta ${pesos(this.limite())}`
         : uso !== null && uso >= 100 ? 'ya llegó a su límite'
         : `usa el ${uso}% de su crédito`,
@@ -449,10 +455,10 @@ export class ClienteExpediente implements OnInit {
         v >= 1.9 && v < 2.1 ? 'el doble de'
         : v >= 2.9 && v < 3.1 ? 'el triple de'
         : `${v.toLocaleString('es-MX', { maximumFractionDigits: 1 })} veces`;
-      return `Viene cada ${h.ritmo} días. Desde el ${fechaLarga(h.ultima)} no ha vuelto: lleva ${sin} días, ${veces} su costumbre.`;
+      return `Viene ${cadaDias(h.ritmo)}. Desde el ${fechaLarga(h.ultima)} no ha vuelto: lleva ${sin} ${sin === 1 ? 'día' : 'días'}, ${veces} su costumbre.`;
     }
     const cuando = sin === 0 ? 'hoy' : `hace ${plural(sin, 'día', 'días')}`;
-    return `Viene cada ${h.ritmo} días. Su última compra fue el ${fechaLarga(h.ultima)}, ${cuando}: va dentro de su ritmo.`;
+    return `Viene ${cadaDias(h.ritmo)}. Su última compra fue el ${fechaLarga(h.ultima)}, ${cuando}: va dentro de su ritmo.`;
   });
 
   readonly fraseCuenta = computed(() => {
@@ -481,7 +487,7 @@ export class ClienteExpediente implements OnInit {
     let f = `Viene sobre todo los ${diaEnPlural(h.dia_de_costumbre)}, de ${horaRango(h.hora_de_costumbre)}.`;
     const p = this.proxima();
     if (p && h.ritmo) {
-      f += ` Compra cada ${h.ritmo} días: ${p.paso ? 'debería haber vuelto' : 'debería volver'} el ${fechaLarga(p.fecha)}.`;
+      f += ` Compra ${cadaDias(h.ritmo)}: ${p.paso ? 'debería haber vuelto' : 'debería volver'} el ${fechaLarga(p.fecha)}.`;
     }
     return f;
   });

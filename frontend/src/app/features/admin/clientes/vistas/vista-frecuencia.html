@@ -153,7 +153,7 @@
                 {{ pesos(r.dinero_periodo) }}
                 <div class="muted" style="font-size: 0.75rem">{{ pesos(r.dinero_por_visita) }} por visita</div>
               </td>
-              <td class="num">{{ r.ritmo ? r.ritmo + ' días' : '—' }}</td>
+              <td class="num">{{ r.ritmo ? (r.ritmo === 1 ? '1 día' : r.ritmo + ' días') : '—' }}</td>
               <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ fechaCorta(r.ultima) }}</td>
               <td class="num" style="font-weight: 600">{{ r.dias_sin_venir }} {{ r.dias_sin_venir === 1 ? 'día' : 'días' }}</td>
               <td><span [class]="'pill ' + ESTADO[r.estado].pill">{{ ESTADO[r.estado].texto }}</span></td>

@@ -4,6 +4,7 @@ import { ClientesService } from '../../../core/services/clientes.service';
 import { ApiError } from '../../../core/models/auth.models';
 import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
 import { DineroPipe } from '../../../shared/dinero.pipe';
+import { nuevaClave } from '../../../core/clave-unica';
 
 /**
  * Corregir la deuda de un cliente: para lo que NO es un abono. Condonar una
@@ -38,6 +39,8 @@ export class AjusteModal {
   readonly registrado = output<{ saldo_nuevo: number }>();
 
   readonly guardando = signal(false);
+  /** Llave de un solo uso (2026-10-26): un reintento tras un corte no ajusta dos veces. */
+  private clave = nuevaClave();
   readonly error = signal<string | null>(null);
 
   sentido: 'baja' | 'sube' = 'baja';
@@ -70,9 +73,10 @@ export class AjusteModal {
     this.guardando.set(true);
     this.error.set(null);
     const saldoNuevo = this.saldoTras();
-    this.clientes.ajustar(this.clienteId(), this.sentido === 'baja' ? -m : m, motivo).subscribe({
+    this.clientes.ajustar(this.clienteId(), this.sentido === 'baja' ? -m : m, motivo, this.clave).subscribe({
       next: (r) => {
         this.guardando.set(false);
+        this.clave = nuevaClave();
         this.registrado.emit({ saldo_nuevo: Number(r?.saldo ?? saldoNuevo) });
         this.cerrar();
       },

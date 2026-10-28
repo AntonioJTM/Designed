@@ -89,6 +89,8 @@ export class ReciboModal implements OnInit {
   readonly semanaInicio = input.required<string>();
   /** Solo un periodo en borrador acepta cambios. */
   readonly editable = input(false);
+  /** Por qué solo se consulta (2026-10-26: el recibo propio decía "ya no está en borrador"). */
+  readonly motivoSoloLectura = input('Esta nómina ya no está en borrador: el recibo solo se consulta.');
 
   readonly cerrado = output<void>();
   /** El periodo con el recibo ya recalculado, para que la semana cuadre sus totales. */

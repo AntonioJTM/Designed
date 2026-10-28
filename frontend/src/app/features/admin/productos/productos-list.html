@@ -34,7 +34,8 @@
       <select [ngModel]="categoriaId()" (ngModelChange)="categoriaId.set($event); cambiarFiltro()">
         <option value="">Todos</option>
         @for (c of categorias(); track c.id) {
-          <option [ngValue]="c.id">{{ c.nombre }}</option>
+          <!-- Un material desactivado puede tener hilos: se filtra igual, pero se dice (2026-10-26). -->
+          <option [ngValue]="c.id">{{ c.nombre }}{{ c.activo === false || +c.activo === 0 ? ' (desactivado)' : '' }}</option>
         }
       </select>
     </label>
@@ -85,7 +86,7 @@
               <th>Calibre</th>
               <th>Material</th>
               <th>Línea</th>
-              <th class="num">Precio por kg</th>
+              <th class="num">Precio público</th>
               <th class="num">Hay</th>
               <th>Estado</th>
               <th><span class="oculto">Acciones</span></th>
@@ -105,9 +106,14 @@
                 <td>{{ p.grosor_calibre || '—' }}</td>
                 <td>{{ p.categoria }}</td>
                 <td>{{ p.linea || '—' }}</td>
+                <!-- Lo que SE COBRA, el de su presentación (2026-10-26, auditoría): el precio de
+                     lista del hilo no cambia lo que cobra la caja y aquí decía $98 cobrando $92. -->
                 <td class="num">
-                  @if (p.precio_kg != null) {
-                    {{ p.precio_kg | dinero }}
+                  @if (precioPublico(p); as pr) {
+                    {{ pr | dinero }} <span class="muted">por kg</span>
+                    @if (p.precio_kg != null && +p.precio_kg !== pr) {
+                      <div><small class="muted">lista {{ p.precio_kg | dinero }}</small></div>
+                    }
                   } @else {
                     <span class="muted">sin precio</span>
                   }

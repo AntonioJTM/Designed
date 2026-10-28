@@ -15,7 +15,7 @@
       @if (error()) { <p class="alert" role="alert">{{ error() }}</p> }
 
       @if (cargando()) {
-        <p class="muted">Cargando el pedido…</p>
+        <p class="muted">Cargando la nota…</p>
       } @else {
         <!-- Escanear un paquete: cae en su hilo; si el pedido no lo llevaba, lo agrega. -->
         <label class="field">
@@ -48,7 +48,7 @@
                   }
                 </div>
                 <button type="button" class="btn btn-ghost btn-sm" (click)="quitarLinea(l)"
-                        [attr.aria-label]="'Quitar ' + l.hilo + ' del pedido'">Quitar</button>
+                        [attr.aria-label]="'Quitar ' + l.hilo + ' de la nota'">Quitar</button>
               </div>
 
               @if (l.paquetes.length > 0) {
@@ -85,7 +85,7 @@
               }
             </section>
           } @empty {
-            <p class="muted">No lleva nada: agrega un hilo, o cancela el pedido.</p>
+            <p class="muted">No lleva nada: agrega un hilo, o cancela la nota.</p>
           }
         </div>
 

@@ -93,7 +93,8 @@
 
             <!-- Lo que sale del horario, calculado al momento. -->
             @if (diasQueTrabaja() > 0) {
-              <div class="resumen-jornada" aria-live="polite">
+              <!-- Sin aria-live: cambia con cada tecla y el lector lo repetía todo (DESIGN.md). -->
+              <div class="resumen-jornada">
                 <div><span>Trabaja</span><b>{{ diasQueTrabaja() }} {{ diasQueTrabaja() === 1 ? 'día' : 'días' }}</b></div>
                 <div><span>Horas a la semana</span><b>{{ horas().toLocaleString('es-MX') }} h</b></div>
                 <div><span>Su día vale</span><b>{{ valorDia() | dinero }}</b></div>
@@ -101,7 +102,8 @@
                 <div><span>Su hora extra (al doble)</span><b>{{ valorHoraExtra() | dinero }}</b></div>
               </div>
             } @else {
-              <p class="alert" role="alert" style="margin: 0">Marca al menos un día de trabajo.</p>
+              <!-- Sin horario se puede guardar: el recibo paga la semana completa (2026-10-26). -->
+              <p class="aviso sin-margen">Sin horario: el recibo paga la semana completa y no se pueden registrar vacaciones.</p>
             }
           </div>
 
@@ -118,7 +120,7 @@
           </button>
         }
         <button type="button" class="btn btn-ghost" (click)="cerrar()">Cancelar</button>
-        <button type="submit" class="btn btn-primary" [disabled]="guardando() || diasQueTrabaja() === 0">
+        <button type="submit" class="btn btn-primary" [disabled]="guardando()">
           {{ guardando() ? 'Guardando…' : 'Guardar' }}
         </button>
       </div>

@@ -58,6 +58,11 @@
               {{ periodo()!.pago_pedido ? 'Ya se pidió que se pague' : 'Pedir que se pague' }}
             </button>
           }
+        } @else if (periodo()!.estado === 'cancelado' && pagaDirecto()) {
+          <!-- Antes no tenía salida en la pantalla (2026-10-26, auditoría). -->
+          <button type="button" class="btn btn-ghost" [disabled]="ocupado()" (click)="regresarABorrador()">
+            Regresar a borrador
+          </button>
         }
       }
     </div>
@@ -71,10 +76,7 @@
     <div class="aviso recalcular" role="status">
       <span>
         Desde que se calculó
-        @if (r.nuevas.length) {
-          {{ r.nuevas.length === 1 ? 'entra 1 venta' : 'entran ' + r.nuevas.length + ' ventas' }}
-          ({{ foliosCortos(r.nuevas) }})
-        }
+        @if (r.nuevas.length) { {{ textoNuevas(r.nuevas) }} }
         @if (r.nuevas.length && r.quitadas.length) { y }
         @if (r.quitadas.length) {
           {{ r.quitadas.length === 1 ? 'sale 1 venta' : 'salen ' + r.quitadas.length + ' ventas' }}
@@ -219,9 +221,9 @@
                   }
                 </td>
                 <td class="num">
-                  @if (num(r.porcentaje_comision) > 0) {
+                  @if (num(r.porcentaje_comision) > 0 || num(r.comision) !== 0) {
                     {{ r.comision | dinero }}
-                    <div class="sub2">{{ num(r.porcentaje_comision) }}%</div>
+                    <div class="sub2">{{ num(r.porcentaje_comision) > 0 ? num(r.porcentaje_comision) + '%' : 'descuento' }}</div>
                   } @else {
                     <span class="muted">—</span>
                     <div class="sub2">sin comisión</div>
@@ -298,6 +300,7 @@
     [periodoId]="periodo()!.id"
     [semanaInicio]="periodo()!.fecha_inicio"
     [editable]="editable() && puedeTocar(r)"
+    [motivoSoloLectura]="editable() && !puedeTocar(r) ? 'Es tu propia nómina: tu recibo lo ajusta otra persona.' : 'Esta nómina ya no está en borrador: el recibo solo se consulta.'"
     (cerrado)="reciboAbierto.set(null)"
     (actualizado)="periodoActualizado($event)"
   />

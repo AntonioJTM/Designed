@@ -357,7 +357,9 @@ function hojaResumen(doc, periodo, recibos, elaboro) {
         { t: pdf.dinero(n(r.sueldo_base) + n(r.pago_vacaciones)), sub: n(r.pago_vacaciones) > 0 ? `vac. ${pdf.dinero(r.pago_vacaciones)}` : '' },
         pct > 0
           ? { t: pdf.dinero(r.comision), sub: `${num(pct)}% de ${pdf.dinero(r.ventas_netas)}` }
-          : { t: '—', sub: 'sin comisión', color: C.tinta3 },
+          // Un descuento de lo que regresó o se canceló, aunque hoy no gane % (2026-10-26).
+          : n(r.comision) !== 0 ? { t: pdf.dinero(r.comision), sub: 'descuento' }
+            : { t: '—', sub: 'sin comisión', color: C.tinta3 },
         extrasYDescuentos(r.otras_percepciones, r.deducciones),
         { t: pdf.dinero(r.total_pagar), bold: true },
       ];
@@ -370,8 +372,9 @@ function hojaResumen(doc, periodo, recibos, elaboro) {
   nota(doc, 'La comisión es sobre la VENTA NETA (subtotal menos descuento): sin IVA ni envío —lo que se cobra por ' +
     'llevar un pedido no cuenta—, y sin lo cancelado ni lo devuelto. Cada venta paga su comisión UNA vez, la semana ' +
     'en que queda liquidada: la de contado, el día que se vende; la de a crédito y las notas, cuando se ' +
-    'terminan de pagar. El sueldo se paga por los días que trabajó según su horario; las vacaciones, como días ' +
-    'normales; la hora extra, al doble.');
+    'terminan de pagar. Lo condonado con un ajuste a mano no paga comisión, y la de una venta que se cancela ' +
+    'después de pagada se descuenta en la siguiente nómina. El sueldo se paga por los días que trabajó según su ' +
+    'horario; las vacaciones, como días normales; la hora extra, al doble.');
   if (p.estado === 'borrador') {
     nota(doc, 'Borrador: las cifras pueden cambiar si se recalcula la nómina antes de pagarla.', { color: C.avisoT });
   }
@@ -484,7 +487,7 @@ function hojaComisiones(doc, periodo, recibos, { reglaAnterior }) {
               t: pdf.dinero(v.venta_neta),
               sub: [
                 n(v.devuelto) > 0 ? `regresó ${pdf.dinero(v.devuelto)}` : '',
-                n(v.condonado) > 0 ? `condonado ${pdf.dinero(v.condonado)}` : '',
+                n(v.condonado) > 0 ? `sin ${pdf.dinero(v.condonado)} condonados` : '',
               ].filter(Boolean).join(' · '),
             }
             : pdf.dinero(v.venta_neta),
@@ -550,6 +553,8 @@ function hojaRecibo(doc, periodo, r) {
   }
   if (pct > 0) {
     percepciones.push({ que: 'Comisión', como: `${num(pct)}% de ${pdf.dinero(r.ventas_netas)} de venta neta`, importe: n(r.comision) });
+  } else if (n(r.comision) !== 0) {
+    percepciones.push({ que: 'Comisión', como: 'descuento de ventas que regresaron o se cancelaron', importe: n(r.comision) });
   }
   for (const c of extras) {
     const cuando = [c.fecha ? diaCorto(c.fecha) : '', horas(c.cantidad), c.hora_entrada ? `entró ${c.hora_entrada}` : '', c.hora_salida ? `salió ${c.hora_salida}` : '']

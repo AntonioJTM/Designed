@@ -39,7 +39,7 @@
             <label class="field">
               La venta no tenía cliente: ¿a quién se le pone el saldo a favor?
               <input type="search" [(ngModel)]="busqueda" (ngModelChange)="alBuscar()" autocomplete="off"
-                     placeholder="Nombre, apodo o teléfono" />
+                     placeholder="Nombre, número (C-0001) o teléfono" />
             </label>
             @if (resultados().length) {
               <ul class="resultados" aria-label="Clientes encontrados">

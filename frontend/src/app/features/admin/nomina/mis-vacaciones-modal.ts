@@ -106,7 +106,8 @@ const ESTADO: Record<VacacionPedida['estado'], { texto: string; tono: string }> 
                   <input type="text" name="notas" maxlength="255" [(ngModel)]="notas" />
                 </label>
                 @if (diasPedidos() !== null) {
-                  <p class="vista-previa" role="status">
+                  <!-- Sin role="status": cambia con cada fecha que se teclea (DESIGN.md). -->
+                  <p class="vista-previa">
                     @if (diasPedidos() === 0) {
                       En esas fechas no te toca trabajar: no gastan días.
                     } @else {

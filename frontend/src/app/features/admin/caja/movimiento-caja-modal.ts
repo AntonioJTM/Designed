@@ -5,6 +5,7 @@ import { VentasService } from '../../../core/services/ventas.service';
 import { MovimientoCaja, SesionCaja } from '../../../core/models/ventas.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { autorizacionPedida } from '../../../shared/autorizacion/pedida';
+import { AuthService } from '../../../core/services/auth.service';
 
 /**
  * RETIRO o INGRESO de efectivo a mano en el turno abierto: el dueño saca dinero
@@ -27,6 +28,9 @@ export class MovimientoCajaModal implements OnInit {
   /** La llave de un solo uso de esta operación (2026-10-20): un doble clic no la registra dos veces. */
   private clave = nuevaClave();
   private readonly ventas = inject(VentasService);
+  private readonly auth = inject(AuthService);
+  /** Solo lo puede PEDIR: se avisa antes de apretar, como en «Registrar gasto» (2026-10-26). */
+  readonly soloPide = !this.auth.puede('hacer:mover_efectivo') && this.auth.puede('pedir:mover_efectivo');
 
   readonly sesion = input.required<SesionCaja>();
 

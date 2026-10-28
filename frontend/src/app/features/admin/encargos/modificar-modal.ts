@@ -174,7 +174,7 @@ export class ModificarPedidoModal implements OnInit {
 
   /** Por qué todavía no se puede guardar, o null. */
   motivo(): string | null {
-    if (!this.lineas().length) return 'El pedido se quedaría sin nada: si ya no lo quiere, cancélalo.';
+    if (!this.lineas().length) return 'La nota se quedaría sin nada: si ya no la quiere, cancélala.';
     const sinKg = this.lineas().find((l) => this.kgDe(l) === null);
     if (sinKg) {
       return sinKg.tipo === 'paquete'
@@ -211,7 +211,7 @@ export class ModificarPedidoModal implements OnInit {
 
   hayAqui(v: Variante): string {
     const kg = Number(v.aqui?.cantidad ?? 0);
-    if (!(kg > 0)) return 'no hay en el almacén del pedido';
+    if (!(kg > 0)) return 'no hay en el almacén de la nota';
     const kilos = `${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg`;
     return v.aqui?.paquetes ? `${v.aqui.paquetes} paq · ${kilos}` : kilos;
   }
@@ -223,7 +223,7 @@ export class ModificarPedidoModal implements OnInit {
   /** Agrega un hilo de la búsqueda (sin kilos todavía: se teclean o se escanean sus paquetes). */
   agregar(v: Variante): void {
     if (this.lineas().some((l) => l.variante_id === v.id)) {
-      this.error.set(`${this.nombreDe(v)} ya viene en el pedido: cámbiale los kilos ahí.`);
+      this.error.set(`${this.nombreDe(v)} ya viene en la nota: cámbiale los kilos ahí.`);
       return;
     }
     this.error.set(null);
@@ -260,7 +260,7 @@ export class ModificarPedidoModal implements OnInit {
     if (!cod) return;
     this.error.set(null);
     if (this.lineas().some((l) => l.paquetes.some((p) => p.codigo === cod))) {
-      this.error.set(`El paquete ${cod} ya está en el pedido.`);
+      this.error.set(`El paquete ${cod} ya está en la nota.`);
       return;
     }
     this.inv.resolverCodigo(cod).subscribe({
@@ -298,7 +298,7 @@ export class ModificarPedidoModal implements OnInit {
     const delMismo = b.estado === 'apartado' && b.consumido_folio === this.pedido().numero_pedido;
     if (b.estado && b.estado !== 'disponible' && !delMismo) {
       if (b.estado === 'apartado') {
-        const de = b.consumido_folio?.startsWith('TRA') ? 'un envío a sucursal' : 'otro pedido';
+        const de = b.consumido_folio?.startsWith('TRA') ? 'un envío a sucursal' : 'otra nota';
         return `El paquete ${cod} está apartado para ${de}${b.consumido_folio ? ` (${b.consumido_folio})` : ''}: escanea otro.`;
       }
       return b.estado === 'vendido' ? `El paquete ${cod} ya se vendió.`
@@ -355,7 +355,7 @@ export class ModificarPedidoModal implements OnInit {
     if (!this.cargando() && this.firma() !== this.original) {
       const si = await this.confirmacion.pedir({
         titulo: '¿Salir sin guardar los cambios?',
-        mensaje: 'Lo que cambiaste del pedido no se ha guardado: si sales, se pierde.',
+        mensaje: 'Lo que cambiaste de la nota no se ha guardado: si sales, se pierde.',
         aceptar: 'Salir sin guardar',
         cancelar: 'Seguir modificando',
         peligro: true,

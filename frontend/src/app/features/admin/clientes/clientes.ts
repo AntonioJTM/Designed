@@ -109,7 +109,7 @@ const PESTANAS: { vista: VistaClientes; etiqueta: string; d: string }[] = [
     .periodo { display: flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--tinta-3); padding-bottom: 8px; }
     .periodo select {
       min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px;
-      background: #fff; font: inherit; font-size: 0.875rem; color: var(--tinta);
+      background: var(--superficie); font: inherit; font-size: 0.875rem; color: var(--tinta);
     }
   `,
 })
@@ -290,7 +290,11 @@ export class ClientesPantalla implements OnInit {
         this.cuenta.set({
           activos: g.clientes.length,
           compraron: g.clientes.filter((c) => c.compras > 0).length,
-          deben: d.num_clientes,
+          // A crédito o en notas pendientes de pago: los dos deben (2026-10-26).
+          deben: new Set([
+            ...d.clientes.map((c) => Number(c.cliente_id)),
+            ...(d.notas_pendientes?.clientes ?? []).map((c) => Number(c.cliente_id)),
+          ]).size,
         });
       })
     );

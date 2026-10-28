@@ -3,7 +3,7 @@
 const express = require('express');
 const gastos = require('./gastos');
 const permisos = require('../permisos/service');
-const { pool } = require('../../config/db');
+const cajaModel = require('./model');
 const { AppError } = require('../../middlewares/error');
 
 /**
@@ -14,10 +14,8 @@ const { AppError } = require('../../middlewares/error');
 async function _turnoDeSusTiendas(auth, sesionId) {
   const almacenes = await permisos.almacenesDe(auth);
   if (almacenes === null) return;
-  const [[s]] = await pool.query(
-    'SELECT c.almacen_id FROM sesiones_caja s JOIN cajas c ON c.id = s.caja_id WHERE s.id = :id',
-    { id: Number(sesionId) }
-  );
+  // La consulta vive en el modelo (2026-10-26): aquí estaba repetida.
+  const s = await cajaModel.almacenDeTurno(sesionId);
   if (s) permisos.exigirAlmacen(almacenes, s.almacen_id, 'Ese turno');
 }
 

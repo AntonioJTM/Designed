@@ -118,6 +118,10 @@
                     </label>
                   }
                 </div>
+                <!-- Las que quien edita no ve se quedan como están (2026-10-26). -->
+                @if (!todas() && otrasTiendas().length) {
+                  <span class="ayuda">También trabaja en {{ otrasTiendas().join(', ') }}: esa tienda no la ves y se queda como está.</span>
+                }
                 <span class="ayuda">
                   {{ todas() ? 'Ve las ventas, la caja y el inventario de todas las tiendas, y los reportes.'
                              : 'Solo ve las ventas, la caja y el inventario de las tiendas marcadas. No ve reportes ni lo de las otras tiendas.' }}

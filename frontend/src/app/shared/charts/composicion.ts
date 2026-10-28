@@ -53,9 +53,12 @@ export interface Tramo {
       width="100%"
       [attr.height]="alto"
     >
-      <!-- Carril: se ve cuando no hay nada que pintar. -->
-      <rect x="0" y="0" [attr.width]="W()" [attr.height]="barH" rx="4"
-            fill="var(--viz-grid)" opacity="0.45" />
+      <!-- Carril: SOLO cuando no hay nada que pintar; debajo de los tramos, el hueco
+           de 2 px enseñaba el gris y no el fondo (DESIGN.md, 2026-10-26). -->
+      @if (tramos().length === 0) {
+        <rect x="0" y="0" [attr.width]="W()" [attr.height]="barH" rx="4"
+              fill="var(--viz-grid)" opacity="0.45" />
+      }
 
       @for (t of tramos(); track t.etiqueta) {
         <path [attr.d]="t.d" [attr.fill]="t.color">
@@ -69,7 +72,7 @@ export interface Tramo {
           <text
             [attr.x]="t.centro"
             [attr.y]="barH / 2 + 4"
-            [attr.fill]="t.textoClaro ? '#ffffff' : 'var(--viz-text)'"
+            [attr.fill]="t.textoClaro ? 'var(--superficie)' : 'var(--viz-text)'"
             class="viz-en-tramo"
             text-anchor="middle"
           >

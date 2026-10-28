@@ -109,7 +109,10 @@ export class VistaHilo {
       },
       {
         etiqueta: 'Rotación', tono: 'tono-acento', valor: rot ? `${rot.veces.toLocaleString('es-MX')} veces al año` : '—',
-        pie: rot ? `${rot.cada_dias ? `Se renueva cada ${rot.cada_dias} días · ` : ''}hubo ${kilos(rot.existencia_promedio)} en promedio` : 'Sin existencia con qué medirla',
+        pie: rot
+          ? `${rot.cada_dias ? `Se renueva cada ${rot.cada_dias} días · ` : ''}hubo ${kilos(rot.existencia_promedio)} en promedio` +
+            (rot.kardex_cuadra === false ? ' · el kardex no cuadra con lo que hay hoy: puede salir un poco distinta' : '')
+          : 'Sin existencia con qué medirla',
       },
       {
         etiqueta: 'Alcanza para', tono: (h.alcanza_semanas ?? 99) < 4 ? 'tono-alerta' : 'tono-aviso', valor: semanas(h.alcanza_semanas),

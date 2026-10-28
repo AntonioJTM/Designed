@@ -75,6 +75,11 @@ const ck = (n, ok, d) => {
   const comoAdmin = como(firmar(admin));
   const negado = (r) => r.status === 403 && r.error?.code === 'SIN_PERMISO';
   const paso = (r) => r.status !== 403 && r.status !== 401;
+  // Con un cuerpo VÁLIDO (2026-10-26, auditoría): con `{}`, `validate` contesta 422 antes
+  // que el candado y la prueba no probaba nada. Los ids no existen: no se mueve nada.
+  const merma = { variante_id: NO_EXISTE, almacen_id: NO_EXISTE, tipo: 'merma', cantidad: 1 };
+  // "No lo hace directo": 403 sin permiso, o 428 si solo lo puede pedir (autorizaciones).
+  const noDirecto = (r) => negado(r) || r.status === 428;
 
   // Lo que deberían sumar cajero + almacenista, según la base.
   const [filas] = await db.query(
@@ -116,14 +121,14 @@ const ck = (n, ok, d) => {
     ck('su perfil trae la suma de cajero y almacenista', tiene.size === suma.size && [...suma].every((c) => tiene.has(c)),
       { tiene: tiene.size, suma: suma.size });
     ck('el perfil dice sus otros puestos', r.data?.otros_roles?.[0]?.nombre === 'almacenista');
-    ck('pasa la guarda de almacenista (ajuste/merma)', paso(await comoUno('POST', '/inventario/movimientos', {})));
+    ck('pasa la guarda de almacenista (ajuste/merma)', paso(await comoUno('POST', '/inventario/movimientos', merma)));
     ck('y la de cajero (meter efectivo)', paso(await comoUno('POST', `/caja/sesiones/${NO_EXISTE}/movimientos`, { tipo: 'ingreso', monto: 1 })));
 
     console.log('\n=== 3. Quitarle un puesto vale en el acto ===');
     r = await comoAdmin('PUT', `/usuarios/${uno.id}`, { otros_roles: [] });
     ck('se le quita almacenista', r.status === 200 && r.data?.otros_roles?.length === 0, r.error);
     ck('con el MISMO token ya no pasa la guarda de almacenista',
-      delCajero.has('hacer:ajuste_merma') || negado(await comoUno('POST', '/inventario/movimientos', {})));
+      delCajero.has('hacer:ajuste_merma') || noDirecto(await comoUno('POST', '/inventario/movimientos', merma)));
     r = await comoUno('GET', '/usuarios/perfil');
     ck('su perfil ya solo trae lo de cajero', (r.data?.permisos ?? []).length === delCajero.size, (r.data?.permisos ?? []).length);
 
@@ -169,7 +174,7 @@ const ck = (n, ok, d) => {
     r = await comoAdmin('PUT', `/usuarios/${uno.id}`, { activo: false });
     ck('se le quita el acceso', r.status === 200 && !r.data?.activo, r.error);
     ck('su token vivo ya no entra a Permisos', (await comoUno('GET', '/permisos')).status === 403);
-    ck('ni pasa la guarda de almacenista', negado(await comoUno('POST', '/inventario/movimientos', {})));
+    ck('ni pasa la guarda de almacenista', noDirecto(await comoUno('POST', '/inventario/movimientos', merma)));
   } catch (e) {
     console.error(e);
     f++;

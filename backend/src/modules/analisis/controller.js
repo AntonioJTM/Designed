@@ -19,19 +19,8 @@ const { puede } = require('../permisos/service');
  */
 async function tablero(req, res, next) {
   try {
-    const q = req.query;
-    if (await puede(req.auth, 'hacer:ver_costos')) {
-      return res.json({ data: await service.tablero(q), error: null });
-    }
-    const [cobranza, clientesEnfriados, hiloMuerto] = await Promise.all([
-      service.cobranza(q),
-      service.clientesEnfriados(q),
-      service.hiloMuerto({ ...q, dias: q.dias_parado }, { conCosto: false }),
-    ]);
-    res.json({
-      data: { cobranza, clientes_enfriados: clientesEnfriados, hilo_muerto: hiloMuerto, margen: null },
-      error: null,
-    });
+    const conCosto = await puede(req.auth, 'hacer:ver_costos');
+    res.json({ data: await service.tablero(req.query, { conCosto }), error: null });
   } catch (err) { next(err); }
 }
 

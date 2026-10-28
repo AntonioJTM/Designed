@@ -251,6 +251,16 @@ export class EnvioModal implements OnInit {
             return;
           }
         }
+        // Mientras se preguntaba "¿sí está aquí?" pudo entrar otro del mismo hilo: se
+        // vuelve a revisar el tope antes de agregarlo (2026-10-26, auditoría).
+        const despues = estabaEn ? this.motivoRechazo(cod, r) : null;
+        if (despues) {
+          this.enCamino.delete(cod);
+          this.error.set(despues);
+          this.ultimo.set(null);
+          this.enfocar();
+          return;
+        }
         this.enCamino.delete(cod);
         const paquete: PaqueteEscaneado = {
           codigo: cod,
@@ -324,7 +334,7 @@ export class EnvioModal implements OnInit {
       // Uno apartado para ESTE mismo envío (se guardó antes y se quitó de la lista) sí vale.
       const delMismo = b.estado === 'apartado' && b.consumido_folio === this.traspaso().folio;
       if (b.estado === 'apartado' && !delMismo) {
-        const de = b.consumido_folio?.startsWith('TRA') ? 'otro envío a sucursal' : 'un pedido';
+        const de = b.consumido_folio?.startsWith('TRA') ? 'otro envío a sucursal' : 'una nota en espera';
         return `El paquete ${cod} está apartado para ${de}${b.consumido_folio ? ` (${b.consumido_folio})` : ''}: escanea otro.`;
       }
     }

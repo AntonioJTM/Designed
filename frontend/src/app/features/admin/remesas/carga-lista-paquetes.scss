@@ -8,7 +8,7 @@
 
 .hilo-abrir {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; margin: -4px -6px;
-  min-height: 36px; border: 0; border-radius: 6px; background: transparent;
+  min-height: 44px; border: 0; border-radius: 6px; background: transparent;
   font: inherit; color: var(--tinta); text-align: left; cursor: pointer;
 }
 .hilo-abrir:hover { background: var(--superficie-2); }
@@ -50,3 +50,6 @@ table.grid.hilos tr.fila-paquetes > td { max-width: none; white-space: normal; p
 .paquetes-lista li.con-aviso { background: var(--aviso-f); color: var(--aviso-t); }
 .paquetes-lista li.con-error .codigo, .paquetes-lista li.con-error .conos,
 .paquetes-lista li.con-aviso .codigo, .paquetes-lista li.con-aviso .conos { color: inherit; }
+
+// Espacio del bloque de papeles de la lista (en lugar de style=, 2026-10-26).
+.separado-abajo { margin: 16px 0; }

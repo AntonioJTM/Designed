@@ -1,10 +1,10 @@
 <!-- De quién llegó y con qué papeles. Todo opcional: se completa después desde el historial. -->
 <div class="datos-carga">
   <div class="field proveedor">
-    <label for="dc-proveedor">Proveedor</label>
+    <label [for]="uid">Proveedor</label>
     @if (agregando()) {
       <span class="nuevo">
-        <input id="dc-proveedor" type="text" [(ngModel)]="nuevoNombre" placeholder="Nombre del proveedor"
+        <input [id]="uid" type="text" [(ngModel)]="nuevoNombre" placeholder="Nombre del proveedor"
                (keydown.enter)="$event.preventDefault(); guardarNuevo()" />
         <button type="button" class="btn btn-primary btn-sm" [disabled]="guardando()" (click)="guardarNuevo()">
           {{ guardando() ? 'Guardando…' : 'Guardar' }}
@@ -13,7 +13,7 @@
       </span>
     } @else {
       <span class="nuevo">
-        <select id="dc-proveedor" [ngModel]="datos().proveedor_id" (ngModelChange)="cambiar('proveedor_id', $event)">
+        <select [id]="uid" [ngModel]="datos().proveedor_id" (ngModelChange)="cambiar('proveedor_id', $event)">
           <option [ngValue]="null">— Sin proveedor —</option>
           @for (p of proveedores(); track p.id) {
             <option [ngValue]="p.id">{{ p.nombre }}</option>

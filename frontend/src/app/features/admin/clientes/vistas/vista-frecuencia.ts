@@ -40,7 +40,7 @@ type Mostrar = 'toca' | 'todos' | 'frio' | 'perdido';
     .pista .base { position: absolute; left: 0; right: 0; top: 11px; height: 2px; background: var(--borde); border-radius: 1px; }
     .pista .tramo { position: absolute; top: 10px; height: 4px; border-radius: 2px; }
     .pista .marca { position: absolute; top: 3px; width: 2px; height: 18px; margin-left: -1px; background: var(--tinta-2); }
-    .pista .punto { position: absolute; top: 5px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; }
+    .pista .punto { position: absolute; top: 5px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; box-shadow: 0 0 0 2px var(--superficie); }
     .eje { display: grid; grid-template-columns: 220px minmax(0, 1fr) 190px; gap: 18px; padding-top: 8px; }
     .eje .marcas { position: relative; height: 18px; font-size: 0.75rem; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
     .eje .marcas span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
@@ -48,7 +48,7 @@ type Mostrar = 'toca' | 'todos' | 'frio' | 'perdido';
     .eje .marcas span:last-child { transform: translateX(-100%); }
     .filtros-tabla { display: flex; flex-wrap: wrap; gap: 12px; }
     .filtros-tabla label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; font-size: 0.8125rem; color: var(--tinta-3); }
-    .filtros-tabla select { max-width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px; background: #fff; font: inherit; font-size: 0.875rem; color: var(--tinta); }
+    .filtros-tabla select { max-width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid var(--borde-campo); border-radius: 8px; background: var(--superficie); font: inherit; font-size: 0.875rem; color: var(--tinta); }
     .tramos-frec > span { flex-basis: 0; min-width: 0; }
     @media (max-width: 720px) {
       .ritmo-fila { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 10px 0; }

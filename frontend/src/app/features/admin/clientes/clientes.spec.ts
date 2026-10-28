@@ -219,13 +219,13 @@ describe('ClientesPantalla', () => {
     const f = await montar('frecuencia');
     const el = f.nativeElement as HTMLElement;
     // La visita típica, arriba.
-    expect(el.textContent).toContain('cada vez se llevan unos 24.5 kg ($3,500)');
+    expect(el.textContent).toContain('cada vez se llevan unos 24.5 kg ($3,500.00)');
     // Por cliente: lo del periodo y lo de cada visita.
     const fila = textoDe(el.querySelector('table.grid tbody tr') as HTMLElement);
     expect(fila).toContain('60 kg');
     expect(fila).toContain('20 kg por visita');
     expect(fila).toContain('$7,000');
-    expect(fila).toContain('$2,333 por visita');
+    expect(fila).toContain('$2,333.33 por visita');
     // Y se puede ordenar por dinero: con "Todos", primero el que más deja.
     const c = f.debugElement.query((d) => d.name === 'app-vista-frecuencia').componentInstance;
     c.mostrar.set('todos');

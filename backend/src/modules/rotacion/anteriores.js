@@ -9,7 +9,7 @@ const lista = require('../remesas/lista');
 // VENTAS DE AÑOS ANTERIORES (2026-10-22, parte 2 de Rotación de inventario):
 // "para no esperar un año a ver la temporada". Un .xlsx con un renglón por hilo,
 // mes y (si se quiere) tienda: Hilo (el color), Calibre, Año, Mes (número o
-// nombre), Kilos y Tienda (opcional; vacía = las dos tiendas). Se ve primero una
+// nombre), Kilos y Tienda (opcional; vacía = todas las tiendas). Se ve primero una
 // VISTA PREVIA con lo que no se entiende; se carga solo si no hay errores.
 //
 // El hilo se reconoce con la MISMA regla que la carga del proveedor
@@ -128,9 +128,9 @@ async function previa(buffer) {
     if (kg == null) error('Faltan los kilos.');
     else if (!(kg > 0)) error('Los kilos tienen que ser más de 0.');
     else r.kg = Math.round(kg * 1000) / 1000;
-    // La tienda (opcional): vacía = las dos.
+    // La tienda (opcional): vacía = todas.
     r.almacen_id = null;
-    r.tienda = 'Las dos tiendas';
+    r.tienda = 'Todas las tiendas';
     if (v('tienda')) {
       const t = sinAcentos(v('tienda'));
       const a = almacenes.find((x) => sinAcentos(x.nombre) === t) ?? almacenes.find((x) => sinAcentos(x.nombre).includes(t));
@@ -149,6 +149,22 @@ async function previa(buffer) {
       if (cargado.has(clave)) aviso(`Ya estaba cargado (${cargado.get(clave).toLocaleString('es-MX')} kg): se reemplaza.`);
     }
     renglones.push(r);
+  }
+  // El mismo hilo y mes "para todas las tiendas" Y por tienda: en el total se sumarían
+  // los dos (2026-10-26, auditoría). Se avisa en los renglones de ese mes.
+  const porMes = new Map();
+  for (const r of renglones) {
+    if (r.estado === 'error' || r.producto_id == null) continue;
+    const k = `${r.producto_id}|${r.anio}|${r.mes}`;
+    if (!porMes.has(k)) porMes.set(k, []);
+    porMes.get(k).push(r);
+  }
+  for (const lista of porMes.values()) {
+    if (!lista.some((r) => r.almacen_id == null) || !lista.some((r) => r.almacen_id != null)) continue;
+    for (const r of lista) {
+      if (r.estado === 'ok') r.estado = 'aviso';
+      r.mensajes.push('Ese mes viene para todas las tiendas y también por tienda: en el total se sumarían los dos. Deja uno.');
+    }
   }
   const validos = renglones.filter((r) => r.estado !== 'error');
   const meses = validos.map((r) => `${r.anio}-${String(r.mes).padStart(2, '0')}`).sort();

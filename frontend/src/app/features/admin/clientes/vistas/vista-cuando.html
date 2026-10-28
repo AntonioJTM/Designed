@@ -104,7 +104,7 @@
               <td>{{ r.dia }}</td>
               <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ horaRango(r.hora) }}</td>
               <td style="font-variant-numeric: tabular-nums; white-space: nowrap">{{ fechaCorta(r.ultima) }}</td>
-              <td class="num">{{ r.ritmo ? 'cada ' + r.ritmo + ' días' : '—' }}</td>
+              <td class="num">{{ r.ritmo ? (r.ritmo === 1 ? 'cada día' : 'cada ' + r.ritmo + ' días') : '—' }}</td>
               <td>
                 <div style="display: flex; align-items: center; gap: 10px">
                   <span style="font-variant-numeric: tabular-nums; min-width: 52px; white-space: nowrap">{{ r.proxima ? fechaCorta(r.proxima) : '—' }}</span>

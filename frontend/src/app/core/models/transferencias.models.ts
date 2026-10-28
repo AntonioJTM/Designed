@@ -36,6 +36,8 @@ export interface Transferencia {
   cancelada: boolean;
   /** La venta se canceló y el dinero quedó a su saldo a favor: sigue en el banco y suma (2026-10-26). */
   a_favor?: boolean;
+  /** De una nota en espera que pesó menos: lo que se le regresó al entregarla; el importe es lo que llegó al banco (2026-10-26). */
+  regresado?: number | null;
   /** Las ventas que pagó (un abono a varias notas trae varias). */
   ventas: { id: number; folio: string; estado: string }[];
   /** El material de lo que se llevó ("ACRILAN, VISCOSA"). */

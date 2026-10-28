@@ -10,7 +10,7 @@
     <div class="kpis">
       @for (k of kpis(); track k.etiqueta) {
         <div class="kpi">
-          <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+          <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
           <span class="kpi-valor">{{ k.valor }}</span>
           <span class="kpi-pie">{{ k.pie }}</span>
         </div>

@@ -106,6 +106,8 @@ export class Traspasos {
   readonly puedeEnviar = computed(() => this.auth.puede('hacer:enviar_traspaso'));
   /** Pide directo a otra tienda (sin autorización): si no, su pedido espera autorización (2026-10-20). */
   readonly surteDirecto = computed(() => this.auth.puede('hacer:surtir_sucursal'));
+  /** Puede pedir mercancía (directo o con autorización): si no, no se le ofrece la solicitud. */
+  readonly puedePedir = computed(() => this.auth.puedeOPide('hacer:surtir_sucursal'));
   /** La solicitud que se está retirando: su botón se apaga mientras responde. */
   readonly retirando = signal<number | null>(null);
   readonly puedeRecibir = computed(() => this.auth.puede('hacer:recibir_traspaso'));
@@ -388,11 +390,6 @@ export class Traspasos {
     return porPaquete > 0 ? Math.max(0, Math.floor((libre + 0.0005) / porPaquete)) : 0;
   }
 
-  /** Cuántos paquetes con peso hay en el origen: el promedio sale de ellos. */
-  paquetesEnOrigen(l: LineaEnvio): number {
-    return this.pesos()[l.variante.id]?.disponible.paquetes ?? 0;
-  }
-
   /** Kilos LIBRES en el origen: la existencia menos lo ya apartado a otras solicitudes. */
   kilosLibres(l: LineaEnvio): number | null {
     const d = this.pesos()[l.variante.id]?.disponible;
@@ -501,9 +498,9 @@ export class Traspasos {
     this.error.set(null);
     this.mensaje.set(null);
 
-    // En PAQUETES: el servidor toma los bultos que de verdad hay (los más
-    // antiguos) y aparta su peso real. Una presentación que no es paquete (la
-    // "simple") no lleva bultos por paquete: va en los kilos que son.
+    // En PAQUETES: el servidor aparta N × el peso PROMEDIO de los paquetes del
+    // origen (a ciegas, el del catálogo); al surtir salen los que se escaneen. Una
+    // presentación que no es paquete (la "simple") va en los kilos que son.
     const items: TraspasoItemInput[] = lineas.map((l) =>
       l.variante.tipo_presentacion === 'paquete'
         ? { variante_id: l.variante.id, paquetes: Number(l.paquetes) }
@@ -521,8 +518,8 @@ export class Traspasos {
         next: (r) => {
           this.ultimo.set(r);
           this.mensaje.set(
-            `Solicitud ${r.folio} creada con ${r.lineas.length} producto(s). La mercancía quedó ` +
-              `apartada; ahora hay que enviarla.`
+            `Solicitud ${r.folio} creada con ${r.lineas.length} ${r.lineas.length === 1 ? 'hilo' : 'hilos'}. ` +
+              'La mercancía quedó apartada; ahora hay que enviarla.'
           );
           this.lineas.set([]);
           this.notas = '';
@@ -534,8 +531,11 @@ export class Traspasos {
           // Se PIDIÓ con autorización (no es un error): queda en "Pedidos con
           // autorización" hasta que la acepten o la rechacen.
           if ((e as { error?: { error?: ApiError } })?.error?.error?.code === 'AUTORIZACION_PEDIDA') {
-            this.mensaje.set('Se pidió la autorización: el pedido aparece arriba, en «Pedidos con autorización», ' +
-              'y la bodega lo ve para surtir cuando lo autoricen.');
+            // Quien surte tiene ese bloque DEBAJO de Pendientes (2026-10-26, auditoría).
+            this.mensaje.set(this.surte()
+              ? 'Se pidió la autorización: el pedido aparece abajo, en «Pedidos con autorización», y aquí mismo se surte cuando lo autoricen.'
+              : 'Se pidió la autorización: el pedido aparece arriba, en «Pedidos con autorización», ' +
+                'y la bodega lo ve para surtir cuando lo autoricen.');
             this.lineas.set([]);
             this.notas = '';
             this.cargarHistorial();
@@ -859,8 +859,6 @@ export class Traspasos {
     return { texto: 'Recibido', clase: 'verde' };
   }
 
-  /** Lo recibido de una línea ya cerrada, para el historial. */
-  /** Un hilo que se pidió y no salió: no había. */
   /**
    * LA BARRA DE CADA HILO (2026-10-16): cuántos paquetes van de los que se
    * pidieron, con sus kilos. Por enviar, los ESCANEADOS y guardados a medio
@@ -869,6 +867,8 @@ export class Traspasos {
    */
   avanceLinea(t: Traspaso, l: TraspasoLinea): { van: number; de: number; kg: number; pct: number; completo: boolean } | null {
     if (this.noSalio(l)) return null;
+    // Pedida en KILOS (presentación simple): no hay paquetes contra qué medir (2026-10-26).
+    if (l.paquetes_solicitados == null && l.cantidad_solicitada != null) return null;
     const pedidos = l.paquetes_solicitados ?? l.paquetes;
     const de = Math.round(Number(pedidos ?? 0));
     if (!(de > 0)) return null;

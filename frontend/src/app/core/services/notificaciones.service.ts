@@ -145,6 +145,8 @@ export class NotificacionesService {
   private reloj: ReturnType<typeof setInterval> | null = null;
   private readonly tiempoReal = inject(TiempoRealService);
   private enVivo: Subscription | null = null;
+  /** Sube al detener: una respuesta que llega de la sesión anterior ya no se pinta. */
+  private vuelta = 0;
 
   /** Arranca el sondeo. Idempotente: llamarlo dos veces no duplica el reloj. */
   iniciar(): void {
@@ -163,9 +165,14 @@ export class NotificacionesService {
     this.reloj = null;
     this.enVivo?.unsubscribe();
     this.enVivo = null;
+    // Al salir se olvidan los avisos (2026-10-26, auditoría): si entra otra persona en
+    // la misma computadora, veía un rato la cobranza y los envíos de quien salió.
+    this.vuelta++;
+    this.pendientes.set(null);
   }
 
   refrescar(): void {
+    const vuelta = this.vuelta;
     this.http
       .get<ApiResponse<Pendientes>>(`${this.base}/notificaciones`)
       .pipe(
@@ -175,7 +182,7 @@ export class NotificacionesService {
         })
       )
       .subscribe({
-        next: (p) => this.pendientes.set(p),
+        next: (p) => { if (vuelta === this.vuelta) this.pendientes.set(p); },
         // Sin sesión o sin red no se hace ruido: la campana simplemente no aparece.
         error: () => {},
       });

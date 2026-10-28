@@ -64,7 +64,11 @@ export class GastosCaja implements OnDestroy {
 
   readonly puedeRegistrar = computed(() => { this.auth.sesion(); return this.auth.puede('hacer:registrar_gasto'); });
   readonly puedeCancelar = computed(() => { this.auth.sesion(); return this.auth.puede('hacer:mover_efectivo'); });
-  readonly administraTipos = computed(() => { this.auth.sesion(); return this.auth.puede('hacer:tipos_gasto'); });
+  // Los tipos son de todas las tiendas: los cambia quien las ve todas (2026-10-26, auditoría).
+  readonly administraTipos = computed(() => {
+    this.auth.sesion();
+    return this.auth.puede('hacer:tipos_gasto') && this.auth.veTodasLasTiendas();
+  });
 
   constructor() {
     this.cargarTipos();

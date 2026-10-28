@@ -2,6 +2,7 @@
 
 const { filtroAlmacen } = require('../permisos/service');
 const { pool, withTransaction } = require('../../config/db');
+const { regresoDinero, regresoKg } = require('./regreso');
 const { AppError } = require('../../middlewares/error');
 const { hoyLocal } = require('../../utils/fechas');
 const { anotarCompartido } = require('../tiempo-real/contexto');
@@ -133,7 +134,8 @@ async function listar({ q, con_saldo, activo, lugar_entrega_id, sin_lugar, orden
 
   const ORDENES = {
     nombre: 'c.nombre',
-    saldo: 'saldo DESC',
+    // Quién debe más: su cuenta de crédito MÁS sus notas pendientes de pago (2026-10-26).
+    saldo: '(COALESCE(s.saldo, 0) + COALESCE(np.falta, 0)) DESC',
     // Quién compra más. Lo que la tienda quiere ver para atender mejor.
     compras: 'total_comprado DESC',
     // Quién no ha vuelto. NULL primero sería ruido: van al final.
@@ -153,14 +155,26 @@ async function listar({ q, con_saldo, activo, lugar_entrega_id, sin_lugar, orden
            COALESCE(s.disponible, c.limite_credito) AS credito_disponible,
            COALESCE(v.num_pedidos, 0) AS num_pedidos,
            COALESCE(v.total_comprado, 0) AS total_comprado,
-           v.ultima_compra
+           v.ultima_compra,
+           -- Lo que debe en NOTAS PENDIENTES DE PAGO (2026-10-26, auditoría): no es crédito,
+           -- pero se debe; sin esto la lista decía "—" a quien sí debía.
+           COALESCE(np.falta, 0) AS en_notas
       FROM clientes c
       LEFT JOIN tipos_cliente tc ON tc.id = c.tipo_cliente_id
       LEFT JOIN v_clientes_saldo s ON s.cliente_id = c.id
       LEFT JOIN (
+        SELECT p.cliente_id,
+               SUM(p.total - COALESCE((SELECT SUM(pg.monto) FROM pagos pg
+                                        WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0)) AS falta
+          FROM pedidos p
+         WHERE p.cliente_id IS NOT NULL AND p.nota_pendiente = 1 AND p.estado = 'pendiente'
+           AND NOT EXISTS (SELECT 1 FROM credito_movimientos cm WHERE cm.pedido_id = p.id AND cm.tipo = 'cargo')
+         GROUP BY p.cliente_id
+      ) np ON np.cliente_id = c.id
+      LEFT JOIN (
         SELECT cliente_id,
                COUNT(*) AS num_pedidos,
-               SUM(total) AS total_comprado,
+               SUM(total - ${regresoDinero('pedidos')}) AS total_comprado,
                MAX(creado_en) AS ultima_compra
           FROM pedidos
          WHERE cliente_id IS NOT NULL AND estado NOT IN ${ESTADOS_MUERTOS}${fv.sql}
@@ -483,10 +497,10 @@ async function estadisticas(id, almacenes = null) {
   const fp = filtroAlmacen('p.almacen_id', almacenes);
   const [[r]] = await pool.query(
     `SELECT COUNT(*) AS num_pedidos,
-            COALESCE(SUM(total), 0) AS total_comprado,
+            COALESCE(SUM(total - ${regresoDinero('pedidos')}), 0) AS total_comprado,
             -- Sin ROUND, AVG devuelve 6 decimales y la pantalla mostraría
             -- "$1,234.567890" como ticket promedio.
-            ROUND(COALESCE(AVG(total), 0), 2) AS ticket_promedio,
+            ROUND(COALESCE(AVG(total - ${regresoDinero('pedidos')}), 0), 2) AS ticket_promedio,
             MIN(creado_en) AS primera_compra,
             MAX(creado_en) AS ultima_compra,
             -- COALESCE porque SUM sobre cero filas es NULL, y "null pedidos
@@ -500,7 +514,7 @@ async function estadisticas(id, almacenes = null) {
 
   // Los kilos van aparte: viven en el detalle, no en el pedido.
   const [[k]] = await pool.query(
-    `SELECT COALESCE(SUM(d.cantidad), 0) AS kilos
+    `SELECT COALESCE(SUM(d.cantidad - ${regresoKg('d')}), 0) AS kilos
        FROM pedido_detalle d
        JOIN pedidos p ON p.id = d.pedido_id
       WHERE p.cliente_id = :id AND p.estado NOT IN ${ESTADOS_MUERTOS}${fp.sql}`,
@@ -528,8 +542,8 @@ async function coloresMasComprados(id, limite = 10, almacenes = null) {
   const [rows] = await pool.query(
     `SELECT p.id AS producto_id, p.nombre AS color, p.grosor_calibre AS calibre,
             cat.nombre AS material, l.nombre AS linea,
-            SUM(d.cantidad) AS kilos,
-            SUM(d.subtotal) AS importe,
+            SUM(d.cantidad - ${regresoKg('d')}) AS kilos,
+            SUM(d.subtotal - ${regresoKg('d')} * d.subtotal / NULLIF(d.cantidad, 0)) AS importe,
             COUNT(DISTINCT ped.id) AS veces,
             MAX(ped.creado_en) AS ultima_vez
        FROM pedido_detalle d
@@ -540,6 +554,7 @@ async function coloresMasComprados(id, limite = 10, almacenes = null) {
        LEFT JOIN lineas l          ON l.id = p.linea_id
       WHERE ped.cliente_id = :id AND ped.estado NOT IN ${ESTADOS_MUERTOS}${f.sql}
       GROUP BY p.id, p.nombre, p.grosor_calibre, cat.nombre, l.nombre
+     HAVING kilos > 0.0005
       ORDER BY kilos DESC
       LIMIT :limite`,
     { id, limite, ...f.params }
@@ -585,12 +600,13 @@ async function pedidos(id, { limit = 20, offset = 0, almacenes = null } = {}) {
     // son dos productos.
     const [hilos] = await pool.query(
       `SELECT d.pedido_id, pr.id AS producto_id, pr.nombre AS color,
-              pr.grosor_calibre AS calibre, SUM(d.cantidad) AS kg
+              pr.grosor_calibre AS calibre, SUM(d.cantidad - ${regresoKg('d')}) AS kg
          FROM pedido_detalle d
          JOIN producto_variantes pv ON pv.id = d.variante_id
          JOIN productos pr          ON pr.id = pv.producto_id
         WHERE d.pedido_id IN (:ids)
         GROUP BY d.pedido_id, pr.id, pr.nombre, pr.grosor_calibre
+       HAVING kg > 0.0005
         ORDER BY kg DESC`,
       { ids }
     );
@@ -1208,7 +1224,7 @@ async function cargarVentaACredito(conn, { clienteId, monto, pedidoId, numeroPed
   const cliente = crows[0];
   if (!cliente) throw new AppError(422, 'CLIENTE_INVALIDO', 'Ese cliente no existe');
   if (!cliente.activo) {
-    throw new AppError(422, 'CLIENTE_INACTIVO', `${cliente.nombre} está dado de baja.`);
+    throw new AppError(422, 'CLIENTE_INACTIVO', `«${cliente.nombre}» está dado de baja como cliente.`);
   }
 
   const limite = Number(cliente.limite_credito);
@@ -1220,10 +1236,12 @@ async function cargarVentaACredito(conn, { clienteId, monto, pedidoId, numeroPed
   const saldoActual = await saldo(clienteId, conn, true);
   const disponible = Math.round((limite - saldoActual) * 100) / 100;
   if (monto > disponible + 0.001) {
+    // Con miles y el signo antes del "$" (2026-10-26: decía "le quedan $-2,000.00").
+    const $ = (n) => Number(n).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
     throw new AppError(409, 'CREDITO_INSUFICIENTE',
-      `${cliente.nombre} debe $${saldoActual.toFixed(2)} de un límite de ` +
-      `$${limite.toFixed(2)}: le quedan $${disponible.toFixed(2)} y esta venta es ` +
-      `de $${monto.toFixed(2)}.`);
+      `${cliente.nombre} debe ${$(saldoActual)} de un límite de ${$(limite)}: ` +
+      (disponible > 0 ? `le quedan ${$(disponible)}` : 'ya no le queda crédito') +
+      ` y esta venta es de ${$(monto)}.`);
   }
 
   // A CUÁNTOS DÍAS es la nota (2026-10-20): los que se dijeron al venderla; sin
@@ -1335,9 +1353,9 @@ async function habitos(clienteId, almacenes = null) {
   // dicen la misma cifra de lo que gastó.
   const [[p90]] = await pool.query(
     `SELECT COUNT(CASE WHEN creado_en >= NOW() - INTERVAL 90 DAY THEN 1 END) AS compras,
-            COALESCE(SUM(CASE WHEN creado_en >= NOW() - INTERVAL 90 DAY THEN total END), 0) AS total,
+            COALESCE(SUM(CASE WHEN creado_en >= NOW() - INTERVAL 90 DAY THEN total - ${regresoDinero('pedidos')} END), 0) AS total,
             COUNT(CASE WHEN creado_en < NOW() - INTERVAL 90 DAY THEN 1 END) AS compras_antes,
-            COALESCE(SUM(CASE WHEN creado_en < NOW() - INTERVAL 90 DAY THEN total END), 0) AS total_antes
+            COALESCE(SUM(CASE WHEN creado_en < NOW() - INTERVAL 90 DAY THEN total - ${regresoDinero('pedidos')} END), 0) AS total_antes
        FROM pedidos
       WHERE cliente_id = :id AND ${vivo} AND creado_en >= NOW() - INTERVAL 180 DAY`,
     { id: clienteId, ...f.params }
@@ -1345,8 +1363,8 @@ async function habitos(clienteId, almacenes = null) {
   // Qué se llevó en esos 90 días: kilos, cuántos en cono y de cuántos HILOS
   // distintos (producto_id: el mismo color en dos calibres son dos hilos).
   const [[k90]] = await pool.query(
-    `SELECT COALESCE(SUM(d.cantidad), 0) AS kg,
-            COALESCE(SUM(CASE WHEN pv.tipo_presentacion = 'cono' THEN d.cantidad ELSE 0 END), 0) AS kg_cono,
+    `SELECT COALESCE(SUM(d.cantidad - ${regresoKg('d')}), 0) AS kg,
+            COALESCE(SUM(CASE WHEN pv.tipo_presentacion = 'cono' THEN d.cantidad - ${regresoKg('d')} ELSE 0 END), 0) AS kg_cono,
             COUNT(DISTINCT pv.producto_id) AS hilos
        FROM pedido_detalle d
        JOIN pedidos p             ON p.id = d.pedido_id
@@ -1358,13 +1376,13 @@ async function habitos(clienteId, almacenes = null) {
   // Contra qué se compara su compra promedio: la de TODOS los clientes
   // identificados en el mismo periodo (el "Por compra" de Cuánto gasta).
   const [[tienda]] = await pool.query(
-    `SELECT COUNT(*) AS compras, COALESCE(SUM(total), 0) AS total FROM pedidos
+    `SELECT COUNT(*) AS compras, COALESCE(SUM(total - ${regresoDinero('pedidos')}), 0) AS total FROM pedidos
       WHERE cliente_id IS NOT NULL AND estado NOT IN ('cancelado', 'devuelto')
         AND creado_en >= NOW() - INTERVAL 90 DAY${f.sql}`,
     f.params
   );
   const [porMes] = await pool.query(
-    `SELECT DATE_FORMAT(creado_en, '%Y-%m') AS mes, COUNT(*) AS compras, SUM(total) AS total
+    `SELECT DATE_FORMAT(creado_en, '%Y-%m') AS mes, COUNT(*) AS compras, SUM(total - ${regresoDinero('pedidos')}) AS total
        FROM pedidos
       WHERE cliente_id = :id AND ${vivo}
         AND creado_en >= DATE_FORMAT(CURDATE() - INTERVAL 5 MONTH, '%Y-%m-01')

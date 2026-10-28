@@ -74,8 +74,8 @@
     </div>
     @if (paquetes().length === 0) {
       <p class="aviso">
-        No hay presentaciones de tipo <b>paquete</b>. Da de alta el producto con la casilla
-        <b>Multipresentación</b> y su presentación de paquete antes de cargarle mercancía.
+        Todavía no hay hilos con su paquete. Da de alta el hilo en Productos (su paquete se crea
+        solo), o carga la lista del proveedor en «Lista con varios colores», que crea los que falten.
       </p>
     } @else {
       <div class="campos">
@@ -110,10 +110,10 @@
         </label>
       </div>
       <!-- De quién llegó y con qué papeles; el costo, solo administración y contabilidad. -->
-      <div style="margin-top: 16px">
+      <div class="separado">
         <app-datos-carga [(datos)]="datosCarga" [conCosto]="veCostos()" />
       </div>
-      <label class="field" style="margin-top: 16px">
+      <label class="field separado">
         <span>Notas <span class="muted">(opcional)</span></span>
         <input type="text" [(ngModel)]="notas" placeholder="Ej. Llegó con dos cajas golpeadas" />
       </label>
@@ -210,7 +210,7 @@
       @if (p.resumen.lotes.length > 1) {
         <p class="lotes-linea muted">
           @for (l of p.resumen.lotes; track l.lote; let ultimo = $last) {
-            Lote <span class="mono">{{ l.lote }}</span>: {{ l.bultos }} bultos,
+            Lote <span class="mono">{{ l.lote }}</span>: {{ l.bultos }} {{ +l.bultos === 1 ? 'paquete' : 'paquetes' }},
             {{ l.kg | cantidad: 'kg' }}{{ ultimo ? '.' : ' · ' }}
           }
           Todos suman al mismo hilo.
@@ -264,7 +264,7 @@
       <div class="confirmar">
         <span class="muted">
           @if (p.bultos.length > bultosVisibles().length) {
-            y {{ p.bultos.length - bultosVisibles().length }} bultos más ·
+            y {{ p.bultos.length - bultosVisibles().length }} {{ p.bultos.length - bultosVisibles().length === 1 ? 'paquete' : 'paquetes' }} más ·
             <button type="button" class="btn-enlace" (click)="verTodos.set(true)">Ver todos</button>
           } @else {
             Entran a {{ nombreAlmacen() || 'el almacén elegido' }}.

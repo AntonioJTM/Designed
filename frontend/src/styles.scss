@@ -206,6 +206,8 @@ button, input, select, textarea { font-family: inherit; }
 .kpi-label .punto.tono-tinta { background: var(--tinta); }
 /* Más tonos para los puntos (2026-10-20: Nómina y Notas en espera los pintaban con style=). */
 .kpi-label .punto.tono-acento { background: var(--acento); }
+.kpi-label .punto.tono-serie-1 { background: var(--viz-series-1); }
+.kpi-label .punto.tono-serie-2 { background: var(--viz-series-2); }
 .kpi-label .punto.tono-ok { background: var(--ok-t); }
 .kpi-label .punto.tono-peligro { background: var(--peligro-t); }
 .kpi-label .punto.tono-ambar { background: var(--aviso-t); }

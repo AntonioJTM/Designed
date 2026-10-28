@@ -142,6 +142,7 @@ describe('Traspasos', () => {
   let permisos: string[] | null = null;
   const authFalso = {
     puede: (p: string) => permisos === null || permisos.includes(p),
+    puedeOPide: (p: string) => permisos === null || permisos.includes(p) || permisos.includes(p.replace('hacer:', 'pedir:')),
     veTodasLasTiendas: () => todasLasTiendas,
   };
   /** ¿Ve todas las tiendas? Una prueba lo apaga (pedir a ciegas). */
@@ -502,7 +503,8 @@ describe('Traspasos', () => {
       { ...almacenes[1], mio: true },
     ] as Almacen[];
     historial = [{ ...enTransito, id: 80, folio: 'TRA-80', estado: 'solicitado', almacen_origen_id: 1, almacen_destino_id: 2 }];
-    permisos = ['ver:surtir', 'hacer:enviar_traspaso'];
+    // Pide con autorización (2026-10-26: sin poder pedir, la solicitud ya no se ofrece).
+    permisos = ['ver:surtir', 'hacer:enviar_traspaso', 'pedir:surtir_sucursal'];
     const fixture = await montarFixture();
     const c = fixture.componentInstance;
 

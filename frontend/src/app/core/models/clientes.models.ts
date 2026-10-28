@@ -48,6 +48,8 @@ export interface Cliente {
   ultimo_abono?: string | null;
   num_pedidos?: Cifra;
   total_comprado?: Cifra;
+  /** Lo que debe en notas pendientes de pago (no es crédito, pero se debe; 2026-10-26). */
+  en_notas?: Cifra;
   ultima_compra?: string | null;
 }
 
@@ -170,6 +172,8 @@ export interface Expediente extends Cliente {
   /** Lo que le quedó a favor por devoluciones (2026-10-13). */
   saldo_favor?: number;
   saldo_favor_movimientos?: MovimientoSaldoFavor[];
+  /** Cuántos movimientos tiene su saldo a favor (la lista trae los más recientes). */
+  saldo_favor_total_movimientos?: number;
   /** Cuánto debe en total: su cuenta de crédito y sus notas pendientes de pago. */
   deuda_total?: DeudaTotal;
 }

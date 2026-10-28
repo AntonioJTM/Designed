@@ -9,12 +9,22 @@ const autorizaciones = require('../autorizaciones/service');
 const router = Router();
 
 /**
- * La campana del panel: lo que está esperando a alguien. Cualquiera del staff la
- * ve, porque cualquiera puede surtir o firmar de recibido.
+ * La campana del panel: lo que está esperando a alguien. Cada quien recibe solo
+ * los avisos de lo que atiende (sus permisos) y de sus tiendas.
  */
 router.get('/', authRequired, requireTipo('usuario'), async (req, res, next) => {
   try {
-    const data = await model.pendientes(await almacenesDe(req.auth));
+    // Cada aviso, solo a quien lo atiende: el mismo permiso con que la pantalla lo enseña.
+    const [clientes, surtir, enviar, recibir, inventario, catalogo, caja, notas, config] = await Promise.all(
+      ['ver:clientes', 'ver:surtir', 'hacer:enviar_traspaso', 'hacer:recibir_traspaso', 'ver:inventario',
+        'ver:catalogo', 'ver:caja', 'ver:notas_pendientes', 'ver:config']
+        .map((k) => puede(req.auth, k))
+    );
+    // "Surtir ›" a quien puede ENVIAR y "falta que confirmen" a quien puede FIRMAR de
+    // recibido (2026-10-26, auditoría): con solo ver Surtir sucursal no podía atenderlos.
+    const data = await model.pendientes(await almacenesDe(req.auth), {
+      clientes, enviar: surtir && enviar, recibir: surtir && recibir, inventario, catalogo, caja, notas, config,
+    });
     // Las solicitudes que esperan SU autorización (2026-10-19): un aviso.
     // Si falla (p. ej. falta la migración) la campana sigue funcionando sin este aviso.
     const porAutorizar = (await puede(req.auth, 'ver:autorizaciones'))

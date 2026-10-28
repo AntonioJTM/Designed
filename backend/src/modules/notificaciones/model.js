@@ -4,6 +4,7 @@ const { pool } = require('../../config/db');
 const analisisModel = require('../analisis/model');
 const { filtroAlmacen } = require('../permisos/service');
 const whatsapp = require('../whatsapp/conexion');
+const { COND_ALERTA } = require('../inventario/model');
 
 // Cuándo un pendiente empieza a doler. Van aquí, con nombre, para poder
 // ajustarlos sin buscarlos dentro de una consulta.
@@ -31,7 +32,14 @@ const DIAS_TURNO_ABIERTO = 2;
  * propósito — lo que importa es que quede pendiente hasta que se resuelva, y una
  * marca de leída solo taparía el pendiente.
  */
-async function pendientes(almacenes = null) {
+/**
+ * `ve`: lo que la persona atiende, por sus permisos (2026-10-26, auditoría): a quien
+ * no tiene Clientes no se le calcula ni se le manda la cobranza, ni los teléfonos de
+ * los clientes nuevos; esconderlo en la pantalla no bastaba (el JSON se lee en el
+ * navegador). Sin `ve` (null), todo.
+ */
+async function pendientes(almacenes = null, ve = null) {
+  const puede = (k) => !ve || ve[k] === true;
   // CADA QUIEN, SUS TIENDAS (2026-10-15): surte quien es del origen, firma de
   // recibido quien es del destino, y los mínimos y las notas son de su tienda.
   // La cobranza y los que dejaron de venir llevan a miradas de Clientes que
@@ -43,7 +51,7 @@ async function pendientes(almacenes = null) {
   const fp = filtroAlmacen('p.almacen_id', almacenes);
 
   // Solicitudes esperando que alguien las surta.
-  const [porEnviar] = await pool.query(
+  const [porEnviar] = !puede('enviar') ? [[]] : await pool.query(
     `SELECT t.id, t.folio, t.creado_en,
             ao.nombre AS almacen_origen, ad.nombre AS almacen_destino,
             u.nombre AS usuario,
@@ -60,7 +68,7 @@ async function pendientes(almacenes = null) {
   );
 
   // Ya salieron y nadie ha firmado que llegaron.
-  const [porRecibir] = await pool.query(
+  const [porRecibir] = !puede('recibir') ? [[]] : await pool.query(
     `SELECT t.id, t.folio, t.enviado_en,
             ao.nombre AS almacen_origen, ad.nombre AS almacen_destino,
             ue.nombre AS enviado_por,
@@ -78,7 +86,7 @@ async function pendientes(almacenes = null) {
 
   // Turnos de caja abiertos de varios días, de SUS tiendas.
   const ft = filtroAlmacen('c.almacen_id', almacenes);
-  const [turnosViejos] = await pool.query(
+  const [turnosViejos] = !puede('caja') ? [[]] : await pool.query(
     `SELECT s.id, s.caja_id, c.nombre AS caja, a.nombre AS almacen, u.nombre AS usuario,
             DATE_FORMAT(s.fecha_apertura, '%Y-%m-%d %H:%i:%s') AS desde,
             DATEDIFF(CURDATE(), DATE(s.fecha_apertura)) AS dias
@@ -92,16 +100,17 @@ async function pendientes(almacenes = null) {
   );
 
   // Existencias bajo su mínimo. Solo cuentan las que TIENEN mínimo capturado.
-  const [[stock]] = await pool.query(
+  // La MISMA condición que Inventario `?ver=minimo` (COND_ALERTA): copiada, se podían separar.
+  const [[stock]] = !puede('inventario') ? [[{ n: 0 }]] : await pool.query(
     `SELECT COUNT(*) AS n FROM inventario i
-      WHERE i.stock_minimo > 0 AND (i.cantidad - i.cantidad_reservada) <= i.stock_minimo${fi.sql}`,
+      WHERE ${COND_ALERTA}${fi.sql}`,
     fi.params
   );
 
   // Cobranza: quién debe una nota que lleva mucho sin pagarse.
   //
   // Se mide desde su NOTA MÁS VIEJA sin pagar (2026-10-20; antes, desde el último
-  // abono, y un abono chiquito lo "renovaba"). Se listan pocos —los de mayor saldo— porque esto es un aviso, no la
+  // abono, y un abono chiquito lo "renovaba"). Se listan pocos —los más vencidos— porque esto es un aviso, no la
   // pantalla de cobranza. Sale de la MISMA cartera que Cuánto debe y Cómo va el negocio (2026-10-17):
   // los mismos días y el mismo plazo que la caja, así el aviso y la lista nunca
   // se contradicen.
@@ -109,16 +118,17 @@ async function pendientes(almacenes = null) {
   // Desde el 2026-10-20 son las NOTAS A CRÉDITO VENCIDAS: cada una pasó sus días de
   // crédito sin pagarse ("después de los días, si no paga, una notificación"). Un
   // aviso con TODAS contadas y las 8 más vencidas a la vista.
-  const atrasados = !todas ? [] : (await analisisModel.cartera()).clientes.filter((r) => r.notas_vencidas > 0);
+  const atrasados = !todas || !puede('clientes') ? [] : (await analisisModel.cartera()).clientes.filter((r) => r.notas_vencidas > 0);
   let notasVencidas = [];
   if (atrasados.length) {
     const { diasSinAbonarDeTodos } = require('../clientes/model');
     const porCliente = await diasSinAbonarDeTodos();
-    notasVencidas = atrasados.flatMap((r) => (porCliente.get(Number(r.cliente_id))?.vencidas ?? []).map((n) => ({
+    notasVencidas = atrasados.flatMap((r) => (porCliente.get(Number(r.cliente_id))?.vencidas ?? []).map((n, i) => ({
       cliente_id: r.cliente_id, nombre: r.nombre, nombre_comercial: r.nombre_comercial, telefono: r.telefono,
       // Sin venta = un ajuste que subió su deuda (Corregir deuda): no es una nota.
       pedido_id: n.pedidoId ?? null, folio: n.folio ?? null, ajuste: n.pedidoId == null,
-      clave: `${r.cliente_id}-${n.pedidoId ?? 'aj-' + n.dia}`,
+      // Con el renglón: dos ajustes del mismo cliente el mismo día repetían la llave.
+      clave: `${r.cliente_id}-${n.pedidoId ?? 'aj-' + n.dia + '-' + i}`,
       dias_credito: n.plazo, vence_el: n.venceEl, dias_vencida: n.diasVencida, por_pagar: n.porPagar,
     }))).sort((a, b) => b.dias_vencida - a.dias_vencida || b.por_pagar - a.por_pagar);
   }
@@ -133,7 +143,7 @@ async function pendientes(almacenes = null) {
   // venir (analisis/model.js → clientesEnfriados), así el número del aviso y la
   // lista que abre son siempre los mismos (lo pidió el usuario el 2026-10-03:
   // "doy clic y no me dice quiénes"). Aquí solo se traen los primeros 8.
-  const frios = !todas
+  const frios = !todas || !puede('clientes')
     ? { clientes: [], num_clientes: 0 }
     : await analisisModel.clientesEnfriados({ dias: DIAS_SIN_VENIR, minCompras: 2, limite: 8 });
 
@@ -144,7 +154,7 @@ async function pendientes(almacenes = null) {
   // administrador DECIDA: o le autoriza un límite, o lo deja así a propósito.
   // Sin el aviso, la decisión no se toma nunca y el cajero se topa con un "no
   // tiene crédito" sin saber a quién pedírselo.
-  const [nuevosSinCredito] = await pool.query(
+  const [nuevosSinCredito] = !puede('clientes') ? [[]] : await pool.query(
     `SELECT c.id AS cliente_id, c.nombre, c.nombre_comercial, c.telefono,
             DATE_FORMAT(c.creado_en, '%Y-%m-%d') AS capturado,
             DATEDIFF(NOW(), c.creado_en) AS dias,
@@ -168,7 +178,7 @@ async function pendientes(almacenes = null) {
   // Hilos que no se pueden vender porque no tienen precio. Los crea así la
   // lista completa del proveedor (Surtir inventario): entra la mercancía y el
   // precio se pone después en Productos. El aviso sigue hasta que se le ponga.
-  const [sinPrecio] = await pool.query(
+  const [sinPrecio] = !puede('catalogo') ? [[]] : await pool.query(
     `SELECT p.id AS producto_id, p.nombre, p.grosor_calibre AS calibre,
             (SELECT DATE_FORMAT(MIN(r.creado_en), '%Y-%m-%d %H:%i:%s')
                FROM remesas r JOIN producto_variantes rv ON rv.id = r.variante_id
@@ -183,7 +193,7 @@ async function pendientes(almacenes = null) {
 
   // Notas pendientes de pago (2026-10-13): lo que se llevaron sin pagar y
   // todavía se debe. UN aviso, con cuánto es y cuántos clientes.
-  const [[notas]] = await pool.query(
+  const [[notas]] = !puede('notas') ? [[{ num: 0, clientes: 0, monto: 0, desde: null }]] : await pool.query(
     `SELECT COUNT(*) AS num, COUNT(DISTINCT p.cliente_id) AS clientes,
             COALESCE(SUM(p.total - COALESCE((SELECT SUM(pg.monto) FROM pagos pg
                                               WHERE pg.pedido_id = p.id AND pg.estado = 'completado'), 0)), 0) AS monto,
@@ -195,7 +205,7 @@ async function pendientes(almacenes = null) {
   );
 
   // El WhatsApp de la tienda se desconectó (2026-10-16): lo ve quien entra a Configuración.
-  const avisoWhatsapp = whatsapp.avisoCampana();
+  const avisoWhatsapp = puede('config') ? whatsapp.avisoCampana() : null;
 
   return {
     whatsapp: avisoWhatsapp,
@@ -210,7 +220,6 @@ async function pendientes(almacenes = null) {
     alertas_stock: Number(stock.n),
     // Hilos sin precio: UN aviso, con los primeros a la vista.
     sin_precio: { num: sinPrecio.length, hilos: sinPrecio.slice(0, 8) },
-    // Cobranza atrasada: los pocos de mayor saldo, más el total.
     // Las notas a crédito vencidas (2026-10-20): las 8 más vencidas, y el total.
     cobranza: {
       notas: cobranza,

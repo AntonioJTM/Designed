@@ -96,7 +96,9 @@ const A_FAVOR_SQL = `EXISTS (SELECT 1 FROM saldo_favor_movimientos sf
    WHERE sf.pedido_id = g.pedido_id AND sf.tipo = 'reintegro' AND sf.metodo_pago_id = g.metodo_pago_id)`;
 
 const FUENTES_SQL = `
-  SELECT 'pago' AS fuente, g.id AS fuente_id, g.creado_en AS fecha, g.monto AS importe,
+  -- El importe es lo que LLEGÓ al banco: si de una nota en espera se le regresó algo al
+  -- entregarla (pesó menos), el pago bajó a lo cobrado y eso está en devuelto_efectivo.
+  SELECT 'pago' AS fuente, g.id AS fuente_id, g.creado_en AS fecha, g.monto + COALESCE(g.devuelto_efectivo, 0) AS importe,
          g.referencia_transaccion AS referencia, p.cliente_id,
          CAST(g.pedido_id AS CHAR) AS pedidos, p.numero_pedido AS folios,
          -- Una nota en espera que se entregó como pendiente de pago ES nota pendiente (2026-10-26).
@@ -104,27 +106,27 @@ const FUENTES_SQL = `
          -- Cancelada Y regresada: no suma. Si al cancelar quedó a su SALDO A FAVOR
          -- (2026-10-26), el dinero sigue en el banco: suma, y se marca \`a_favor\`.
          ((g.estado = 'reembolsado' OR p.estado IN ('cancelado', 'devuelto')) AND NOT ${A_FAVOR_SQL}) AS cancelada,
-         ${A_FAVOR_SQL} AS a_favor
+         ${A_FAVOR_SQL} AS a_favor, g.devuelto_efectivo AS regresado
     FROM pagos g
     JOIN pedidos p ON p.id = g.pedido_id
    WHERE g.metodo_pago_id IN (:metodos) AND g.estado IN ('completado', 'reembolsado')
   UNION ALL
   SELECT 'abono', MIN(c.id), c.creado_en, SUM(c.monto), MAX(c.referencia), c.cliente_id,
          GROUP_CONCAT(c.pedido_id ORDER BY c.id), GROUP_CONCAT(pa.numero_pedido ORDER BY c.id SEPARATOR ', '),
-         'abono', 0, 0
+         'abono', 0, 0, NULL
     FROM credito_movimientos c
     LEFT JOIN pedidos pa ON pa.id = c.pedido_id
    WHERE c.tipo = 'abono' AND c.metodo_pago_id IN (:metodos)
    GROUP BY c.cliente_id, c.creado_en, c.usuario_id, c.metodo_pago_id
   UNION ALL
-  SELECT 'anticipo', s.id, s.creado_en, s.monto, s.referencia, s.cliente_id, NULL, NULL, 'anticipo', 0, 0
+  SELECT 'anticipo', s.id, s.creado_en, s.monto, s.referencia, s.cliente_id, NULL, NULL, 'anticipo', 0, 0, NULL
     FROM saldo_favor_movimientos s
    WHERE s.tipo = 'anticipo' AND s.metodo_pago_id IN (:metodos)
   UNION ALL
   -- Lo que se le REGRESÓ por el banco al cancelar una venta a crédito (2026-10-26):
   -- el ajuste de su saldo a favor con el método de transferencia, en negativo.
   SELECT 'regreso', s.id, s.creado_en, s.monto, s.referencia, s.cliente_id,
-         CAST(s.pedido_id AS CHAR), pr.numero_pedido, 'regreso', 0, 0
+         CAST(s.pedido_id AS CHAR), pr.numero_pedido, 'regreso', 0, 0, NULL
     FROM saldo_favor_movimientos s
     LEFT JOIN pedidos pr ON pr.id = s.pedido_id
    WHERE s.tipo = 'ajuste' AND s.metodo_pago_id IN (:metodos)`;
@@ -138,7 +140,7 @@ const DESDE_SQL = `
 const RENGLON_SQL = `
   SELECT x.fuente, x.fuente_id, DATE_FORMAT(x.fecha, '%Y-%m-%d %H:%i:%s') AS fecha, x.importe,
          x.referencia, x.cliente_id, cl.nombre AS cliente, cl.codigo AS cliente_codigo,
-         x.pedidos, x.folios, x.de, x.cancelada, x.a_favor,
+         x.pedidos, x.folios, x.de, x.cancelada, x.a_favor, x.regresado,
          t.cuenta_bancaria_id, cb.banco AS cuenta_banco,
          RIGHT(COALESCE(cb.numero_cuenta, cb.clabe), 4) AS cuenta_ultimos,
          COALESCE(t.estado, 'por_revisar') AS estado, COALESCE(t.facturada, 0) AS facturada,
@@ -444,6 +446,8 @@ function _renglon(r) {
     de: r.de,
     cancelada: Boolean(Number(r.cancelada)),
     a_favor: Boolean(Number(r.a_favor)),
+    // De una nota en espera que pesó menos: lo que se le regresó al entregarla (2026-10-26).
+    regresado: r.regresado != null && Number(r.regresado) > 0 ? round2(r.regresado) : null,
     ventas: [],
     materiales: null,
     _pedidos: String(r.pedidos ?? '').split(',').map(Number).filter((n) => n > 0),

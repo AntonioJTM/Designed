@@ -80,7 +80,7 @@ export interface LoteDeBultos {
  */
 export type TipoPresentacion = 'simple' | 'paquete' | 'cono';
 
-/** De dónde sale el precio del cono: lo reparte el paquete o lo pone el usuario. */
+/** De dónde sale el precio del cono: el mismo por kilo que su paquete ('calculado') o el que pone el usuario. */
 export type ModoPrecio = 'manual' | 'calculado';
 
 export interface Variante {

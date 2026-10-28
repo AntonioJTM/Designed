@@ -455,7 +455,7 @@ describe('ModificarPedidoModal', () => {
     expect(c.kgDe(c.lineas()[2])).toBe(20);
     expect(c.kgDe(c.lineas()[0])).toBe(19.2);
     escanear(c, 'AP');
-    expect(c.error()).toContain('apartado para otro pedido');
+    expect(c.error()).toContain('apartado para otra nota');
     c.guardar();
     expect(enviado!.lineas).toEqual([
       { detalle_id: 10, codigos: ['A1'], cantidad: 19.2 },

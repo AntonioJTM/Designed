@@ -105,16 +105,18 @@ async function guardarEmpleado(usuarioId, datos) {
     throw new AppError(422, 'FECHA_INGRESO_FUTURA', 'La fecha de ingreso no puede ser después de hoy.');
   }
 
-  // Sin comisión, el porcentaje se guarda en 0 para que el recibo no mienta.
-  const pagaComision = datos.paga_comision ?? false;
+  // Sin comisión, el porcentaje se guarda en 0 para que el recibo no mienta. Lo que
+  // no viene se queda como estaba (2026-10-26: `{activo:false}` dejaba el sueldo en $0).
+  const pagaComision = datos.paga_comision ?? !!Number(empleado.paga_comision ?? 0);
+  const yaEstaba = !!Number(empleado.en_nomina);
   const guardado = await model.guardarEmpleado(usuarioId, {
-    sueldo_base_semanal: datos.sueldo_base_semanal ?? 0,
+    sueldo_base_semanal: datos.sueldo_base_semanal ?? Number(empleado.sueldo_base_semanal ?? 0),
     paga_comision: pagaComision,
-    porcentaje_comision: pagaComision ? (datos.porcentaje_comision ?? 0) : 0,
+    porcentaje_comision: pagaComision ? (datos.porcentaje_comision ?? Number(empleado.porcentaje_comision ?? 0)) : 0,
     valor_hora_extra: datos.valor_hora_extra ?? Number(empleado.valor_hora_extra ?? 0),
     fecha_ingreso: datos.fecha_ingreso !== undefined ? datos.fecha_ingreso : (empleado.fecha_ingreso ?? null),
     comida_min: comidaMin,
-    activo: datos.activo ?? true,
+    activo: datos.activo ?? (yaEstaba ? !!Number(empleado.activo) : true),
     ...(datos.horario ? { horario: datos.horario } : {}),
   });
   return _conJornada(guardado, guardado.fecha_ingreso ? await model.listarVacaciones(usuarioId) : []);
@@ -222,7 +224,7 @@ function exigirQueNoSeanSuyas(usuarioId, yo, esAdmin) {
 }
 
 async function registrarVacaciones(usuarioId, datos, creadoPor, opciones = {}) {
-  const { dias } = await revisarVacaciones(usuarioId, datos, opciones);
+  const { dias, emp } = await revisarVacaciones(usuarioId, datos, opciones);
   await model.crearVacaciones({
     usuario_id: usuarioId,
     fecha_inicio: datos.fecha_inicio,
@@ -230,6 +232,12 @@ async function registrarVacaciones(usuarioId, datos, creadoPor, opciones = {}) {
     dias,
     notas: datos.notas || null,
     creado_por: creadoPor,
+  }, async (conn) => {
+    const saldo = jornada.saldoVacaciones(emp.fecha_ingreso, datos.fecha_inicio, await model.listarVacaciones(usuarioId, conn));
+    if (dias > saldo.restan) {
+      throw new AppError(422, 'VACACIONES_INSUFICIENTES',
+        `Le quedan ${saldo.restan} días de vacaciones de ese año y estas fechas son ${dias}: mientras tanto se registraron otras.`);
+    }
   });
   return vacacionesDe(usuarioId);
 }
@@ -378,18 +386,13 @@ async function agregarConcepto(reciboId, datos) {
       "Indica si el concepto 'otro' es 'percepcion' o 'deduccion'");
   }
 
-  // Horas extra: si no se envía el importe, se calcula con el valor de hora
-  // configurado para ese empleado.
-  let importe = datos.importe;
-  if (importe === undefined && datos.clave === 'horas_extra') {
-    const empleado = await model.obtenerEmpleado(recibo.usuario_id);
-    const valorHora = Number(empleado?.valor_hora_extra ?? 0);
-    if (!valorHora) {
-      throw new AppError(422, 'SIN_VALOR_HORA',
-        'Este empleado no tiene valor de hora extra configurado; captura el importe a mano');
-    }
-    importe = round2(valorHora * Number(datos.cantidad ?? 0));
+  // Las HORAS EXTRA van por día, con su hora real y al doble (`/horas-extra`):
+  // este camino viejo las pagaba sin el doble y sin revisar el día (2026-10-26, auditoría).
+  if (datos.clave === 'horas_extra') {
+    throw new AppError(422, 'HORAS_EXTRA_POR_DIA',
+      'Las horas extra se capturan por día, con la hora real de salida o de entrada: se pagan al doble.');
   }
+  const importe = datos.importe;
   if (importe === undefined) {
     throw new AppError(422, 'IMPORTE_REQUERIDO', 'Falta el importe del concepto');
   }
@@ -516,17 +519,23 @@ async function exigirAlDia(periodoId) {
   const r = await model.porRecalcular(periodoId);
   if (!r) return;
   const partes = [];
-  if (r.nuevas.length) {
-    partes.push(`${r.nuevas.length} ${r.nuevas.length === 1 ? 'venta entra' : 'ventas entran'} ` +
-      `(${r.nuevas.slice(0, 3).map((v) => v.numero_pedido).join(', ')}${r.nuevas.length > 3 ? '…' : ''})`);
-  }
+  const grupo = (que, uno, varios) => {
+    const l = r.nuevas.filter((v) => (v.que ?? 'entra') === que);
+    if (l.length) {
+      partes.push(`${l.length} ${l.length === 1 ? uno : varios} ` +
+        `(${l.slice(0, 3).map((v) => v.numero_pedido).join(', ')}${l.length > 3 ? '…' : ''})`);
+    }
+  };
+  grupo('entra', 'venta entra', 'ventas entran');
+  grupo('cambia', 'venta cambió', 'ventas cambiaron');
+  grupo('descuento', 'descuento entra', 'descuentos entran');
   if (r.quitadas.length) {
     partes.push(`${r.quitadas.length} ${r.quitadas.length === 1 ? 'venta sale' : 'ventas salen'} ` +
       `(${r.quitadas.slice(0, 3).map((v) => v.numero_pedido).join(', ')}${r.quitadas.length > 3 ? '…' : ''})`);
   }
   if (r.personal) partes.push('cambió el personal de la nómina');
   throw new AppError(409, 'NOMINA_POR_RECALCULAR',
-    `Desde que se calculó, ${partes.join(' y ')}. Vuelve a calcularla («Calcular») antes de pagarla.`, r);
+    `Desde que se calculó, ${partes.join(' y ')}. Vuelve a calcularla («Volver a calcular») antes de pagarla.`, r);
 }
 
 module.exports = {

@@ -184,6 +184,12 @@ export class ProductosList implements OnDestroy {
   }
 
   /** Kilos del hilo, o `null` cuando no se sabe (para pintar "—"). */
+  /** Lo que se cobra por kilo (su presentación más barata activa); null si no tiene precio. */
+  precioPublico(p: Producto): number | null {
+    const v = Number(p.precio_desde ?? 0);
+    return v > 0 ? v : null;
+  }
+
   hay(p: Producto): number | null {
     const m = this.existencias();
     if (!m) return null;
@@ -215,7 +221,7 @@ export class ProductosList implements OnDestroy {
 
   /** Guardó en el modal: el listado se recarga para reflejarlo. */
   alGuardar(p: Producto): void {
-    this.mensaje.set(`Producto "${p.nombre}" guardado.`);
+    this.mensaje.set(`Producto "${p.nombre}${p.grosor_calibre ? ' ' + p.grosor_calibre : ''}" guardado.`);
     this.buscar();
   }
 

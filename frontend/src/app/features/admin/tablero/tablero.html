@@ -29,7 +29,7 @@
   <div class="kpis">
     @for (k of kpis(); track k.etiqueta) {
       <div class="kpi">
-        <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+        <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
         <span class="kpi-valor">{{ k.valor }}</span>
         <span class="kpi-pie">{{ k.pie }}</span>
       </div>
@@ -153,8 +153,7 @@
           <h2>Hilo parado</h2>
           <p>
             Lo que hay en existencia y no se ha vendido en {{ datos()?.hilo_muerto?.dias ?? 90 }} días o
-            más, valorado {{ datos()?.hilo_muerto?.valorado_a === 'costo' ? 'al costo' : 'a precio de venta' }}:
-            lo que te darían por él si se vendiera.
+            más, valorado {{ datos()?.hilo_muerto?.valorado_a === 'costo' ? 'al costo: lo que pagaste por él' : 'a precio de venta: lo que te darían por él si se vendiera' }}.
           </p>
         </div>
       </div>
@@ -250,8 +249,9 @@
           <h2>Lo que te deben</h2>
           <p>
             {{ d.cobranza.num_clientes }}
-            {{ d.cobranza.num_clientes === 1 ? 'cliente con saldo' : 'clientes con saldo' }}.
-            La antigüedad se cuenta desde su último movimiento: quien abonó la semana pasada está pagando.
+            {{ d.cobranza.num_clientes === 1 ? 'cliente con saldo' : 'clientes con saldo' }} a crédito.
+            Cada nota vence a sus días de crédito: un abono chico no la pone al corriente mientras su nota
+            más vieja siga vencida.
           </p>
         </div>
         @if (veClientes()) {
@@ -263,12 +263,28 @@
         <div>
           <span>Total por cobrar</span>
           <b>{{ pesos(d.cobranza.total_por_cobrar) }}</b>
+          <small>a crédito</small>
         </div>
+        <!-- No es crédito, pero se debe (2026-10-26). -->
+        @if (d.notas_pendientes && d.notas_pendientes.monto > 0) {
+          <div>
+            <span>En notas pendientes de pago</span>
+            <b>{{ pesos(d.notas_pendientes.monto) }}</b>
+            <small>
+              @if (veNotas()) {
+                <a routerLink="/admin/notas-pendientes">{{ d.notas_pendientes.num_clientes }}
+                  {{ d.notas_pendientes.num_clientes === 1 ? 'cliente' : 'clientes' }} · cobrar</a>
+              } @else {
+                {{ d.notas_pendientes.num_clientes }} {{ d.notas_pendientes.num_clientes === 1 ? 'cliente' : 'clientes' }}
+              }
+            </small>
+          </div>
+        }
         <div>
           <span>Con notas vencidas</span>
           <b>{{ pesos(d.cobranza.vencido) }}</b>
           <small>
-            {{ d.cobranza.num_vencidos }} {{ d.cobranza.num_vencidos === 1 ? 'cliente' : 'clientes' }}
+            lo que deben {{ d.cobranza.num_vencidos }} {{ d.cobranza.num_vencidos === 1 ? 'cliente' : 'clientes' }}@if (d.cobranza.num_vencidos > 0) {; de eso, {{ pesos(d.cobranza.vencido_notas ?? d.cobranza.vencido) }} ya vencido}
           </small>
         </div>
         <!-- Lo que la tienda les guarda (anticipos y lo que regresaron), 2026-10-19. -->
@@ -277,8 +293,13 @@
             <span>A favor de clientes</span>
             <b>{{ pesos(d.a_favor.total) }}</b>
             <small>
-              <a routerLink="/admin/clientes/deuda">{{ d.a_favor.num_clientes }}
-                {{ d.a_favor.num_clientes === 1 ? 'cliente' : 'clientes' }} · ver quiénes</a>
+              <!-- El enlace solo a quien puede abrir Clientes (2026-10-26). -->
+              @if (veClientes()) {
+                <a routerLink="/admin/clientes/deuda">{{ d.a_favor.num_clientes }}
+                  {{ d.a_favor.num_clientes === 1 ? 'cliente' : 'clientes' }} · ver quiénes</a>
+              } @else {
+                {{ d.a_favor.num_clientes }} {{ d.a_favor.num_clientes === 1 ? 'cliente' : 'clientes' }}
+              }
             </small>
           </div>
         }
@@ -344,7 +365,13 @@
           </table>
         </div>
       } @else {
-        <p class="vacio">Nadie te debe nada ahora mismo.</p>
+        <p class="vacio">
+          @if (d.notas_pendientes && d.notas_pendientes.monto > 0) {
+            Nadie te debe a crédito. En notas pendientes de pago te deben {{ pesos(d.notas_pendientes.monto) }}.
+          } @else {
+            Nadie te debe nada ahora mismo.
+          }
+        </p>
       }
     </section>
 

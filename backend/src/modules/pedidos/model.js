@@ -121,21 +121,30 @@ async function _apartadoEnAlmacen(conn, varianteId, almacenId) {
 async function _precioDeVariante(conn, varianteId, tipoClienteId) {
   // `precio_tipo` es el precio propio del tipo de cliente, si lo tiene
   // capturado; si no, se cobra el público (pv.precio).
+  // Un CONO de precio calculado cobra LO MISMO que su paquete (2026-10-26, auditoría):
+  // también su oferta y su precio por lista de cliente, que viven en el paquete. Antes
+  // se buscaban en el cono, que no los tiene, y a Mayoreo se le cobraba el público.
   const [vrows] = await conn.query(
-    `SELECT pv.id, pv.precio, pv.precio_oferta, pv.presentacion, pv.activo,
-            pv.costo,
+    `SELECT pv.id, pv.precio, COALESCE(o.precio_oferta, pv.precio_oferta) AS precio_oferta,
+            pv.presentacion, pv.activo, pv.costo,
             p.nombre AS producto, p.grosor_calibre AS calibre, imp.porcentaje AS imp_pct,
             (SELECT vp.precio FROM variante_precios vp
-              WHERE vp.variante_id = pv.id AND vp.tipo_cliente_id = :tipo_cliente) AS precio_tipo
+              WHERE vp.variante_id = COALESCE(o.id, pv.id) AND vp.tipo_cliente_id = :tipo_cliente) AS precio_tipo
        FROM producto_variantes pv
        JOIN productos p        ON p.id = pv.producto_id
        LEFT JOIN impuestos imp ON imp.id = p.impuesto_id
+       LEFT JOIN producto_variantes o
+              ON o.id = pv.origen_variante_id AND pv.tipo_presentacion = 'cono' AND pv.modo_precio = 'calculado'
       WHERE pv.id = :id`,
     { id: varianteId, tipo_cliente: tipoClienteId ?? 0 }
   );
   const v = vrows[0];
   if (!v) throw new AppError(422, 'VARIANTE_INVALIDA', `Variante ${varianteId} no existe`);
-  if (!v.activo) throw new AppError(422, 'VARIANTE_INACTIVA', `La variante ${varianteId} está inactiva`);
+  // Con el nombre del hilo, no con un número interno (2026-10-26, auditoría).
+  if (!v.activo) {
+    throw new AppError(422, 'VARIANTE_INACTIVA',
+      `«${v.producto}${v.calibre ? ' ' + v.calibre : ''} · ${v.presentacion}» está desactivado: no se vende.`);
+  }
 
   // Orden de prelación: precio del tipo de cliente > oferta > público.
   const precioUnit =
@@ -694,12 +703,20 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       for (const b of bultos) {
         // El bulto se bloquea para que dos cajas no puedan venderlo a la vez.
         const [brows] = await conn.query(
-          `SELECT id, lote, estado, peso_kg, consumido_tipo, consumido_id
+          `SELECT id, variante_id, lote, estado, peso_kg, consumido_tipo, consumido_id
              FROM variante_codigos WHERE codigo = :c LIMIT 1 FOR UPDATE`,
           { c: b.codigo }
         );
         const bulto = brows[0];
-        pesoBultos += Number(bulto?.peso_kg ?? b.peso_kg ?? 0);
+        // Lo mismo que al modificar una nota (2026-10-26, auditoría): un código que no
+        // existe o un paquete de otro hilo no entran. La caja nunca los manda; una
+        // petición armada a mano dejaba vendido el paquete de un hilo con los kilos de otro.
+        if (!bulto) throw new AppError(422, 'CODIGO_DESCONOCIDO', `El código ${b.codigo} no está registrado.`);
+        if (Number(bulto.variante_id) !== Number(d.variante_id)) {
+          throw new AppError(422, 'BULTO_DE_OTRO_HILO',
+            `El paquete ${b.codigo} no es de ${d.descripcion ?? 'ese hilo'}: escanéalo en su propio renglón.`);
+        }
+        pesoBultos += Number(bulto.peso_kg ?? b.peso_kg ?? 0);
 
         // Un bulto es una pieza física única: si ya salió, no se vuelve a vender.
         // Al lanzar aquí se revierte la venta completa, que es lo correcto: no
@@ -720,10 +737,11 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
            VALUES (:detalle, :codigo_id, :codigo, :peso, :lote)`,
           {
             detalle: dr.insertId,
-            codigo_id: bulto?.id ?? null,
+            codigo_id: bulto.id,
             codigo: b.codigo,
-            peso: b.peso_kg,
-            lote: b.lote ?? bulto?.lote ?? null,
+            // El peso y el lote GUARDADOS del paquete (antes, los de la petición).
+            peso: bulto.peso_kg ?? b.peso_kg,
+            lote: bulto.lote ?? b.lote ?? null,
           }
         );
 
@@ -874,7 +892,7 @@ async function _crearPedido(datos, usuarioId, { esCliente = false } = {}) {
       await conn.query(
         `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
          VALUES (:sesion, 'venta', :monto, :pedido, :motivo)`,
-        { sesion: sesionCajaId, monto: efectivo, pedido: pedidoId, motivo: `${esEncargo ? 'Pedido' : 'Venta'} ${numero}` }
+        { sesion: sesionCajaId, monto: efectivo, pedido: pedidoId, motivo: `${esEncargo ? 'Nota en espera' : 'Venta'} ${numero}` }
       );
     }
 
@@ -985,7 +1003,7 @@ async function _obtenerConn(ejecutor, id) {
       `SELECT b.detalle_id, b.codigo, b.peso_kg, b.lote
          FROM pedido_detalle_bultos b
         WHERE b.detalle_id IN (:ids)
-        ORDER BY b.lote, b.id`,
+        ORDER BY b.id`,
       { ids: det.map((d) => d.id) }
     );
     for (const d of det) {
@@ -1160,6 +1178,7 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
   // se reparten de lo más antiguo a lo más nuevo (la misma cuenta que la da por
   // pagada). Sin esto una fiada ya pagada salía con "Falta" el total.
   const pagadoConAbonos = new Map();
+  const porPagarFiada = new Map();
   const venceDe = new Map();
   const plazo = clientesModel.plazoPorOmision();
   if (rows.length) {
@@ -1172,6 +1191,9 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
       for (const d of await clientesModel.aplicarAbonos(pool, cliente_id)) {
         if (d.pedidoId != null) {
           pagadoConAbonos.set(d.pedidoId, d.pagado);
+          // Lo que falta de ELLA en el reparto: resta también lo que una devolución
+          // le descontó (2026-10-26, auditoría: decía "falta $2,000" con $1,200 por pagar).
+          porPagarFiada.set(d.pedidoId, d.porPagar);
           // Cuándo vence (2026-10-20): el día en que se fió más sus días; y lo que
           // falta de ELLA en el reparto (resta lo que una devolución le descontó).
           if (d.dia) venceDe.set(d.pedidoId, { vence: clientesModel.sumarDias(d.dia, d.plazo ?? plazo), porPagar: d.porPagar });
@@ -1182,7 +1204,9 @@ async function listar({ canal, estado, situacion, cliente_id, q, caja_id, desde,
   for (const r of rows) {
     r.hilos = [];
     const pagado = Number(r.pagado) + (pagadoConAbonos.get(Number(r.id)) ?? 0);
-    r.falta = INACTIVOS.includes(r.estado) ? 0 : Math.max(0, round2(Number(r.total) - pagado));
+    r.falta = INACTIVOS.includes(r.estado) ? 0
+      : porPagarFiada.has(Number(r.id)) ? Math.max(0, round2(porPagarFiada.get(Number(r.id))))
+      : Math.max(0, round2(Number(r.total) - pagado));
     // DE CONTADO: se pagó ese mismo día, no a crédito, como nota pendiente de
     // pago, apartado ni nota en espera (esas se pagan después o en partes).
     r.contado = !Number(r.fiada) && !Number(r.nota_pendiente) && !Number(r.encargo) && r.estado !== 'apartado';
@@ -1286,14 +1310,14 @@ function _validarCaminoEncargo(pedido, estado) {
   if (!sinEntregar) {
     if (estado === 'apartado' || PASOS_ENCARGO.includes(estado)) {
       throw new AppError(409, 'PEDIDO_YA_ENTREGADO',
-        `${num} ya se entregó: no regresa a estar en espera. Si lo devolvieron, márcalo devuelto.`);
+        `${num} ya se entregó: no regresa a estar en espera. Si regresó mercancía, usa «Devolución».`);
     }
     return;
   }
   if (INACTIVOS.includes(antes)) {
     if (estado !== 'en_preparacion') {
       throw new AppError(409, 'REACTIVAR_COMO_PEDIDO',
-        `${num} era un pedido: se reactiva "en espera", que vuelve a apartar la mercancía.`);
+        `${num} era una nota en espera: se reactiva "en espera", que vuelve a apartar la mercancía.`);
     }
     return;
   }
@@ -1310,7 +1334,7 @@ function _validarCaminoEncargo(pedido, estado) {
         '(«Entregar y cobrar» si le falta pagar).');
   }
   throw new AppError(409, 'PEDIDO_SE_ENTREGA',
-    `${num} es un pedido: se entrega desde Pedidos, que cobra lo que falte y lo descuenta del inventario.`);
+    `${num} es una nota en espera: se entrega desde Notas en espera, que cobra lo que falte y lo descuenta del inventario.`);
 }
 
 /**
@@ -1445,8 +1469,12 @@ async function _resolverRetorno(conn, linea, devolucion) {
 async function _sesionParaDevolucion(conn, pedido) {
   if (!pedido.sesion_caja_id) return null;
 
+  // Con el turno BLOQUEADO (2026-10-26, auditoría): el corte también lo bloquea, así
+  // que si la cajera corta en el mismo segundo, o el corte espera a que esto termine
+  // (y cuenta este movimiento) o esto espera al corte y ya lo ve cerrado. Sin el
+  // candado, el efectivo de la cancelación caía en un turno ya contado.
   const [srows] = await conn.query(
-    'SELECT id, estado, caja_id FROM sesiones_caja WHERE id = :id',
+    'SELECT id, estado, caja_id FROM sesiones_caja WHERE id = :id FOR UPDATE',
     { id: pedido.sesion_caja_id }
   );
   const sesion = srows[0];
@@ -1456,7 +1484,7 @@ async function _sesionParaDevolucion(conn, pedido) {
   const [arows] = await conn.query(
     `SELECT id FROM sesiones_caja
       WHERE caja_id = :caja AND estado = 'abierta'
-      ORDER BY id DESC LIMIT 1`,
+      ORDER BY id DESC LIMIT 1 FOR UPDATE`,
     { caja: sesion.caja_id }
   );
   return arows[0]?.id ?? null;
@@ -2117,12 +2145,34 @@ const POR_COBRADO = ['pagado', 'en_preparacion', 'enviado', 'entregado'];
 async function _validarCaminoNota(conn, id, pedido, estado) {
   if (!Number(pedido.nota_pendiente)) return;
   const antes = pedido.estado;
+  const pasoACredito = async () => {
+    const [[cargo]] = await conn.query(
+      "SELECT 1 AS si FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo' LIMIT 1",
+      { id }
+    );
+    return !!cargo; // pasó a crédito: la cuida `_validarCaminoFiado`
+  };
+  // REACTIVAR una nota cancelada (2026-10-26, auditoría): vuelve como «Pendiente de
+  // pago». Como «Pagado» o «Entregado» solo si lo que pagó (y que al reactivar vuelve
+  // a contar) la cubre: antes salía la mercancía otra vez sin cobrar un peso y la nota
+  // desaparecía de Notas pendientes de pago.
+  if (INACTIVOS.includes(antes) && POR_COBRADO.includes(estado)) {
+    if (await pasoACredito()) return;
+    const [[r]] = await conn.query(
+      `SELECT COALESCE(SUM(monto), 0) AS pagado FROM pagos
+        WHERE pedido_id = :id AND estado IN ('completado', 'reembolsado')`,
+      { id }
+    );
+    const falta = round2(Number(pedido.total) - Number(r.pagado));
+    if (falta > 0.004) {
+      throw new AppError(409, 'REACTIVAR_COMO_NOTA',
+        `${pedido.numero_pedido} es una nota pendiente de pago y le faltan $${falta.toFixed(2)}: ` +
+        'se reactiva como «Pendiente de pago» y se da por pagada sola al registrar sus pagos.');
+    }
+    return;
+  }
   if (INACTIVOS.includes(antes) || INACTIVOS.includes(estado) || antes === estado) return;
-  const [[cargo]] = await conn.query(
-    "SELECT 1 AS si FROM credito_movimientos WHERE pedido_id = :id AND tipo = 'cargo' LIMIT 1",
-    { id }
-  );
-  if (cargo) return; // pasó a crédito: la cuida `_validarCaminoFiado`
+  if (await pasoACredito()) return;
   const falta = round2(Number(pedido.total) - (await _abonado(conn, id)));
   if (antes === 'pendiente' && POR_COBRADO.includes(estado) && falta > 0.004) {
     throw new AppError(409, 'NOTA_PENDIENTE_SIN_PAGAR',
@@ -2196,7 +2246,7 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
 
   return withTransaction(async (conn) => {
     const [prows] = await conn.query(
-      'SELECT id, numero_pedido, estado, total, nota_pendiente FROM pedidos WHERE id = :id FOR UPDATE',
+      'SELECT id, numero_pedido, estado, total, nota_pendiente, encargo, inventario_descontado FROM pedidos WHERE id = :id FOR UPDATE',
       { id: pedidoId }
     );
     const pedido = prows[0];
@@ -2272,6 +2322,15 @@ async function guardarComprobante(pedidoId, buf, nombreOriginal, usuarioId) {
         throw new AppError(409, 'NOTA_PENDIENTE_USA_ABONOS',
           `${pedido.numero_pedido} es una nota pendiente de pago: el depósito se registra en ` +
           '«Registrar su pago», por transferencia y con lo que depositó. Después le pegas aquí la captura.');
+      }
+      // Igual una NOTA EN ESPERA (2026-10-26, auditoría): el pago por TODO lo que faltaba
+      // la daba por pagada aunque el depósito fuera de una parte, y sin la cuenta de banco.
+      // El depósito se registra al entregarla, por transferencia y con lo que depositó.
+      if (Number(pedido.encargo) && Number(pedido.inventario_descontado) === 0) {
+        await archivos.borrar(CARPETA_COMPROBANTES, guardado.nombre);
+        throw new AppError(409, 'NOTA_EN_ESPERA_USA_ABONOS',
+          `${pedido.numero_pedido} es una nota en espera: el depósito se registra al entregarla ` +
+          '(«Entregar o cobrar», por transferencia y con lo que depositó). Después le pegas aquí la captura.');
       }
       const cobrado = await _abonado(conn, pedidoId);
       const falta = round2(Number(pedido.total) - cobrado);
@@ -2816,7 +2875,7 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
     if (esEncargo) {
       if (Number(pedido.inventario_descontado) || !PASOS_ENCARGO.includes(pedido.estado)) {
         throw new AppError(409, 'NO_ES_PEDIDO_VIGENTE',
-          `${pedido.numero_pedido} no es un pedido por entregar (está ${pedido.estado}).`);
+          `${pedido.numero_pedido} no es una nota por entregar (está ${pedido.estado}).`);
       }
     } else if (pedido.estado !== 'apartado') {
       throw new AppError(409, 'NO_ES_APARTADO',
@@ -2930,7 +2989,7 @@ async function entregarApartado(pedidoId, usuarioId, datos = {}) {
           cant: -d.cantidad,
           pedido: pedidoId,
           usuario: usuarioId ?? null,
-          motivo: `Entrega del ${esEncargo ? 'pedido' : 'apartado'} ${pedido.numero_pedido}`,
+          motivo: `Entrega ${esEncargo ? 'de la nota en espera' : 'del apartado'} ${pedido.numero_pedido}`,
         }
       );
     }
@@ -2996,7 +3055,7 @@ async function _devolverDiferencia(conn, pedido, monto, datos) {
     await conn.query(
       `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
        VALUES (:sesion, 'devolucion', :monto, :pedido, :motivo)`,
-      { sesion: datos.sesion_caja_id, monto: sale, pedido: pedido.id, motivo: `Diferencia del pedido ${num}: pesó menos de lo que dejó pagado` }
+      { sesion: datos.sesion_caja_id, monto: sale, pedido: pedido.id, motivo: `Diferencia de la nota ${num}: pesó menos de lo que dejó pagado` }
     );
   }
   if (aFavor > 0.004) {
@@ -3005,27 +3064,45 @@ async function _devolverDiferencia(conn, pedido, monto, datos) {
       notas: `Pesó menos de lo que dejó pagado y en la caja no había efectivo para devolverle todo: $${aFavor.toFixed(2)} le quedaron a favor`,
     });
   }
-  const [pagos] = await conn.query(
+  // Los pagos bajan a lo que la tienda se queda. Primero el EFECTIVO, del más
+  // reciente al más viejo: se reduce o se quita. Una TRANSFERENCIA no se borra ni
+  // pierde lo que llegó al banco (2026-10-26, auditoría): su `monto` baja a lo cobrado
+  // y lo regresado queda en `devuelto_efectivo`, que Transferencias vuelve a sumar
+  // (si no, decía $940 donde el banco recibió $1,000). Se rebaja primero la más grande
+  // y a ninguna se le deja en cero.
+  const [filas] = await conn.query(
     `SELECT pg.id, pg.monto, (LOWER(mp.nombre) LIKE '%efectivo%') AS efectivo
        FROM pagos pg JOIN metodos_pago mp ON mp.id = pg.metodo_pago_id
-      WHERE pg.pedido_id = :id AND pg.estado = 'completado'
-      ORDER BY efectivo DESC, pg.id DESC`,
+      WHERE pg.pedido_id = :id AND pg.estado = 'completado'`,
     { id: pedido.id }
   );
+  const pagos = [
+    ...filas.filter((p) => Number(p.efectivo)).sort((a, b) => b.id - a.id),
+    ...filas.filter((p) => !Number(p.efectivo)).sort((a, b) => Number(b.monto) - Number(a.monto)),
+  ];
   let resta = monto;
   for (const p of pagos) {
     if (resta <= 0.004) break;
-    const quita = round2(Math.min(Number(p.monto), resta));
-    // Un pago que se devuelve completo deja de existir (el monto no puede ser
-    // cero); el rastro queda en el movimiento de caja.
-    if (quita >= Number(p.monto) - 0.004) {
-      await conn.query('DELETE FROM pagos WHERE id = :id', { id: p.id });
-      // Si era una transferencia, se va con él lo que se anotó de ella (Transferencias).
-      await conn.query("DELETE FROM transferencias WHERE fuente = 'pago' AND fuente_id = :id", { id: p.id });
+    if (Number(p.efectivo)) {
+      const quita = round2(Math.min(Number(p.monto), resta));
+      // Un pago en efectivo que se devuelve completo deja de existir (el monto no
+      // puede ser cero); el rastro queda en el movimiento de caja.
+      if (quita >= Number(p.monto) - 0.004) {
+        await conn.query('DELETE FROM pagos WHERE id = :id', { id: p.id });
+      } else {
+        await conn.query('UPDATE pagos SET monto = monto - :q WHERE id = :id', { q: quita, id: p.id });
+      }
+      resta = round2(resta - quita);
     } else {
-      await conn.query('UPDATE pagos SET monto = monto - :q WHERE id = :id', { q: quita, id: p.id });
+      const quita = round2(Math.min(resta, Number(p.monto) - 0.01));
+      if (quita <= 0.004) continue;
+      await conn.query(
+        `UPDATE pagos SET monto = monto - :q, devuelto_efectivo = COALESCE(devuelto_efectivo, 0) + :q
+          WHERE id = :id`,
+        { q: quita, id: p.id }
+      );
+      resta = round2(resta - quita);
     }
-    resta = round2(resta - quita);
   }
   return { devuelto: sale, a_favor: aFavor };
 }
@@ -3106,7 +3183,7 @@ async function _errorBultoTomadoDetalle(conn, codigo, bulto) {
       { id: bulto.consumido_tipo === 'pedido' ? bulto.consumido_id ?? 0 : 0 }
     );
     const de = p
-      ? ` para ${Number(p.encargo) ? 'el pedido' : 'el apartado'} ${p.numero_pedido}${p.cliente ? ' de ' + p.cliente : ''}`
+      ? ` para ${Number(p.encargo) ? 'la nota en espera' : 'el apartado'} ${p.numero_pedido}${p.cliente ? ' de ' + p.cliente : ''}`
       : '';
     return new AppError(409, 'BULTO_NO_DISPONIBLE', `El paquete ${codigo} está apartado${de}: escanea otro.`);
   }
@@ -3518,7 +3595,7 @@ async function _cobrarAlEntregar(conn, pedido, pendiente, datos, usuarioId) {
     await conn.query(
       `INSERT INTO movimientos_caja (sesion_caja_id, tipo, monto, referencia_id, motivo)
        VALUES (:sesion, 'ingreso', :monto, :pedido, :motivo)`,
-      { sesion: datos.sesion_caja_id, monto: efectivo, pedido: pedido.id, motivo: `Cobro al entregar el pedido ${num}` }
+      { sesion: datos.sesion_caja_id, monto: efectivo, pedido: pedido.id, motivo: `Cobro al entregar la nota ${num}` }
     );
   }
   if (aCredito > 0) {
@@ -3610,10 +3687,13 @@ async function listarEncargos({ estado, q, almacenes } = {}) {
   // Cuántos hay en cada paso (con el filtro de texto, sin el de estado).
   const conteo = { en_preparacion: 0, listo: 0, enviado: 0 };
   if (estado) {
+    // De SUS tiendas, como la lista (2026-10-26, auditoría: contaba las de todas).
+    const w = ["p.encargo = 1", 'p.inventario_descontado = 0', "p.estado IN ('en_preparacion', 'listo', 'enviado')"];
+    const pc = {};
+    _deSusTiendas(w, pc, almacenes);
     const [c] = await pool.query(
-      `SELECT p.estado, COUNT(*) n FROM pedidos p
-        WHERE p.encargo = 1 AND p.inventario_descontado = 0 AND p.estado IN ('en_preparacion', 'listo', 'enviado')
-        GROUP BY p.estado`
+      `SELECT p.estado, COUNT(*) n FROM pedidos p WHERE ${w.join(' AND ')} GROUP BY p.estado`,
+      pc
     );
     for (const x of c) conteo[x.estado] = Number(x.n);
   } else {

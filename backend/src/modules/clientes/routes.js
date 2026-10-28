@@ -132,7 +132,7 @@ const lugarSchema = z
 router.get('/lugares-entrega', ...soloStaff, controller.lugaresListar);
 router.post('/lugares-entrega', ...soloStaff, validate(lugarSchema), controller.lugaresCrear);
 router.put('/lugares-entrega/:id', ...soloStaff, validate(lugarSchema), controller.lugaresActualizar);
-// Las cinco pestañas de Clientes: frecuencia, deuda, que-compra, cuando, gasto.
+// Las miradas de Clientes (las pestañas de análisis): frecuencia, deuda, que-compra, cuando, gasto.
 // Suman TODAS las tiendas: solo quien las ve todas (2026-10-15).
 router.get('/analisis/:vista', ...soloStaff, requirePermiso('ver:clientes'), requireTodasLasTiendas, controller.analisis);
 
@@ -157,7 +157,8 @@ router.put('/:id/limite-credito', ...soloStaff, validate(limiteSchema), autoriza
 router.post('/:id/abonos', ...soloStaff, validate(abonoSchema), unaVez(), controller.abonar);
 // Los datos de su ticket, al registrarlo o para reimprimirlo (2026-10-15).
 router.get('/:id/abonos/:movId/ticket', ...soloStaff, controller.ticketAbono);
-router.post('/:id/ajustes', ...soloStaff, validate(ajusteSchema), autorizable('corregir_deuda'), controller.ajustar);
+// Con su llave de un solo uso (2026-10-26, auditoría): un reintento tras un corte no ajusta dos veces.
+router.post('/:id/ajustes', ...soloStaff, validate(ajusteSchema), unaVez(), autorizable('corregir_deuda'), controller.ajustar);
 
 // SALDO A FAVOR (2026-10-13): lo que le quedó de una devolución se descuenta de
 // lo que debe cuando él lo pide. Sin `monto`, todo lo que alcance.
@@ -173,7 +174,7 @@ const ajusteSaldoSchema = z
     notas: z.string().trim().min(1, 'Escribe el motivo').max(255),
   })
   .strict();
-router.post('/:id/saldo-favor/ajuste', ...soloStaff, validate(ajusteSaldoSchema), autorizable('ajustar_saldo_favor'), controller.ajustarSaldoFavor);
+router.post('/:id/saldo-favor/ajuste', ...soloStaff, validate(ajusteSaldoSchema), unaVez(), autorizable('ajustar_saldo_favor'), controller.ajustarSaldoFavor);
 
 // ANTICIPO (2026-10-14): dinero a cuenta, sin nota, en efectivo y/o por
 // transferencia; le queda a favor. El efectivo exige el turno que lo recibe.

@@ -37,7 +37,7 @@
           <span class="escaneo">
             <input #bc type="text" [(ngModel)]="q" autocomplete="off"
                    (keydown.enter)="$event.preventDefault(); buscar()"
-                   placeholder="Color, calibre, SKU o código" />
+                   placeholder="Color, calibre o código del paquete" />
             <button type="button" class="btn btn-ghost" (click)="buscar()">Buscar</button>
           </span>
         </label>

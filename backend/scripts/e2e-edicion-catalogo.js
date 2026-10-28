@@ -168,7 +168,7 @@ const ck = (n, ok, d) => {
     const [[almBulto]] = await db.query('SELECT id FROM almacenes WHERE activo = 1 ORDER BY id LIMIT 1');
     await api('POST', `/variantes/${varBulto}/codigos`, { codigo: 'TMPED-B-' + SUF, peso_kg: 19, almacen_id: almBulto.id });
     r = await api('GET', `/productos/${conBulto}/eliminacion`);
-    ck('con un bulto ya NO se puede', r.data?.se_puede === false && /1 bulto/.test(r.data?.mensaje ?? ''), r.data?.mensaje);
+    ck('con un bulto ya NO se puede', r.data?.se_puede === false && /1 paquete/.test(r.data?.mensaje ?? ''), r.data?.mensaje);
     r = await api('DELETE', '/productos/' + conBulto);
     ck('el borrado se rechaza: 409', r.status === 409, r.status);
     const [[{ bultos }]] = await db.query('SELECT COUNT(*) bultos FROM variante_codigos WHERE variante_id = ?', [varBulto]);

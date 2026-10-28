@@ -472,6 +472,8 @@ export interface Pedido {
    * —no es dinero de la tienda— pero el ticket lo muestra.
    */
   cambio?: number;
+  /** La venta ya existía con esa llave de cobro: el servidor la contesta otra vez sin registrar nada. */
+  repetido?: boolean;
   /** Al entregar un pedido que pesó menos de lo que dejó: lo que se le devolvió. */
   devuelto?: number;
   /**
@@ -587,6 +589,8 @@ export interface LineaDevolvible {
   disponible: number;
   /** A cómo queda el kilo a favor: lo que de verdad se cobró por kilo. */
   precio_kg: number;
+  /** El mismo sin redondear: con él se calcula el importe, igual que el servidor. */
+  precio_kg_exacto?: number;
   /** Lo suelto entra como conos (paquete o cono) o como kilos (hilo por kilo). */
   sueltos_como: 'conos' | 'kilos';
   bultos: BultoDevolvible[];

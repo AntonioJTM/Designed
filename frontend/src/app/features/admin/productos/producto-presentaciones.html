@@ -41,9 +41,10 @@
               @if (!v.activo) { <span class="pill gris">Inactiva</span> }
             </div>
             <!-- Cambiar lo que se le cobra a todos es de quien tiene "cambiar precios". -->
-            @if (puedeCambiarPrecios() && (precioEditable(v) || pesoEditable(v))) {
+            <!-- También el cono de precio calculado: ahí solo se dice si se vende (2026-10-26). -->
+            @if (puedeCambiarPrecios()) {
               <button type="button" class="btn btn-ghost btn-sm" (click)="abrirPrecio(v)">
-                {{ pesoEditable(v) ? 'Precio y peso' : 'Precio' }}
+                {{ tituloPrecio(v) }}
               </button>
             }
           </div>
@@ -227,7 +228,10 @@
                     </td>
                     @for (v of variantesOrdenadas(); track v.id) {
                       <td class="num">
-                        @if (puedeCambiarPrecios()) {
+                        @if (!precioEditable(v)) {
+                          <!-- El cono cobra lo mismo que su paquete, también por lista (2026-10-26). -->
+                          <span class="muted">el del paquete</span>
+                        } @else if (puedeCambiarPrecios()) {
                           <input type="number" step="0.01" min="0" class="input-lista"
                                  [(ngModel)]="preciosLista[claveLista(v.id, t.id)]"
                                  [placeholder]="v.precio"
@@ -362,7 +366,7 @@
         @if (pr.resumen.lotes.length) {
           <div class="lotes">
             @for (l of pr.resumen.lotes; track l.lote) {
-              <span class="ficha">Lote {{ l.lote }} · {{ l.bultos }} bultos · {{ l.kg | cantidad: 'kg' }}</span>
+              <span class="ficha">Lote {{ l.lote }} · {{ l.bultos }} {{ +l.bultos === 1 ? 'paquete' : 'paquetes' }} · {{ l.kg | cantidad: 'kg' }}</span>
             }
           </div>
         }
@@ -406,7 +410,7 @@
         @if (pr.bultos.length > bultosVisibles().length) {
           <div style="margin-top: 10px">
             <button type="button" class="btn btn-ghost btn-sm" (click)="verTodosBultos.set(true)">
-              Ver los {{ pr.bultos.length }} bultos
+              Ver todos los paquetes ({{ pr.bultos.length }})
             </button>
           </div>
         }
@@ -430,7 +434,7 @@
           <div>
             <h2>Carga {{ u.folio }} lista</h2>
             <p>
-              {{ u.num_bultos }} bultos · {{ u.kg_total | cantidad: 'kg' }} al inventario
+              {{ u.num_bultos }} {{ +u.num_bultos === 1 ? 'paquete' : 'paquetes' }} · {{ u.kg_total | cantidad: 'kg' }} al inventario
               @if (u.lotes.length > 1) { · {{ u.lotes.length }} lotes del mismo hilo }
             </p>
           </div>
@@ -470,7 +474,7 @@
                     aria-label="Qué bultos ver">
               <option value="disponibles">Disponibles</option>
               <option value="todos">Todos</option>
-              <option value="apartados">Apartados para pedidos</option>
+              <option value="apartados">Apartados (notas en espera o envíos)</option>
               <option value="vendidos">Vendidos</option>
               <option value="desarmados">Bajados a conos</option>
             </select>
@@ -577,7 +581,7 @@
           @if (bultosFiltrados().length > bultosVisiblesTabla().length) {
             <div style="margin-top: 10px">
               <button type="button" class="btn btn-ghost btn-sm" (click)="verTodosLosBultos.set(true)">
-                Ver los {{ bultosFiltrados().length }} bultos
+                Ver todos los paquetes ({{ bultosFiltrados().length }})
               </button>
             </div>
           }
@@ -586,8 +590,9 @@
         @if (principal(); as p) {
           <p class="muted" style="margin: 14px 0 0; font-size: 0.8125rem; line-height: 1.5">
             Escanea cualquiera y el sistema lo reconoce como esta presentación. El código principal
-            es <span class="mono">{{ p.codigo_barras || '—' }}</span>. Dónde está cada bulto es
-            aproximado: se corrige solo cuando lo escanean al vender o al bajarlo a conos.
+            es <span class="mono">{{ p.codigo_barras || '—' }}</span>. Cada bulto dice en qué almacén
+            está: lo pone la carga y lo cambia el envío a otra tienda. La caja y «Bajar conos» solo toman
+            los paquetes que están en esa tienda.
           </p>
         }
       </section>
@@ -653,7 +658,7 @@
     <div class="modal-overlay">
       <div class="modal angosto" role="dialog" aria-modal="true" aria-labelledby="modal-precio-titulo">
         <div class="modal-head">
-          <h2 id="modal-precio-titulo">{{ pesoEditable(v) ? 'Precio y peso' : 'Precio' }} · {{ v.sku }}</h2>
+          <h2 id="modal-precio-titulo">{{ tituloPrecio(v) }} · {{ v.sku }}</h2>
           <button type="button" class="modal-cerrar" (click)="cerrarModal()" aria-label="Cerrar">✕</button>
         </div>
         <form (ngSubmit)="guardarPublico(v)">
@@ -683,10 +688,10 @@
                 </span>
               </label>
             }
-            <!-- Desactivar en vez de borrar: lo que tiene mercancía o ventas no se borra (2026-10-17). -->
+            <!-- Desactivar en vez de borrar: las presentaciones no se borran (2026-10-20). -->
             <label class="field check">
               <input type="checkbox" name="activa" [(ngModel)]="varianteActiva" />
-              <span>Activa: se vende <span class="muted">(quítala para dejar de venderla sin borrarla)</span></span>
+              <span>Activa: se vende <span class="muted">(desmárcala para dejar de venderla; sus ventas y su historial se quedan)</span></span>
             </label>
             <p class="muted" style="font-size: 0.8125rem; line-height: 1.5">
               Lo vendido antes no cambia: cada venta guarda el precio con que se cobró.
@@ -748,7 +753,8 @@
           <label class="field">
             Peso real
             <span class="campo-moneda">
-              <input type="number" step="0.001" min="0" [(ngModel)]="nuevoPeso" name="np" />
+              <input #campoPeso type="number" step="0.001" min="0" [(ngModel)]="nuevoPeso" name="np"
+                     (keydown.enter)="$event.preventDefault(); agregarCodigoVar()" />
               <span class="unidad">kg</span>
             </span>
             @if (nuevoAlmacen && nuevoPeso) {
@@ -770,9 +776,10 @@
       </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" (click)="cerrarModal()">Cerrar</button>
-        <button type="button" class="btn btn-primary" [disabled]="!nuevoCodigo.trim() || faltaAlmacenBulto() || !(nuevoPeso! > 0)"
-                (click)="agregarCodigoVar(); campoCodigo.focus()">
-          Añadir bulto
+        <button type="button" class="btn btn-primary"
+                [disabled]="agregandoBulto() || !nuevoCodigo.trim() || faltaAlmacenBulto() || !(nuevoPeso! > 0)"
+                (click)="agregarCodigoVar()">
+          {{ agregandoBulto() ? 'Añadiendo…' : 'Añadir bulto' }}
         </button>
       </div>
     </div>

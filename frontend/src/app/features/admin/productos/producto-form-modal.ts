@@ -1,5 +1,5 @@
-import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, Injector, OnInit, afterNextRender, computed, inject, input, output, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { catchError, forkJoin, of } from 'rxjs';
 import { CatalogoService, EliminacionProducto } from '../../../core/services/catalogo.service';
@@ -29,6 +29,9 @@ import { ApiError } from '../../../core/models/auth.models';
 export class ProductoFormModal implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly catalogo = inject(CatalogoService);
+  private readonly injector = inject(Injector);
+  /** Tenía «Multipresentación» al abrir (un hilo con paquete): para avisar si se quita. */
+  readonly multiOriginal = signal(false);
 
   /** Producto a editar; `null` = alta. */
   readonly productoId = input<number | null>(null);
@@ -107,23 +110,34 @@ export class ProductoFormModal implements OnInit {
 
   /** Calibre que ya traía el producto y no está en la lista de su material. */
   private readonly calibreHeredado = signal<string | null>(null);
+  /** El material con que se guardó: solo con él se ofrece el calibre heredado. */
+  private readonly materialOriginal = signal<number | null>(null);
 
   /**
    * Calibres del material elegido: acrilán 1/30 y 2/30, viscosa 2/48. Se leen
    * de la categoría (`calibres`) para poder cambiarlos sin tocar código.
    */
-  readonly calibres = computed(() => {
-    const catId = Number(this.formValor().categoria_id);
+  readonly calibres = computed(() => this.calibresDe(Number(this.formValor().categoria_id)));
+
+  private calibresDe(catId: number): string[] {
     const material = this.categorias().find((c) => c.id === catId);
     const lista = (material?.calibres ?? '')
       .split(',')
       .map((c) => c.trim())
       .filter(Boolean);
     const heredado = this.calibreHeredado();
-    return heredado && !lista.includes(heredado) ? [...lista, heredado] : lista;
-  });
+    return heredado && catId === this.materialOriginal() && !lista.includes(heredado) ? [...lista, heredado] : lista;
+  }
 
   constructor() {
+    // Al cambiar de material, el calibre que no es suyo se vacía (2026-10-26,
+    // auditoría): se quedaba escondido y se guardaba «BLANCO · VISCOSA · 2/30».
+    this.form.controls.categoria_id.valueChanges.pipe(takeUntilDestroyed()).subscribe((catId) => {
+      const cal = (this.form.controls.grosor_calibre.value ?? '').trim();
+      if (cal && catId != null && !this.calibresDe(Number(catId)).includes(cal)) {
+        this.form.controls.grosor_calibre.setValue('');
+      }
+    });
     // Los campos se ven desde el primer cuadro —así el modal no crece a saltos—
     // pero no se pueden tocar hasta que llegan los datos. El velo los tapa.
     this.form.disable({ emitEvent: false });
@@ -153,7 +167,10 @@ export class ProductoFormModal implements OnInit {
         : of(null),
     }).subscribe({
       next: (o) => {
-        this.categorias.set(o.categorias.items);
+        // Los materiales desactivados no se ofrecen (salvo el que ya tiene el hilo).
+        this.categorias.set(o.categorias.items.filter(
+          (c) => (c.activo !== false && Number(c.activo) !== 0) || c.id === o.producto?.categoria_id
+        ));
         this.lineas.set(o.lineas);
         this.unidades.set(o.unidades);
         this.impuestos.set(o.impuestos);
@@ -178,6 +195,12 @@ export class ProductoFormModal implements OnInit {
   }
 
   private llenar(p: ProductoDetalle): void {
+    // Si el calibre guardado no está entre los del material, se conserva como opción
+    // extra para no borrárselo sin avisar al guardar. Va ANTES del reset: el reset avisa
+    // el cambio de material y, sin esto, ese calibre se vaciaba.
+    this.calibreHeredado.set(p.grosor_calibre?.trim() || null);
+    this.materialOriginal.set(p.categoria_id ?? null);
+    this.multiOriginal.set(!!Number(p.multipresentacion ?? 0));
     this.form.reset({
       categoria_id: p.categoria_id,
       unidad_medida_id: p.unidad_medida_id,
@@ -192,9 +215,6 @@ export class ProductoFormModal implements OnInit {
       destacado: !!p.destacado,
       activo: !!p.activo,
     });
-    // Si el calibre guardado no está entre los del material, se conserva
-    // como opción extra para no borrárselo sin avisar al guardar.
-    this.calibreHeredado.set(p.grosor_calibre?.trim() || null);
     this.sinPrecio.set(!!p.sin_precio);
   }
 
@@ -269,6 +289,14 @@ export class ProductoFormModal implements OnInit {
     this.form.patchValue({ nombre: '', descripcion: '', precio_kg: null, destacado: false });
     this.form.patchValue({ unidad_medida_id: unidad });
     this.form.markAsUntouched();
+    // El cursor al nombre del color: el botón que se apretó ya no está (2026-10-26).
+    afterNextRender(() => document.querySelector<HTMLInputElement>('input[formControlName="nombre"]')?.focus(),
+      { injector: this.injector });
+  }
+
+  /** Lo tenía marcado y tiene presentaciones de paquete o cono: quitarlo deja su «Precio y peso» sin guardar. */
+  quitaMultipresentacion(): boolean {
+    return !!this.multiOriginal() && !this.form.getRawValue().multipresentacion;
   }
 
   eliminar(): void {

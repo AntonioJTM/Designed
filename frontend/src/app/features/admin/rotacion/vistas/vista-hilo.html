@@ -37,7 +37,7 @@
       <div class="card-head">
         <div>
           <h2>Cuánto se vende cada mes</h2>
-          <p>Kilos de {{ hilo.hilo }}, las dos tiendas{{ hilo.presentaciones.length === 2 ? ', paquete y cono' : '' }}</p>
+          <p>Kilos de {{ hilo.hilo }}, todas las tiendas{{ hilo.presentaciones.length === 2 ? ', paquete y cono' : '' }}</p>
         </div>
         <button type="button" class="btn-enlace" (click)="comoTabla.set(!comoTabla())">{{ comoTabla() ? 'Ver como gráfica' : 'Ver como tabla' }}</button>
       </div>
@@ -81,7 +81,7 @@
       </div>
       <app-proyeccion-semanal [semanas]="d.proyeccion.semanas" [conPedido]="conPedido()" [llega]="d.proyeccion.llega_semana"
                               [kgPedido]="d.pedido_hoy?.kg ?? 0" [llegaFecha]="d.pedido_hoy?.llega ?? null" [hoy]="d.hoy"
-                              [dondeTexto]="'los ' + (d.almacenes.length || 1) + ' almacenes'" [comoTabla]="comoTablaProy()"
+                              [dondeTexto]="(d.almacenes.length || 1) === 1 ? 'el almacén' : 'los ' + d.almacenes.length + ' almacenes'" [comoTabla]="comoTablaProy()"
                               [descripcion]="'Lo que habría de ' + hilo.hilo + ' cada semana'" />
       @if (siguiente(); as s) { <p class="muted pie-proy">{{ s }}</p> }
     </section>

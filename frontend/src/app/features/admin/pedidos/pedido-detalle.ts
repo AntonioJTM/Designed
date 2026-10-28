@@ -161,6 +161,8 @@ export class PedidoDetalle implements OnDestroy {
     return this.estados().filter((e) => {
       if (e === actual) return true;
       if (e === 'devuelto') return false;
+      // "Pendiente · a crédito" en una venta de CONTADO no crea ningún crédito (2026-10-26, auditoría).
+      if (e === 'pendiente' && !enLinea && this.fiado(p!) <= 0 && !this.esNotaPendiente(p!)) return false;
       if (conDevoluciones && e === 'cancelado') return false;
       if (!this.puedeCancelar() && e === 'cancelado') return false;
       if (!enLinea && !pasosDePedido && (e === 'en_preparacion' || e === 'enviado')) return false;
@@ -168,6 +170,10 @@ export class PedidoDetalle implements OnDestroy {
       if (fiadaVigente && e === 'pendiente' && !debe) return false;
       if (nota && actual === 'pendiente' && notaDebe && e !== 'cancelado') return false;
       if (nota && e === 'pendiente' && !notaDebe) return false;
+      // Una NOTA PENDIENTE DE PAGO cancelada, igual (2026-10-26): como «Pagado» o
+      // «Entregado» solo si lo que pagó la cubre (REACTIVAR_COMO_NOTA en el servidor).
+      if (this.esNotaPendiente(p!) && this.fiado(p!) <= 0 && this.inactivo(p!) && e !== 'pendiente'
+          && e !== actual && !this.notaCubierta(p!)) return false;
       // Una venta a crédito CANCELADA se reactiva solo como pendiente: vuelve a
       // deber y se da por pagada sola si su cuenta la cubre (2026-10-19).
       if (this.fiado(p!) > 0 && this.inactivo(p!) && e !== 'pendiente') return false;
@@ -185,7 +191,23 @@ export class PedidoDetalle implements OnDestroy {
     return !!Number(p.nota_pendiente ?? 0);
   }
 
+  /** Lo que pagó con su saldo a favor (pagos «Saldo a favor»): al cancelar regresa a su saldo. */
+  pagadoConSaldo(p: Pedido): number {
+    const r = (p.pagos ?? [])
+      .filter((g) => g.estado === 'completado' && /saldo a favor/i.test(g.metodo ?? ''))
+      .reduce((s, g) => s + Number(g.monto), 0);
+    return Math.round(r * 100) / 100;
+  }
+
   /** Lo que falta de una nota pendiente de pago (sus abonos son pagos). */
+  /** ¿Lo que pagó (cobrado o regresado al cancelar) cubre la nota? Para reactivarla como pagada. */
+  notaCubierta(p: Pedido): boolean {
+    const pagado = (p.pagos ?? [])
+      .filter((g) => g.estado === 'completado' || g.estado === 'reembolsado')
+      .reduce((s, g) => s + Number(g.monto), 0);
+    return Number(p.total) - pagado <= 0.004;
+  }
+
   faltaNota(p: Pedido): number {
     return Math.max(0, Math.round((Number(p.total) - this.pagado(p)) * 100) / 100);
   }
@@ -319,7 +341,14 @@ export class PedidoDetalle implements OnDestroy {
     const p = this.pedido();
     const devuelto = Number(p?.devuelto_total ?? 0);
     if (!p || devuelto <= 0) return this.cifras();
-    return [...this.cifras(), { etiqueta: 'Regresó', valor: devuelto, pie: 'le quedó a favor' }];
+    // Lo que regresó se descontó de lo que debía o le quedó a favor: se dice cuál (2026-10-26,
+    // auditoría: decía "le quedó a favor" aunque se descontara de esta misma nota).
+    const aDeuda = (p.devoluciones ?? []).reduce((s, d) => s + Number(d.aplicado_a_deuda ?? 0), 0);
+    const aFavor = Math.round((devuelto - aDeuda) * 100) / 100;
+    const pie = aDeuda <= 0.004 ? 'le quedó a favor'
+      : aFavor <= 0.004 ? 'se descontó de lo que debía'
+      : `${this.dinero(aDeuda)} de lo que debía · ${this.dinero(aFavor)} a favor`;
+    return [...this.cifras(), { etiqueta: 'Regresó', valor: devuelto, pie }];
   });
 
   /** Pagos, y lo fiado como un renglón más: es la forma en que se pagó esa parte. */
@@ -394,7 +423,7 @@ export class PedidoDetalle implements OnDestroy {
     ev.push({
       t: p.creado_en,
       que: apartado
-        ? `Se apartó ${donde}`
+        ? (this.esEncargo(p) ? `Se tomó la nota en espera ${donde}` : `Se apartó ${donde}`)
         : p.canal === 'tienda_linea' ? 'Se hizo el pedido en la tienda en línea' : `Se vendió ${donde}`,
     });
 
@@ -404,7 +433,11 @@ export class PedidoDetalle implements OnDestroy {
       const metodo = g.metodo.toLowerCase();
       let que: string;
       if (g.estado === 'pendiente' || g.estado === 'procesando') que = `Quedó por cobrar ${m} por ${metodo}`;
-      else if (apartado) que = i === 0 ? `Dejó ${m} de anticipo en ${metodo}` : `Abonó ${m} en ${metodo}`;
+      else if (apartado) {
+        que = i === 0
+          ? (this.esEncargo(p) ? `Dejó ${m} a cuenta en ${metodo}` : `Dejó ${m} de anticipo en ${metodo}`)
+          : `Abonó ${m} en ${metodo}`;
+      }
       else que = `Pagó ${m} en ${metodo}`;
       if (g.estado === 'reembolsado') que += ' (se le devolvió)';
       ev.push({ t: g.creado_en, que });
@@ -429,9 +462,12 @@ export class PedidoDetalle implements OnDestroy {
     for (const d of p.devoluciones ?? []) {
       const kg = d.lineas.reduce((s, l) => s + Number(l.kg), 0);
       const a = d.nombre_comercial || d.cliente || quien;
-      let que = `Regresó ${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg (${d.folio}): ` +
-        `${this.dinero(d.total)} a favor de ${a}`;
-      if (Number(d.aplicado_a_deuda) > 0) que += `; se descontaron ${this.dinero(d.aplicado_a_deuda)} de lo que debía`;
+      const aDeuda = Number(d.aplicado_a_deuda ?? 0);
+      const aFavor = Math.round((Number(d.total) - aDeuda) * 100) / 100;
+      let que = `Regresó ${kg.toLocaleString('es-MX', { maximumFractionDigits: 3 })} kg (${d.folio}) por ${this.dinero(d.total)}: `;
+      que += aDeuda <= 0.004 ? `le quedaron a favor de ${a}`
+        : aFavor <= 0.004 ? 'se descontaron de lo que debía'
+        : `${this.dinero(aDeuda)} se descontaron de lo que debía y ${this.dinero(aFavor)} le quedaron a favor de ${a}`;
       ev.push({ t: d.creado_en, que });
     }
     if (this.inactivo(p) && p.actualizado_en) {
@@ -869,7 +905,7 @@ export class PedidoDetalle implements OnDestroy {
                 ? `Nota en espera cancelada. Se liberó lo apartado en ${almacen}.${quedoTxt}${sinEfectivo}`
                 : `Apartado cancelado. Se liberó lo apartado en ${almacen}.${quedoTxt}${sinEfectivo}`
             : estado === 'cancelado' || estado === 'devuelto'
-              ? `${estado === 'cancelado' ? 'Venta cancelada' : 'Mercancía devuelta'}. Regresó al inventario de ${almacen}.${quedoTxt}${sinEfectivo}${abonadoTxt}`
+              ? `${estado === 'devuelto' ? 'Mercancía devuelta' : this.esNotaPendiente(p) && this.fiado(p) <= 0 ? 'Nota cancelada' : 'Venta cancelada'}. Regresó al inventario de ${almacen}.${quedoTxt}${sinEfectivo}${abonadoTxt}`
               : `Pedido marcado como ${etiquetaEstado(estado, p.canal, p.encargo).toLowerCase()}.`
         );
         // Se recarga: cambiaron los bultos, los pagos y las alternativas.
@@ -928,7 +964,7 @@ export class PedidoDetalle implements OnDestroy {
     // se le pega la prueba a una transferencia que ya tenga. Un pago nuevo por
     // "lo que falta" la dejaba pagada con la deuda todavía en su cuenta.
     // Igual una NOTA PENDIENTE DE PAGO (2026-10-20): su depósito va en «Registrar su pago».
-    if (this.fiado(p) > 0.004 || this.esNotaPendiente(p)) return hayAQuienPegarla;
+    if (this.fiado(p) > 0.004 || this.esNotaPendiente(p) || this.esNotaEnEspera(p)) return hayAQuienPegarla;
     const cobrado = pagos
       .filter((g) => g.estado === 'completado')
       .reduce((s, g) => s + Number(g.monto), 0);
@@ -941,7 +977,17 @@ export class PedidoDetalle implements OnDestroy {
    */
   capturaSoloPrueba(): boolean {
     const p = this.pedido();
-    return !!p && (this.fiado(p) > 0.004 || this.esNotaPendiente(p));
+    return !!p && (this.fiado(p) > 0.004 || this.esNotaPendiente(p) || this.esNotaEnEspera(p));
+  }
+
+  /** Una NOTA EN ESPERA sin entregar (2026-10-26): su depósito se registra al entregarla. */
+  esNotaEnEspera(p: Pedido): boolean {
+    return this.esEncargo(p) && this.esApartadoSinEntregar(p) && !this.inactivo(p);
+  }
+
+  depositoAlEntregar(): boolean {
+    const p = this.pedido();
+    return !!p && this.esNotaEnEspera(p) && !this.aceptaComprobante();
   }
 
   /** Una nota pendiente de pago que todavía se debe: su depósito va en «Registrar su pago». */

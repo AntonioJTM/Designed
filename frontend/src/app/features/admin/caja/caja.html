@@ -41,7 +41,7 @@
             @if (diferencia(c) === 0) {
               El cajón cuadra.
             } @else {
-              La diferencia queda guardada en el corte; se ve después en Reportes → Cortes de caja.
+              La diferencia queda guardada en el corte@if (veCortes()) {; se ve después en Reportes → Cortes de caja}.
             }
           </p>
         </div>
@@ -75,7 +75,7 @@
       <div class="kpis">
         @for (k of kpis(); track k.etiqueta) {
           <div class="kpi">
-            <span class="kpi-label"><span class="punto" [style.background]="k.punto"></span>{{ k.etiqueta }}</span>
+            <span class="kpi-label"><span [class]="'punto ' + k.tono"></span>{{ k.etiqueta }}</span>
             <span class="kpi-valor">{{ k.valor }}</span>
             <span class="kpi-pie">{{ k.pie }}</span>
           </div>
@@ -252,11 +252,11 @@
             <input type="text" [(ngModel)]="formCaja.nombre" name="nombreCaja" placeholder="Ej. Caja Cuautepec" />
           </label>
           <label class="field full">
-            Almacén del que descuenta
+            Tienda
             <select [(ngModel)]="formCaja.almacen_id" name="almacenCaja">
-              @for (a of almacenes(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
+              @for (a of tiendasParaCaja(); track a.id) { <option [ngValue]="a.id">{{ a.nombre }}</option> }
             </select>
-            <span class="ayuda">Las ventas de esta caja salen de las existencias de ese almacén.</span>
+            <span class="ayuda">Solo tiendas (con mostrador). Las ventas de esta caja salen de las existencias de esa tienda.</span>
           </label>
           <label class="field check">
             <input type="checkbox" [(ngModel)]="formCaja.activo" name="activaCaja" /> Activa

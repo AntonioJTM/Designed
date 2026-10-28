@@ -15,7 +15,9 @@
               [attr.aria-expanded]="menuAbierto()" aria-controls="menu-principal">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" aria-hidden="true"><path d="M4 7h16 M4 12h16 M4 17h16"></path></svg>
-        <span class="oculto">Menú</span>
+        <span class="oculto">Menú{{ total() > 0 ? ', ' + (total() === 1 ? '1 pendiente' : total() + ' pendientes') : '' }}</span>
+        <!-- Con el menú cerrado no se ve la campana: su número va aquí (2026-10-26, auditoría). -->
+        @if (total() > 0) { <span class="badge menu-badge" aria-hidden="true">{{ total() }}</span> }
       </button>
     </div>
 
@@ -45,10 +47,10 @@
             La campana: lo que está esperando a alguien. Va aquí, junto al nombre y
             el tipo de usuario, donde la pidió el usuario.
           -->
-          <button type="button" class="campana" (click)="alternar()"
-                  [attr.aria-expanded]="abierto()"
-                  [attr.aria-label]="total() > 0 ? total() + ' pendientes' : 'Sin pendientes'"
-                  [title]="total() > 0 ? total() + ' cosas esperan atención' : 'Nada pendiente'">
+          <button #campana type="button" class="campana" (click)="alternar()"
+                  [attr.aria-expanded]="abierto()" aria-controls="panel-avisos"
+                  [attr.aria-label]="total() === 0 ? 'Sin pendientes' : total() === 1 ? '1 pendiente' : total() + ' pendientes'"
+                  [title]="total() === 0 ? 'Nada pendiente' : total() === 1 ? '1 asunto espera atención' : total() + ' asuntos esperan atención'">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"></path>
@@ -66,7 +68,7 @@
         desplazamiento, con media pantalla vacía a un lado.
       -->
       @if (abierto()) {
-        <section class="avisos" role="dialog" aria-label="Pendientes">
+        <section class="avisos" id="panel-avisos" role="dialog" aria-label="Pendientes">
           <header class="avisos-head">
             <div>
               <h2>Pendientes</h2>
@@ -76,7 +78,7 @@
                 @else { {{ total() }} {{ total() === 1 ? 'asunto espera' : 'asuntos esperan' }} a alguien. Se quitan solos al resolverse. }
               </p>
             </div>
-            <button type="button" class="avisos-cerrar" (click)="abierto.set(false)" aria-label="Cerrar avisos">
+            <button type="button" class="avisos-cerrar" (click)="cerrarAvisos()" aria-label="Cerrar avisos">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18"></path></svg>
             </button>
@@ -119,7 +121,7 @@
               @if (veConfig() && p.whatsapp; as w) {
                 <div class="avisos-grupo">
                   <h3>Sistema</h3>
-                  <button type="button" class="aviso-fila" (click)="irA('/admin/configuracion')">
+                  <button type="button" class="aviso-fila" (click)="irA(url(destino.whatsapp))">
                     <span class="icono tono-naranja" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.chat"></path></svg></span>
                     <span class="que">
                       <b>{{ w.motivo === 'sesion_cerrada' ? 'El WhatsApp de la tienda se desconectó' : 'El WhatsApp de la tienda no se puede conectar' }}</b>
@@ -132,12 +134,12 @@
                   </button>
                 </div>
               }
-              @if ((veMercancia() && (p.traspasos_por_enviar.length > 0 || p.traspasos_por_recibir.length > 0))
+              @if ((veEnviar() && p.traspasos_por_enviar.length > 0) || (veRecibir() && p.traspasos_por_recibir.length > 0)
                    || (veInventario() && p.alertas_stock > 0)
                    || (veCatalogo() && (p.sin_precio?.num ?? 0) > 0)) {
                 <div class="avisos-grupo">
                   <h3>Mercancía</h3>
-                  @if (veMercancia()) {
+                  @if (veEnviar()) {
                     @for (t of p.traspasos_por_enviar; track t.id) {
                       <button type="button" class="aviso-fila" (click)="irA(url(destino.traspasos))">
                         <span class="icono tono-azul" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.envio"></path></svg></span>
@@ -148,6 +150,8 @@
                         <span class="ir" aria-hidden="true">Surtir ›</span>
                       </button>
                     }
+                  }
+                  @if (veRecibir()) {
                     @for (t of p.traspasos_por_recibir; track t.id) {
                       <button type="button" class="aviso-fila" (click)="irA(url(destino.traspasos))">
                         <span class="icono tono-gris" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.envio"></path></svg></span>
@@ -188,7 +192,7 @@
                 <div class="avisos-grupo">
                   <h3>Caja</h3>
                   @for (t of p.turnos_abiertos!.turnos; track t.id) {
-                    <button type="button" class="aviso-fila" (click)="irA(url(destino.caja))">
+                    <button type="button" class="aviso-fila" (click)="irA(url(cajaDe(t.caja_id)))">
                       <span class="icono tono-naranja" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.cobro"></path></svg></span>
                       <span class="que">
                         <b>{{ t.caja }} lleva {{ t.dias }} días abierta sin corte</b>
@@ -241,6 +245,12 @@
                         </li>
                       }
                     </ul>
+                    <!-- La lista va hasta 8; el título dice cuántas son (2026-10-26, auditoría). -->
+                    @if (p.cobranza.num_notas > p.cobranza.notas.length) {
+                      <button type="button" class="btn-enlace avisos-mas" (click)="irA(url(destino.cobranza))">
+                        Y {{ p.cobranza.num_notas - p.cobranza.notas.length }} más en Cuánto debe ›
+                      </button>
+                    }
                   }
                   @if (p.nuevos_sin_credito && p.nuevos_sin_credito.num_clientes > 0) {
                     <!--
@@ -250,7 +260,7 @@
                       propósito.
                     -->
                     @for (c of p.nuevos_sin_credito.clientes; track c.cliente_id) {
-                      <button type="button" class="aviso-fila" (click)="irA('/admin/clientes/' + c.cliente_id)">
+                      <button type="button" class="aviso-fila" (click)="irA(url(clienteDe(c.cliente_id)))">
                         <span class="icono tono-gris" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="ICONO.gente"></path></svg></span>
                         <span class="que">
                           <b>{{ c.nombre_comercial || c.nombre }}: falta decidir su crédito</b>
@@ -264,9 +274,9 @@
                     }
                     <!-- La lista va hasta 8; el número dice cuántos son (2026-10-20). -->
                     @if (p.nuevos_sin_credito.num_clientes > p.nuevos_sin_credito.clientes.length) {
-                      <p class="avisos-mas">
-                        Y {{ p.nuevos_sin_credito.num_clientes - p.nuevos_sin_credito.clientes.length }} más en Clientes.
-                      </p>
+                      <button type="button" class="btn-enlace avisos-mas" (click)="irA(url(destino.clientesNuevos))">
+                        Y {{ p.nuevos_sin_credito.num_clientes - p.nuevos_sin_credito.clientes.length }} más: los más nuevos en Clientes ›
+                      </button>
                     }
                   }
                   @if (p.enfriados && p.enfriados.num_clientes > 0) {

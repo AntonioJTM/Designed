@@ -247,6 +247,36 @@ const OPERACIONES = {
     pedir: 'pedir:mover_efectivo',
     conTienda: true,
     vence: 'dia',
+    cerrarSiCambio: true,
+    // Antes de pedirlo, que se PUEDA (2026-10-26, auditoría; como el gasto): el turno
+    // abierto y, si es retiro, el efectivo en el cajón. Por la API se pedía "Sacar
+    // $5,000" con $3,000 en el cajón.
+    async alPedir(req) {
+      const { efectivoEnCajon } = require('../caja/model');
+      const conn = await pool.getConnection();
+      try {
+        const [[s]] = await conn.query('SELECT estado FROM sesiones_caja WHERE id = :id', { id: Number(req.params.id) });
+        if (!s || s.estado !== 'abierta') {
+          throw new AppError(409, 'SESION_CERRADA', 'El turno de caja ya está cerrado: abre uno para sacar o meter efectivo.');
+        }
+        if (req.body?.tipo === 'retiro') {
+          const hay = await efectivoEnCajon(conn, Number(req.params.id));
+          if (Number(req.body?.monto) > hay + 0.001) {
+            throw new AppError(409, 'EFECTIVO_INSUFICIENTE',
+              `En el cajón debería haber ${pesos(hay)}; no se pueden sacar ${pesos(req.body?.monto)}.`);
+          }
+        }
+      } finally {
+        conn.release();
+      }
+    },
+    // Si mientras esperaba cortaron el turno, la solicitud se cierra sola.
+    contexto: (req) => ({ sesion_id: Number(req.params.id) }),
+    async revisarAntes(cuerpo, ctx) {
+      if (!ctx?.sesion_id) return null;
+      const s = await una('SELECT estado FROM sesiones_caja WHERE id = :id', { id: ctx.sesion_id });
+      return !s || s.estado !== 'abierta' ? 'El turno de caja ya se cerró: que se pida otra vez en el turno abierto.' : null;
+    },
     async describir(req) {
       const s = await una(
         'SELECT c.nombre AS caja FROM sesiones_caja s JOIN cajas c ON c.id = s.caja_id WHERE s.id = :id',
@@ -326,6 +356,12 @@ const OPERACIONES = {
     permiso: 'hacer:tipos_gasto',
     pedir: 'pedir:tipos_gasto',
     cerrarSiCambio: true,
+    // Los tipos son de TODAS las tiendas: lo acepta quien las ve todas, como quien los
+    // da de alta directo (2026-10-26, auditoría).
+    async autorizaSoloSi(auth) {
+      const { almacenesDe } = require('../permisos/service');
+      return (await almacenesDe(auth)) === null;
+    },
     async describir(req) {
       const b = req.body ?? {};
       const tope = b.limite != null ? `con límite de ${pesos(b.limite)} por gasto` : 'sin límite (todo gasto de ese tipo se autorizaría)';
@@ -535,7 +571,7 @@ const OPERACIONES = {
   },
 
   fiar_atrasado: {
-    nombre: 'Fiar con cuenta atrasada',
+    nombre: 'A crédito con una nota vencida',
     permiso: 'hacer:fiar_atrasado',
     pedir: 'pedir:fiar_atrasado',
     soloEnElMomento: true,
@@ -543,14 +579,14 @@ const OPERACIONES = {
     aplica: (req) => req.body?.fiar_con_atraso === true,
     async describir(req) {
       if (!req.params?.id) {
-        return `Fiar ${pesos(req.body?.a_credito)} a ${await nombreCliente(req.body?.cliente_id)}, que trae su cuenta atrasada`;
+        return `A crédito ${pesos(req.body?.a_credito)} a ${await nombreCliente(req.body?.cliente_id)}, que tiene una nota vencida`;
       }
       const p = await ventaDe(req.params.id);
       const como = /\/a-credito$/.test(req.path) ? 'Pasar a crédito'
         // Al registrar el pago de una nota pendiente, lo que falte (2026-10-26).
         : /\/pago-nota$/.test(req.path) ? 'Pasar a crédito lo que falta de'
           : `Entregar a crédito ${pesos(req.body?.a_credito)} de`;
-      return `${como} ${p?.numero_pedido ?? 'la nota'} · ${p?.cliente ?? ''}, que trae su cuenta atrasada`;
+      return `${como} ${p?.numero_pedido ?? 'la nota'} · ${p?.cliente ?? ''}, que tiene una nota vencida`;
     },
   },
 
@@ -726,17 +762,25 @@ const OPERACIONES = {
       const ve = veAlmacen(origen);
       for (const l of lineas) {
         if (!ve) { l.en_origen = null; continue; }
-        // Lo LIBRE: los paquetes disponibles, o los kilos menos lo ya apartado.
-        l.en_origen = l.unidad === 'paquetes'
-          ? Number((await una(
-            `SELECT COUNT(*) AS n FROM variante_codigos
+        // Los paquetes LIBRES (2026-10-26, auditoría: contaba los disponibles aunque otra
+        // solicitud ya hubiera apartado parte): los disponibles, hasta lo que alcanzan los
+        // kilos libres con el peso promedio de esos paquetes.
+        const libreKg = async () => Math.max(0, Number((await una(
+          'SELECT cantidad - cantidad_reservada AS libre FROM inventario WHERE variante_id = :v AND almacen_id = :a',
+          { v: l.variante_id, a: origen }
+        ))?.libre ?? 0));
+        if (l.unidad === 'paquetes') {
+          const d = await una(
+            `SELECT COUNT(*) AS n, COALESCE(SUM(peso_kg), 0) AS kg FROM variante_codigos
               WHERE variante_id = :v AND almacen_id = :a AND estado = 'disponible'`,
             { v: l.variante_id, a: origen }
-          ))?.n ?? 0)
-          : Math.max(0, Number((await una(
-            'SELECT cantidad - cantidad_reservada AS libre FROM inventario WHERE variante_id = :v AND almacen_id = :a',
-            { v: l.variante_id, a: origen }
-          ))?.libre ?? 0));
+          );
+          const n = Number(d?.n ?? 0);
+          const promedio = n ? Number(d.kg) / n : 0;
+          l.en_origen = promedio > 0 ? Math.min(n, Math.floor((await libreKg() + 0.0005) / promedio)) : n;
+          continue;
+        }
+        l.en_origen = await libreKg();
       }
       return { origen: await nombreAlmacen(origen), lineas };
     },

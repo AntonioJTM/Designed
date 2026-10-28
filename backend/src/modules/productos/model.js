@@ -187,7 +187,10 @@ async function cargado(id, ejecutor = pool) {
        (SELECT COUNT(*) FROM variante_conversiones
          WHERE variante_origen_id IN ${sub} OR variante_destino_id IN ${sub}) AS desarmes,
        (SELECT COUNT(*) FROM orden_compra_detalle  WHERE variante_id IN ${sub}) AS compras,
-       (SELECT COUNT(*) FROM carrito_items         WHERE variante_id IN ${sub}) AS carritos`,
+       (SELECT COUNT(*) FROM carrito_items         WHERE variante_id IN ${sub}) AS carritos,
+       -- Las ventas de años anteriores (Rotación) cuelgan del HILO y no se borran en
+       -- cascada: el modal decía "se puede eliminar" y luego fallaba (2026-10-26).
+       (SELECT COUNT(*) FROM ventas_anteriores     WHERE producto_id = :id) AS ventas_anteriores`,
     { id }
   );
   return Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Number(v)]));
@@ -205,7 +208,7 @@ async function eliminarSiVacio(id) {
     if (!p) return { noExiste: true };
     const c = await cargado(id, conn);
     const tiene = c.bultos || c.cargas || c.saldos || c.movimientos || c.ventas || c.traspasos
-      || c.desarmes || c.compras || c.carritos;
+      || c.desarmes || c.compras || c.carritos || c.ventas_anteriores;
     if (tiene) return c;
     await conn.query('DELETE FROM productos WHERE id = :id', { id });
     return null;

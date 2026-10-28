@@ -8,7 +8,7 @@
 }
 .rango-fecha input {
   height: 44px; width: 170px; padding: 0 12px;
-  border: 1px solid var(--borde-campo); border-radius: 8px; background: #fff;
+  border: 1px solid var(--borde-campo); border-radius: 8px; background: var(--superficie);
   font: inherit; font-size: 0.875rem; color: var(--tinta);
 }
 .rango-fecha input:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }

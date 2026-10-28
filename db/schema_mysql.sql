@@ -5,8 +5,9 @@
 --  ARCHIVO GENERADO desde la base 'desarrollo'. No lo edites a mano:
 --  cambia la base y vuelve a correr  node scripts/dump-db.js --estructura
 -- =====================================================================
--- Generado: 2026-09-10T16:14:01.768Z
--- Tablas: 48 · Vistas: 7
+-- Generado: 2026-09-10T16:14:01.768Z · puesto al día a mano hasta el 2026-10-26
+-- (cotejado columna por columna contra 'desarrollo').
+-- Tablas: 66 · Vistas: 7
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -64,6 +65,12 @@ CREATE TABLE `usuarios` (
   -- 1 = ve todas las tiendas; 0 = solo las de `usuario_almacenes`
   -- (migración 2026-10_tiendas_por_persona.sql). El administrador, todas siempre.
   `todas_las_tiendas` tinyint(1) NOT NULL DEFAULT 1,
+  -- La clave con que autoriza en el momento (4-6 números, aparte de la contraseña);
+  -- 10 equivocadas seguidas la apagan (migración 2026-10_autorizaciones.sql).
+  `clave_autorizacion_hash` varchar(100) DEFAULT NULL,
+  `clave_autorizacion_fallos` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `clave_autorizacion_apagada_en` datetime DEFAULT NULL,
+  `clave_autorizacion_apagada_por` bigint(20) unsigned DEFAULT NULL,
   `ultimo_acceso` datetime DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -908,6 +915,8 @@ DROP TABLE IF EXISTS `pedidos`;
 CREATE TABLE `pedidos` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `numero_pedido` varchar(40) NOT NULL,
+  -- Llave de un solo uso de la caja: una venta se registra UNA vez (2026-10_clave_cobro.sql).
+  `clave_cobro` char(36) DEFAULT NULL,
   `canal` varchar(15) NOT NULL,
   `encargo` tinyint(1) NOT NULL DEFAULT 0,
   `nota_pendiente` tinyint(1) NOT NULL DEFAULT 0,
@@ -940,6 +949,7 @@ CREATE TABLE `pedidos` (
   PRIMARY KEY (`id`),
   KEY `idx_pedidos_nota_pendiente` (`nota_pendiente`,`estado`),
   UNIQUE KEY `numero_pedido` (`numero_pedido`),
+  UNIQUE KEY `uq_pedidos_clave_cobro` (`clave_cobro`),
   KEY `usuario_id` (`usuario_id`),
   KEY `idx_pedidos_vendedor` (`vendedor_id`),
   KEY `sesion_caja_id` (`sesion_caja_id`),
@@ -1018,6 +1028,10 @@ CREATE TABLE `pagos` (
   -- El billete que entregó en efectivo, solo informativo (cambio = recibido −
   -- monto). Migración 2026-10_efectivo_recibido.sql.
   `recibido` decimal(12,2) DEFAULT NULL,
+  -- De este pago, lo que se le regresó en EFECTIVO (la nota en espera pesó menos):
+  -- `monto` es lo cobrado; Transferencias suma monto + esto (lo que llegó al banco).
+  -- Migración 2026-10_pago_regresado_en_efectivo.sql.
+  `devuelto_efectivo` decimal(12,2) DEFAULT NULL,
   `estado` varchar(15) NOT NULL DEFAULT 'completado',
   `referencia_transaccion` varchar(120) DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
@@ -1250,6 +1264,9 @@ CREATE TABLE `nomina_recibos` (
   `deducciones` decimal(12,2) NOT NULL DEFAULT 0.00,
   `total_pagar` decimal(12,2) NOT NULL DEFAULT 0.00,
   `notas` text DEFAULT NULL,
+  -- El horario con que se calculó, congelado (2026-10_recibo_horario.sql): una semana
+  -- pagada se reimprime con el de ESA semana.
+  `horario_json` text DEFAULT NULL,
   `creado_en` datetime NOT NULL DEFAULT current_timestamp(),
   `actualizado_en` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -1344,6 +1361,42 @@ CREATE TABLE `operaciones_unicas` (
   CONSTRAINT `chk_ou_estado` CHECK (`estado` in ('en_curso','hecha'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ---------- Tabla: autorizaciones ----------
+-- Lo que alguien pidió hacer y espera que lo autorice quien lo hace directo
+-- (migraciones 2026-10_autorizaciones.sql, _fase2 y _fase3). Guarda la petición
+-- tal cual (método, ruta, cuerpo) para hacerla al aceptarla.
+DROP TABLE IF EXISTS `autorizaciones`;
+CREATE TABLE `autorizaciones` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `operacion` varchar(40) NOT NULL,
+  `estado` varchar(12) NOT NULL DEFAULT 'pendiente',
+  `metodo` varchar(8) NOT NULL,
+  `ruta` varchar(255) NOT NULL,
+  `cuerpo` mediumtext DEFAULT NULL,
+  `resumen` varchar(500) NOT NULL,
+  `almacenes` varchar(100) DEFAULT NULL,
+  `solicitante_id` bigint(20) unsigned NOT NULL,
+  `solicitado_en` datetime NOT NULL DEFAULT current_timestamp(),
+  `autorizador_id` bigint(20) unsigned DEFAULT NULL,
+  `en_el_momento` tinyint(1) NOT NULL DEFAULT 0,
+  `aprobando_en` datetime DEFAULT NULL,
+  `resuelto_en` datetime DEFAULT NULL,
+  `motivo` varchar(255) DEFAULT NULL,
+  `ultimo_error` varchar(500) DEFAULT NULL,
+  `resultado` mediumtext DEFAULT NULL,
+  `contexto` mediumtext DEFAULT NULL,
+  `secreto` char(64) DEFAULT NULL,
+  `nota_aprobacion` varchar(500) DEFAULT NULL,
+  `aviso` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_autorizaciones_estado` (`estado`,`solicitado_en`),
+  KEY `idx_autorizaciones_solicitante` (`solicitante_id`,`solicitado_en`),
+  KEY `fk_autorizaciones_autorizador` (`autorizador_id`),
+  CONSTRAINT `fk_autorizaciones_autorizador` FOREIGN KEY (`autorizador_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_autorizaciones_solicitante` FOREIGN KEY (`solicitante_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `chk_autorizaciones_estado` CHECK (`estado` in ('pendiente','aprobando','aprobada','rechazada','cancelada','vencida','cerrada'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------- Tabla: transferencias ----------
 -- Lo NUEVO de cada transferencia (2026-10-20): a qué cuenta llegó, si ya se vio
 -- en el banco (procesada) y si se facturó. La transferencia misma es un pagos,
@@ -1431,9 +1484,9 @@ CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_clientes_sald
 CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_mas_vendidos` AS select `pv`.`id` AS `variante_id`,`pv`.`sku` AS `sku`,`p`.`nombre` AS `producto`,sum(`pd`.`cantidad` - coalesce(`dev`.`kg`,0)) AS `unidades_vendidas`,sum(`pd`.`subtotal` - coalesce(`dev`.`kg` * `pd`.`subtotal` / nullif(`pd`.`cantidad`,0),0)) AS `ingresos` from ((((`pedido_detalle` `pd` join `producto_variantes` `pv` on(`pv`.`id` = `pd`.`variante_id`)) join `productos` `p` on(`p`.`id` = `pv`.`producto_id`)) join `pedidos` `ped` on(`ped`.`id` = `pd`.`pedido_id`)) left join (select `devolucion_detalle`.`detalle_id` AS `detalle_id`,sum(`devolucion_detalle`.`cantidad`) AS `kg` from `devolucion_detalle` group by `devolucion_detalle`.`detalle_id`) `dev` on(`dev`.`detalle_id` = `pd`.`id`)) where `ped`.`estado` not in ('cancelado','devuelto') group by `pv`.`id`,`pv`.`sku`,`p`.`nombre`;
 
 -- ---------- Vista: v_movimiento_hilo ----------
-CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_movimiento_hilo` AS select `pv`.`id` AS `variante_id`,`pv`.`producto_id` AS `producto_id`,max(case when `m`.`referencia_tipo` = 'pedido' and `m`.`cantidad` < 0 then `m`.`creado_en` end) AS `ultima_salida`,max(case when `m`.`referencia_tipo` = 'remesa' then `m`.`creado_en` end) AS `ultima_entrada`,coalesce(sum(case when `m`.`referencia_tipo` = 'pedido' and `m`.`cantidad` < 0 then -`m`.`cantidad` else 0 end),0) AS `kg_vendidos_historico` from (`producto_variantes` `pv` left join `movimientos_inventario` `m` on(`m`.`variante_id` = `pv`.`id`)) group by `pv`.`id`,`pv`.`producto_id`;
+CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_movimiento_hilo` AS select `pv`.`id` AS `variante_id`,`pv`.`producto_id` AS `producto_id`,max(case when `m`.`referencia_tipo` = 'pedido' and `m`.`cantidad` < 0 and `ped`.`estado` not in ('cancelado','devuelto') then `m`.`creado_en` end) AS `ultima_salida`,max(case when `m`.`referencia_tipo` = 'remesa' then `m`.`creado_en` end) AS `ultima_entrada`,coalesce(sum(case when `m`.`referencia_tipo` = 'pedido' and `m`.`cantidad` < 0 and `ped`.`estado` not in ('cancelado','devuelto') then -`m`.`cantidad` else 0 end),0) AS `kg_vendidos_historico` from ((`producto_variantes` `pv` left join `movimientos_inventario` `m` on(`m`.`variante_id` = `pv`.`id`)) left join `pedidos` `ped` on(`m`.`referencia_tipo` = 'pedido' and `ped`.`id` = `m`.`referencia_id`)) group by `pv`.`id`,`pv`.`producto_id`;
 
 -- ---------- Vista: v_ventas_por_empleado ----------
-CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_ventas_por_empleado` AS select `p`.`usuario_id` AS `usuario_id`,`u`.`nombre` AS `usuario`,cast(`p`.`creado_en` as date) AS `dia`,count(0) AS `num_pedidos`,coalesce(sum(`p`.`subtotal` - `p`.`descuento`),0) AS `venta_neta`,coalesce(sum(`p`.`total`),0) AS `venta_total` from (`pedidos` `p` join `usuarios` `u` on(`u`.`id` = `p`.`usuario_id`)) where `p`.`usuario_id` is not null and `p`.`estado` not in ('cancelado','devuelto') group by `p`.`usuario_id`,`u`.`nombre`,cast(`p`.`creado_en` as date);
+CREATE OR REPLACE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_ventas_por_empleado` AS select coalesce(`p`.`vendedor_id`,`p`.`usuario_id`) AS `usuario_id`,`u`.`nombre` AS `usuario`,cast(`p`.`creado_en` as date) AS `dia`,count(0) AS `num_pedidos`,coalesce(sum(`p`.`subtotal` - `p`.`descuento`),0) AS `venta_neta`,coalesce(sum(`p`.`total`),0) AS `venta_total` from (`pedidos` `p` join `usuarios` `u` on(`u`.`id` = coalesce(`p`.`vendedor_id`,`p`.`usuario_id`))) where coalesce(`p`.`vendedor_id`,`p`.`usuario_id`) is not null and `p`.`estado` not in ('cancelado','devuelto') group by coalesce(`p`.`vendedor_id`,`p`.`usuario_id`),`u`.`nombre`,cast(`p`.`creado_en` as date);
 
 SET FOREIGN_KEY_CHECKS = 1;

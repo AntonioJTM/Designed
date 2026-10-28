@@ -25,6 +25,11 @@ export class VistaTemporadas {
 
   readonly MESES_CORTOS = MESES_CORTOS;
   readonly kilos = kilos;
+
+  /** El que MÁS se aleja de los parejos: la frase vale para todos (antes, el del primero). */
+  masSeAleja(parejos: { se_aleja: number }[]): number {
+    return Math.max(0, ...parejos.map((p) => Number(p.se_aleja) || 0));
+  }
   readonly cap = cap;
 
   readonly nivel = computed(() => this.datos().historia.nivel);

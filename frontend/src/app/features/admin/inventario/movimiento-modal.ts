@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { Component, ElementRef, Injector, OnInit, afterNextRender, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EquivalenciaPaquetes, InventarioService } from '../../../core/services/inventario.service';
 import { Almacen, TipoMovimiento } from '../../../core/models/inventario.models';
@@ -81,11 +81,14 @@ export class MovimientoModal implements OnInit {
         if (v.length === 1) {
           // Coincidencia única (típico al escanear un código): se autoselecciona.
           this.varianteSel = v[0].id;
-          this.mensaje.set(`Variante: ${v[0].sku} · ${v[0].producto}`);
+          this.mensaje.set(`Elegido: ${this.etiquetaVariante(v[0])}`);
           this.alElegir();
         } else if (v.length === 0) {
           this.mensaje.set(null);
-          this.error.set('No se encontró ninguna variante con ese código.');
+          this.error.set(`No encontré ningún hilo con «${q}».`);
+          // Vacío y con el cursor: el siguiente escaneo no se pega a este (2026-10-26).
+          this.q = '';
+          this.enfocarLector();
         }
       },
       error: (e) => this.error.set(this.msg(e)),
@@ -102,7 +105,7 @@ export class MovimientoModal implements OnInit {
     const clas = [v.material, v.linea].filter(Boolean).join(' · ');
     const pres =
       v.tipo_presentacion === 'cono' ? 'Cono' : v.tipo_presentacion === 'paquete' ? 'Paquete' : v.presentacion || '';
-    return [clas ? `${hilo} — ${clas}` : hilo, pres, v.sku].filter(Boolean).join(' · ');
+    return [clas ? `${hilo} — ${clas}` : hilo, pres].filter(Boolean).join(' · ');
   }
 
   esAjuste(): boolean {
@@ -184,11 +187,11 @@ export class MovimientoModal implements OnInit {
     this.mensaje.set(null);
     const kg = this.kilos();
     if (!this.varianteSel || !this.mov.almacen_id || kg == null) {
-      this.error.set('Elige variante, almacén y cantidad.');
+      this.error.set('Elige el hilo, el almacén y la cantidad.');
       return;
     }
     if (this.unidad === 'paq' && !this.pesoRef()) {
-      this.error.set('No se sabe cuánto pesa un paquete de este SKU: captura los kilos.');
+      this.error.set('No se sabe cuánto pesa un paquete de este hilo: captura los kilos.');
       return;
     }
     this.guardando.set(true);
@@ -203,10 +206,13 @@ export class MovimientoModal implements OnInit {
       })
       .subscribe({
         next: (r) => {
-          this.mensaje.set(`Movimiento registrado. Saldo: ${r.saldo_anterior} → ${r.saldo_nuevo}.`);
+          const kg = (n: unknown) => this.cantidad.transform(n as number, 'kg');
+          this.mensaje.set(`Listo. Había ${kg(r.saldo_anterior)} y quedan ${kg(r.saldo_nuevo)}.`);
           this.mov.cantidad = null;
           this.mov.motivo = '';
           this.guardando.set(false);
+          // El cursor vuelve al lector, con lo escrito seleccionado: el siguiente escaneo lo reemplaza.
+          this.enfocarLector();
           // Se refresca el saldo para el siguiente SKU del conteo.
           this.alElegir();
           // No se cierra: cuadrar varios SKU seguidos es lo normal en un conteo.
@@ -225,6 +231,20 @@ export class MovimientoModal implements OnInit {
           this.error.set(this.msg(e));
         },
       });
+  }
+
+  private readonly cantidad = new CantidadPipe();
+  private readonly injector = inject(Injector);
+  private readonly lector = viewChild<ElementRef<HTMLInputElement>>('bc');
+
+  /** El cursor al campo de buscar o escanear, con lo escrito seleccionado. */
+  private enfocarLector(): void {
+    afterNextRender(() => {
+      const c = this.lector()?.nativeElement;
+      if (!c) return;
+      c.focus();
+      c.select();
+    }, { injector: this.injector });
   }
 
   cerrar(): void {

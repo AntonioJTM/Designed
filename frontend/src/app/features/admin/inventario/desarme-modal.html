@@ -43,7 +43,17 @@
           </div>
           <div class="renglon">
             <span>
-              Salen <b>{{ pb.conos_a_generar }}</b> conos
+              @if (pideConos()) {
+                <!-- El paquete no dice sus conos (2026-10-26): se escriben. -->
+                <label class="conos-salen">
+                  ¿Cuántos conos salieron?
+                  <input type="number" min="1" step="1" inputmode="numeric" name="conos" [(ngModel)]="conosCapturados"
+                         [attr.aria-invalid]="!(conosDelPaquete() >= 1)" />
+                  <span class="muted">el paquete no lo dice</span>
+                </label>
+              } @else {
+                Salen <b>{{ pb.conos_a_generar }}</b> conos
+              }
               @if (!pb.cono) {
                 <span class="muted"> · se dará de alta la presentación de cono</span>
               }

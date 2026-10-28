@@ -170,7 +170,8 @@ export interface PeriodoNomina {
    * personal: hay que recalcularla antes de pagarla (2026-10-26). null = al día.
    */
   por_recalcular?: {
-    nuevas: { numero_pedido: string; venta_neta: number }[];
+    /** `que`: entra (nueva), cambia (ya estaba y cambió) o descuento (regresó o se canceló). */
+    nuevas: { numero_pedido: string; venta_neta: number; que?: 'entra' | 'cambia' | 'descuento' }[];
     quitadas: { numero_pedido: string; venta_neta: number }[];
     personal: boolean;
   } | null;

@@ -6,6 +6,9 @@
  *
  * Es 100% de SOLO LECTURA: no modifica ningún archivo ni escribe en la base.
  * Revisa con criterio estricto de arquitectura, reglas de negocio y diseño UI/UX:
+ *   0. La propia auditoría (2026-10-26): la skill /verificar, su guía, su mapa de
+ *      módulos y sus 12 agentes nombran solo lo que existe, y nada del sistema
+ *      (módulo del servidor, pantalla, E2E) se queda sin módulo que lo revise
  *   1. Orden de archivos, arquitectura por capas, limpieza y privacidad
  *   2. Pantallas, menú, permisos y sistema de diseño UI/UX (DESIGN.md: "La bodega bien llevada")
  *   3. Auditoría estricta MÓDULO POR MÓDULO (los 12 módulos del sistema en código)
@@ -34,6 +37,7 @@ const idxBase = args.indexOf('--base');
 const baseElegida = idxBase >= 0 && args[idxBase + 1] ? args[idxBase + 1] : 'hitex';
 
 const hallazgos = {
+  auditoria: [],
   archivos: [],
   pantallas: [],
   modulos: [],
@@ -57,6 +61,9 @@ const estadoModulos = new Map([
 ]);
 
 let comprobaciones = 0;
+// Las pruebas unitarias del servidor se corren de verdad y se cuentan aparte
+// (antes se sumaban como "reglas" del módulo 12 y lo inflaban).
+const pruebasUnitarias = { pasadas: 0, fallidas: 0 };
 
 function revisar(categoria, condicion, mensajeFalla, gravedad = 'AVISO', modulo = null) {
   comprobaciones++;
@@ -87,6 +94,197 @@ function listarArchivos(dir, filtro = () => true, acum = []) {
     }
   }
   return acum;
+}
+
+// ============================================================================
+// 0. LA PROPIA AUDITORÍA (2026-10-26): la skill /verificar, su guía, su mapa de
+//    módulos y sus 12 agentes. Un agente al que se le manda leer un archivo que
+//    ya no existe pierde el tiempo o se inventa el resultado, y una pantalla o
+//    un módulo nuevo que no está en el mapa no lo revisa nadie. Por eso TODO lo
+//    que nombran (rutas, reglas de CLAUDE.md, permisos, operaciones, E2E,
+//    tablas) tiene que existir, y todo lo del sistema tiene que tener dueño.
+// ============================================================================
+const CARPETA_SKILL = '.claude/skills/verificar';
+const ESPEJO_SKILL = '.agents/skills/verificar';
+const ARCHIVOS_SKILL = ['SKILL.md', 'guia-agente.md', 'mapa-modulos.md'];
+
+/** ¿Existe la ruta (relativa a la raíz)? Admite `dir/*`, `dir/**` y `prefijo*` en el último tramo. */
+function existeRuta(patron) {
+  const limpio = String(patron).split(/\s|→/)[0].replace(/^\.\//, '').replace(/\/$/, '');
+  if (!limpio) return false;
+  if (!limpio.includes('*')) return fs.existsSync(path.join(RAIZ, limpio));
+  const partes = limpio.split('/');
+  const ultimo = partes.pop();
+  const dir = path.join(RAIZ, ...partes);
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return false;
+  if (ultimo === '*' || ultimo === '**') return true;
+  const re = new RegExp(
+    '^' + ultimo.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$'
+  );
+  return fs.readdirSync(dir).some((n) => re.test(n));
+}
+
+/** Una ruta del repositorio (no un nombre de función ni un comando). */
+function esRutaDelRepo(s) {
+  return (
+    /^(frontend|backend|db|deploy|muestras|Documentos|\.claude|\.agents)\//.test(s) ||
+    /^(CLAUDE\.md|DESIGN\.md|PRODUCT\.md|CAMBIOS\.txt|README\.md|\.gitignore)$/.test(s)
+  );
+}
+
+/** Los `elementos` entre comillas invertidas y los «títulos» de un texto. */
+const entreBackticks = (s) => [...String(s || '').matchAll(/`([^`]+)`/g)].map((m) => m[1].trim());
+const entreComillas = (s) => [...String(s || '').matchAll(/«([^»]+)»/g)].map((m) => m[1].trim());
+
+/**
+ * Lee mapa-modulos.md: `## NN · Nombre` y debajo viñetas `- Etiqueta: …` que pueden
+ * seguir en renglones con sangría. Devuelve [{ numero, nombre, datos: { Etiqueta: texto } }].
+ */
+function leerMapa(texto) {
+  const modulos = [];
+  let actual = null;
+  let etiqueta = null;
+  for (const linea of texto.split(/\r?\n/)) {
+    const enc = linea.match(/^## (\d\d) · (.+)$/);
+    if (enc) {
+      actual = { numero: enc[1], nombre: enc[2].trim(), datos: {} };
+      modulos.push(actual);
+      etiqueta = null;
+      continue;
+    }
+    if (!actual) continue;
+    const vin = linea.match(/^- ([^:]+):\s*(.*)$/);
+    if (vin) {
+      etiqueta = vin[1].trim();
+      actual.datos[etiqueta] = `${actual.datos[etiqueta] || ''} ${vin[2]}`;
+      continue;
+    }
+    if (etiqueta && /^\s{2,}\S/.test(linea)) actual.datos[etiqueta] += ` ${linea.trim()}`;
+    else if (!linea.trim()) etiqueta = null;
+  }
+  return modulos;
+}
+
+/** A qué carpeta "con dueño" pertenece una ruta (módulo del servidor o pantalla del panel). */
+function carpetaConDueno(ruta) {
+  const m = String(ruta).match(/^(backend\/src\/modules\/[^/*]+|frontend\/src\/app\/features\/admin\/[^/*]+)/);
+  return m ? m[1] : null;
+}
+
+function verificarLaPropiaAuditoria() {
+  const A = 'auditoria';
+  for (const f of ARCHIVOS_SKILL) {
+    const original = leer(`${CARPETA_SKILL}/${f}`);
+    const copia = leer(`${ESPEJO_SKILL}/${f}`);
+    revisar(A, Boolean(original), `Falta "${CARPETA_SKILL}/${f}": la skill /verificar no puede correr sin él.`, 'GRAVE');
+    revisar(
+      A,
+      original === copia,
+      `"${CARPETA_SKILL}/${f}" y "${ESPEJO_SKILL}/${f}" no son idénticos: copia el de .claude a .agents.`,
+      'IMPORTANTE'
+    );
+    // Las rutas del repositorio que nombra la skill tienen que existir.
+    for (const r of entreBackticks(original).filter(esRutaDelRepo)) {
+      revisar(A, existeRuta(r), `"${CARPETA_SKILL}/${f}" nombra "${r}", que no existe en el disco.`, 'IMPORTANTE');
+    }
+  }
+
+  const mapaTxt = leer(`${CARPETA_SKILL}/mapa-modulos.md`);
+  if (!mapaTxt) return;
+  const mapa = leerMapa(mapaTxt);
+  revisar(A, mapa.length === 12, `El mapa de módulos tiene ${mapa.length} módulos; deben ser 12.`, 'GRAVE');
+
+  const claudeMd = leer('CLAUDE.md');
+  const { CLAVES } = require(path.join(BACKEND, 'src', 'modules', 'permisos', 'catalogo.js'));
+  const operaciones = new Set(
+    [...leer('backend/src/modules/autorizaciones/operaciones.js').matchAll(/^  ([a-z_]+): \{/gm)].map((m) => m[1])
+  );
+  const sqlEsquema = [
+    leer('db/schema_mysql.sql'),
+    ...listarArchivos(path.join(RAIZ, 'db', 'migrations'), (f) => f.endsWith('.sql')).map((f) => fs.readFileSync(f, 'utf8')),
+  ].join('\n');
+  const tablas = new Set([
+    ...[...sqlEsquema.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?`?([a-z_]+)`?/gi)].map((m) => m[1].toLowerCase()),
+    ...[...sqlEsquema.matchAll(/VIEW\s+`?(v_[a-z_]+)/gi)].map((m) => m[1].toLowerCase()),
+  ]);
+  const codigo = [
+    ...listarArchivos(path.join(BACKEND, 'src'), (f) => f.endsWith('.js')),
+    ...listarArchivos(path.join(BACKEND, 'scripts'), (f) => f.endsWith('.js')),
+    ...listarArchivos(path.join(FRONTEND, 'src'), (f) => /\.(ts|html|scss)$/.test(f)),
+  ]
+    .map((f) => fs.readFileSync(f, 'utf8'))
+    .join('\n');
+  const general = leer('.claude/agents/revisor-general.md');
+
+  const carpetasCubiertas = new Set();
+  const e2eCubiertas = new Set();
+  for (const m of mapa) {
+    const d = m.datos;
+    const agente = entreBackticks(d.Agente)[0];
+    revisar(A, Boolean(agente), `El módulo ${m.numero} del mapa no dice cuál es su agente.`, 'GRAVE');
+    if (agente) {
+      const txtAgente = leer(`.claude/agents/${agente}.md`);
+      revisar(A, Boolean(txtAgente), `Falta el agente ".claude/agents/${agente}.md" del módulo ${m.numero}.`, 'GRAVE');
+      if (txtAgente) {
+        revisar(
+          A,
+          new RegExp(`^name:\\s*${agente}\\s*$`, 'm').test(txtAgente),
+          `El agente ".claude/agents/${agente}.md" no se llama "${agente}" en su encabezado.`,
+          'GRAVE'
+        );
+        revisar(A, txtAgente.includes('guia-agente.md'), `El agente "${agente}" no manda leer guia-agente.md.`, 'IMPORTANTE');
+        for (const r of entreBackticks(txtAgente).filter(esRutaDelRepo)) {
+          revisar(A, existeRuta(r), `El agente "${agente}" nombra "${r}", que no existe en el disco.`, 'IMPORTANTE');
+        }
+      }
+      revisar(A, general.includes(agente), `revisor-general.md no menciona al agente "${agente}" del módulo ${m.numero}.`, 'AVISO');
+    }
+    for (const etiqueta of ['Pantalla', 'Servidor', 'Comparte', 'Pruebas unitarias']) {
+      for (const r of entreBackticks(d[etiqueta])) {
+        revisar(A, existeRuta(r), `Módulo ${m.numero} del mapa, "${etiqueta}": "${r}" no existe en el disco.`, 'IMPORTANTE');
+        if (etiqueta !== 'Comparte') {
+          const c = carpetaConDueno(r);
+          if (c) carpetasCubiertas.add(c);
+        }
+      }
+    }
+    for (const t of entreComillas(d['Reglas de CLAUDE.md'])) {
+      revisar(A, claudeMd.includes(`**${t}`), `Módulo ${m.numero} del mapa cita la regla «${t}», que ya no está con ese título en CLAUDE.md.`, 'IMPORTANTE');
+    }
+    for (const f of entreBackticks(d['Funciones y códigos'])) {
+      revisar(A, codigo.includes(f), `Módulo ${m.numero} del mapa cita "${f}", que ya no aparece en el código.`, 'AVISO');
+    }
+    for (const p of entreBackticks(d.Permisos)) {
+      revisar(A, CLAVES.has(p), `Módulo ${m.numero} del mapa cita el permiso "${p}", que no está en permisos/catalogo.js.`, 'IMPORTANTE');
+    }
+    for (const o of entreBackticks(d.Operaciones)) {
+      revisar(A, operaciones.has(o), `Módulo ${m.numero} del mapa cita la operación "${o}", que no está en autorizaciones/operaciones.js.`, 'IMPORTANTE');
+    }
+    for (const e of entreBackticks(d.E2E)) {
+      e2eCubiertas.add(e);
+      revisar(A, fs.existsSync(path.join(BACKEND, 'scripts', e)), `Módulo ${m.numero} del mapa cita la prueba "${e}", que no existe en backend/scripts.`, 'IMPORTANTE');
+    }
+    for (const t of entreBackticks(d.Tablas)) {
+      revisar(A, tablas.has(t.toLowerCase()), `Módulo ${m.numero} del mapa cita la tabla o vista "${t}", que no está en db/schema_mysql.sql ni en las migraciones.`, 'IMPORTANTE');
+    }
+  }
+
+  // Nada del sistema sin módulo que lo revise.
+  for (const mod of fs.readdirSync(path.join(BACKEND, 'src', 'modules'), { withFileTypes: true })) {
+    if (!mod.isDirectory()) continue;
+    revisar(A, carpetasCubiertas.has(`backend/src/modules/${mod.name}`), `El módulo del servidor "backend/src/modules/${mod.name}" no está en ningún módulo del mapa: nadie lo audita.`, 'IMPORTANTE');
+  }
+  const dirAdmin = path.join(FRONTEND, 'src', 'app', 'features', 'admin');
+  if (fs.existsSync(dirAdmin)) {
+    for (const carpeta of fs.readdirSync(dirAdmin, { withFileTypes: true })) {
+      if (!carpeta.isDirectory()) continue;
+      revisar(A, carpetasCubiertas.has(`frontend/src/app/features/admin/${carpeta.name}`), `La pantalla "frontend/src/app/features/admin/${carpeta.name}" no está en ningún módulo del mapa: nadie la audita.`, 'IMPORTANTE');
+    }
+  }
+  for (const f of fs.readdirSync(path.join(BACKEND, 'scripts'))) {
+    if (!/^e2e-.*\.js$/.test(f)) continue;
+    revisar(A, e2eCubiertas.has(f), `La prueba "backend/scripts/${f}" no está en ningún módulo del mapa.`, 'AVISO');
+  }
 }
 
 // ============================================================================
@@ -467,14 +665,32 @@ function sinComentariosJs(txt) {
 }
 
 function textoVisibleHtml(html) {
-  return html
+  const sinCom = html
     .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<(?:svg|style)\b[\s\S]*?<\/(?:svg|style)>/gi, ' ')
+    .replace(/<(?:svg|style)\b[\s\S]*?<\/(?:svg|style)>/gi, ' ');
+  // Extraer también textos visibles en atributos (placeholder, title, aria-label) y literales dentro de {{ '...' }}
+  const atributos = [];
+  sinCom.replace(/\b(?:placeholder|title|aria-label)="([^"]+)"/gi, (_, v) => {
+    atributos.push(v);
+    return '';
+  });
+  const literalesInterpolados = [];
+  sinCom.replace(/\{\{([\s\S]*?)\}\}/g, (_, expr) => {
+    // Ignorar argumentos de pipes como | cantidad: 'kg' o | date: '...'
+    const sinPipes = expr.replace(/\|\s*\w+\s*:\s*'[^']*'/g, '');
+    sinPipes.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (__, lit) => {
+      literalesInterpolados.push(lit);
+      return '';
+    });
+    return '';
+  });
+  const textoPlano = sinCom
     .replace(/<[a-zA-Z!/](?:"[^"]*"|'[^']*'|[^'">])*>/g, ' ')
     .replace(/@(?:if|else\s+if|for|switch|case)\b[^{]*\{/g, ' ')
     .replace(/@else\s*\{?/g, ' ')
     .replace(/\{\{[\s\S]*?\}\}/g, ' ')
     .replace(/[{}]/g, ' ');
+  return `${textoPlano} ${atributos.join(' ')} ${literalesInterpolados.join(' ')}`;
 }
 
 // ============================================================================
@@ -652,7 +868,9 @@ function verificarModulosEnCodigo() {
   revisar('modulos', invModel.includes('COND_ALERTA') && invModel.includes('SOLO_EN_TIENDA') && invModel.includes('destare_por_cono_kg'), 'Inventario debe exigir stock_minimo > 0 para alertas (COND_ALERTA), permitir bajar conos solo en tiendas (SOLO_EN_TIENDA) y aceptar el destare (el del paquete o por cono).', 'GRAVE', M06);
   revisar('modulos', hiloJs.includes('detalleHilo') && hiloJs.includes('bultosDeLote'), 'El detalle de un hilo en Inventario debe exponer saldos por almacén, lotes y paquetes uno por uno.', 'IMPORTANTE', M06);
   // Coherencia entre COND_ALERTA (<=) y texto de las ventanas de mínimo ("o menos", no "menos de")
-  revisar('modulos', !/menos de\b/i.test(minModalHtml) && !/menos de\b/i.test(minModalTs) && !/menos de\b/i.test(minsModalTs), 'El stock mínimo avisa al llegar al número o menos (<=); las ventanas de mínimo deben decir "N paquetes o menos", nunca "menos de N".', 'IMPORTANTE', M06);
+  // Se mira el TEXTO, sin etiquetas: «<b>menos</b> de» también dice "menos de" (2026-10-26: se escapó así).
+  const textoPlano = (s) => s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+  revisar('modulos', ![minModalHtml, minModalTs, minsModalTs].some((s) => /menos de\b/i.test(textoPlano(s))), 'El stock mínimo avisa al llegar al número o menos (<=); las ventanas de mínimo deben decir "N paquetes o menos", nunca "menos de N".', 'IMPORTANTE', M06);
   // Kardex: distinguir el faltante (merma) y la cancelación de un traspaso del envío normal
   revisar('modulos', invService.includes('Faltante del traspaso') && invService.includes('se canceló el traspaso'), 'En el Kardex (inventario/service.js → _describir), el faltante de un envío debe rotularse como "Faltante del traspaso…" y la cancelación como "Regresó: se canceló el traspaso…", no como un traspaso normal.', 'IMPORTANTE', M06);
   // Operatividad en Inventario: vista previa antes de confirmar ajuste/merma/mínimo, lector limpio en conos, un solo botón primario y mensaje de merma en palabras de tienda
@@ -773,8 +991,10 @@ function verificarModulosEnCodigo() {
     const salida = `${resTest.stdout || ''}\n${resTest.stderr || ''}`;
     const pasadas = (salida.match(/^[✔✓]\s+/gm) || []).length;
     const fallidas = (salida.match(/^[✖✗]\s+.*$/gm) || []);
+    pruebasUnitarias.pasadas = pasadas;
+    pruebasUnitarias.fallidas = fallidas.length;
     for (let i = 0; i < pasadas; i++) {
-      revisar('modulos', true, '', 'GRAVE', M12);
+      revisar('modulos', true, '', 'GRAVE', null);
     }
     if (resTest.status !== 0 || fallidas.length > 0) {
       revisar(
@@ -782,7 +1002,7 @@ function verificarModulosEnCodigo() {
         false,
         `Fallaron pruebas unitarias de ejecución real en el backend: ${fallidas.join(' | ') || 'revisa npm test en backend/'}`,
         'GRAVE',
-        M12
+        null
       );
     }
   }
@@ -833,9 +1053,13 @@ async function verificarBaseDeDatos() {
       'proveedores', 'remesas', 'traspasos', 'traspaso_detalle', 'traspaso_bultos',
       'clientes', 'lugares_entrega', 'credito_movimientos', 'saldo_favor_movimientos',
       'pedidos', 'pedido_detalle', 'pedido_detalle_bultos', 'pagos', 'metodos_pago',
-      'devoluciones', 'devolucion_detalle',
+      'devoluciones', 'devolucion_detalle', 'devolucion_bultos',
       'nomina_empleados', 'nomina_periodos', 'nomina_recibos', 'nomina_horarios', 'nomina_vacaciones',
+      'nomina_comisiones',
       'configuracion', 'cuentas_bancarias',
+      // Lo que entró del 2026-10-19 al 2026-10-22: autorizaciones, llave de un solo
+      // uso, gastos de la caja, transferencias y ventas de años anteriores.
+      'autorizaciones', 'operaciones_unicas', 'tipos_gasto', 'gastos', 'transferencias', 'ventas_anteriores',
     ];
     const [tablasEnBase] = await c.query(
       'SELECT table_name t FROM information_schema.tables WHERE table_schema = ?',
@@ -1066,12 +1290,14 @@ async function verificarBaseDeDatos() {
 // EJECUCIÓN Y REPORTE
 // ============================================================================
 (async () => {
+  verificarLaPropiaAuditoria();
   verificarArchivos();
   verificarPantallasYPermisos();
   verificarModulosEnCodigo();
   const infoBd = await verificarBaseDeDatos();
 
   const secciones = [
+    ['0. La propia auditoría (skill /verificar, guía, mapa y agentes)', hallazgos.auditoria],
     ['1. Orden de archivos, arquitectura y privacidad', hallazgos.archivos],
     ['2. Pantallas, menú, permisos e interfaz', hallazgos.pantallas],
     ['3. Reglas estrictas en código (12 módulos)', hallazgos.modulos],
@@ -1109,6 +1335,10 @@ async function verificarBaseDeDatos() {
       for (const f of est.fallas) console.log(`      · ${f}`);
     }
   }
+  console.log(
+    `  · Pruebas unitarias del servidor (node --test): ${pruebasUnitarias.pasadas} pasaron` +
+      (pruebasUnitarias.fallidas ? `, ${pruebasUnitarias.fallidas} fallaron` : '')
+  );
 
   console.log('\n-------------------------------------------------------------------------------');
   if (totalHallazgos === 0) {

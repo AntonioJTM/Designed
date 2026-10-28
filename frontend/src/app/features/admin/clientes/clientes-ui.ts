@@ -1,7 +1,7 @@
 import { EstadoRitmo, PeriodoClientes } from '../../../core/models/rediseno.models';
 import { RAMPA_AZUL } from '../../../shared/charts/contraste';
 
-// Piezas comunes de la sección Clientes (las cinco pestañas y el expediente):
+// Piezas comunes de la sección Clientes (sus pestañas y el expediente):
 // cómo se nombra un periodo, cómo se pinta el ritmo de un cliente y cómo se
 // leen las fechas. Van juntas para que las pestañas y el expediente digan lo
 // mismo con las mismas palabras y los mismos colores.
@@ -98,8 +98,14 @@ export function estadoRitmo(ritmo: number | null | undefined, diasSinVenir: numb
  * Pesos SIN centavos, para las cifras grandes y las etiquetas de barra
  * ("$20,328"). En las tablas, donde importa el centavo, va el pipe `dinero`.
  */
+/** Con centavos, como el pipe `dinero` (2026-10-26: "¿Descontar $151?" cuando eran $150.50). */
 export function pesos(v: unknown): string {
-  return Number(v ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+  return Number(v ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** "cada día" o "cada 12 días" (2026-10-26: salía "cada 1 días"). */
+export function cadaDias(n: number): string {
+  return Number(n) === 1 ? 'cada día' : `cada ${n} días`;
 }
 
 /** Kilos sin ceros de relleno, como el pipe `cantidad`, para armar frases. */

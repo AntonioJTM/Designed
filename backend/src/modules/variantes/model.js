@@ -8,8 +8,8 @@ const { anotarAlmacen, anotarCompartido } = require('../tiempo-real/contexto');
 // inventaría; el inventario/carrito/pedidos SIEMPRE apuntan aquí, no a productos.
 
 // `unidad` es la unidad del producto y `unidad_venta` la de ESTA presentación:
-// un paquete se vende por kilo y un cono por pieza, aunque el producto se mida
-// en kg. El POS y el carrito la usan para rotular la cantidad.
+// las tres (paquete, cono y simple) se venden por KILO. El POS y el carrito la
+// usan para rotular la cantidad.
 // `paquete_*` trae los datos del paquete de origen cuando la variante es cono,
 // para poder mostrar de dónde salió su precio calculado.
 const SELECT_BASE = `
@@ -109,7 +109,22 @@ async function conExistenciaEn(rows, almacenId) {
       GROUP BY variante_id`,
     { a: almacenId, ids }
   );
-  const kg = new Map(inv.map((x) => [x.variante_id, Number(x.cantidad)]));
+  // Lo vendido sin entregar (notas en espera, apartados) ya tiene dueño: la venta
+  // valida contra lo que queda (`_apartadoEnAlmacen`), y la caja decía "hay 8 kg"
+  // con 5 de una nota en espera (2026-10-26, auditoría).
+  const [ap] = await pool.query(
+    `SELECT pd.variante_id, SUM(pd.cantidad) AS kg
+       FROM pedido_detalle pd
+       JOIN pedidos p ON p.id = pd.pedido_id
+      WHERE p.inventario_descontado = 0 AND p.estado NOT IN ('cancelado', 'devuelto')
+        AND p.almacen_id = :a AND pd.variante_id IN (:ids)
+      GROUP BY pd.variante_id`,
+    { a: almacenId, ids }
+  );
+  const apartado = new Map(ap.map((x) => [x.variante_id, Number(x.kg)]));
+  const kg = new Map(inv.map((x) => [
+    x.variante_id, Math.max(0, Math.round((Number(x.cantidad) - (apartado.get(x.variante_id) ?? 0)) * 1000) / 1000),
+  ]));
   const n = new Map(paq.map((x) => [x.variante_id, Number(x.n)]));
   for (const r of rows) {
     r.aqui = {
@@ -120,29 +135,31 @@ async function conExistenciaEn(rows, almacenId) {
   return rows;
 }
 
-async function obtener(id) {
-  const [rows] = await pool.query(`${SELECT_BASE} WHERE pv.id = :id LIMIT 1`, { id });
+// `conn`: la de una transacción abierta (la presentación que nace dentro de una
+// carga, un desarme o una devolución, 2026-10-26); sin ella, el pool.
+async function obtener(id, conn = pool) {
+  const [rows] = await conn.query(`${SELECT_BASE} WHERE pv.id = :id LIMIT 1`, { id });
   const variante = rows[0] || null;
   if (variante) {
-    variante.codigos = await codigosDe(id);
-    variante.precios = await preciosDe(id);
+    variante.codigos = await codigosDe(id, conn);
+    variante.precios = await preciosDe(id, conn);
   }
   return variante;
 }
 
 // ---- Códigos de barras adicionales por variante ----
 
-async function codigosDe(varianteId) {
+async function codigosDe(varianteId, conn = pool) {
   // Cada renglón es un BULTO: trae su peso real, su lote y cuántos conos rinde.
   // Se incluye el folio de la remesa que lo trajo para poder rastrear de dónde
   // salió (los que se capturaron a mano no tienen remesa).
-  // El almacén es APROXIMADO —lo pone la remesa y lo corrigen el traspaso y el
-  // escaneo al vender—, pero es lo que permite decir "dónde está" cada bulto en
-  // la pantalla de presentaciones. Los capturados a mano llevan el almacén que
+  // El almacén lo pone la carga y lo cambia el traspaso (la venta ya no lo corrige:
+  // solo vende los paquetes de esa tienda, 2026-10-07); es lo que permite decir
+  // "dónde está" cada bulto en la pantalla de presentaciones. Los capturados a mano llevan el almacén que
   // se eligió (desde el 2026-10-07; antes quedaban en NULL) y `con_entrada`
   // dice si el bulto METIÓ kilos al inventario —llegó en una carga, o se
   // capturó a mano desde el 2026-10-07—: quitarlo los saca.
-  const [rows] = await pool.query(
+  const [rows] = await conn.query(
     `SELECT vc.id, vc.variante_id, vc.codigo, vc.peso_kg, vc.lote, vc.conos,
             vc.estado, vc.consumido_en, vc.consumido_tipo, vc.consumido_id,
             COALESCE(ped.numero_pedido, tra.folio) AS consumido_folio,
@@ -222,11 +239,6 @@ async function bultoPorCodigo(codigo) {
 }
 
 /**
- * Da de alta un bulto suelto (lo normal es que lleguen por remesa). Acepta su
- * peso y su lote: son datos del bulto, no adornos. NO toca el inventario —
- * registrar el código y recibir la mercancía son cosas distintas.
- */
-/**
  * Da de alta un bulto capturado a mano y da ENTRADA a sus kilos en su almacén
  * (2026-10-07: "sí se suman los kilos de la entrada de ese paquete"): el bulto,
  * el saldo y su movimiento en el kardex (referencia 'bulto'), en una sola
@@ -291,6 +303,9 @@ async function quitarBultoConSalida(bulto, usuarioId) {
       { id: bulto.id }
     );
     if (!vc) return null;
+    // Se vuelve a mirar CON el paquete bloqueado (2026-10-26, auditoría): si la caja
+    // lo vendió mientras se confirmaba «Quitar», sus kilos saldrían dos veces.
+    if (vc.estado && vc.estado !== 'disponible') return { error: 'NO_DISPONIBLE', estado: vc.estado };
     const kg = Number(vc.peso_kg ?? 0);
     if (!(kg > 0) || !vc.almacen_id) {
       // Sin peso o sin almacén no hay kilos que sacar: solo se borra.
@@ -358,9 +373,9 @@ async function eliminarCodigo(id) {
   return r.affectedRows > 0;
 }
 
-async function crear(datos) {
+async function crear(datos, conn = pool) {
   anotarCompartido('catalogo');
-  const [r] = await pool.query(
+  const [r] = await conn.query(
     `INSERT INTO producto_variantes
        (producto_id, sku, codigo_barras, presentacion, lote,
         tipo_presentacion, peso_kg, origen_variante_id, piezas_por_origen, modo_precio,
@@ -371,7 +386,7 @@ async function crear(datos) {
         :precio, :precio_oferta, :costo, :activo)`,
     datos
   );
-  return obtener(r.insertId);
+  return obtener(r.insertId, conn);
 }
 
 async function actualizar(id, datos) {
@@ -396,8 +411,8 @@ async function eliminar(id) {
 // (El borrado de una presentación se quitó el 2026-10-20: ver service.js → eliminar.)
 
 /** Precios por tipo de cliente de una variante (sin incluir el público). */
-async function preciosDe(varianteId) {
-  const [rows] = await pool.query(
+async function preciosDe(varianteId, conn = pool) {
+  const [rows] = await conn.query(
     `SELECT vp.tipo_cliente_id, tc.nombre AS tipo_cliente, vp.precio
        FROM variante_precios vp
        JOIN tipos_cliente tc ON tc.id = vp.tipo_cliente_id

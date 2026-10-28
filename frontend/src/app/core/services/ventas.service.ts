@@ -408,9 +408,9 @@ export class VentasService {
    * El cliente REGRESA mercancía de la nota: los paquetes cerrados (escaneados)
    * y lo suelto (pesado). Entra al inventario y le queda a favor; no sale dinero.
    */
-  devolver(pedidoId: number, body: DevolverInput): Observable<ResultadoDevolucion> {
+  devolver(pedidoId: number, body: DevolverInput, clave?: string): Observable<ResultadoDevolucion> {
     return this.http
-      .post<ApiResponse<ResultadoDevolucion>>(`${this.base}/pedidos/${pedidoId}/devoluciones`, body)
+      .post<ApiResponse<ResultadoDevolucion>>(`${this.base}/pedidos/${pedidoId}/devoluciones`, body, conClave(clave))
       .pipe(map(data));
   }
 

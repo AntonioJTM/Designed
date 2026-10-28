@@ -5,7 +5,7 @@
   <section class="card verde">
     <div class="card-head">
       <div>
-        <h2>Lista cargada: {{ u.num_hilos }} {{ u.num_hilos === 1 ? 'hilo' : 'hilos' }}, {{ u.num_bultos | cantidad }} bultos</h2>
+        <h2>Lista cargada: {{ u.num_hilos }} {{ u.num_hilos === 1 ? 'hilo' : 'hilos' }}, {{ u.num_bultos | cantidad }} {{ +u.num_bultos === 1 ? 'paquete' : 'paquetes' }}</h2>
         <p>
           Ya está en el inventario{{ almacenUltima ? ' de ' + almacenUltima : '' }}: {{ u.kg_total | cantidad: 'kg' }}.
           @if (u.nuevos > 0) { Se {{ u.nuevos === 1 ? 'creó 1 hilo nuevo' : 'crearon ' + u.nuevos + ' hilos nuevos' }}. }
@@ -91,7 +91,7 @@
 
   <!-- Los papeles de la lista: los mismos para todos sus hilos. El proveedor que trae
        el archivo (hoja DOCUMENTO) se propone solo. -->
-  <div style="margin: 16px 0">
+  <div class="separado-abajo">
     <app-datos-carga [(datos)]="datosCarga" [conCosto]="false" [sugerido]="previa()?.documento?.proveedor ?? null" />
   </div>
 
@@ -111,7 +111,7 @@
           <span>
             @if (leyendo()) { Leyendo el archivo… }
             @else if (previa(); as p) {
-              Hoja {{ p.hoja }}: {{ p.resumen.num_bultos | cantidad }} bultos de {{ p.resumen.num_hilos }}
+              Hoja {{ p.hoja }}: {{ p.resumen.num_bultos | cantidad }} {{ +p.resumen.num_bultos === 1 ? 'paquete' : 'paquetes' }} de {{ p.resumen.num_hilos }}
               {{ p.resumen.num_hilos === 1 ? 'hilo' : 'hilos' }}
             } @else { No se pudo leer }
           </span>
@@ -144,6 +144,9 @@
     </div>
   </div>
 
+  <!-- Fuera de la vista previa (2026-10-26): al pedir la autorización la vista previa se
+       vacía y el aviso, que vivía adentro, no se veía. -->
+  @if (pedida()) { <p class="ok-msg" role="status">{{ pedida() }}</p> }
   @if (previa(); as p) {
     <div class="resumen">
       <div class="caja-dato">
@@ -265,12 +268,12 @@
                 @switch (h.estado) {
                   @case ('existe') { <span class="pill verde">Ya existe</span> }
                   @case ('nuevo') { <span class="pill azul">Nuevo</span> }
-                  @default { <span class="pill rojo">Dos hilos iguales</span> }
+                  @default { <span class="pill rojo">{{ h.iguales ?? 2 }} hilos iguales</span> }
                 }
                 <div class="sub">
                   @if (h.producto; as prod) {
                     Se le agregan bultos ·
-                    @if (prod.tiene_precio) { {{ prod.precio_kg | dinero }} por kg } @else { sin precio }
+                    @if (prod.tiene_precio) { {{ (prod.precio_cobra ?? prod.precio_kg) | dinero }} por kg } @else { sin precio }
                     · {{ prod.material }}{{ prod.linea ? ' ' + prod.linea : '' }}
                   } @else if (h.estado === 'nuevo') {
                     Se crea sin precio
@@ -343,7 +346,6 @@
     </div>
 
     @if (errorCarga()) { <p class="alert error-carga" role="alert">{{ errorCarga() }}</p> }
-    @if (pedida()) { <p class="ok-msg" role="status">{{ pedida() }}</p> }
 
     <!--
       Mientras carga, en vez de un botón apagado que dice "Cargando…" (parecía que
@@ -359,7 +361,7 @@
         </div>
         <div class="avance-barra" aria-hidden="true"><span [style.width.%]="pct(a)"></span></div>
         <p class="avance-cifra">
-          {{ a.hechos | cantidad }} de {{ a.total | cantidad }} bultos registrados · {{ pct(a) }}%
+          {{ a.hechos | cantidad }} de {{ a.total | cantidad }} {{ +a.total === 1 ? 'paquete registrado' : 'paquetes registrados' }} · {{ pct(a) }}%
         </p>
         <ul class="avance-hilos">
           @for (h of a.hilos; track h.hilo) {
@@ -390,7 +392,7 @@
           @else { Entra todo a {{ nombreAlmacen() }}. }
         </span>
         <button type="button" class="btn btn-primary" [disabled]="!!falta()" (click)="confirmar()">
-          Cargar {{ p.resumen.num_bultos | cantidad }} bultos en {{ p.resumen.num_hilos }}
+          Cargar {{ p.resumen.num_bultos | cantidad }} {{ +p.resumen.num_bultos === 1 ? 'paquete' : 'paquetes' }} en {{ p.resumen.num_hilos }}
           {{ p.resumen.num_hilos === 1 ? 'hilo' : 'hilos' }}
         </button>
       </div>

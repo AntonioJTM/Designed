@@ -248,7 +248,8 @@ router.post('/:id/a-credito', ...soloStaff, requirePermiso('hacer:fiar'), valida
 // Lo que se puede devolver de una nota y la devolución misma (queda a favor).
 // La vista previa la ve también quien PIDE la devolución (para armarla).
 router.get('/:id/devolucion', ...soloStaff, requirePermisoAlguno('hacer:cancelar_venta', 'pedir:cancelar_venta'), controller.previaDevolucion);
-router.post('/:id/devoluciones', ...soloStaff, validate(devolverSchema), autorizable('devolucion'), controller.devolver);
+// Con su llave de un solo uso (2026-10-26): lo suelto que regresa no entra dos veces.
+router.post('/:id/devoluciones', ...soloStaff, validate(devolverSchema), unaVez(), autorizable('devolucion'), controller.devolver);
 // Aquí es donde por fin se descuenta del inventario. Un PEDIDO cobra (o fía)
 // aquí lo que le falte.
 const entregaSchema = z

@@ -50,7 +50,7 @@ const SEMANAS_ATRAS = 12;
     .semana-sel { display: flex; align-items: center; gap: 6px; max-width: 100%; }
     .semana-sel select {
       min-height: 44px; min-width: 260px; padding: 0 12px; border: 1px solid var(--borde-campo);
-      border-radius: 8px; background: #fff; font: inherit; font-size: 0.875rem; color: var(--tinta);
+      border-radius: 8px; background: var(--superficie); font: inherit; font-size: 0.875rem; color: var(--tinta);
     }
     .semana-sel select:focus { outline: none; border-color: var(--acento); box-shadow: 0 0 0 3px var(--foco); }
     .semana-sel .btn-icono { width: 44px; height: 44px; }
@@ -198,6 +198,19 @@ export class Nomina {
   }
 
   /** "POS-79FA, POS-8D33…": los folios cortos de las ventas que cambiaron (hasta 3). */
+  /** "entra 1 venta (POS-79FA), cambia 1 venta (POS-12AB)…": qué le pasó a cada una. */
+  textoNuevas(ventas: { numero_pedido: string; que?: string }[]): string {
+    const grupo = (que: string, uno: string, varios: string): string | null => {
+      const l = ventas.filter((v) => (v.que ?? 'entra') === que);
+      return l.length ? `${l.length === 1 ? uno : `${varios.replace('N', String(l.length))}`} (${this.foliosCortos(l)})` : null;
+    };
+    return [
+      grupo('entra', 'entra 1 venta', 'entran N ventas'),
+      grupo('cambia', 'cambia 1 venta', 'cambian N ventas'),
+      grupo('descuento', 'entra 1 descuento (regresó o se canceló)', 'entran N descuentos (regresaron o se cancelaron)'),
+    ].filter(Boolean).join(', ');
+  }
+
   foliosCortos(ventas: { numero_pedido: string }[]): string {
     const cortos = ventas.slice(0, 3).map((v) => folioCorto(v.numero_pedido));
     return cortos.join(', ') + (ventas.length > 3 ? '…' : '');
@@ -249,8 +262,8 @@ export class Nomina {
     const total = this.dinero.transform(this.totales().total);
     const si = await this.confirmacion.pedir({
       titulo: `¿Pedir que se pague la nómina del sábado ${diaLargo(p.fecha_pago, this.hoy)}?`,
-      mensaje: `Por ${total}. Se paga cuando la autoricen. Si cambias algo después (recalcular, días, horas extra, ` +
-        'bonos o descuentos), hay que volver a pedirla.',
+      mensaje: `Por ${total}. Se paga cuando la autoricen. Si cambias algo después (recalcular, días, horas extra ` +
+        'o descuentos), hay que volver a pedirla.',
       aceptar: 'Pedir que se pague',
     });
     if (!si) return;
@@ -271,13 +284,24 @@ export class Nomina {
     if (!p) return;
     const si = await this.confirmacion.pedir({
       titulo: '¿Cancelar esta nómina?',
-      mensaje: 'Los recibos se conservan, pero quedan sin efecto.',
+      mensaje: 'Los recibos se conservan, pero quedan sin efecto. Para volver a usarla, quien paga la nómina la regresa a borrador.',
       aceptar: 'Cancelar la nómina',
       cancelar: 'No, regresar',
       peligro: true,
     });
     if (!si) return;
     this.cambiarEstado('cancelado', 'Nómina cancelada.');
+  }
+
+  /** Una semana cancelada regresa a borrador, donde se recalcula sola. */
+  async regresarABorrador(): Promise<void> {
+    const si = await this.confirmacion.pedir({
+      titulo: '¿Regresar esta nómina a borrador?',
+      mensaje: 'Vuelve a contar y se recalcula: mientras estuvo cancelada, sus ventas pudieron entrar en otra semana.',
+      aceptar: 'Regresar a borrador',
+    });
+    if (!si) return;
+    this.cambiarEstado('borrador', 'La nómina regresó a borrador y se recalculó.');
   }
 
   private cambiarEstado(estado: EstadoPeriodoNomina, msg: string): void {

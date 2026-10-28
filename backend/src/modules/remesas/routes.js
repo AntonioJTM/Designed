@@ -122,11 +122,13 @@ const datosSchema = z
 // depender de que el navegador mande el content-type exacto.
 const cuerpoBinario = express.raw({ type: () => true, limit: '15mb' });
 
-router.get('/', ...soloStaff, controller.listar);
-
 // Reportes en PDF de las entradas (ver reportes.js). Se piden desde Recibir
 // remesa, desde las presentaciones del producto y desde Inventario.
 const veReportes = requirePermisoAlguno('ver:remesa', 'ver:catalogo', 'ver:inventario');
+
+// El historial de cargas pide lo mismo que sus PDF (2026-10-26, auditoría: lo leía
+// cualquiera del personal, con proveedor, factura y pedimento).
+router.get('/', ...soloStaff, veReportes, controller.listar);
 router.get('/producto/:productoId/pdf', ...soloStaff, veReportes, controller.pdfProducto);
 router.get('/:id/pdf', ...soloStaff, veReportes, controller.pdfCarga);
 // Varias cargas en un solo PDF (?ids=1,2,3): las de una lista completa.

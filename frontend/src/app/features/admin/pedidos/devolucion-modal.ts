@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { VentasService } from '../../../core/services/ventas.service';
+import { nuevaClave } from '../../../core/clave-unica';
 import { ClientesService } from '../../../core/services/clientes.service';
 import {
   LineaDevolvible,
@@ -57,6 +58,8 @@ export class DevolucionModal implements OnInit, OnDestroy {
   readonly previa = signal<PreviaDevolucion | null>(null);
   readonly cargando = signal(true);
   readonly guardando = signal(false);
+  /** Llave de un solo uso (2026-10-26): si se corta la red y se aprieta otra vez, no entra dos veces. */
+  private clave = nuevaClave();
   readonly error = signal<string | null>(null);
   /** Lo último que se escaneó, para que el cajero vea que entró. */
   readonly ultimo = signal<string | null>(null);
@@ -217,7 +220,8 @@ export class DevolucionModal implements OnInit, OnDestroy {
 
   /** A favor por esta línea, redondeado igual que el servidor (paquetes y suelto por separado). */
   importe(l: LineaDevolvible): number {
-    return r2(r2(this.kgPaquetes(l) * l.precio_kg) + r2(this.kgSuelto(l) * l.precio_kg));
+    const porKg = l.precio_kg_exacto ?? l.precio_kg;
+    return r2(r2(this.kgPaquetes(l) * porKg) + r2(this.kgSuelto(l) * porKg));
   }
 
   total(): number {
@@ -375,10 +379,11 @@ export class DevolucionModal implements OnInit, OnDestroy {
         cliente_id: p.cliente_id ? undefined : this.clienteElegido()?.id,
         notas: this.notas.trim() || undefined,
         lineas,
-      })
+      }, this.clave)
       .subscribe({
         next: (r) => {
           this.guardando.set(false);
+          this.clave = nuevaClave();
           this.hecho.emit(r);
         },
         error: (e) => {

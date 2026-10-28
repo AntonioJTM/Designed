@@ -49,19 +49,26 @@ async function margen(q = {}) {
  * independientes, así que van en paralelo: en serie, abrir el tablero costaría
  * la suma de las cuatro.
  */
-async function tablero(q = {}) {
+/**
+ * El tablero de un viaje. Sin «Ver costos» (`conCosto: false`) el hilo parado va a
+ * precio de venta y el margen no se calcula (llega en null).
+ */
+async function tablero(q = {}, { conCosto = true } = {}) {
   // `dias` es de los clientes que dejaron de venir; el hilo parado lleva su
   // propio umbral (`dias_parado`). Compartían el parámetro y mover "días sin
   // venir" en la pantalla cambiaba también qué hilo contaba como parado.
-  const [cob, frios, muerto, marg] = await Promise.all([
-    cobranza(q), clientesEnfriados(q), hiloMuerto({ ...q, dias: q.dias_parado }), margen(q),
+  const [cob, frios, muerto, marg, notas] = await Promise.all([
+    cobranza(q), clientesEnfriados(q), hiloMuerto({ ...q, dias: q.dias_parado }, { conCosto }),
+    conCosto ? margen(q) : null, model.notasPendientes(),
   ]);
   // Lo que la tienda les guarda a sus clientes (2026-10-19): la cifra; quiénes
-  // y desde cuándo, en Clientes › Cuánto debe.
+  // y desde cuándo, en Clientes › Cuánto debe. No es un costo: le llega a todo el
+  // que abre el tablero (2026-10-26, antes solo a quien veía costos).
   const aFavor = await require('../clientes/saldo-favor').aFavorDeClientes();
   return {
     cobranza: cob, clientes_enfriados: frios, hilo_muerto: muerto, margen: marg,
     a_favor: { total: aFavor.total, num_clientes: aFavor.num_clientes },
+    notas_pendientes: notas,
   };
 }
 

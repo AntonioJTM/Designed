@@ -6,7 +6,8 @@ import { RedisenoService } from '../../../core/services/rediseno.service';
 import { Hoy as DatosHoy } from '../../../core/models/rediseno.models';
 import { ApiError } from '../../../core/models/auth.models';
 import { fechaRelativa } from '../../../shared/fecha.pipe';
-import { DESTINO_AVISO } from '../../../core/avisos';
+import { DESTINO_AVISO, cajaDe, clienteDe } from '../../../core/avisos';
+import { DineroPipe } from '../../../shared/dinero.pipe';
 import { folioCorto } from '../../../shared/folio.pipe';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TiempoRealService } from '../../../core/services/tiempo-real.service';
@@ -18,7 +19,8 @@ interface Pendiente {
   titulo: string;
   detalle: string;
   accion: string;
-  ruta: string;
+  /** A dónde lleva; sin ruta, el aviso solo dice qué hacer (la clave se pone abajo del menú). */
+  ruta?: string;
   /** Filtro que se pasa en la dirección (?falta=precio). */
   query?: Record<string, string>;
 }
@@ -83,18 +85,23 @@ export class Hoy {
   private readonly veSurtir = computed(() => this.puede('ver:surtir'));
   private readonly veInventario = computed(() => this.puede('ver:inventario'));
   private readonly veCatalogo = computed(() => this.puede('ver:catalogo'));
+  private readonly veAutorizaciones = computed(() => this.puede('ver:autorizaciones'));
+  private readonly veConfig = computed(() => this.puede('ver:config'));
+  /** Las ventas de la gráfica: de todas las tiendas o de las suyas (2026-10-26). */
+  readonly deQueTiendas = computed(() => (this.auth.veTodasLasTiendas() ? 'en todas las tiendas' : 'en tus tiendas'));
 
   /** Las cuatro cifras de arriba; las de clientes y notas pendientes, solo si se ven. */
   readonly kpis = computed(() => {
     const d = this.datos();
     const p = this.pendientes();
-    const lista: { etiqueta: string; valor: string; pie: string; punto: string }[] = [];
+    // El punto va por clase (`.punto.tono-*`), no con style= (DESIGN.md).
+    const lista: { etiqueta: string; valor: string; pie: string; tono: string }[] = [];
     if (d) {
       lista.push({
         etiqueta: 'Vendido hoy',
         valor: this.pesos(d.vendido_hoy.total),
         pie: `${d.vendido_hoy.ventas} ${d.vendido_hoy.ventas === 1 ? 'venta' : 'ventas'}`,
-        punto: 'var(--acento)',
+        tono: 'tono-acento',
       });
       lista.push({
         etiqueta: 'En las cajas',
@@ -103,7 +110,7 @@ export class Hoy {
           d.cajas.length === 0
             ? 'no hay turnos abiertos'
             : `efectivo esperado en ${d.cajas.length} ${d.cajas.length === 1 ? 'turno abierto' : 'turnos abiertos'}`,
-        punto: 'var(--viz-series-3)',
+        tono: 'tono-serie-3',
       });
     }
     if (p && this.veCobranza()) {
@@ -114,7 +121,7 @@ export class Hoy {
           (p.cobranza?.num_notas ?? 0) === 0
             ? 'ninguna nota a crédito pasó sus días'
             : `${p.cobranza.num_notas} ${p.cobranza.num_notas === 1 ? 'nota pasó' : 'notas pasaron'} sus días sin pagarse`,
-        punto: 'var(--punto-alerta)',
+        tono: 'tono-alerta',
       });
     }
     if (p && this.veNotas()) {
@@ -123,7 +130,7 @@ export class Hoy {
         etiqueta: 'Notas pendientes de pago',
         valor: this.pesos(p.notas_pendientes?.monto ?? 0),
         pie: n === 0 ? 'nadie se llevó nada sin pagar' : n === 1 ? '1 nota por cobrar' : `${n} notas por cobrar`,
-        punto: 'var(--punto-aviso)',
+        tono: 'tono-aviso',
       });
     }
     return lista;
@@ -135,9 +142,12 @@ export class Hoy {
     if (!p) return [];
     const mercancia: Pendiente[] = [];
     const ventas: Pendiente[] = [];
+    const caja: Pendiente[] = [];
     const clientes: Pendiente[] = [];
+    const sistema: Pendiente[] = [];
 
-    if (this.veSurtir()) {
+    // "Surtir" a quien envía y "falta que confirmen" a quien firma (2026-10-26, auditoría).
+    if (this.veSurtir() && this.puede('hacer:enviar_traspaso')) {
       for (const t of p.traspasos_por_enviar) {
         const n = Number(t.num_lineas);
         mercancia.push({
@@ -149,6 +159,8 @@ export class Hoy {
           ...DESTINO_AVISO.traspasos,
         });
       }
+    }
+    if (this.veSurtir() && this.puede('hacer:recibir_traspaso')) {
       for (const t of p.traspasos_por_recibir) {
         mercancia.push({
           icono: ICONO.envio,
@@ -192,7 +204,8 @@ export class Hoy {
     const turnos = p.turnos_abiertos?.turnos ?? [];
     if (this.puede('ver:caja') && turnos.length) {
       const peor = turnos[0];
-      ventas.push({
+      // En su propio grupo «Caja», como la campana (2026-10-26), y lleva a ESA caja.
+      caja.push({
         icono: ICONO.cobro,
         tono: 'naranja',
         titulo: turnos.length === 1
@@ -200,7 +213,7 @@ export class Hoy {
           : `${turnos.length} cajas llevan ${p.turnos_abiertos!.dias} días o más abiertas sin corte`,
         detalle: `${peor.almacen}${peor.usuario ? ' · la abrió ' + peor.usuario : ''} · el corte es diario: hazlo en Caja`,
         accion: 'Hacer el corte',
-        ...DESTINO_AVISO.caja,
+        ...cajaDe(peor.caja_id),
       });
     }
 
@@ -226,12 +239,14 @@ export class Hoy {
       if (c && c.num_notas > 0) {
         // Ya vienen de la más vencida a la menos (2026-10-20).
         const peor = c.notas[0];
+        // Un ajuste a su cuenta no es una nota ni tiene días de crédito.
+        const deQue = peor?.ajuste ? 'un ajuste a su cuenta' : `a ${peor?.dias_credito} días`;
         clientes.push({
           icono: ICONO.cobro,
           tono: 'naranja',
           titulo: `${c.num_notas} ${c.num_notas === 1 ? 'nota a crédito vencida' : 'notas a crédito vencidas'} · ${this.pesos(c.monto)}`,
           detalle: peor
-            ? `La más vencida: ${peor.nombre_comercial || peor.nombre}, a ${peor.dias_credito} días, venció hace ${peor.dias_vencida} ${peor.dias_vencida === 1 ? 'día' : 'días'}`
+            ? `La más vencida: ${peor.nombre_comercial || peor.nombre}, ${deQue}, venció hace ${peor.dias_vencida} ${peor.dias_vencida === 1 ? 'día' : 'días'}`
             : '',
           accion: 'Cobrar',
           ...DESTINO_AVISO.cobranza,
@@ -244,7 +259,9 @@ export class Hoy {
           tono: 'ambar',
           titulo:
             e.num_clientes === 1 ? '1 cliente dejó de venir' : `${e.num_clientes} clientes dejaron de venir`,
-          detalle: `Llevan ${e.dias} días o más sin comprar · vale la pena llamarles`,
+          detalle: e.num_clientes === 1
+            ? `Lleva ${e.dias} días o más sin comprar · vale la pena llamarle`
+            : `Llevan ${e.dias} días o más sin comprar · vale la pena llamarles`,
           accion: 'Ver quiénes',
           ...DESTINO_AVISO.dejaronDeVenir,
         });
@@ -267,17 +284,54 @@ export class Hoy {
               ? `${nombre}, ${this.capturado(primero?.dias)}`
               : `${nombre} y ${n.num_clientes - 1} más · capturados en los últimos ${n.dias} días`,
           accion: 'Decidir',
-          // Con uno solo se va directo a él; con varios, al primero (los demás
-          // siguen en la campana).
-          ruta: primero ? `/admin/clientes/${primero.cliente_id}` : '/admin/clientes',
+          // Con uno solo se va directo a él; con varios, a la lista con los más
+          // nuevos arriba (2026-10-26: antes, al primero).
+          ...(n.num_clientes === 1 && primero ? clienteDe(primero.cliente_id) : DESTINO_AVISO.clientesNuevos),
         });
       }
+    }
+
+    // LOS MISMOS PENDIENTES QUE LA CAMPANA (2026-10-26, auditoría): Hoy decía "Nada
+    // pendiente" con una solicitud esperando autorización.
+    const porAutorizar = p.autorizaciones?.num ?? 0;
+    if (this.veAutorizaciones() && porAutorizar > 0) {
+      sistema.push({
+        icono: ICONO.nota,
+        tono: 'azul',
+        titulo: porAutorizar === 1 ? '1 solicitud espera tu autorización' : `${porAutorizar} solicitudes esperan tu autorización`,
+        detalle: 'Mientras no se autoricen, no se hacen',
+        accion: 'Autorizar',
+        ...DESTINO_AVISO.autorizaciones,
+      });
+    }
+    if (p.mi_clave_apagada) {
+      sistema.push({
+        icono: ICONO.gente,
+        tono: 'naranja',
+        titulo: 'Tu clave para autorizar se apagó',
+        detalle: 'Se equivocaron 10 veces seguidas. Ponla otra vez en «Mi clave», abajo del menú',
+        accion: '',
+      });
+    }
+    if (this.veConfig() && p.whatsapp) {
+      sistema.push({
+        icono: ICONO.envio,
+        tono: 'naranja',
+        titulo: 'El WhatsApp de la tienda se desconectó',
+        detalle: p.whatsapp.motivo === 'sesion_cerrada'
+          ? 'Se cerró la sesión desde el celular: hay que escanear el QR otra vez'
+          : 'Lleva un rato sin poder conectarse',
+        accion: 'Enlazar',
+        ...DESTINO_AVISO.whatsapp,
+      });
     }
 
     return [
       { titulo: 'Mercancía', items: mercancia },
       { titulo: 'Ventas', items: ventas },
+      { titulo: 'Caja', items: caja },
       { titulo: 'Clientes', items: clientes },
+      { titulo: 'Sistema', items: sistema },
     ].filter((g) => g.items.length > 0);
   });
 
@@ -337,8 +391,10 @@ export class Hoy {
     return fechaRelativa(iso);
   }
 
+  /** Con centavos, como el corte y Cuánto debe (2026-10-26: "$1,235" contra "$1,234.50"). */
+  private readonly formato = new DineroPipe();
   pesos(v: unknown): string {
-    return Number(v ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+    return this.formato.transform(Number(v ?? 0));
   }
 
   private kg(v: unknown): string {

@@ -104,7 +104,7 @@ describe('ComisionesSemanaComponent', () => {
     expect(texto).not.toContain('de envío o IVA');
     expect(texto).toContain('Devolución');
     expect(texto).toContain('se descuenta');
-    expect(texto).toContain('1 devolución de una venta ya pagada se descuenta en la próxima nómina');
+    expect(texto).toContain('1 descuento (regresó o se canceló una venta ya pagada) se aplica en la próxima nómina');
   });
 
   it('en el recibo: solo esa persona, sin la explicación de arriba', async () => {

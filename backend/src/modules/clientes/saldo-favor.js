@@ -43,6 +43,12 @@ async function saldoFavor(clienteId, ejecutor = pool, bloquear = false) {
 }
 
 /** Los movimientos del saldo a favor, del más nuevo al más viejo. */
+/** Cuántos movimientos tiene su saldo a favor: la tarjeta trae los más recientes y lo dice. */
+async function cuantosMovimientos(clienteId) {
+  const [[r]] = await pool.query('SELECT COUNT(*) AS n FROM saldo_favor_movimientos WHERE cliente_id = :id', { id: clienteId });
+  return Number(r.n);
+}
+
 async function movimientos(clienteId, { limit = 50, almacenes = null } = {}) {
   const [rows] = await pool.query(
     `SELECT m.id, m.tipo, m.monto, m.notas, m.creado_en, m.referencia,
@@ -107,7 +113,7 @@ async function recibirAnticipo(conn, { clienteId, efectivo = 0, transferencia = 
   }
   const [[cli]] = await conn.query('SELECT id, nombre, activo FROM clientes WHERE id = :id FOR UPDATE', { id: clienteId });
   if (!cli) throw new AppError(404, 'NO_ENCONTRADO', 'Cliente no encontrado');
-  if (!cli.activo) throw new AppError(422, 'CLIENTE_INACTIVO', `${cli.nombre} está dado de baja.`);
+  if (!cli.activo) throw new AppError(422, 'CLIENTE_INACTIVO', `«${cli.nombre}» está dado de baja como cliente.`);
 
   const [metodos] = await conn.query('SELECT id, nombre FROM metodos_pago WHERE activo = 1 AND interno = 0');
   const metodoDe = (palabra) => metodos.find((m) => String(m.nombre).toLowerCase().includes(palabra))?.id ?? null;
@@ -530,7 +536,7 @@ async function aFavorDeClientes() {
 
 module.exports = {
   aFavorDeClientes,
-  saldoFavor, movimientos, agregar, metodoSaldoFavor, usarEnVenta, usadoEnVenta, reintegrarDeVenta, aplicarADeuda, deudaTotal,
+  saldoFavor, movimientos, cuantosMovimientos, agregar, metodoSaldoFavor, usarEnVenta, usadoEnVenta, reintegrarDeVenta, aplicarADeuda, deudaTotal,
   ajustarSaldo, pagarConSaldo, pasarSobranteAFavor,
   debeDeVenta, descontarDeVenta, recibirAnticipo,
 };

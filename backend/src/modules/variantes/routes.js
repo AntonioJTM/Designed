@@ -4,7 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const controller = require('./controller');
 const { validate } = require('../../middlewares/validate');
-const { authRequired, requireTipo, requirePermiso } = require('../../middlewares/auth');
+const { authRequired, requireTipo, requirePermiso, requirePermisoAlguno } = require('../../middlewares/auth');
 const { autorizable } = require('../autorizaciones/autorizable');
 
 const router = Router();
@@ -17,8 +17,8 @@ const crearSchema = z
     presentacion: z.string().trim().max(40).optional(),
     // Etiqueta de la remesa. Solo se guarda si el producto es "por lotes".
     lote: z.string().trim().max(40).nullable().optional(),
-    // Presentación: 'paquete' se vende por kilo y se puede desarmar en conos;
-    // 'cono' se vende por pieza y sale de un paquete; 'simple' es el caso base.
+    // Presentación: 'paquete' se vende por kilo y se baja a conos; 'cono' sale de
+    // un paquete y también se vende por kilo; 'simple' es el caso base.
     tipo_presentacion: z.enum(['simple', 'paquete', 'cono']).optional(),
     peso_kg: z.coerce.number().positive().max(999999).nullable().optional(),
     origen_variante_id: z.coerce.number().int().positive().nullable().optional(),
@@ -36,8 +36,9 @@ const crearSchema = z
 const precioTipoSchema = z
   .object({
     tipo_cliente_id: z.coerce.number().int().positive(),
-    // null borra el precio y ese tipo vuelve a pagar el público.
-    precio: z.coerce.number().nonnegative().max(9999999).nullable(),
+    // null borra el precio y ese tipo vuelve a pagar el público. $0 no (2026-10-26): al
+    // cobrar decía "no tiene precio" de un hilo que sí lo tiene.
+    precio: z.coerce.number().positive('El precio va mayor que $0; vacío = paga el público.').max(9999999).nullable(),
   })
   .strict();
 
@@ -96,6 +97,9 @@ router.get('/resolver/:codigo', ...soloStaff, controller.resolverCodigo);
 router.get('/:id/codigos', ...soloStaff, controller.listarCodigos);
 // Un paquete a mano mete kilos: es un ingreso de inventario (se autoriza, 2026-10-19).
 router.post('/:id/codigos', ...catalogo, validate(codigoSchema), autorizable('bulto_a_mano'), controller.agregarCodigo);
-router.delete('/codigos/:codigoId', ...catalogo, controller.eliminarCodigo);
+// Quitar un paquete SACA sus kilos (2026-10-26, auditoría: bastaba Productos): quien
+// carga mercancía o hace ajustes y mermas.
+router.delete('/codigos/:codigoId', ...catalogo, requirePermisoAlguno('hacer:cargar_inventario', 'hacer:ajuste_merma'),
+  controller.eliminarCodigo);
 
 module.exports = router;

@@ -68,7 +68,7 @@ table.grid td .pill { margin-left: 6px; }
   border: 2px solid var(--borde); display: inline-flex; align-items: center; justify-content: center;
 }
 .avance-hilos li.cargando .marca { border-color: var(--acento); border-top-color: transparent; animation: girar 0.8s linear infinite; }
-.avance-hilos li.listo .marca { border-color: var(--ok-t); background: var(--ok-t); color: #fff; }
+.avance-hilos li.listo .marca { border-color: var(--ok-t); background: var(--ok-t); color: var(--superficie); }
 .estado-carga .nota { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .avance-hilos li.cargando .marca { animation-duration: 2s; } }
 table.grid.hilos td.num, table.grid.hilos td:nth-child(2) { white-space: nowrap; }

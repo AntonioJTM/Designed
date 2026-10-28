@@ -101,7 +101,7 @@ describe('CajaPantalla', () => {
     try {
       const c = (await montar([])).componentInstance;
       const [haber, ventas, ingresos, salio] = c.kpis();
-      expect(haber.pie).toBe('fondo $500 + lo que entró − lo que salió');
+      expect(haber.pie).toBe('fondo $500.00 + lo que entró − lo que salió');
       expect(ingresos.etiqueta).toBe('Abonos y otros ingresos');
       expect(ingresos.valor).toContain('1,050');
       expect(ingresos.pie).toBe('1 abono · 1 anticipo · 1 pago de nota · 1 ingreso a mano, en efectivo');

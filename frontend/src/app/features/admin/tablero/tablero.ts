@@ -39,7 +39,8 @@ interface Kpi {
   etiqueta: string;
   valor: string;
   pie: string;
-  punto: string;
+  /** El punto de la cifra, por clase (`.punto.tono-*`), no con style= (DESIGN.md). */
+  tono: string;
 }
 
 /** Cuántas semanas se dibujan en "Ventas por semana". */
@@ -50,11 +51,11 @@ const SEMANAS = 12;
  * debajo a quién cobrarle. Quién dejó de venir se mudó a Clientes → Dejaron de
  * venir (2026-10-03), que es a donde lleva el aviso de la campana.
  *
- * Está pensado para MIRARSE, no para operar. Arriba van las cuatro cifras del
- * periodo; luego las ventas de las últimas 12 semanas (siempre las mismas, para
- * ver la tendencia sin que el selector la mueva); luego qué colores dejan
- * dinero y qué hilo está parado; y al final la cobranza y los clientes que se
- * enfriaron, cada uno con su cifra, su gráfica y su tabla.
+ * Está pensado para MIRARSE, no para operar. Arriba van las cifras del periodo;
+ * luego las ventas de las últimas 12 semanas (siempre las mismas, para ver la
+ * tendencia sin que el selector la mueva); luego qué colores dejan dinero y qué
+ * hilo está parado; y al final la cobranza, con su cifra, su gráfica y su tabla
+ * (los que dejaron de venir viven en Clientes → Dejaron de venir).
  *
  * COSTOS: el margen y la ganancia solo los ve quien tiene «Ver costos y
  * márgenes» (`hacer:ver_costos`). El servidor ni siquiera los manda a quien no
@@ -91,6 +92,7 @@ export class Tablero implements OnInit {
   readonly veCostos = computed(() => this.auth.puede('hacer:ver_costos'));
   /** Para no enlazar al expediente a quien no puede abrir Clientes. */
   readonly veClientes = computed(() => this.auth.puede('ver:clientes'));
+  readonly veNotas = computed(() => this.auth.puede('ver:notas_pendientes'));
 
   // ------------------------------------------------------------ El periodo
   private readonly hoy = new Date();
@@ -256,7 +258,7 @@ export class Tablero implements OnInit {
       pie: v && a
         ? comparar(Number(v.resumen.total), Number(a.resumen.total), p.antes.nombre)
         : this.errorVentas() ? 'no se pudo consultar' : 'consultando…',
-      punto: 'var(--acento)',
+      tono: 'tono-acento',
     });
 
     if (this.veCostos()) {
@@ -268,7 +270,7 @@ export class Tablero implements OnInit {
           : m.venta_analizada > 0
             ? `margen de ${this.pct(m.margen_pct)} sobre la venta`
             : 'falta capturar el precio de compra en las cargas',
-        punto: 'var(--viz-series-3)',
+        tono: 'tono-serie-3',
       });
     }
 
@@ -281,8 +283,8 @@ export class Tablero implements OnInit {
         pie: !h ? '…'
           : h.num_hilos === 0
             ? 'todo el hilo se está moviendo'
-            : `${h.num_hilos} ${h.num_hilos === 1 ? 'hilo lleva' : 'hilos llevan'} ${h.dias} días o más sin venderse`,
-        punto: 'var(--viz-series-2)',
+            : `${h.num_hilos} ${h.num_hilos === 1 ? 'hilo tiene' : 'hilos tienen'} paquete o cono ${h.dias} días o más sin venderse`,
+        tono: 'tono-serie-2',
       });
     }
 
@@ -295,7 +297,7 @@ export class Tablero implements OnInit {
           ? 'nadie te debe ahora mismo'
           : `${c.num_clientes} ${c.num_clientes === 1 ? 'cliente' : 'clientes'}` +
             (c.num_vencidos > 0 ? ` · ${c.num_vencidos} con notas vencidas` : ''),
-      punto: 'var(--punto-alerta)',
+      tono: 'tono-alerta',
     });
     return lista;
   });

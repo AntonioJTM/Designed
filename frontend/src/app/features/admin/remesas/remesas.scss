@@ -60,3 +60,6 @@ table.grid td.avisos .pill + .pill { margin-left: 6px; }
   gap: 12px; margin-top: 14px; font-size: 0.8125rem;
 }
 .confirmar + .nota { margin: 8px 0 0; text-align: right; }
+
+// Espacio entre bloques (en lugar de style= en la plantilla, 2026-10-26).
+.separado { margin-top: 16px; }

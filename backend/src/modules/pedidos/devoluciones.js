@@ -34,10 +34,12 @@ const INACTIVOS = ['cancelado', 'devuelto'];
 
 /** El cono que sale de un paquete (o null si todavía no existe). */
 async function _conoDe(ejecutor, paqueteId) {
+  // También uno desactivado (2026-10-26, auditoría): sin él se intentaba crear otro
+  // con el mismo SKU y fallaba. Lo que regresa entra ahí; se vende al activarlo.
   const [[c]] = await ejecutor.query(
     `SELECT id FROM producto_variantes
-      WHERE origen_variante_id = :id AND tipo_presentacion = 'cono' AND activo = 1
-      ORDER BY id LIMIT 1`,
+      WHERE origen_variante_id = :id AND tipo_presentacion = 'cono'
+      ORDER BY activo DESC, id LIMIT 1`,
     { id: paqueteId }
   );
   return c ? Number(c.id) : null;
@@ -99,6 +101,9 @@ async function previa(pedidoId, clienteId = null) {
       // A cómo queda el kilo a favor: lo que de verdad se cobró por kilo (con su
       // descuento y su IVA).
       precio_kg: cantidad > 0 ? round2((Number(l.subtotal) + Number(l.impuesto)) / cantidad) : 0,
+      // El mismo, sin redondear: con él calcula la ventana, como el servidor al registrar
+      // (2026-10-26, auditoría: salía $1,967.60 en pantalla y $1,967.59 al registrar).
+      precio_kg_exacto: cantidad > 0 ? (Number(l.subtotal) + Number(l.impuesto)) / cantidad : 0,
       // Lo suelto que regresa de un paquete entra como CONOS.
       sueltos_como: l.tipo_presentacion === 'paquete' ? 'conos' : l.tipo_presentacion === 'cono' ? 'conos' : 'kilos',
       bultos: bultos
@@ -153,34 +158,6 @@ async function registrar(pedidoId, datos, usuarioId) {
     throw new AppError(422, 'DEVOLUCION_VACIA', 'Di qué regresa: escanea los paquetes o pesa lo suelto.');
   }
 
-  // Lo suelto de un paquete entra como CONO: si el hilo todavía no tiene la
-  // presentación, se crea ANTES (como al bajar conos a mostrador).
-  for (const l of lineasIn) {
-    if (!(Number(l.kg_sueltos ?? 0) > 0)) continue;
-    const [[d]] = await pool.query(
-      `SELECT d.variante_id, pv.tipo_presentacion, pv.producto_id, pv.sku
-         FROM pedido_detalle d JOIN producto_variantes pv ON pv.id = d.variante_id
-        WHERE d.id = :d AND d.pedido_id = :p`,
-      { d: l.detalle_id, p: pedidoId }
-    );
-    if (!d || d.tipo_presentacion !== 'paquete') continue;
-    if (await _conoDe(pool, d.variante_id)) continue;
-    const [[c]] = await pool.query(
-      `SELECT vc.conos FROM pedido_detalle_bultos b JOIN variante_codigos vc ON vc.id = b.variante_codigo_id
-        WHERE b.detalle_id = :d AND vc.conos > 0 LIMIT 1`,
-      { d: l.detalle_id }
-    );
-    await variantesService.crear({
-      producto_id: d.producto_id,
-      sku: `${d.sku}-CONO`,
-      presentacion: 'Cono',
-      tipo_presentacion: 'cono',
-      origen_variante_id: d.variante_id,
-      piezas_por_origen: Number(c?.conos) || 12,
-      modo_precio: 'calculado',
-    });
-  }
-
   return withTransaction(async (conn) => {
     const [[p]] = await conn.query(
       `SELECT id, numero_pedido, estado, inventario_descontado, almacen_id, cliente_id
@@ -195,6 +172,35 @@ async function registrar(pedidoId, datos, usuarioId) {
       throw new AppError(409, 'NO_SE_HA_ENTREGADO',
         `${p.numero_pedido} todavía no se entrega: la mercancía sigue en la tienda. Se modifica o se cancela.`);
     }
+
+  // Lo suelto de un paquete entra como CONO: si el hilo todavía no tiene la
+  // presentación, se crea AQUÍ, dentro de la devolución (2026-10-26, auditoría: se
+  // creaba antes y, si la devolución se rechazaba, el cono quedaba).
+  for (const l of lineasIn) {
+    if (!(Number(l.kg_sueltos ?? 0) > 0)) continue;
+    const [[d]] = await conn.query(
+      `SELECT d.variante_id, pv.tipo_presentacion, pv.producto_id, pv.sku
+         FROM pedido_detalle d JOIN producto_variantes pv ON pv.id = d.variante_id
+        WHERE d.id = :d AND d.pedido_id = :p`,
+      { d: l.detalle_id, p: pedidoId }
+    );
+    if (!d || d.tipo_presentacion !== 'paquete') continue;
+    if (await _conoDe(conn, d.variante_id)) continue;
+    const [[c]] = await conn.query(
+      `SELECT vc.conos FROM pedido_detalle_bultos b JOIN variante_codigos vc ON vc.id = b.variante_codigo_id
+        WHERE b.detalle_id = :d AND vc.conos > 0 LIMIT 1`,
+      { d: l.detalle_id }
+    );
+    await variantesService.crear({
+      producto_id: d.producto_id,
+      sku: `${d.sku}-CONO`,
+      presentacion: 'Cono',
+      tipo_presentacion: 'cono',
+      origen_variante_id: d.variante_id,
+      piezas_por_origen: Number(c?.conos) || 12,
+      modo_precio: 'calculado',
+    }, conn);
+  }
 
     // El saldo a favor es de ALGUIEN: la venta sin cliente lo pide ahora.
     let clienteId = p.cliente_id ? Number(p.cliente_id) : null;

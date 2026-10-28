@@ -225,6 +225,8 @@ export class Pos {
     fiado: number;
     /** Lo que pagó con su saldo a favor (2026-10-13). */
     saldoUsado?: number;
+    /** Ya había quedado registrada (se cortó la red y se volvió a mandar igual). */
+    repetida?: boolean;
   } | null>(null);
 
   cajaSel: number | '' = '';
@@ -302,6 +304,8 @@ export class Pos {
   readonly cobrando = signal(false);
   /** La llave de un solo uso de la venta en curso; cambia al registrarla. */
   private claveCobro = nuevaClave();
+  /** Lo que se mandó con esa llave: si cambia después de un error, es otra venta (`conLlave`). */
+  private huellaCobro: string | null = null;
   /** La del abono desde la caja (2026-10-20): un doble clic no abona dos veces. */
   private claveAbono = nuevaClave();
   /**
@@ -629,6 +633,13 @@ export class Pos {
   private agregarPorCodigo(r: CodigoResuelto): void {
     const v = r.variante;
 
+    // Una presentación desactivada no se vende: antes entraba y fallaba hasta cobrar,
+    // con "La variante 12 está inactiva" (2026-10-26, auditoría).
+    if (v.activo === false || (v.activo as unknown) === 0) {
+      this.avisarLector(`«${this.nombreHilo(v)}» está desactivado: no se vende. Se activa en Productos → Presentaciones, «Precio y peso».`);
+      return;
+    }
+
     // Un bulto ya vendido o desarmado no existe físicamente: no se vuelve a
     // vender. El backend también lo rechaza; esto es para avisar antes de que
     // el cajero cierre el ticket.
@@ -636,14 +647,14 @@ export class Pos {
       // Apartado = es de un pedido o un apartado de otro cliente, o va en un
       // envío a sucursal que se está surtiendo: sigue aquí, pero ya tiene dueño.
       const folio = r.bulto.consumido_folio;
-      const deQue = folio?.startsWith('TRA') ? 'va en un envío a sucursal' : 'es de un pedido';
+      const deQue = folio?.startsWith('TRA') ? 'va en un envío a sucursal' : 'es de una nota en espera';
       this.avisarLector(
         r.bulto.estado === 'apartado'
           ? `El paquete ${r.bulto.codigo} está apartado${folio ? ' para ' + folio : ''}: ${deQue}. Escanea otro.`
           : r.bulto.estado === 'faltante'
             // No llegó en un envío (2026-10-20): en el sistema ya no está en ninguna tienda.
             ? `El paquete ${r.bulto.codigo} se dio por faltante al recibir ${folio ?? 'un envío'} (no llegó). Escanea otro.`
-            : `El bulto ${r.bulto.codigo} ya está ${r.bulto.estado}${folio ? ' en ' + folio : ''}. Escanea otro.`
+            : `El paquete ${r.bulto.codigo} ${r.bulto.estado === 'desarmado' ? 'ya se bajó a conos' : 'ya se vendió'}${folio ? ' (' + folio + ')' : ''}. Escanea otro.`
       );
       return;
     }
@@ -665,6 +676,8 @@ export class Pos {
     // eso metía 1 kg sin preguntar (2026-10-06).
     if (!r.bulto || !peso || peso <= 0) {
       this.buscar();
+      // Seleccionado: si se escanea otra cosa, lo reemplaza en vez de pegarse.
+      this.enfocarLector(true);
       return;
     }
 
@@ -712,13 +725,13 @@ export class Pos {
     });
 
     if (repetido) {
-      this.avisarLector(`El bulto ${bulto.codigo} ya está en el ticket; no se cobra dos veces.`);
+      this.avisarLector(`El paquete ${bulto.codigo} ya está en el ticket; no se cobra dos veces.`);
       return;
     } else {
       // Empezó otra venta: el ticket de la anterior ya no aplica.
       this.ticket.set(null);
       this.mensaje.set(
-        `Bulto ${bulto.codigo}: ${peso} kg${r.bulto.lote ? ` · lote ${r.bulto.lote}` : ''}`
+        `Paquete ${bulto.codigo}: ${peso} kg${r.bulto.lote ? ` · lote ${r.bulto.lote}` : ''}`
       );
     }
     this.qVar = '';
@@ -732,7 +745,9 @@ export class Pos {
    */
   private sinPrecio(nombre: string, precio: number): boolean {
     if (precio > 0) return false;
-    this.error.set(this.textoSinPrecio(nombre));
+    // Junto al lector, donde se mira al vender (2026-10-26, auditoría).
+    this.avisoLector.set(this.textoSinPrecio(nombre));
+    this.enfocarLector(true);
     return true;
   }
 
@@ -952,7 +967,7 @@ export class Pos {
           : i
       )
     );
-    this.mensaje.set(`Se quitó el bulto ${codigo} del ticket.`);
+    this.mensaje.set(`Se quitó el paquete ${codigo} del ticket.`);
     this.enfocarLector();
   }
 
@@ -1120,7 +1135,7 @@ export class Pos {
           ? `No hay conos de ${nombre} en esta tienda. Bájalos en Inventario o véndele el paquete.`
           : `${nombre} todavía no tiene conos: se bajan en Inventario. Aquí está lo que hay del hilo.`);
       },
-      error: (e) => this.error.set(this.msg(e)),
+      error: (e) => this.avisoLector.set(this.msg(e)),
     });
   }
 
@@ -1235,7 +1250,7 @@ export class Pos {
           this.apartadoCliente.set(null);
           this.enfocarLector();
           this.mensaje.set(
-            `${c.nombre}${c.codigo ? ' (' + c.codigo + ')' : ''} quedó registrado. Todavía sin crédito: ` +
+            `${c.nombre}${c.codigo ? ' (' + c.codigo + ')' : ''} ya está en tus clientes. Todavía sin crédito: ` +
               'el cobro es completo hasta que un administrador le autorice un límite.'
           );
         },
@@ -1608,9 +1623,8 @@ export class Pos {
           }];
 
     this.ventas
-      .crearPedido({
+      .crearPedido(this.conLlave({
         canal: 'punto_venta',
-        clave_cobro: this.claveCobro,
         sesion_caja_id: s.id,
         vendedor_id: this.vendedorElegido(),
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
@@ -1631,7 +1645,7 @@ export class Pos {
         // Sin nada que pagar hoy (todo a crédito) no se manda pago alguno. Se
         // manda lo RECIBIDO: el servidor asienta lo cobrado y devuelve el cambio.
         pagos,
-      })
+      }))
       .subscribe({
         next: (pedido) => {
           this.ventaRegistrada();
@@ -1644,6 +1658,7 @@ export class Pos {
             pagadoHoy: Math.round((Number(pedido.total) - fiado - saldo) * 100) / 100,
             fiado,
             saldoUsado: saldo,
+            repetida: !!pedido.repetido,
           });
           this.limpiarVenta();
         },
@@ -1656,6 +1671,21 @@ export class Pos {
   private ventaRegistrada(): void {
     this.cobrando.set(false);
     this.claveCobro = nuevaClave();
+    this.huellaCobro = null;
+  }
+
+  /**
+   * La llave del cobro es de UNA venta tal como se mandó (2026-10-26, auditoría).
+   * Si un cobro falla por la red, se reintenta con la misma llave y el servidor
+   * contesta la venta que sí quedó. Pero si después de ese error se cambia el
+   * carrito, el modo o el pago, ya es OTRA venta y lleva otra llave: con la misma,
+   * el servidor contestaba la vieja y lo agregado se iba sin cobrar.
+   */
+  private conLlave<T extends object>(cuerpo: T): T & { clave_cobro: string } {
+    const huella = JSON.stringify(cuerpo);
+    if (this.huellaCobro !== null && this.huellaCobro !== huella) this.claveCobro = nuevaClave();
+    this.huellaCobro = huella;
+    return { ...cuerpo, clave_cobro: this.claveCobro };
   }
 
   /** No quedó: se suelta "Cobrar" y se dice por qué. La llave se queda (no se registró nada). */
@@ -1817,14 +1847,13 @@ export class Pos {
    */
   private tomarPedido(s: SesionCaja, deja: number): void {
     this.ventas
-      .crearPedido({
+      .crearPedido(this.conLlave({
         canal: 'punto_venta',
         sesion_caja_id: s.id,
         vendedor_id: this.vendedorElegido(),
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         encargo: true,
-        clave_cobro: this.claveCobro,
         metodo_entrega: 'recoger',
         entrega_para: this.paraCuando || undefined,
         notas: this.notasPedido.trim() || undefined,
@@ -1838,11 +1867,11 @@ export class Pos {
           metodo_pago_id: Number(this.metodoSel), monto: deja,
           ...(this.metodoEsTransferencia() ? this.datosTransferencia() : {}),
         }] : undefined,
-      })
+      }))
       .subscribe({
         next: (pedido) => {
           this.ventaRegistrada();
-          this.ticket.set({ pedido, cambio: 0, pagadoHoy: deja, fiado: 0 });
+          this.ticket.set({ pedido, cambio: 0, pagadoHoy: deja, fiado: 0, repetida: !!pedido.repetido });
           this.limpiarVenta();
         },
         error: (e) => this.ventaFallida(e),
@@ -1863,25 +1892,24 @@ export class Pos {
    */
   private darNotaPendiente(s: SesionCaja): void {
     this.ventas
-      .crearPedido({
+      .crearPedido(this.conLlave({
         canal: 'punto_venta',
         sesion_caja_id: s.id,
         vendedor_id: this.vendedorElegido(),
         cliente_id: this.clienteSel()!.id,
         tipo_cliente_id: this.tipoClienteSel() ? Number(this.tipoClienteSel()) : undefined,
         pendiente_pago: true,
-        clave_cobro: this.claveCobro,
         items: this.carrito().map((i) => ({
           variante_id: i.variante_id,
           cantidad: i.cantidad,
           bultos: i.bultos?.length ? i.bultos : undefined,
           piezas: i.piezas || undefined,
         })),
-      })
+      }))
       .subscribe({
         next: (pedido) => {
           this.ventaRegistrada();
-          this.ticket.set({ pedido, cambio: 0, pagadoHoy: 0, fiado: 0 });
+          this.ticket.set({ pedido, cambio: 0, pagadoHoy: 0, fiado: 0, repetida: !!pedido.repetido });
           this.limpiarVenta();
         },
         error: (e) => this.ventaFallida(e),
